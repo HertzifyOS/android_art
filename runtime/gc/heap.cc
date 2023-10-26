@@ -309,6 +309,7 @@ Heap::Heap(size_t initial_size,
            bool verify_pre_sweeping_rosalloc,
            bool verify_post_gc_rosalloc,
            bool gc_stress_mode,
+           bool continuous_gc_mode,
            bool measure_gc_performance,
            bool use_homogeneous_space_compaction_for_oom,
            bool use_generational_gc,
@@ -818,6 +819,8 @@ Heap::Heap(size_t initial_size,
   if (gc_stress_mode_) {
     backtrace_lock_ = new Mutex("GC complete lock");
   }
+  continuous_gc_mode_ = continuous_gc_mode && IsGcConcurrent();
+
   if (is_running_on_memory_tool_ || gc_stress_mode_) {
     instrumentation->InstrumentQuickAllocEntryPoints();
   }
@@ -2990,7 +2993,7 @@ void Heap::LogGC(GcCause gc_cause, collector::GarbageCollector* collector) {
     }
   }
   bool is_sampled = false;
-  if (UNLIKELY(gc_stress_mode_)) {
+  if (UNLIKELY(gc_stress_mode_ || continuous_gc_mode_)) {
     static std::atomic_int64_t accumulated_duration_ns = 0;
     accumulated_duration_ns += duration;
     if (accumulated_duration_ns >= kGcStressModeGcLogSampleFrequencyNs) {
@@ -4045,6 +4048,15 @@ class Heap::ConcurrentGCTask : public HeapTask {
     DCHECK(GCNumberLt(my_gc_num_, heap->GetCurrentGcNum() + 2));  // <= current_gc_num + 1
     heap->ConcurrentGC(self, cause_, force_full_, my_gc_num_);
     CHECK_IMPLIES(GCNumberLt(heap->GetCurrentGcNum(), my_gc_num_), runtime->IsShuttingDown(self));
+    if (UNLIKELY(heap->continuous_gc_mode_) && heap->task_processor_->IsRunning()) {
+      // Add some delay to ensure that gc-thread doesn't saturate mutators in
+      // case they want to enter GC critical-section.
+      usleep(1'000);
+      // Add another concurrent GC task. If somebody else beat us with their
+      // gc-num, then this task won't be added. That is fine as the succeeding
+      // task with then add a task.
+      heap->RequestConcurrentGC(self, kGcCauseBackground, /*force_full_=*/false, my_gc_num_);
+    }
   }
 
  private:

@@ -38,6 +38,8 @@ def parse_args():
                       help='Disable JIT (device|host only).')
   parser.add_argument('--gcstress', action='store_true',
                       help='Enable GC stress configuration (device|host only).')
+  parser.add_argument('--continuous-gc', action='store_true',
+                      help='Enable continuous GC configuration (device|host only).')
   parser.add_argument('tests', nargs="*",
                       help='Name(s) of the test(s) to run')
   parser.add_argument('--verbose', action='store_true', help='Print verbose output from vogar.')
@@ -323,6 +325,8 @@ def get_vogar_command(test_name):
   if args.gcstress:
     cmd.append("--vm-arg -Xgc:gcstress")
     cmd.append('--vm-arg -Djsr166.delay.factor="1.50"')
+  if args.continuous_gc:
+    cmd.append("--vm-arg -Xgc:continuous_gc")
   if args.debug:
     cmd.append("--vm-arg -XXlib:libartd.so --vm-arg -XX:SlowDebug=true")
 
@@ -388,7 +392,7 @@ def main():
       args.jobs = get_target_cpu_count()
     else:
       args.jobs = multiprocessing.cpu_count()
-      if args.gcstress:
+      if args.gcstress or args.continuous_gc:
         # TODO: Investigate and fix the underlying issues.
         args.jobs = args.jobs // 2
 

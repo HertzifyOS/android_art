@@ -312,6 +312,8 @@ if True:
                     help="Run with gc stress testing")
   argp.add_argument("--gcverify", action='store_true',
                     help="Run with gc verification")
+  argp.add_argument("--continuous-gc", action='store_true',
+                    help="Run with continuous background GCs")
   argp.add_argument("--jvmti-trace-stress", action='store_true',
                     help="Run with jvmti method tracing stress testing")
   argp.add_argument("--jvmti-step-stress", action='store_true',
@@ -446,6 +448,7 @@ if True:
     if gc_stress:
         basic_verify = True
 
+    continuous_gc = args.continuous_gc
     jvmti_step_stress = args.jvmti_step_stress
     jvmti_redefine_stress = args.jvmti_redefine_stress
     jvmti_field_stress = args.jvmti_field_stress
@@ -613,6 +616,10 @@ if True:
     run_args += [
         "--gc-stress --runtime-option -Xgc:gcstress --runtime-option -Xms2m "
         "--runtime-option -Xmx16m"
+    ]
+  if continuous_gc:
+    run_args += [
+        "--runtime-option -Xgc:continuous_gc"
     ]
   if jvmti_redefine_stress:
     run_args += ["--no-app-image --jvmti-redefine-stress"]
