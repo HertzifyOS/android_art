@@ -2496,23 +2496,6 @@ ProfileCompilationInfo::FindOrAddDexPc(InlineCacheMap* inline_cache, uint32_t de
   return &(inline_cache->FindOrAdd(dex_pc, DexPcData(inline_cache->get_allocator()))->second);
 }
 
-HashSet<std::string> ProfileCompilationInfo::GetClassDescriptors(
-    const std::vector<const DexFile*>& dex_files,
-    const ProfileSampleAnnotation& annotation) {
-  HashSet<std::string> ret;
-  for (const DexFile* dex_file : dex_files) {
-    const DexFileData* data = FindDexDataUsingAnnotations(dex_file, annotation);
-    if (data != nullptr) {
-      for (dex::TypeIndex type_idx : data->class_set) {
-        ret.insert(GetTypeDescriptor(dex_file, type_idx));
-      }
-    } else {
-      VLOG(compiler) << "Failed to find profile data for " << dex_file->GetLocation();
-    }
-  }
-  return ret;
-}
-
 bool ProfileCompilationInfo::IsProfileFile(int fd) {
   // First check if it's an empty file as we allow empty profile files.
   // Profiles may be created by ActivityManager or installd before we manage to

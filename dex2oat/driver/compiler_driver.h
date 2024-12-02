@@ -26,7 +26,6 @@
 #include "base/array_ref.h"
 #include "base/bit_utils.h"
 #include "base/bit_vector.h"
-#include "base/hash_set.h"
 #include "base/mutex.h"
 #include "base/os.h"
 #include "base/quasi_atomic.h"
@@ -64,6 +63,7 @@ class CompilerOptions;
 class DexCompilationUnit;
 class DexFile;
 template<class T> class Handle;
+class ImageClassMap;
 struct InlineIGetIPutData;
 class InstructionSetFeatures;
 class InternTable;
@@ -105,7 +105,7 @@ class CompilerDriver {
   void PreCompile(jobject class_loader,
                   const std::vector<const DexFile*>& dex_files,
                   TimingLogger* timings,
-                  /*inout*/ HashSet<std::string>* image_classes)
+                  /*inout*/ ImageClassMap* image_classes)
       REQUIRES(!Locks::mutator_lock_);
   void CompileAll(jobject class_loader,
                   const std::vector<const DexFile*>& dex_files,
@@ -230,7 +230,7 @@ class CompilerDriver {
  private:
   void LoadImageClasses(TimingLogger* timings,
                         jobject class_loader,
-                        /*inout*/ HashSet<std::string>* image_classes)
+                        /*inout*/ ImageClassMap* image_classes)
       REQUIRES(!Locks::mutator_lock_);
 
   // Attempt to resolve all type, methods, fields, and strings
@@ -283,7 +283,7 @@ class CompilerDriver {
                          TimingLogger* timings)
       REQUIRES(!Locks::mutator_lock_);
 
-  void UpdateImageClasses(TimingLogger* timings, /*inout*/ HashSet<std::string>* image_classes)
+  void UpdateImageClasses(TimingLogger* timings, /*inout*/ ImageClassMap* image_classes)
       REQUIRES(!Locks::mutator_lock_);
 
   void Compile(jobject class_loader,

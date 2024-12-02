@@ -1135,6 +1135,7 @@
     },
     {
         "tests": ["178-app-image-native-method",
+                  "184-dex2oat-dlc",
                   "530-checker-peel-unroll",
                   "595-profile-saving",
                   "616-cha-unloading",

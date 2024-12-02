@@ -29,6 +29,7 @@
 #include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/utils.h"
+#include "image_class_map.h"
 #include "optimizing/register_allocator.h"
 
 namespace art HIDDEN {
@@ -298,11 +299,12 @@ class CompilerOptions final {
     return dex_files_for_oat_file_;
   }
 
-  const HashSet<std::string>& GetImageClasses() const {
+  const ImageClassMap& GetImageClasses() const {
     return image_classes_;
   }
 
-  EXPORT bool IsImageClass(const char* descriptor) const;
+  static constexpr size_t kInferArrayDim = static_cast<size_t>(-1);
+  EXPORT bool IsImageClass(TypeReference type_ref, size_t array_dim = kInferArrayDim) const;
 
   // Returns whether the given `pretty_descriptor` is in the list of preloaded
   // classes. `pretty_descriptor` should be the result of calling `PrettyDescriptor`.
@@ -416,7 +418,7 @@ class CompilerOptions final {
 
   // Image classes, specifies the classes that will be included in the image if creating an image.
   // Must not be empty for real boot image, only for tests pretending to compile boot image.
-  HashSet<std::string> image_classes_;
+  ImageClassMap image_classes_;
 
   // Classes listed in the preloaded-classes file, used for boot image and
   // boot image extension compilation.

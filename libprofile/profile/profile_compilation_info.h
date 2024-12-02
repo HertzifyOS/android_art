@@ -630,12 +630,6 @@ class ProfileCompilationInfo {
 
   ArenaAllocator* GetAllocator() { return &allocator_; }
 
-  // Return all of the class descriptors in the profile for a set of dex files.
-  // Note: see GetMethodHotness docs for the handling of annotations..
-  HashSet<std::string> GetClassDescriptors(
-      const std::vector<const DexFile*>& dex_files,
-      const ProfileSampleAnnotation& annotation = ProfileSampleAnnotation::kNone);
-
   // Return true if the fd points to a profile file.
   bool IsProfileFile(int fd);
 
