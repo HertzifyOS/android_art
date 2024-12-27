@@ -51,6 +51,7 @@ class RegTypeCache;
 #define FOR_EACH_CONCRETE_REG_TYPE(V)                                         \
   V(Undefined)                                                                \
   V(Conflict)                                                                 \
+  /* Boolean, Byte, Char, Short are ordered as in get/put instructions. */    \
   V(Boolean)                                                                  \
   V(Byte)                                                                     \
   V(Char)                                                                     \
@@ -116,15 +117,18 @@ class RegType {
   constexpr bool IsConstantTypes() const {
     return IsConstant() || IsConstantLo() || IsConstantHi() || IsNull();
   }
+  static constexpr bool IsConstant(Kind kind) {
+    return kind == Kind::kZero ||
+           kind == Kind::kBooleanConstant ||
+           kind == Kind::kPositiveByteConstant ||
+           kind == Kind::kPositiveShortConstant ||
+           kind == Kind::kCharConstant ||
+           kind == Kind::kByteConstant ||
+           kind == Kind::kShortConstant ||
+           kind == Kind::kIntegerConstant;
+  }
   constexpr bool IsConstant() const {
-    return IsZero() ||
-           IsBooleanConstant() ||
-           IsPositiveByteConstant() ||
-           IsPositiveShortConstant() ||
-           IsCharConstant() ||
-           IsByteConstant() ||
-           IsShortConstant() ||
-           IsIntegerConstant();
+    return IsConstant(GetKind());
   }
 
   constexpr bool IsNonZeroReferenceTypes() const;
@@ -221,11 +225,30 @@ class RegType {
   // Give the constant value encoded, but this shouldn't be called in the
   // general case.
   bool IsArrayIndexTypes() const { return IsIntegralTypes(); }
+
   // Float type may be derived from any constant type
-  constexpr bool IsFloatTypes() const { return IsFloat() || IsConstant(); }
-  constexpr bool IsLongTypes() const { return IsLongLo() || IsConstantLo(); }
+  static constexpr bool IsFloatTypes(Kind kind) {
+    return kind == Kind::kFloat || IsConstant(kind);
+  }
+  constexpr bool IsFloatTypes() const {
+    return IsFloatTypes(GetKind());
+  }
+
+  static constexpr bool IsLongTypes(Kind kind) {
+    return kind == Kind::kLongLo || kind == Kind::kConstantLo;
+  }
+  constexpr bool IsLongTypes() const {
+    return IsLongTypes(GetKind());
+  }
+
+  static constexpr bool IsDoubleTypes(Kind kind) {
+    return kind == Kind::kDoubleLo || kind == Kind::kConstantLo;
+  }
+  constexpr bool IsDoubleTypes() const {
+    return IsDoubleTypes(GetKind());
+  }
+
   constexpr bool IsLongHighTypes() const { return (IsLongHi() || IsConstantHi()); }
-  constexpr bool IsDoubleTypes() const { return IsDoubleLo() || IsConstantLo(); }
   constexpr bool IsDoubleHighTypes() const { return (IsDoubleHi() || IsConstantHi()); }
   bool HasClass() const {
     // The only type with a class is `ReferenceType`. There is no class for
