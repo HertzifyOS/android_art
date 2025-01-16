@@ -560,9 +560,10 @@ class HGraph : public ArenaObject<kArenaAllocGraph> {
   // List of methods that are assumed to have single implementation.
   ArenaSet<ArtMethod*> cha_single_implementation_list_;
 
-  friend class SsaBuilder;           // For caching constants.
-  friend class SsaLivenessAnalysis;  // For the linear order.
-  friend class HInliner;             // For the reverse post order.
+  friend class HControlFlowSimplifier;  // For direct modification of `reverse_post_order_`.
+  friend class HInliner;                // For the reverse post order.
+  friend class SsaBuilder;              // For caching constants.
+  friend class SsaLivenessAnalysis;     // For the linear order.
   ART_FRIEND_TEST(GraphTest, IfSuccessorSimpleJoinBlock1);
   DISALLOW_COPY_AND_ASSIGN(HGraph);
 };
