@@ -17,7 +17,6 @@
 #include <cstdint>
 #include <vector>
 
-#include "compiler.h"
 #include "dex/standard_dex_file.h"
 #include "driver/compiler_options.h"
 #include "fuzzer_common.h"
@@ -42,7 +41,6 @@ static constexpr bool kDebugPrints = false;
 std::vector<std::unique_ptr<uint8_t[]>> data_to_delete;
 std::vector<std::unique_ptr<StandardDexFile>> dex_files_to_delete;
 
-std::unique_ptr<Compiler> compiler;
 std::unique_ptr<CompilerOptions> compiler_options;
 std::unique_ptr<FuzzerCompilerCallbacks> callbacks;
 // No need for unique_ptr as it is just a fake storage.
@@ -50,22 +48,29 @@ FuzzerCompiledMethodStorage storage;
 
 extern "C" int LLVMFuzzerInitialize([[maybe_unused]] int* argc, [[maybe_unused]] char*** argv) {
   callbacks.reset(new FuzzerCompilerCallbacks());
-  FuzzerInitialize(callbacks.get(), kRuntimeISA);
-  compiler_options = CreateCompilerOptions(/*is_baseline=*/ true, kRuntimeISA);
-  compiler.reset(CreateCompiler(*compiler_options, &storage));
+  FuzzerInitialize(callbacks.get(), InstructionSet::kArm64);
+  compiler_options = CreateCompilerOptions(/*is_baseline=*/false, InstructionSet::kArm64);
+
+  // Extra checks so that the fast fuzzer does something
+  CHECK(compiler_options->GetImplicitNullChecks());
+  CHECK(compiler_options->GetImplicitStackOverflowChecks());
+  CHECK(!compiler_options->GetDebuggable());
+  CHECK(!art::kUseTableLookupReadBarrier);
+  CHECK(art::kReserveMarkingRegister);
+  CHECK(!art::kPoisonHeapReferences);
   return 0;
 }
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-  return CompilerFuzzerTestOneInput(data,
-                                    size,
-                                    compiler.get(),
-                                    callbacks.get(),
-                                    &skipped_gc_iterations,
-                                    kMaxSkipGCIterations,
-                                    kDebugPrints,
-                                    data_to_delete,
-                                    dex_files_to_delete);
+  return FastCompilerFuzzerTestOneInput(data,
+                                        size,
+                                        compiler_options.get(),
+                                        callbacks.get(),
+                                        &skipped_gc_iterations,
+                                        kMaxSkipGCIterations,
+                                        kDebugPrints,
+                                        data_to_delete,
+                                        dex_files_to_delete);
 }
 
 }  // namespace fuzzer

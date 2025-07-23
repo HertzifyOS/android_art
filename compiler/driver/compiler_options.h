@@ -36,9 +36,10 @@ namespace art HIDDEN {
 
 // Forward declare CompilerOptions so that the CreateCompilerOptions forward declare works.
 class CompilerOptions;
+enum class InstructionSet;
 
 namespace fuzzer {
-std::unique_ptr<CompilerOptions> CreateCompilerOptions(bool is_baseline);
+std::unique_ptr<CompilerOptions> CreateCompilerOptions(bool is_baseline, InstructionSet isa);
 }  // namespace fuzzer
 
 namespace jit {
@@ -56,7 +57,6 @@ class Thumb2RelativePatcherTest;
 
 class ArtMethod;
 class DexFile;
-enum class InstructionSet;
 class InstructionSetFeatures;
 class ProfileCompilationInfo;
 
@@ -513,7 +513,8 @@ class CompilerOptions final {
   friend class linker::Arm64RelativePatcherTest;
   friend class linker::Thumb2RelativePatcherTest;
 
-  friend std::unique_ptr<CompilerOptions> fuzzer::CreateCompilerOptions(bool is_baseline);
+  friend std::unique_ptr<CompilerOptions> fuzzer::CreateCompilerOptions(bool is_baseline,
+                                                                        InstructionSet isa);
 
   template <class Base>
   friend bool ReadCompilerOptions(Base& map, CompilerOptions* options, std::string* error_msg);
