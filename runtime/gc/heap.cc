@@ -657,31 +657,37 @@ Heap::Heap(size_t initial_size,
     non_moving_space_->SetFootprintLimit(non_moving_space_->Capacity());
     AddSpace(non_moving_space_);
   }
+  size_t main_space_reservation = capacity_;
   // Create other spaces based on whether or not we have a moving GC.
   if (foreground_collector_type_ == kCollectorTypeCC) {
     CHECK(separate_non_moving_space);
     // Reserve twice the capacity, to allow evacuating every region for explicit GCs.
+    main_space_reservation += capacity_;
     MemMap region_space_mem_map =
-        space::RegionSpace::CreateMemMap(kRegionSpaceName, capacity_ * 2, request_begin);
+        space::RegionSpace::CreateMemMap(kRegionSpaceName, main_space_reservation, request_begin);
     CHECK(region_space_mem_map.IsValid()) << "No region space mem map";
     region_space_ = space::RegionSpace::Create(
         kRegionSpaceName, std::move(region_space_mem_map), use_generational_gc_);
     AddSpace(region_space_);
   } else if (IsMovingGc(foreground_collector_type_)) {
     // Create bump pointer spaces.
-    // We only to create the bump pointer if the foreground collector is a compacting GC.
+    // We only need to create the bump pointer if the foreground collector is a compacting GC.
     // TODO: Place bump-pointer spaces somewhere to minimize size of card table.
     bump_pointer_space_ = space::BumpPointerSpace::CreateFromMemMap("Bump pointer space 1",
                                                                     std::move(main_mem_map_1));
     CHECK(bump_pointer_space_ != nullptr) << "Failed to create bump pointer space";
     AddSpace(bump_pointer_space_);
-    // For Concurrent Mark-compact GC we don't need the temp space to be in
-    // lower 4GB. So its temp space will be created by the GC itself.
+    // For Concurrent Mark-compact GC we don't need the temp space to be in lower 4GB,
+    // unless kObjPtrPoisoning is true. And when needed, it doesn't need to be
+    // contiguous. So its temp space will be created by the GC itself.
     if (foreground_collector_type_ != kCollectorTypeCMC) {
+      main_space_reservation += capacity_;
       temp_space_ = space::BumpPointerSpace::CreateFromMemMap("Bump pointer space 2",
                                                               std::move(main_mem_map_2));
       CHECK(temp_space_ != nullptr) << "Failed to create bump pointer space";
       AddSpace(temp_space_);
+    } else if (kObjPtrPoisoning) {
+      main_space_reservation += capacity_;
     }
     CHECK(separate_non_moving_space);
   } else {
@@ -700,6 +706,7 @@ Heap::Heap(size_t initial_size,
                                                            capacity_,
                                                            name,
                                                            /* can_move_objects= */ true));
+      main_space_reservation += capacity_;
       CHECK(main_space_backup_.get() != nullptr);
       // Add the space so its accounted for in the heap_begin and heap_end.
       AddSpace(main_space_backup_.get());
@@ -709,18 +716,24 @@ Heap::Heap(size_t initial_size,
   CHECK(!non_moving_space_->CanMoveObjects());
   // Allocate the large object space.
   if (large_object_space_type == space::LargeObjectSpaceType::kFreeList) {
-    large_object_space_ = space::FreeListSpace::Create("free list large object space", capacity_);
-    CHECK(large_object_space_ != nullptr) << "Failed to create large object space";
+    // We should leave room for non-heap requirements in low_4gb. So cap the
+    // reservation for main (moving) space and large-object space to 3.5GB.
+    constexpr size_t kMaxHeapLow4GBReservation = 3 * GB + 512 * MB;
+    size_t los_capacity =
+        std::min(capacity_, UnsignedDifference(kMaxHeapLow4GBReservation, main_space_reservation));
+    large_object_space_ =
+        space::FreeListSpace::Create("free list large object space", los_capacity);
   } else if (large_object_space_type == space::LargeObjectSpaceType::kMap) {
     large_object_space_ = space::LargeObjectMapSpace::Create("mem map large object space");
     CHECK(large_object_space_ != nullptr) << "Failed to create large object space";
   } else {
-    // Disable the large object space by making the cutoff excessively large.
-    large_object_threshold_ = std::numeric_limits<size_t>::max();
     large_object_space_ = nullptr;
   }
   if (large_object_space_ != nullptr) {
     AddSpace(large_object_space_);
+  } else {
+    // Disable the large object space by making the cutoff excessively large.
+    large_object_threshold_ = std::numeric_limits<size_t>::max();
   }
   // Compute heap capacity. Continuous spaces are sorted in order of Begin().
   CHECK(!continuous_spaces_.empty());
