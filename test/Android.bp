@@ -323,7 +323,11 @@ art_cc_defaults {
         "art_gtest_common_defaults",
         "libartd-gtest_static_defaults",
     ],
-    test_suites: ["art-host-tests"],
+    target: {
+        host: {
+            test_suites: ["art-host-tests"],
+        },
+    },
     test_options: {
         test_suite_tag: ["art-host-gtest"],
     },
@@ -2079,5 +2083,19 @@ phony {
         "art_run_test_dependencies",
         // TESTING_ART_APEX
         "com.android.art.testing",
+    ],
+}
+
+art_common_host_data {
+    name: "art_common_host_data_files",
+}
+
+test_suite_package {
+    name: "art-host-tests-bp",
+    include_host_shared_libs_in_main_zip: true,
+    art_data_zips: [
+        ":art_common_host_data_files",
+        ":art_common_static_host_libs",
+        ":apex_icu_dat_zip",
     ],
 }

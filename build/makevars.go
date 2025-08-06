@@ -47,7 +47,7 @@ func makeVarsProvider(ctx android.MakeVarsContext) {
 	ctx.Strict("LIBART_IMG_TARGET_BASE_ADDRESS", ctx.Config().LibartImgDeviceBaseAddress())
 
 	testMap := make(map[string][]string)
-	testcasesContent := make(map[string]string)
+	testcasesContent := make(map[string]android.Path)
 	ctx.VisitAllModuleProxies(func(m android.ModuleProxy) {
 		if provider, ok := android.OtherModuleProvider(ctx, m, testInstallInfoProvider); ok {
 			for k, v := range provider.Testcases {
@@ -70,7 +70,7 @@ func makeVarsProvider(ctx android.MakeVarsContext) {
 	// Create list of copy commands to install the content of the testcases directory.
 	copy_cmds := []string{}
 	for _, key := range android.SortedKeys(testcasesContent) {
-		copy_cmds = append(copy_cmds, testcasesContent[key]+":"+key)
+		copy_cmds = append(copy_cmds, testcasesContent[key].String()+":"+key)
 	}
 	ctx.Strict("ART_TESTCASES_CONTENT", strings.Join(copy_cmds, " "))
 

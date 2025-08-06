@@ -100,3 +100,139 @@ java_test_host {
     },
     test_suites: ["general-tests"],
 }
+
+cc_genrule {
+    name: "art_common_static_host_libs_zip_64",
+    host_supported: true,
+    device_supported: false,
+    compile_multilib: "64",
+    srcs: [
+        ":libbase",
+        ":libc++",
+        ":libicu",
+        ":libicu_jni",
+        ":liblog",
+        ":libsigchain",
+        ":libunwindstack",
+        ":libziparchive",
+        ":libjavacore",
+        ":libandroidio",
+        ":libopenjdkd",
+        ":liblz4",
+        ":liblzma",
+        ":libcrypto",
+        ":libz",
+        ":libicuuc",
+        ":libicui18n",
+        ":libexpat",
+    ],
+    tools: ["soong_zip"],
+    out: ["art_common_static_libs_64.zip"],
+    cmd: "TEMP_DIR=$(genDir)/tmp64 && rm -rf $$TEMP_DIR && " +
+        "LIB_DIR=$$TEMP_DIR/host/testcases/art_common/out/host/linux-x86/lib64 && " +
+        "mkdir -p $$LIB_DIR && " +
+        "cp $(location :libbase) $$LIB_DIR/libbase.so && " +
+        "cp $(location :libc++) $$LIB_DIR/libc++.so && " +
+        "cp $(location :libicu) $$LIB_DIR/libicu.so && " +
+        "cp $(location :libicu_jni) $$LIB_DIR/libicu_jni.so && " +
+        "cp $(location :liblog) $$LIB_DIR/liblog.so && " +
+        "cp $(location :libsigchain) $$LIB_DIR/libsigchain.so && " +
+        "cp $(location :libunwindstack) $$LIB_DIR/libunwindstack.so && " +
+        "cp $(location :libziparchive) $$LIB_DIR/libziparchive.so && " +
+        "cp $(location :libjavacore) $$LIB_DIR/libjavacore.so && " +
+        "cp $(location :libandroidio) $$LIB_DIR/libandroidio.so && " +
+        "cp $(location :libopenjdkd) $$LIB_DIR/libopenjdkd.so && " +
+        "cp $(location :liblz4) $$LIB_DIR/liblz4.so && " +
+        "cp $(location :liblzma) $$LIB_DIR/liblzma.so && " +
+        "cp $(location :libcrypto) $$LIB_DIR/libcrypto-host.so && " +
+        "cp $(location :libz) $$LIB_DIR/libz-host.so && " +
+        "cp $(location :libicuuc) $$LIB_DIR/libicuuc-host.so && " +
+        "cp $(location :libicui18n) $$LIB_DIR/libicui18n-host.so && " +
+        "cp $(location :libexpat) $$LIB_DIR/libexpat-host.so && " +
+        "$(location soong_zip) -o $(out) -C $$TEMP_DIR -D $$TEMP_DIR/host",
+}
+
+cc_genrule {
+    name: "art_common_static_host_libs_zip_32",
+    host_supported: true,
+    device_supported: false,
+    compile_multilib: "32",
+    srcs: [
+        ":libbase",
+        ":libc++",
+        ":libicu",
+        ":libicu_jni",
+        ":liblog",
+        ":libsigchain",
+        ":libunwindstack",
+        ":libziparchive",
+        ":libjavacore",
+        ":libandroidio",
+        ":libopenjdkd",
+        ":liblz4",
+        ":liblzma",
+        ":libcrypto",
+        ":libz",
+        ":libicuuc",
+        ":libicui18n",
+        ":libexpat",
+    ],
+    tools: ["soong_zip"],
+    out: ["art_common_static_libs_32.zip"],
+    cmd: "TEMP_DIR=$(genDir)/tmp32 && rm -rf $$TEMP_DIR && " +
+        "LIB_DIR=$$TEMP_DIR/host/testcases/art_common/out/host/linux-x86/lib && " +
+        "mkdir -p $$LIB_DIR && " +
+        "cp $(location :libbase) $$LIB_DIR/libbase.so && " +
+        "cp $(location :libc++) $$LIB_DIR/libc++.so && " +
+        "cp $(location :libicu) $$LIB_DIR/libicu.so && " +
+        "cp $(location :libicu_jni) $$LIB_DIR/libicu_jni.so && " +
+        "cp $(location :liblog) $$LIB_DIR/liblog.so && " +
+        "cp $(location :libsigchain) $$LIB_DIR/libsigchain.so && " +
+        "cp $(location :libunwindstack) $$LIB_DIR/libunwindstack.so && " +
+        "cp $(location :libziparchive) $$LIB_DIR/libziparchive.so && " +
+        "cp $(location :libjavacore) $$LIB_DIR/libjavacore.so && " +
+        "cp $(location :libandroidio) $$LIB_DIR/libandroidio.so && " +
+        "cp $(location :libopenjdkd) $$LIB_DIR/libopenjdkd.so && " +
+        "cp $(location :liblz4) $$LIB_DIR/liblz4.so && " +
+        "cp $(location :liblzma) $$LIB_DIR/liblzma.so && " +
+        "cp $(location :libcrypto) $$LIB_DIR/libcrypto-host.so && " +
+        "cp $(location :libz) $$LIB_DIR/libz-host.so && " +
+        "cp $(location :libicuuc) $$LIB_DIR/libicuuc-host.so && " +
+        "cp $(location :libicui18n) $$LIB_DIR/libicui18n-host.so && " +
+        "cp $(location :libexpat) $$LIB_DIR/libexpat-host.so && " +
+        "$(location soong_zip) -o $(out) -C $$TEMP_DIR -D $$TEMP_DIR/host",
+}
+
+// TODO: Move this to art/test after "libopenjdkd" and "libjavacore" are visible
+// to art/test.
+// This rule packages a set of shared libraries (.so) required by ART host tests.
+// The tests are executed by a test runner that needs to find and load these
+// shared libraries at runtime. The term "static" in the name refers to the
+// statically-defined list of dependencies, not to static libraries (.a).
+// The packaged libraries are indeed shared objects (.so). This is necessary
+// for the gtest framework which dynamically loads these dependencies.
+genrule {
+    name: "art_common_static_host_libs",
+    tools: ["merge_zips"],
+    host_first_srcs: [
+        ":art_common_static_host_libs_zip_64",
+    ],
+    host_second_srcs: [
+        ":art_common_static_host_libs_zip_32",
+    ],
+    out: ["art_common_static_host_libs.zip"],
+    cmd: "$(location merge_zips) $(out) $(in)",
+}
+
+genrule {
+    name: "apex_icu_dat_zip",
+    srcs: [
+        ":icu_dat",
+    ],
+    tools: ["soong_zip"],
+    out: ["apex_icu_dat.zip"],
+    cmd: "TEMP_DIR=$(genDir)/tmp32 && rm -rf $$TEMP_DIR && " +
+        "mkdir -p $$TEMP_DIR/host/testcases/art_common/out/host/linux-x86/com.android.i18n/etc/icu && " +
+        "cp $(location :icu_dat) $$TEMP_DIR/host/testcases/art_common/out/host/linux-x86/com.android.i18n/etc/icu/ && " +
+        "$(location soong_zip) -o $(out) -C $$TEMP_DIR -D $$TEMP_DIR/host",
+}
