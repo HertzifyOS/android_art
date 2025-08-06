@@ -2702,7 +2702,9 @@ void Heap::PreZygoteFork() {
     }
   }
   AddModUnionTable(mod_union_table);
-  large_object_space_->SetAllLargeObjectsAsZygoteObjects(self, set_mark_bit);
+  if (large_object_space_ != nullptr) {
+    large_object_space_->SetAllLargeObjectsAsZygoteObjects(self, set_mark_bit);
+  }
   if (collector::SemiSpace::kUseRememberedSet) {
     // Add a new remembered set for the post-zygote non-moving space.
     accounting::RememberedSet* post_zygote_non_moving_space_rem_set =

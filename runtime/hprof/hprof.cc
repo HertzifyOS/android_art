@@ -1133,12 +1133,9 @@ void Hprof::DumpHeapObject(mirror::Object* obj) {
       heap_type = HPROF_HEAP_IMAGE;
       VisitRoot(obj, RootInfo(kRootVMInternal));
     }
-  } else {
-    const auto* los = heap->GetLargeObjectsSpace();
-    if (los->Contains(obj) && los->IsZygoteLargeObject(Thread::Current(), obj)) {
-      heap_type = HPROF_HEAP_ZYGOTE;
-      VisitRoot(obj, RootInfo(kRootVMInternal));
-    }
+  } else if (heap->IsZygoteLargeObject(obj)) {
+    heap_type = HPROF_HEAP_ZYGOTE;
+    VisitRoot(obj, RootInfo(kRootVMInternal));
   }
   CheckHeapSegmentConstraints();
 

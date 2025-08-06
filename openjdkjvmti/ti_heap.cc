@@ -1507,11 +1507,8 @@ static jint GetHeapId(art::ObjPtr<art::mirror::Object> obj)
       // as HPROF_HEAP_APP. b/35762934
       heap_type = kHeapIdImage;
     }
-  } else {
-    const auto* los = heap->GetLargeObjectsSpace();
-    if (los->Contains(obj.Ptr()) && los->IsZygoteLargeObject(art::Thread::Current(), obj.Ptr())) {
-      heap_type = kHeapIdZygote;
-    }
+  } else if (heap->IsZygoteLargeObject(obj.Ptr())) {
+    heap_type = kHeapIdZygote;
   }
   return heap_type;
 };
