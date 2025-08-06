@@ -27,6 +27,7 @@ bootstrap_go_package {
         "art_gob_enc.go",
         "codegen.go",
         "makevars.go",
+        "test_suite_data.go",
     ],
     pluginFor: ["soong_build"],
 }
