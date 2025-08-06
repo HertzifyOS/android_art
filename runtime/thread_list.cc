@@ -777,7 +777,8 @@ static bool WaitOnceForSuspendBarrier(AtomicInteger* barrier,
 
 #endif  // ART_USE_FUTEXES
 
-std::optional<std::string> ThreadList::WaitForSuspendBarrier(AtomicInteger* barrier,
+std::optional<std::string> ThreadList::WaitForSuspendBarrier(Thread* self,
+                                                             AtomicInteger* barrier,
                                                              pid_t t,
                                                              int attempt_of_4) {
 #if ART_USE_FUTEXES
@@ -800,8 +801,9 @@ std::optional<std::string> ThreadList::WaitForSuspendBarrier(AtomicInteger* barr
   if (attempt_of_4 != 1) {
     // TODO: RequestSynchronousCheckpoint routinely passes attempt_of_4 = 0. Can
     // we avoid the getpriority() call?
-    if (getpriority(PRIO_PROCESS, 0 /* this thread */) >
-        Thread::PriorityToNiceness(kNormThreadPriority)) {
+    static const int normal_niceness = Thread::PriorityToNiceness(kNormThreadPriority);
+    if ((self != nullptr && self->GetNicenessBeforeBoost() > normal_niceness) ||
+        getpriority(PRIO_PROCESS, 0 /* this thread */) > normal_niceness) {
       // We're a low priority thread, and thus have a longer ANR timeout. Increase the suspend
       // timeout.
       avg_wait_multiplier = 3;
@@ -1048,7 +1050,7 @@ void ThreadList::SuspendAllInternal(Thread* self, SuspendReason reason) {
   pid_t tid = 0;
   std::ostringstream oss;
   for (int attempt_of_4 = 1; attempt_of_4 <= 4; ++attempt_of_4) {
-    auto result = WaitForSuspendBarrier(&pending_threads, tid, attempt_of_4);
+    auto result = WaitForSuspendBarrier(self, &pending_threads, tid, attempt_of_4);
     if (!result.has_value()) {
       // Wait succeeded.
       break;
@@ -1252,7 +1254,7 @@ bool ThreadList::SuspendThread(Thread* self,
   // Now wait for target to decrement suspend barrier.
   std::optional<std::string> failure_info;
   if (!is_suspended) {
-    failure_info = WaitForSuspendBarrier(&wrapped_barrier.barrier_, tid, attempt_of_4);
+    failure_info = WaitForSuspendBarrier(self, &wrapped_barrier.barrier_, tid, attempt_of_4);
     if (!failure_info.has_value()) {
       is_suspended = true;
     }

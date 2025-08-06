@@ -1808,6 +1808,16 @@ class EXPORT Thread {
     return tls32_.shared_method_hotness;
   }
 
+  static constexpr int8_t kNotBoosted = -100;
+
+  // Set nice value before temporary priority boost, for use by ScopedPriorityChange.
+  void SetNicenessBeforeBoost(int niceness) {
+    DCHECK(niceness == kNotBoosted || (niceness >= -20 && niceness <= 19));
+    niceness_before_boost_ = static_cast<int8_t>(niceness);
+  }
+
+  int GetNicenessBeforeBoost() { return niceness_before_boost_; }
+
  private:
   // We pretend to acquire this while running a checkpoint to detect lock ordering issues.
   // Initialized lazily.
@@ -2600,6 +2610,9 @@ class EXPORT Thread {
 
   // True if the thread is some form of runtime thread (ex, GC or JIT).
   bool is_runtime_thread_;
+
+  // Priority before ScopedPriorityChange::SetToNormalOrBetter, or kNotBoosted.
+  int8_t niceness_before_boost_ = kNotBoosted;
 
   // Set during execution of JNI methods that get field and method id's as part of determining if
   // the caller is allowed to access all fields and methods in the Core Platform API.

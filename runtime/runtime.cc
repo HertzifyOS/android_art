@@ -2240,10 +2240,9 @@ bool Runtime::Init(RuntimeArgumentMap&& runtime_options_in) {
     LOG(FATAL) << "Unreachable";
     UNREACHABLE();
   }
-  {
-    ScopedObjectAccess soa(self);
-    callbacks_->NextRuntimePhase(RuntimePhaseCallback::RuntimePhase::kInitialAgents);
-  }
+
+  Locks::mutator_lock_->AssertSharedHeld(self);
+  callbacks_->NextRuntimePhase(RuntimePhaseCallback::RuntimePhase::kInitialAgents);
 
   if (IsZygote() && IsPerfettoHprofEnabled()) {
     constexpr const char* plugin_name = kIsDebugBuild ?

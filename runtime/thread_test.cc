@@ -16,12 +16,17 @@
 
 #include "thread.h"
 
+#include <sys/resource.h>
+
 #include "android-base/logging.h"
 #include "base/locks.h"
 #include "base/mutex.h"
 #include "common_runtime_test.h"
+#include "mirror/object.h"
+#include "scoped_thread_priority_change.h"
 #include "thread-current-inl.h"
 #include "thread-inl.h"
+#include "well_known_classes-inl.h"
 
 namespace art HIDDEN {
 
@@ -94,6 +99,54 @@ TEST_F(ThreadTest, ThreadExitSignalTest) {
     ASSERT_TRUE(tefs[2].HasExited());
   }
   Thread::DCheckUnregisteredEverywhere(&tefs[0], &tefs[2]);
+}
+
+// Ensure that ScopedPriorityChange works correctly and interacts properly with
+// GetNicenessBeforeBoost().
+TEST_F(ThreadTest, ScopedPriorityChangeTest) {
+#if defined(ART_TARGET_ANDROID)
+  Thread* self = Thread::Current();
+  ASSERT_FALSE(self == nullptr);
+  self->TransitionFromSuspendedToRunnable();  // Start() releases mutator lock.
+  bool started = Runtime::Current()->Start();
+  CHECK(started);
+  ScopedObjectAccess soa(self);
+  mirror::Object* peer = self->GetPeer();
+  ASSERT_FALSE(peer == nullptr);
+  int initial_niceness = self->GetCachedNiceness();
+  // Set java.lang.Thread cached niceness and Linux niceness to match.
+  // O.w. ScopedPriorityChage does nothing.
+  WellKnownClasses::java_lang_Thread_niceness->SetInt<false>(peer, 5);
+  int ret = setpriority(PRIO_PROCESS, 0, 5);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(getpriority(PRIO_PROCESS, 0), 5);
+  ASSERT_EQ(self->GetCachedNiceness(), 5);
+  ASSERT_EQ(self->GetNicenessBeforeBoost(), Thread::kNotBoosted);
+  {
+    ScopedPriorityChange spc(self);
+    ASSERT_EQ(getpriority(PRIO_PROCESS, 0), 5);
+    ASSERT_EQ(self->GetNicenessBeforeBoost(), Thread::kNotBoosted);
+    spc.SetToNormalOrBetter();
+    ASSERT_EQ(getpriority(PRIO_PROCESS, 0), 0);
+    ASSERT_EQ(self->GetNicenessBeforeBoost(), 5);
+    {
+      // Nested invocations have no effect.
+      ScopedPriorityChange spc2(self);
+      spc2.SetToNormalOrBetter();
+      ASSERT_EQ(getpriority(PRIO_PROCESS, 0), 0);
+      ASSERT_EQ(self->GetNicenessBeforeBoost(), 5);
+    }
+    ASSERT_EQ(getpriority(PRIO_PROCESS, 0), 0);
+    ASSERT_EQ(self->GetNicenessBeforeBoost(), 5);
+  }
+  ASSERT_EQ(getpriority(PRIO_PROCESS, 0), 5);
+  ASSERT_EQ(self->GetNicenessBeforeBoost(), Thread::kNotBoosted);
+  WellKnownClasses::java_lang_Thread_niceness->SetInt<false>(peer, initial_niceness);
+  ret = setpriority(PRIO_PROCESS, 0, initial_niceness);
+  ASSERT_EQ(ret, 0);
+#endif  // ART_TARGET_ANDROID
+  // Else we are on host where we don't have permission to decrease niceness,
+  // and thus can't effectively test.
 }
 
 }  // namespace art

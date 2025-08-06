@@ -1843,7 +1843,7 @@ bool Thread::RequestSynchronousCheckpoint(Closure* function, ThreadState wait_st
       // Arguably that's not making anything qualitatively worse.
       bool success = !Runtime::Current()
                           ->GetThreadList()
-                          ->WaitForSuspendBarrier(&wrapped_barrier.barrier_)
+                          ->WaitForSuspendBarrier(self, &wrapped_barrier.barrier_)
                           .has_value();
       CHECK(success);
     }
