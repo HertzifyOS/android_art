@@ -956,8 +956,7 @@ class MethodVerifierImpl : public ::art::verifier::MethodVerifier {
   ALWAYS_INLINE inline bool VerifyCopyReference(uint32_t vdst, uint32_t vsrc)
       REQUIRES_SHARED(Locks::mutator_lock_) {
     const RegType& type = work_line_->GetRegisterType(this, vsrc);
-    // Allow conflicts to be copied around.
-    if (UNLIKELY(!type.IsConflict() && !type.IsReferenceTypes())) {
+    if (UNLIKELY(!type.IsReferenceTypes())) {
       FailForCopyReference(vdst, vsrc, type);
       return false;
     }
@@ -969,15 +968,14 @@ class MethodVerifierImpl : public ::art::verifier::MethodVerifier {
       REQUIRES_SHARED(Locks::mutator_lock_) {
     uint16_t src_type_id = work_line_->GetRegisterTypeId(vsrc);
     if (UNLIKELY(src_type_id >= RegTypeCache::NumberOfRegKindCacheIds()) ||
-        UNLIKELY(RegTypeCache::RegKindForId(src_type_id) != RegType::kConflict &&
-                 !RegType::IsCategory1Types(RegTypeCache::RegKindForId(src_type_id)))) {
+        UNLIKELY(!RegType::IsCategory1Types(RegTypeCache::RegKindForId(src_type_id)))) {
       const RegType& type = reg_types_.GetFromId(src_type_id);
-      DCHECK(!type.IsConflict() && !type.IsCategory1Types()) << type;
+      DCHECK(!type.IsCategory1Types()) << type;
       FailForCopyCat1(vdst, vsrc, type);
       return false;
     }
     RegType::Kind kind = RegTypeCache::RegKindForId(src_type_id);
-    DCHECK(kind == RegType::kConflict || RegType::IsCategory1Types(kind)) << kind;
+    DCHECK(RegType::IsCategory1Types(kind)) << kind;
     work_line_->SetRegisterType(vdst, kind);
     return true;
   }
