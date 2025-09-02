@@ -224,6 +224,9 @@ struct EXPORT WellKnownClasses {
   static ArtField* java_nio_ByteBuffer_hb;
   static ArtField* java_nio_ByteBuffer_isReadOnly;
   static ArtField* java_nio_ByteBuffer_offset;
+  static ArtField* jdk_internal_foreign_NativeMemorySegmentImpl_min;
+  static ArtField* jdk_internal_foreign_AbstractMemorySegmentImpl_length;
+  static ArtField* jdk_internal_foreign_AbstractMemorySegmentImpl_readOnly;
   static ArtField* java_util_Collections_EMPTY_LIST;
   static ArtField* java_util_concurrent_ThreadLocalRandom_seeder;
   static ArtField* jdk_internal_vm_Continuation_virtualThreadContext;
@@ -305,6 +308,7 @@ struct EXPORT WellKnownClasses {
   static constexpr ClassFromField<&java_lang_Integer_IntegerCache_cache>
       java_lang_Integer_IntegerCache;
   static constexpr ClassFromField<&java_lang_Long_LongCache_cache> java_lang_Long_LongCache;
+  static constexpr ClassFromField<&jdk_internal_foreign_NativeMemorySegmentImpl_min> jdk_internal_foreign_NativeMemorySegmentImpl;
 
   static constexpr ClassFromMethod<&java_lang_Boolean_valueOf> java_lang_Boolean;
   static constexpr ClassFromMethod<&java_lang_Byte_valueOf> java_lang_Byte;

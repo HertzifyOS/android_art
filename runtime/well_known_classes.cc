@@ -171,6 +171,9 @@ ArtField* WellKnownClasses::java_lang_Throwable_detailMessage;
 ArtField* WellKnownClasses::java_lang_Throwable_stackTrace;
 ArtField* WellKnownClasses::java_lang_Throwable_stackState;
 ArtField* WellKnownClasses::java_lang_Throwable_suppressedExceptions;
+ArtField* WellKnownClasses::jdk_internal_foreign_NativeMemorySegmentImpl_min;
+ArtField* WellKnownClasses::jdk_internal_foreign_AbstractMemorySegmentImpl_length;
+ArtField* WellKnownClasses::jdk_internal_foreign_AbstractMemorySegmentImpl_readOnly;
 ArtField* WellKnownClasses::java_nio_Buffer_address;
 ArtField* WellKnownClasses::java_nio_Buffer_capacity;
 ArtField* WellKnownClasses::java_nio_Buffer_elementSizeShift;
@@ -451,7 +454,7 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
   java_lang_Long_value = CacheValueInBoxField(
       class_linker, self, "Ljava/lang/Long;", "J");
 
-  StackHandleScope<51u> hs(self);
+  StackHandleScope<53u> hs(self);
   Handle<mirror::Class> d_s_bdcl =
       hs.NewHandle(FindSystemClass(class_linker, self, "Ldalvik/system/BaseDexClassLoader;"));
   Handle<mirror::Class> d_s_dlcl =
@@ -538,6 +541,10 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
       hs.NewHandle(FindSystemClass(class_linker, self, "Ljava/util/function/Consumer;"));
   Handle<mirror::Class> j_i_v_cont =
       hs.NewHandle(FindSystemClass(class_linker, self, "Ljdk/internal/vm/Continuation;"));
+  Handle<mirror::Class> j_i_f_amsi = hs.NewHandle(
+      FindSystemClass(class_linker, self, "Ljdk/internal/foreign/AbstractMemorySegmentImpl;"));
+  Handle<mirror::Class> j_i_f_nmsi = hs.NewHandle(
+      FindSystemClass(class_linker, self, "Ljdk/internal/foreign/NativeMemorySegmentImpl;"));
   Handle<mirror::Class> j_i_m_fd =
       hs.NewHandle(FindSystemClass(class_linker, self, "Ljdk/internal/math/FloatingDecimal;"));
   Handle<mirror::Class> j_i_m_fd_btab = hs.NewHandle(FindSystemClass(
@@ -935,14 +942,18 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
       j_l_Throwable, /*is_static=*/ false, "backtrace", "Ljava/lang/Object;");
   java_lang_Throwable_suppressedExceptions = CacheField(
       j_l_Throwable, /*is_static=*/ false, "suppressedExceptions", "Ljava/util/List;");
-
   java_nio_Buffer_address = CacheField(j_n_b.Get(), /*is_static=*/ false, "address", "J");
   java_nio_Buffer_capacity = CacheField(j_n_b.Get(), /*is_static=*/ false, "capacity", "I");
   java_nio_Buffer_elementSizeShift =
       CacheField(j_n_b.Get(), /*is_static=*/ false, "_elementSizeShift", "I");
   java_nio_Buffer_limit = CacheField(j_n_b.Get(), /*is_static=*/ false, "limit", "I");
   java_nio_Buffer_position = CacheField(j_n_b.Get(), /*is_static=*/ false, "position", "I");
-
+  jdk_internal_foreign_NativeMemorySegmentImpl_min =
+      CacheField(j_i_f_nmsi.Get(), /*is_static=*/false, "min", "J");
+  jdk_internal_foreign_AbstractMemorySegmentImpl_length =
+      CacheField(j_i_f_amsi.Get(), /*is_static=*/false, "length", "J");
+  jdk_internal_foreign_AbstractMemorySegmentImpl_readOnly =
+      CacheField(j_i_f_amsi.Get(), /*is_static=*/false, "readOnly", "Z");
   java_nio_ByteBuffer_hb = CacheField(j_n_bb.Get(), /*is_static=*/ false, "hb", "[B");
   java_nio_ByteBuffer_isReadOnly =
       CacheField(j_n_bb.Get(), /*is_static=*/ false, "isReadOnly", "Z");
@@ -1131,6 +1142,9 @@ void WellKnownClasses::Clear() {
   java_nio_ByteBuffer_hb = nullptr;
   java_nio_ByteBuffer_isReadOnly = nullptr;
   java_nio_ByteBuffer_offset = nullptr;
+  jdk_internal_foreign_NativeMemorySegmentImpl_min = nullptr;
+  jdk_internal_foreign_AbstractMemorySegmentImpl_length = nullptr;
+  jdk_internal_foreign_AbstractMemorySegmentImpl_readOnly = nullptr;
   java_util_Collections_EMPTY_LIST = nullptr;
   java_util_concurrent_ThreadLocalRandom_seeder = nullptr;
   jdk_internal_vm_Continuation_virtualThreadContext = nullptr;
