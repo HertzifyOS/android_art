@@ -225,15 +225,21 @@ class DumpCheckpoint final : public Closure {
     }
   }
 
-  void WaitForThreadsToRunThroughCheckpoint(size_t threads_running_checkpoint) {
+  bool WaitForThreadsToRunThroughCheckpoint(size_t threads_running_checkpoint) {
     Thread* self = Thread::Current();
     ScopedThreadStateChange tsc(self, ThreadState::kWaitingForCheckPointsToRun);
-    bool timed_out = barrier_.Increment(self, threads_running_checkpoint, kDumpWaitTimeout);
-    if (timed_out) {
-      // Avoid a recursive abort.
-      LOG((kIsDebugBuild && (gAborting == 0)) ? ::android::base::FATAL : ::android::base::ERROR)
-          << "Unexpected time out during dump checkpoint.";
+    bool timed_out = false;
+    if (!kIsDebugBuild && gAborting == 0) {
+      barrier_.Increment(self, threads_running_checkpoint);
+    } else {
+      // Timeout when aborting. We don't want to wait for a long time when aborting.
+      timed_out = barrier_.Increment(self, threads_running_checkpoint, kDumpWaitTimeout);
+      if (timed_out) {
+        LOG(gAborting == 0 ? ::android::base::FATAL : ::android::base::ERROR)
+            << "Unexpected time out during dump checkpoint.";
+      }
     }
+    return timed_out;
   }
 
  private:
@@ -258,18 +264,24 @@ void ThreadList::Dump(std::ostream& os, bool dump_native_stack) {
   if (self != nullptr) {
     // Dump() can be called in any mutator lock state.
     bool mutator_lock_held = Locks::mutator_lock_->IsSharedHeld(self);
-    DumpCheckpoint checkpoint(dump_native_stack);
+    // Use a regular pointer and clean up only if waiting for checkpoints was successful. On a
+    // timeout, it's better to leak the memory than causing memory corruption issues.
+    DumpCheckpoint* checkpoint = new DumpCheckpoint(dump_native_stack);
     // Acquire mutator lock separately for each thread, to avoid long runnable code sequence
     // without suspend checks.
     size_t threads_running_checkpoint =
-        RunCheckpoint(&checkpoint,
+        RunCheckpoint(checkpoint,
                       nullptr,
                       true,
                       /* acquire_mutator_lock= */ !mutator_lock_held);
+    bool time_out = false;
     if (threads_running_checkpoint != 0) {
-      checkpoint.WaitForThreadsToRunThroughCheckpoint(threads_running_checkpoint);
+      time_out = checkpoint->WaitForThreadsToRunThroughCheckpoint(threads_running_checkpoint);
     }
-    checkpoint.Dump(self, os);
+    checkpoint->Dump(self, os);
+    if (!time_out) {
+      delete checkpoint;
+    }
   } else {
     DumpUnattachedThreads(os, dump_native_stack);
   }
