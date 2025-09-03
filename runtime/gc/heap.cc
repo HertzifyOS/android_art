@@ -4965,6 +4965,12 @@ static uint32_t GetPseudoRandomFromUid() {
 }
 
 void Heap::PostForkChildAction(Thread* self) {
+  // It's possible a GC request was enqueued in zygote or early in the child
+  // process before we have a chance here to reset the heap thresholds.
+  // Increment the gc number to ignore those GC requests and avoid GC
+  // immediately post zygote fork (b/442880511).
+  gcs_completed_.fetch_add(1, std::memory_order_release);
+
   uint32_t starting_gc_num = GetCurrentGcNum();
   uint64_t last_adj_time = NanoTime();
   next_gc_type_ = NonStickyGcType();  // Always start with a full gc.
