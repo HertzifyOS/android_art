@@ -490,6 +490,7 @@ class CodeGeneratorRISCV64 : public CodeGenerator {
 
   void DumpCoreRegister(std::ostream& stream, int reg) const override;
   void DumpFloatingPointRegister(std::ostream& stream, int reg) const override;
+  void DumpVectorRegister(std::ostream& stream, int reg) const override;
 
   InstructionSet GetInstructionSet() const override { return InstructionSet::kRiscv64; }
 

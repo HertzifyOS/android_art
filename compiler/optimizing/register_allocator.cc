@@ -34,6 +34,7 @@ static RegisterSet GetAvailableRegisters(const CodeGenerator* codegen) {
   RegisterSet registers = RegisterSet::Empty();
   registers.AddCoreRegisterSet(MaxInt<uint32_t>(codegen->GetNumberOfCoreRegisters()));
   registers.AddFpuRegisterSet(MaxInt<uint32_t>(codegen->GetNumberOfFloatingPointRegisters()));
+  registers.AddVecRegisterSet(MaxInt<uint32_t>(codegen->GetNumberOfVectorRegisters()));
   return registers.Subtract(codegen->GetBlockedRegisters());
 }
 
@@ -49,6 +50,7 @@ RegisterAllocator::RegisterAllocator(ScopedArenaAllocator* allocator,
       liveness_(liveness),
       num_core_registers_(codegen_->GetNumberOfCoreRegisters()),
       num_fp_registers_(codegen_->GetNumberOfFloatingPointRegisters()),
+      num_vector_registers_(codegen_->GetNumberOfVectorRegisters()),
       available_registers_(GetAvailableRegisters(codegen)),
       registers_blocked_for_call_(GetBlockedRegistersForCall(codegen)) {}
 
@@ -113,6 +115,9 @@ void RegisterAllocator::DumpRegister(std::ostream& stream,
     case RegisterType::kFpRegister:
       codegen->DumpFloatingPointRegister(stream, reg);
       break;
+    case RegisterType::kVectorRegister:
+      codegen->DumpVectorRegister(stream, reg);
+      break;
   }
 }
 
@@ -123,6 +128,8 @@ static inline uint32_t RegisterSetForType(const RegisterSet& register_set,
       return register_set.GetCoreRegisterSet();
     case RegisterAllocator::RegisterType::kFpRegister:
       return register_set.GetFpuRegisterSet();
+    case RegisterAllocator::RegisterType::kVectorRegister:
+      return register_set.GetVecRegisterSet();
   }
 }
 
@@ -226,7 +233,8 @@ bool RegisterAllocator::ValidateIntervals(ArrayRef<LiveInterval* const> interval
         if (kIsDebugBuild && log_fatal_on_failure && !current->IsFixed()) {
           // Only check when an error is fatal. Only tests code ask for non-fatal failures
           // and test code may not properly fill the right information to the code generator.
-          CHECK(codegen.HasAllocatedRegister(register_type == RegisterType::kCoreRegister, reg));
+          CHECK_NE(RegisterSetForType(codegen.GetAllocatedRegisters(), register_type) & (1u << reg),
+                   0u);
         }
         BitVector* liveness_of_register = liveness_of_values[reg];
         for (size_t j = it.CurrentRange()->GetStart(); j < it.CurrentRange()->GetEnd(); ++j) {

@@ -263,6 +263,7 @@ class CodeGenerator : public DeletableArenaObject<kArenaAllocCodeGenerator> {
 
   size_t GetNumberOfCoreRegisters() const { return number_of_core_registers_; }
   size_t GetNumberOfFloatingPointRegisters() const { return number_of_fpu_registers_; }
+  size_t GetNumberOfVectorRegisters() const { return number_of_vector_registers_; }
 
   virtual void ComputeSpillMask() {
     spilled_registers_ = allocated_registers_.Intersect(callee_saves_);
@@ -272,6 +273,8 @@ class CodeGenerator : public DeletableArenaObject<kArenaAllocCodeGenerator> {
 
   virtual void DumpCoreRegister(std::ostream& stream, int reg) const = 0;
   virtual void DumpFloatingPointRegister(std::ostream& stream, int reg) const = 0;
+  virtual void DumpVectorRegister(std::ostream& stream, int reg) const;  // Default: unreachable.
+
   virtual InstructionSet GetInstructionSet() const = 0;
 
   // Saves the register in the stack. Returns the size taken on stack.
@@ -542,6 +545,10 @@ class CodeGenerator : public DeletableArenaObject<kArenaAllocCodeGenerator> {
     allocated_registers_.AddFpuRegisterSet(registers);
   }
 
+  void AddAllocatedVectorRegisterSet(uint32_t registers) {
+    allocated_registers_.AddVecRegisterSet(registers);
+  }
+
   void AddAllocatedCoreRegister(uint32_t reg) {
     allocated_registers_.AddCoreRegister(reg);
   }
@@ -550,10 +557,12 @@ class CodeGenerator : public DeletableArenaObject<kArenaAllocCodeGenerator> {
     allocated_registers_.AddFpuRegister(reg);
   }
 
-  bool HasAllocatedRegister(bool is_core, int reg) const {
-    return is_core
-        ? allocated_registers_.ContainsCoreRegister(reg)
-        : allocated_registers_.ContainsFpuRegister(reg);
+  void AddAllocatedVectorRegister(uint32_t reg) {
+    allocated_registers_.AddVecRegister(reg);
+  }
+
+  RegisterSet GetAllocatedRegisters() const {
+    return allocated_registers_;
   }
 
   // Type consistency check, used only in debug builds.
@@ -773,6 +782,7 @@ class CodeGenerator : public DeletableArenaObject<kArenaAllocCodeGenerator> {
   CodeGenerator(HGraph* graph,
                 size_t number_of_core_registers,
                 size_t number_of_fpu_registers,
+                size_t number_of_vector_registers,
                 RegisterSet callee_saves,
                 const CompilerOptions& compiler_options,
                 OptimizingCompilerStats* stats,
@@ -879,6 +889,7 @@ class CodeGenerator : public DeletableArenaObject<kArenaAllocCodeGenerator> {
 
   size_t number_of_core_registers_;
   size_t number_of_fpu_registers_;
+  size_t number_of_vector_registers_;
 
   // The order to use for code generation.
   const ArenaVector<HBasicBlock*>* block_order_;

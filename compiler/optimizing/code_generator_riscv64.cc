@@ -124,9 +124,15 @@ Location Riscv64ReturnLocation(DataType::Type return_type) {
   }
 }
 
+static RegisterSet AllVectorRegisters() {
+  RegisterSet register_set = RegisterSet::Empty();
+  register_set.AddVecRegisterSet(MaxInt<uint32_t>(kNumberOfVRegisters));
+  return register_set;
+}
+
 static RegisterSet OneRegInReferenceOutSaveEverythingCallerSaves() {
   InvokeRuntimeCallingConvention calling_convention;
-  RegisterSet caller_saves = RegisterSet::Empty();
+  RegisterSet caller_saves = AllVectorRegisters();
   caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(0));
   DCHECK_EQ(
       calling_convention.GetRegisterAt(0),
@@ -2560,7 +2566,7 @@ void LocationsBuilderRISCV64::HandleFieldGet(HInstruction* instruction) {
   }
 
   if (object_field_get_with_read_barrier && kUseBakerReadBarrier) {
-    locations->SetCustomSlowPathCallerSaves(RegisterSet::Empty());  // No caller-save registers.
+    locations->SetCustomSlowPathCallerSaves(AllVectorRegisters());  // Only vector registers.
     // We need a temporary register for the read barrier marking slow
     // path in CodeGeneratorRISCV64::GenerateFieldLoadWithBakerReadBarrier.
     locations->AddTemp(Location::RequiresRegister());
@@ -2788,7 +2794,7 @@ void LocationsBuilderRISCV64::VisitArrayGet(HArrayGet* instruction) {
         object_array_get_with_read_barrier ? Location::kOutputOverlap : Location::kNoOutputOverlap);
   }
   if (object_array_get_with_read_barrier && kUseBakerReadBarrier) {
-    locations->SetCustomSlowPathCallerSaves(RegisterSet::Empty());  // No caller-save registers.
+    locations->SetCustomSlowPathCallerSaves(AllVectorRegisters());  // Only vector registers.
     // We need a temporary register for the read barrier marking slow
     // path in CodeGeneratorRISCV64::GenerateArrayLoadWithBakerReadBarrier.
     locations->AddTemp(Location::RequiresRegister());
@@ -3091,7 +3097,7 @@ void InstructionCodeGeneratorRISCV64::VisitBooleanNot(HBooleanNot* instruction) 
 }
 
 void LocationsBuilderRISCV64::VisitBoundsCheck(HBoundsCheck* instruction) {
-  RegisterSet caller_saves = RegisterSet::Empty();
+  RegisterSet caller_saves = AllVectorRegisters();
   InvokeRuntimeCallingConvention calling_convention;
   caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(0));
   caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(1));
@@ -3609,7 +3615,7 @@ void LocationsBuilderRISCV64::VisitDeoptimize(HDeoptimize* instruction) {
   LocationSummary* locations =
       LocationSummary::Create(allocator_, instruction, LocationSummary::kCallOnSlowPath);
   InvokeRuntimeCallingConvention calling_convention;
-  RegisterSet caller_saves = RegisterSet::Empty();
+  RegisterSet caller_saves = AllVectorRegisters();
   caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(0));
   locations->SetCustomSlowPathCallerSaves(caller_saves);
   if (IsBooleanValueOrMaterializedCondition(instruction->InputAt(0))) {
@@ -3871,7 +3877,7 @@ void LocationsBuilderRISCV64::VisitInstanceOf(HInstanceOf* instruction) {
 
   LocationSummary* locations = LocationSummary::Create(allocator_, instruction, call_kind);
   if (baker_read_barrier_slow_path) {
-    locations->SetCustomSlowPathCallerSaves(RegisterSet::Empty());  // No caller-save registers.
+    locations->SetCustomSlowPathCallerSaves(AllVectorRegisters());  // Only vector registers.
   }
   locations->SetInAt(0, Location::RequiresRegister());
   if (type_check_kind == TypeCheckKind::kBitstringCheck) {
@@ -4322,7 +4328,7 @@ void LocationsBuilderRISCV64::VisitLoadClass(HLoadClass* instruction) {
       : LocationSummary::kNoCall;
   LocationSummary* locations = LocationSummary::Create(allocator_, instruction, call_kind);
   if (kUseBakerReadBarrier && requires_read_barrier && !instruction->NeedsEnvironment()) {
-    locations->SetCustomSlowPathCallerSaves(RegisterSet::Empty());  // No caller-save registers.
+    locations->SetCustomSlowPathCallerSaves(AllVectorRegisters());  // Only vector registers.
   }
   if (load_kind == HLoadClass::LoadKind::kReferrersClass) {
     locations->SetInAt(0, Location::RequiresRegister());
@@ -5240,11 +5246,8 @@ void InstructionCodeGeneratorRISCV64::VisitSub(HSub* instruction) {
 void LocationsBuilderRISCV64::VisitSuspendCheck(HSuspendCheck* instruction) {
   LocationSummary* locations =
       LocationSummary::Create(allocator_, instruction, LocationSummary::kCallOnSlowPath);
-  // In suspend check slow path, usually there are no caller-save registers at all.
-  // If SIMD instructions are present, however, we force spilling all live SIMD
-  // registers in full width (since the runtime only saves/restores lower part).
-  locations->SetCustomSlowPathCallerSaves(GetGraph()->HasSIMD() ? RegisterSet::AllFpu() :
-                                                                  RegisterSet::Empty());
+  // In suspend check slow path, we need to spill only vector registers.
+  locations->SetCustomSlowPathCallerSaves(AllVectorRegisters());
 }
 
 void InstructionCodeGeneratorRISCV64::VisitSuspendCheck(HSuspendCheck* instruction) {
@@ -6030,6 +6033,7 @@ CodeGeneratorRISCV64::CodeGeneratorRISCV64(HGraph* graph,
     : CodeGenerator(graph,
                     kNumberOfXRegisters,
                     kNumberOfFRegisters,
+                    kNumberOfVRegisters,
                     ComputeCalleeSaves(),
                     compiler_options,
                     stats,
@@ -6488,6 +6492,7 @@ inline RegisterSet CodeGeneratorRISCV64::ComputeBlockedRegisters(HGraph* graph) 
       // TMP(T6) and TMP2(T5) are used as temporary/scratch registers.
       (1u << TMP) | (1u << TMP2));
   blocked_registers.AddFpuRegister(FTMP);  // FTMP(FT11) is used as temporary/scratch register.
+  // TODO: We shall need a VTMP for parallel moves of vector registers.
 
   if (graph->IsDebuggable()) {
     // Stubs do not save callee-save floating point registers. If the graph
@@ -6535,6 +6540,10 @@ void CodeGeneratorRISCV64::DumpCoreRegister(std::ostream& stream, int reg) const
 
 void CodeGeneratorRISCV64::DumpFloatingPointRegister(std::ostream& stream, int reg) const {
   stream << FRegister(reg);
+}
+
+void CodeGeneratorRISCV64::DumpVectorRegister(std::ostream& stream, int reg) const {
+  stream << VRegister(reg);
 }
 
 const Riscv64InstructionSetFeatures& CodeGeneratorRISCV64::GetInstructionSetFeatures() const {

@@ -27,7 +27,7 @@ namespace art HIDDEN {
 class RegisterSet : public ValueObject {
  public:
   static RegisterSet Empty() { return RegisterSet(); }
-  static RegisterSet AllFpu() { return RegisterSet(0, -1); }
+  static RegisterSet AllFpu() { return RegisterSet(0u, ~0u, 0u); }
 
   void AddCoreRegisterSet(uint32_t registers) {
     core_register_set_ |= registers;
@@ -35,6 +35,10 @@ class RegisterSet : public ValueObject {
 
   void AddFpuRegisterSet(uint32_t registers) {
     fpu_register_set_ |= registers;
+  }
+
+  void AddVecRegisterSet(uint32_t registers) {
+    vec_register_set_ |= registers;
   }
 
   void AddCoreRegister(uint32_t reg) {
@@ -47,6 +51,11 @@ class RegisterSet : public ValueObject {
     fpu_register_set_ |= 1u << reg;
   }
 
+  void AddVecRegister(uint32_t reg) {
+    DCHECK_LT(reg, BitSizeOf<uint32_t>());
+    vec_register_set_ |= 1u << reg;
+  }
+
   bool ContainsCoreRegister(uint32_t id) const {
     return Contains(core_register_set_, id);
   }
@@ -55,12 +64,18 @@ class RegisterSet : public ValueObject {
     return Contains(fpu_register_set_, id);
   }
 
+  bool ContainsVecRegister(uint32_t id) const {
+    return Contains(vec_register_set_, id);
+  }
+
   static bool Contains(uint32_t register_set, uint32_t reg) {
     return (register_set & (1 << reg)) != 0;
   }
 
   size_t GetNumberOfRegisters() const {
-    return POPCOUNT(core_register_set_) + POPCOUNT(fpu_register_set_);
+    return POPCOUNT(core_register_set_) +
+           POPCOUNT(fpu_register_set_) +
+           POPCOUNT(vec_register_set_);
   }
 
   uint32_t GetCoreRegisterSet() const {
@@ -71,31 +86,48 @@ class RegisterSet : public ValueObject {
     return fpu_register_set_;
   }
 
-  static uint32_t RegisterSet::* GetRegisterFieldAccessor(bool fp) {
-    return fp ? &RegisterSet::fpu_register_set_ : &RegisterSet::core_register_set_;
+  uint32_t GetVecRegisterSet() const {
+    return vec_register_set_;
+  }
+
+  static uint32_t RegisterSet::* GetCoreRegisterSetAccessor() {
+    return &RegisterSet::core_register_set_;
+  }
+
+  static uint32_t RegisterSet::* GetFpuRegisterSetAccessor() {
+    return &RegisterSet::fpu_register_set_;
+  }
+
+  static uint32_t RegisterSet::* GetVecRegisterSetAccessor() {
+    return &RegisterSet::vec_register_set_;
   }
 
   RegisterSet Union(const RegisterSet& other) const {
     return {core_register_set_ | other.core_register_set_,
-            fpu_register_set_ | other.fpu_register_set_};
+            fpu_register_set_ | other.fpu_register_set_,
+            vec_register_set_ | other.vec_register_set_};
   }
 
   RegisterSet Intersect(const RegisterSet& other) const {
     return {core_register_set_ & other.core_register_set_,
-            fpu_register_set_ & other.fpu_register_set_};
+            fpu_register_set_ & other.fpu_register_set_,
+            vec_register_set_ & other.vec_register_set_};
   }
 
   RegisterSet Subtract(const RegisterSet& other) const {
     return {core_register_set_ & ~other.core_register_set_,
-            fpu_register_set_ & ~other.fpu_register_set_};
+            fpu_register_set_ & ~other.fpu_register_set_,
+            vec_register_set_ & ~other.vec_register_set_};
   }
 
  private:
-  RegisterSet() : core_register_set_(0), fpu_register_set_(0) {}
-  RegisterSet(uint32_t core, uint32_t fp) : core_register_set_(core), fpu_register_set_(fp) {}
+  RegisterSet() : core_register_set_(0u), fpu_register_set_(0u), vec_register_set_(0u) {}
+  RegisterSet(uint32_t core, uint32_t fp, uint32_t vec)
+      : core_register_set_(core), fpu_register_set_(fp), vec_register_set_(vec) {}
 
   uint32_t core_register_set_;
   uint32_t fpu_register_set_;
+  uint32_t vec_register_set_;
 };
 
 }  // namespace art

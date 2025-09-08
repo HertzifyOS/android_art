@@ -41,7 +41,8 @@ class RegisterAllocator : public DeletableArenaObject<kArenaAllocRegisterAllocat
  public:
   enum class RegisterType {
     kCoreRegister,
-    kFpRegister
+    kFpRegister,
+    kVectorRegister
   };
 
   static std::unique_ptr<RegisterAllocator> Create(ScopedArenaAllocator* allocator,
@@ -115,6 +116,7 @@ class RegisterAllocator : public DeletableArenaObject<kArenaAllocRegisterAllocat
   // Cached values calculated from codegen data.
   const size_t num_core_registers_;
   const size_t num_fp_registers_;
+  const size_t num_vector_registers_;
   const RegisterSet available_registers_;
   const RegisterSet registers_blocked_for_call_;
 };

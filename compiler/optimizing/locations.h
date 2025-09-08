@@ -58,41 +58,43 @@ class Location : public ValueObject {
     kConstant = 1,
     kStackSlot = 2,  // 32bit stack slot.
     kDoubleStackSlot = 3,  // 64bit stack slot.
-
-    kRegister = 4,  // Core register.
+    kSIMDStackSlot = 4,  // 128bit stack slot. TODO: generalize with encoded #bytes?
 
     // We do not use the value 5 because it conflicts with kLocationConstantMask.
     kDoNotUse5 = 5,
 
-    kFpuRegister = 6,  // Float register.
-
-    kRegisterPair = 7,  // Long register.
-
-    kFpuRegisterPair = 8,  // Double register.
+    kRegister = 6,  // Core register.
+    kFpuRegister = 7,  // Float register.
+    kVecRegister = 8,  // Vector register.
 
     // We do not use the value 9 because it conflicts with kLocationConstantMask.
     kDoNotUse9 = 9,
 
-    kSIMDStackSlot = 10,  // 128bit stack slot. TODO: generalize with encoded #bytes?
+    kRegisterPair = 10,  // Long register.
+    kFpuRegisterPair = 11,  // Double register.
 
     // Unallocated location represents a location that is not fixed and can be
     // allocated by a register allocator.  Each unallocated location has
     // a policy that specifies what kind of location is suitable. Payload
     // contains register allocation policy.
-    kUnallocated = 11,
+    kUnallocated = 12,
+
+    // We do not use the value 13 because it conflicts with kLocationConstantMask.
+    kDoNotUse13 = 13,
   };
 
   constexpr Location() : ValueObject(), value_(kInvalid) {
     // Verify that non-constant location kinds do not interfere with kConstant.
     static_assert((kInvalid & kLocationConstantMask) != kConstant, "TagError");
-    static_assert((kUnallocated & kLocationConstantMask) != kConstant, "TagError");
     static_assert((kStackSlot & kLocationConstantMask) != kConstant, "TagError");
     static_assert((kDoubleStackSlot & kLocationConstantMask) != kConstant, "TagError");
     static_assert((kSIMDStackSlot & kLocationConstantMask) != kConstant, "TagError");
     static_assert((kRegister & kLocationConstantMask) != kConstant, "TagError");
     static_assert((kFpuRegister & kLocationConstantMask) != kConstant, "TagError");
+    static_assert((kVecRegister & kLocationConstantMask) != kConstant, "TagError");
     static_assert((kRegisterPair & kLocationConstantMask) != kConstant, "TagError");
     static_assert((kFpuRegisterPair & kLocationConstantMask) != kConstant, "TagError");
+    static_assert((kUnallocated & kLocationConstantMask) != kConstant, "TagError");
     static_assert((kConstant & kLocationConstantMask) == kConstant, "TagError");
 
     DCHECK(!IsValid());
@@ -142,6 +144,10 @@ class Location : public ValueObject {
     return Location(kFpuRegister, reg);
   }
 
+  static constexpr Location VecRegisterLocation(int reg) {
+    return Location(kVecRegister, reg);
+  }
+
   static constexpr Location RegisterPairLocation(int low, int high) {
     return Location(kRegisterPair, low << 16 | high);
   }
@@ -158,6 +164,10 @@ class Location : public ValueObject {
     return GetKind() == kFpuRegister;
   }
 
+  bool IsVecRegister() const {
+    return GetKind() == kVecRegister;
+  }
+
   bool IsRegisterPair() const {
     return GetKind() == kRegisterPair;
   }
@@ -167,11 +177,15 @@ class Location : public ValueObject {
   }
 
   bool IsRegisterKind() const {
-    return IsRegister() || IsFpuRegister() || IsRegisterPair() || IsFpuRegisterPair();
+    return IsRegister() ||
+           IsFpuRegister() ||
+           IsVecRegister() ||
+           IsRegisterPair() ||
+           IsFpuRegisterPair();
   }
 
   int reg() const {
-    DCHECK(IsRegister() || IsFpuRegister());
+    DCHECK(IsRegister() || IsFpuRegister() || IsVecRegister());
     return GetPayload();
   }
 
@@ -194,6 +208,12 @@ class Location : public ValueObject {
   template <typename T>
   T AsFpuRegister() const {
     DCHECK(IsFpuRegister());
+    return static_cast<T>(reg());
+  }
+
+  template <typename T>
+  T AsVecRegister() const {
+    DCHECK(IsVecRegister());
     return static_cast<T>(reg());
   }
 
@@ -348,17 +368,19 @@ class Location : public ValueObject {
   const char* DebugString() const {
     switch (GetKind()) {
       case kInvalid: return "I";
-      case kRegister: return "R";
+      case kConstant: return "C";
       case kStackSlot: return "S";
       case kDoubleStackSlot: return "DS";
       case kSIMDStackSlot: return "SIMD";
-      case kUnallocated: return "U";
-      case kConstant: return "C";
+      case kRegister: return "R";
       case kFpuRegister: return "F";
+      case kVecRegister: return "V";
       case kRegisterPair: return "RP";
       case kFpuRegisterPair: return "FP";
+      case kUnallocated: return "U";
       case kDoNotUse5:  // fall-through
       case kDoNotUse9:
+      case kDoNotUse13:
         LOG(FATAL) << "Should not use this location kind";
     }
     UNREACHABLE();
@@ -369,6 +391,7 @@ class Location : public ValueObject {
     kAny,
     kRequiresRegister,
     kRequiresFpuRegister,
+    kRequiresVecRegister,
     kSameAsFirstInput,
   };
 
@@ -393,6 +416,10 @@ class Location : public ValueObject {
     return UnallocatedLocation(kRequiresFpuRegister);
   }
 
+  static Location RequiresVecRegister() {
+    return UnallocatedLocation(kRequiresVecRegister);
+  }
+
   static Location RegisterOrConstant(HInstruction* instruction);
   static Location RegisterOrInt32Constant(HInstruction* instruction);
   static Location ByteRegisterOrConstant(int reg, HInstruction* instruction);
@@ -411,7 +438,9 @@ class Location : public ValueObject {
   }
 
   bool RequiresRegisterKind() const {
-    return GetPolicy() == kRequiresRegister || GetPolicy() == kRequiresFpuRegister;
+    return GetPolicy() == kRequiresRegister ||
+           GetPolicy() == kRequiresFpuRegister ||
+           GetPolicy() == kRequiresVecRegister;
   }
 
   uintptr_t GetEncoding() const {

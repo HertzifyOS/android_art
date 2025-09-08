@@ -321,6 +321,12 @@ void CodeGenerator::InitializeCodeGenerationData() {
   code_generation_data_ = CodeGenerationData::Create(graph_->GetArenaStack(), GetInstructionSet());
 }
 
+void CodeGenerator::DumpVectorRegister([[maybe_unused]] std::ostream& stream,
+                                       [[maybe_unused]] int reg) const {
+  LOG(FATAL) << "No vector registers on " << GetInstructionSet();
+  UNREACHABLE();
+}
+
 void CodeGenerator::Compile() {
   InitializeCodeGenerationData();
 
@@ -941,6 +947,7 @@ std::unique_ptr<CodeGenerator> CodeGenerator::Create(HGraph* graph,
 CodeGenerator::CodeGenerator(HGraph* graph,
                              size_t number_of_core_registers,
                              size_t number_of_fpu_registers,
+                             size_t number_of_vector_registers,
                              RegisterSet callee_saves,
                              const CompilerOptions& compiler_options,
                              OptimizingCompilerStats* stats,
@@ -954,6 +961,7 @@ CodeGenerator::CodeGenerator(HGraph* graph,
       data_types_requiring_register_pair_(0u),
       number_of_core_registers_(number_of_core_registers),
       number_of_fpu_registers_(number_of_fpu_registers),
+      number_of_vector_registers_(number_of_vector_registers),
       block_order_(nullptr),
       disasm_info_(nullptr),
       stats_(stats),
@@ -969,6 +977,7 @@ CodeGenerator::CodeGenerator(HGraph* graph,
       unimplemented_intrinsics_(unimplemented_intrinsics) {
   DCHECK_LE(number_of_core_registers_, BitSizeOf<uint32_t>());
   DCHECK_LE(number_of_fpu_registers_, BitSizeOf<uint32_t>());
+  DCHECK_LE(number_of_vector_registers, BitSizeOf<uint32_t>());
 
   if (GetGraph()->IsCompilingOsr()) {
     // Make OSR methods have all registers spilled, this simplifies the logic of

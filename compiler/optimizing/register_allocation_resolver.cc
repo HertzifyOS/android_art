@@ -227,7 +227,9 @@ void RegisterAllocationResolver::UpdateSafepointLiveRegisters(
   for (HInstruction* instruction : liveness_.GetInstructionsFromSsaIndexes()) {
     size_t remaining_safepoints = instruction->GetLiveInterval()->GetNumSafepointsAfter();
     uint32_t RegisterSet::* register_field_accessor =
-        RegisterSet::GetRegisterFieldAccessor(instruction->GetLiveInterval()->IsFloatingPoint());
+        instruction->GetLiveInterval()->IsFloatingPoint()
+            ? RegisterSet::GetFpuRegisterSetAccessor()
+            : RegisterSet::GetCoreRegisterSetAccessor();
     for (LiveInterval* current = instruction->GetLiveInterval();
          current != nullptr;
          current = current->GetNextSibling()) {
