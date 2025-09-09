@@ -3137,6 +3137,8 @@ struct OatdumpArgs : public CmdlineArgs {
       imt_stat_dump_ = true;
     } else if (option == "--dump-method-and-offset-as-json") {
       dump_method_and_offset_as_json = true;
+    } else if (option == "--allow-profile-code") {
+      allow_profile_code_ = true;
     } else {
       return kParseUnknownArgument;
     }
