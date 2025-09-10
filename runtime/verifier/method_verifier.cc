@@ -1068,6 +1068,15 @@ class MethodVerifierImpl : public ::art::verifier::MethodVerifier {
       } else if (check_type.IsUninitializedTypes() || src_type.IsUninitializedTypes()) {
         // Hard fail for uninitialized types, which don't match anything but themselves.
         fail_type = VERIFY_ERROR_BAD_CLASS_HARD;
+      } else if (check_type.IsArrayTypes() && !src_type.IsArrayTypes()) {
+        // Hard fail: check is array, src is non-array. Note that here we don't have to check
+        // `!src_type.IsUnresolvedTypes()` since the assignability check is not symmetric.
+        fail_type = VERIFY_ERROR_BAD_CLASS_HARD;
+      } else if (!check_type.IsArrayTypes() &&
+                 !check_type.IsUnresolvedTypes() &&
+                 src_type.IsArrayTypes()) {
+        // Hard fail: check is resolved non-array, src is array.
+        fail_type = VERIFY_ERROR_BAD_CLASS_HARD;
       } else if (check_type.IsUnresolvedTypes() || src_type.IsUnresolvedTypes()) {
         fail_type = VERIFY_ERROR_UNRESOLVED_TYPE_CHECK;
       } else {
