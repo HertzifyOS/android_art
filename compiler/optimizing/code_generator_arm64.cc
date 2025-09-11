@@ -1361,7 +1361,7 @@ void CodeGeneratorARM64::MaybeRecordTraceEvent(bool is_method_entry) {
   // Don't instrument methods that are unlikely to be long running
   if (!graph->HasLoops() &&
       !graph->HasMonitorOperations() &&
-      graph->CountNumberOfInstructions() <= kSmallFunctionThreshold) {
+      !graph->HasMoreInstructionsThan(kSmallFunctionThreshold)) {
     return;
   }
 

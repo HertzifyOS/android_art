@@ -48,6 +48,20 @@ size_t HGraph::CountNumberOfInstructions() {
   return number_of_instructions;
 }
 
+bool HGraph::HasMoreInstructionsThan(size_t limit) {
+  size_t number_of_instructions = 0;
+  for (HBasicBlock* block : GetReversePostOrderSkipEntryBlock()) {
+    for (HInstructionIteratorPrefetchNext instr_it(block->GetInstructions()); !instr_it.Done();
+         instr_it.Advance()) {
+      ++number_of_instructions;
+      if (number_of_instructions > limit) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 // Register a back edge; if the block was not a loop header before the call,
 // associate a newly created loop info with it.
 void AddBackEdge(HBasicBlock* block, HBasicBlock* back_edge) {
