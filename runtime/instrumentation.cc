@@ -584,8 +584,8 @@ void UpdateNeedsDexPcEventsOnStack(Thread* thread) REQUIRES(Locks::mutator_lock_
   visitor.WalkStack(true);
 }
 
-void ReportMethodEntryForOnStackMethods(InstrumentationListener* listener, Thread* thread)
-    REQUIRES(Locks::mutator_lock_) {
+void Instrumentation::ReportMethodEntryForOnStackMethods(InstrumentationListener* listener,
+                                                         Thread* thread) {
   Locks::mutator_lock_->AssertExclusiveHeld(Thread::Current());
 
   struct InstallStackVisitor final : public StackVisitor {

@@ -231,6 +231,9 @@ class Instrumentation {
     return MemberOffset(OFFSETOF_MEMBER(Instrumentation, have_method_exit_listeners_));
   }
 
+  static void ReportMethodEntryForOnStackMethods(InstrumentationListener* listener, Thread* thread)
+      REQUIRES(Locks::mutator_lock_);
+
   // Add a listener to be notified of the masked together sent of instrumentation events. This
   // suspend the runtime to install stubs. You are expected to hold the mutator lock as a proxy
   // for saying you should have suspended all threads (installing stubs while threads are running

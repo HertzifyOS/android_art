@@ -40,6 +40,7 @@ static constexpr size_t kLongRunningMethodThreshold = 1 << 23;
 enum class LowOverheadTraceType {
   kLongRunningMethods,
   kAllMethods,
+  kAllMethodsWithFlush,
   kNone
 };
 
@@ -195,7 +196,7 @@ class TraceProfiler {
   static bool IsTraceProfileInProgress() REQUIRES(Locks::trace_lock_);
 
   // Allocates a buffer for the specified thread.
-  static void AllocateBuffer(Thread* thread);
+  static void AllocateBuffer(Thread* thread) REQUIRES(Locks::trace_lock_);
 
   // Used to flush the long running method buffer when it is full. This method flushes all methods
   // that have already seen an exit and records them into a string. If we don't have sufficient free

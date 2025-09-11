@@ -61,6 +61,7 @@
 #include "scoped_thread_state_change-inl.h"
 #include "stack.h"
 #include "thread-inl.h"
+#include "trace.h"
 #include "trace_profile.h"
 #include "var_handles.h"
 #include "well_known_classes.h"
@@ -2814,6 +2815,11 @@ extern "C" Context* artMethodExitHook(Thread* self,
 extern "C" void artRecordLongRunningMethodTraceEvent(ArtMethod* method, Thread* self, bool is_entry)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   TraceProfiler::FlushBufferAndRecordTraceEvent(method, self, is_entry);
+}
+
+extern "C" void artRecordMethodTraceEvent(ArtMethod* method, Thread* self, bool is_entry)
+    REQUIRES_SHARED(Locks::mutator_lock_) {
+  TraceLowOverhead::LogMethodTraceEvent(self, method, is_entry);
 }
 
 }  // namespace art

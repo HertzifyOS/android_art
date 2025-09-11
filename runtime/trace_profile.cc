@@ -114,8 +114,6 @@ void TraceProfiler::AllocateBuffer(Thread* thread) {
     return;
   }
 
-  Thread* self = Thread::Current();
-  MutexLock mu(self, *Locks::trace_lock_);
   if (!profile_in_progress_) {
     return;
   }
@@ -136,6 +134,10 @@ void TraceProfiler::AllocateBuffer(Thread* thread) {
 
 LowOverheadTraceType TraceProfiler::GetTraceType() {
   MutexLock mu(Thread::Current(), *Locks::trace_lock_);
+  if (Trace::IsTracingEnabledLocked()) {
+    DCHECK_EQ(trace_data_, nullptr);
+    return Trace::GetTraceType();
+  }
   // LowOverhead trace entry points are configured based on the trace type. When trace_data_ is null
   // then there is no low overhead tracing running, so we use nop entry points.
   if (trace_data_ == nullptr) {

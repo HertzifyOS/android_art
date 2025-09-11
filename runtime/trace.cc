@@ -95,6 +95,7 @@ static constexpr const char* kTracerInstrumentationKey = "Tracer";
 double TimestampCounter::tsc_to_nanosec_scaling_factor = -1;
 
 Trace* Trace::the_trace_ = nullptr;
+Trace* TraceLowOverhead::low_overhead_trace_ = nullptr;
 pthread_t Trace::sampling_pthread_ = 0U;
 std::unique_ptr<std::vector<ArtMethod*>> Trace::temp_stack_trace_;
 
@@ -642,6 +643,13 @@ void Trace::Start(std::unique_ptr<File>&& trace_file_in,
     return;
   }
 
+  if ((TraceFlag::kTraceLowOverhead & flags) && !ShouldEnableProfileCode()) {
+    // Low-overhead tracing requested but the feature isn't enabled.
+    LOG(ERROR) << "Feature not supported. Please build with ALLOW_PROFILE_CODE and enable "
+                "com.android.art.rw.flags.enable_profile_code_rw";
+    return;
+  }
+
   // Initialize the frequency of timestamp counter updates here. This is needed
   // to get wallclock time from timestamp counter values.
   TimestampCounter::InitializeTimestampCounters();
@@ -690,6 +698,22 @@ void Trace::Start(std::unique_ptr<File>&& trace_file_in,
                                           reinterpret_cast<void*>(interval_us)),
                          "Sampling profiler thread");
       the_trace_->interval_us_ = interval_us;
+    } else if (flags & TraceFlag::kTraceLowOverhead) {
+      DCHECK(ShouldEnableProfileCode());
+      TraceLowOverhead::Start(the_trace_);
+      if (is_trace_format_v2) {
+        // Add ClassLoadCallback to record methods on class load.
+        runtime->GetRuntimeCallbacks()->AddClassLoadCallback(the_trace_);
+      }
+      // Start a low overhead trace.
+      MutexLock tl_lock(Thread::Current(), *Locks::thread_list_lock_);
+      for (Thread* thread : Runtime::Current()->GetThreadList()->GetList()) {
+        thread->UpdateTlsLowOverheadTraceEntrypoints(LowOverheadTraceType::kAllMethodsWithFlush);
+        thread->SetMethodTraceBuffer(
+            the_trace_->GetTraceWriter()->AcquireTraceBuffer(thread->GetTid()), kPerThreadBufSize);
+        the_trace_->GetTraceWriter()->RecordThreadInfo(thread);
+        instrumentation::Instrumentation::ReportMethodEntryForOnStackMethods(the_trace_, thread);
+      }
     } else {
       if (!runtime->IsJavaDebuggable()) {
         art::jit::Jit* jit = runtime->GetJit();
@@ -788,6 +812,7 @@ void Trace::StopTracing(bool flush_entries) {
       // trace_lock_ both here and when flushing on a thread detach only one of them will succeed
       // in actually flushing the buffer.
       for (Thread* thread : Runtime::Current()->GetThreadList()->GetList()) {
+        thread->UpdateTlsLowOverheadTraceEntrypoints(LowOverheadTraceType::kNone);
         if (thread->GetMethodTraceBuffer() != nullptr) {
           // We may have pending requests to flush the data. So just enqueue a
           // request to flush the current buffer so all the requests are
@@ -797,6 +822,7 @@ void Trace::StopTracing(bool flush_entries) {
         }
       }
       the_trace_ = nullptr;
+      TraceLowOverhead::Stop();
       sampling_pthread_ = 0U;
     }
   }
@@ -841,6 +867,21 @@ void Trace::FlushThreadBuffer(Thread* self) {
     return;
   }
   the_trace_->trace_writer_->FlushBuffer(self, /* is_sync= */ false, /* free_buffer= */ true);
+}
+
+void Trace::AllocateThreadBuffer(Thread* self) {
+  MutexLock mu(self, *Locks::trace_lock_);
+  // Check if we still need to flush inside the trace_lock_. If we are stopping tracing it is
+  // possible we already deleted the trace and flushed the buffer too.
+  if (the_trace_ == nullptr) {
+    if (ShouldEnableProfileCode()) {
+      TraceProfiler::AllocateBuffer(self);
+    }
+    return;
+  }
+  auto buffer = the_trace_->trace_writer_->AcquireTraceBuffer(self->GetTid());
+  self->SetMethodTraceBuffer(buffer, kPerThreadBufSize);
+  the_trace_->GetTraceWriter()->RecordThreadInfo(self);
 }
 
 void Trace::ReleaseThreadBuffer(Thread* self) {
@@ -1898,6 +1939,14 @@ bool Trace::IsTracingEnabled() {
 
 bool Trace::IsTracingEnabledLocked() {
   return the_trace_ != nullptr;
+}
+
+LowOverheadTraceType Trace::GetTraceType() {
+  DCHECK(the_trace_ != nullptr) << "Trace flags requested, but no trace currently running";
+  if (the_trace_->flags_ & TraceFlag::kTraceLowOverhead) {
+    return LowOverheadTraceType::kAllMethodsWithFlush;
+  }
+  return LowOverheadTraceType::kNone;
 }
 
 }  // namespace art

@@ -37,6 +37,7 @@
 #include "instrumentation.h"
 #include "runtime_globals.h"
 #include "thread_pool.h"
+#include "trace_profile.h"
 
 namespace art HIDDEN {
 
@@ -442,6 +443,8 @@ class Trace final : public instrumentation::InstrumentationListener, public Clas
  public:
   enum TraceFlag {
     kTraceCountAllocs = 0x001,
+    // 2nd and 3rd bits are used for specifying format version
+    kTraceLowOverhead = 0x008,
     kTraceClockSourceWallClock = 0x010,
     kTraceClockSourceThreadCpu = 0x100,
   };
@@ -511,6 +514,8 @@ class Trace final : public instrumentation::InstrumentationListener, public Clas
   // allocated while the thread is terminating. See ThreadList::Unregister for more details.
   static void ReleaseThreadBuffer(Thread* thread)
       REQUIRES(!Locks::trace_lock_) NO_THREAD_SAFETY_ANALYSIS;
+  static void AllocateThreadBuffer(Thread* thread)
+      REQUIRES(!Locks::trace_lock_) NO_THREAD_SAFETY_ANALYSIS;
 
   // Removes any listeners installed for method tracing. This is used in non-streaming case
   // when we no longer record any events once the buffer is full. In other cases listeners are
@@ -573,7 +578,10 @@ class Trace final : public instrumentation::InstrumentationListener, public Clas
   static TraceMode GetMode() REQUIRES(!Locks::trace_lock_);
   static size_t GetBufferSize() REQUIRES(!Locks::trace_lock_);
   static int GetFlags() REQUIRES(!Locks::trace_lock_);
+  static LowOverheadTraceType GetTraceType() REQUIRES(Locks::trace_lock_);
   static int GetIntervalInMillis() REQUIRES(!Locks::trace_lock_);
+  static void LogMethodTraceEvent(Thread* self, ArtMethod* method, bool is_entry)
+      REQUIRES_SHARED(Locks::mutator_lock_);
 
   // Used by class linker to prevent class unloading.
   static bool IsTracingEnabled() REQUIRES(!Locks::trace_lock_);
@@ -641,6 +649,26 @@ class Trace final : public instrumentation::InstrumentationListener, public Clas
   std::unique_ptr<TraceWriter> trace_writer_;
 
   DISALLOW_COPY_AND_ASSIGN(Trace);
+};
+
+class TraceLowOverhead {
+ public:
+  static void Start(Trace* trace) { low_overhead_trace_ = trace; }
+
+  static void Stop() { low_overhead_trace_ = nullptr; }
+
+  static void LogMethodTraceEvent(Thread* self, ArtMethod* method, bool is_entry)
+      REQUIRES_SHARED(Locks::mutator_lock_) {
+    if (is_entry) {
+      low_overhead_trace_->MethodEntered(self, method);
+    } else {
+      JValue return_value;
+      low_overhead_trace_->MethodExited(self, method, {}, return_value);
+    }
+  }
+
+ private:
+  static Trace* low_overhead_trace_;
 };
 
 }  // namespace art

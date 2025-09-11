@@ -2594,6 +2594,55 @@ ENTRY art_quick_record_exit_trace_event
     ret
 END art_quick_record_exit_trace_event
 
+ENTRY art_quick_record_entry_trace_event_with_flush
+    ldr xIP1, [xSELF, #TRACE_BUFFER_CURRENT_OFFSET]
+    // xIP0 has the trace buffer pointer. This is loaded on the fast path before
+    // checking if we need to call this method. This will be still valid here.
+    sub xIP1, xIP1, 16
+    cmp xIP1, xIP0
+    b.lt .Lhandle_record_entry_overflow
+    mrs xIP0, cntvct_el0
+    str x0, [xIP1]
+    str xIP0, [xIP1, 8]
+    str xIP1, [xSELF, #TRACE_BUFFER_CURRENT_OFFSET]
+    ret
+.Lhandle_record_entry_overflow:
+    SETUP_SAVE_EVERYTHING_FRAME
+    // x0 already has method*
+    mov x1, xSELF                             // pass Thread::Current
+    mov x2, 1                                 // set to true for entry events
+    bl  artRecordMethodTraceEvent             // (ArtMethod*, Thread*, is_entry)
+    RESTORE_SAVE_EVERYTHING_FRAME             // Note: will restore xSELF
+    REFRESH_MARKING_REGISTER
+    ret
+END art_quick_record_entry_trace_event_with_flush
+
+ENTRY art_quick_record_exit_trace_event_with_flush
+    ldr xIP1, [xSELF, #TRACE_BUFFER_CURRENT_OFFSET]
+    // xIP0 has the trace buffer pointer. This is loaded on the fast path before
+    // checking if we need to call this method. This will be still valid here.
+    // TODO: Change this so we only need one entry here.
+    sub xIP1, xIP1, 16
+    cmp xIP1, xIP0
+    b.lt .Lhandle_record_exit_overflow
+    ldr xIP0, [sp] // pass ArtMethod*
+    orr xIP0, xIP0, #1
+    str xIP0, [xIP1]
+    mrs xIP0, cntvct_el0
+    str xIP0, [xIP1, 8]
+    str xIP1, [xSELF, #TRACE_BUFFER_CURRENT_OFFSET]
+    ret
+.Lhandle_record_exit_overflow:
+    SETUP_SAVE_EVERYTHING_FRAME
+    ldr x0, [sp, #FRAME_SIZE_SAVE_EVERYTHING] // pass ArtMethod*
+    mov x1, xSELF                             // pass Thread::Current
+    mov x2, 0                                 // set to true for exit events
+    bl  artRecordMethodTraceEvent             // (ArtMethod*, Thread*, is_entry)
+    RESTORE_SAVE_EVERYTHING_FRAME             // Note: will restore xSELF
+    REFRESH_MARKING_REGISTER
+    ret
+END art_quick_record_exit_trace_event_with_flush
+
 ENTRY art_quick_record_long_running_entry_trace_event
     ldr xIP1, [xSELF, #TRACE_BUFFER_CURRENT_OFFSET]
     sub xIP1, xIP1, 16

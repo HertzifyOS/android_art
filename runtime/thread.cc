@@ -1173,7 +1173,7 @@ Thread* Thread::Attach(const char* thread_name,
     self->Dump(LOG_STREAM(INFO));
   }
 
-  TraceProfiler::AllocateBuffer(self);
+  Trace::AllocateThreadBuffer(self);
   if (should_run_callbacks) {
     ScopedObjectAccess soa(self);
     runtime->GetRuntimeCallbacks()->ThreadStart(self);
