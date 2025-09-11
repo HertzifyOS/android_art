@@ -15,6 +15,7 @@
  */
 
 import java.lang.reflect.Field;
+import java.util.concurrent.ThreadLocalRandom;
 import jdk.internal.misc.Unsafe;
 
 public class Main {
@@ -104,6 +105,7 @@ public class Main {
     testGetAndPutVolatile(unsafe);
     testGetAcquireAndPutRelease(unsafe);
     testCopyMemory(unsafe);
+    testNullBasedAccessors(unsafe);
   }
 
   private static void testArrayBaseOffset(Unsafe unsafe) {
@@ -603,6 +605,102 @@ public class Main {
         expectThrow(RuntimeException.class, "unsafe.copyMemory/non-array-dst");
     } catch (RuntimeException expected) {
     }
+  }
+
+  private static void testNullBasedAccessors(Unsafe unsafe) {
+    long ptr = unsafe.allocateMemory(16);
+    int intV = ThreadLocalRandom.current().nextInt();
+
+    unsafe.putInt(/*o=*/ null, ptr, intV);
+    check(unsafe.getInt(/*o=*/ null, ptr), intV, "putInt/getInt");
+
+    unsafe.putIntVolatile(/*o=*/ null, ptr, intV + 1);
+    check(unsafe.getIntVolatile(/*o=*/ null, ptr), intV + 1, "getInt/putInt volatile");
+
+    check(unsafe.compareAndSetInt(/*o=*/ null, ptr, intV + 1, intV), true, "CAS int");
+    check(unsafe.compareAndSetInt(/*o=*/ null, ptr, intV + 1, intV), false, "CAS int repeat");
+
+    long longV = ThreadLocalRandom.current().nextLong();
+
+    unsafe.putLong(/*o=*/ null, ptr, longV);
+    check(unsafe.getLong(/*o=*/ null, ptr), longV, "getLong/putLong");
+
+    unsafe.putLongVolatile(/*o=*/ null, ptr, longV + 1);
+    check(unsafe.getLongVolatile(/*o=*/ null, ptr), longV + 1, "getLong/putLong volatile");
+    check(unsafe.compareAndSetLong(/*o=*/ null, ptr, longV + 1, longV), true, "CAS long");
+    check(unsafe.compareAndSetLong(/*o=*/ null, ptr, longV + 1, longV), false, "CAS long repeat");
+
+    check(unsafe.compareAndExchangeLong(/*o=*/ null, ptr, longV, longV + 1), longV, "CAE long");
+    check(
+        unsafe.compareAndExchangeLong(/*o=*/ null, ptr, longV, longV + 1),
+        longV + 1,
+        "CAE long repeat");
+
+    boolean booleanV = ThreadLocalRandom.current().nextBoolean();
+
+    unsafe.putBoolean(/*o=*/ null, ptr, booleanV);
+    check(unsafe.getBoolean(/*o=*/ null, ptr), booleanV, "putBoolean/getBoolean");
+    unsafe.putBooleanVolatile(/*o=*/ null, ptr, !booleanV);
+    check(unsafe.getBooleanVolatile(/*o=*/ null, ptr), !booleanV, "putBoolean/getBoolean volatile");
+
+    byte byteV = (byte) ThreadLocalRandom.current().nextInt();
+
+    unsafe.putByte(/*o=*/ null, ptr, byteV);
+    check(unsafe.getByte(/*o=*/ null, ptr), byteV, "putByte/getByte");
+
+    byteV = (byte) ThreadLocalRandom.current().nextInt();
+    unsafe.putByteVolatile(/*o=*/ null, ptr, byteV);
+    check(unsafe.getByteVolatile(/*o=*/ null, ptr), byteV, "putByte/getByte volatile");
+
+    char charV = (char) ThreadLocalRandom.current().nextInt();
+
+    unsafe.putChar(/*o=*/ null, ptr, charV);
+    check(unsafe.getChar(/*o=*/ null, ptr), charV, "putChar/getChar");
+
+    charV = (char) ThreadLocalRandom.current().nextInt();
+    unsafe.putCharVolatile(/*o=*/ null, ptr, charV);
+    check(unsafe.getCharVolatile(/*o=*/ null, ptr), charV, "putChar/getChar volatile");
+
+    short shortV = (short) ThreadLocalRandom.current().nextInt();
+
+    unsafe.putShort(/*o=*/ null, ptr, shortV);
+    check(unsafe.getShort(/*o=*/ null, ptr), shortV, "putShort/getShort");
+
+    shortV = (short) ThreadLocalRandom.current().nextInt();
+    unsafe.putShortVolatile(/*o=*/ null, ptr, shortV);
+    check(unsafe.getShortVolatile(/*o=*/ null, ptr), shortV, "putShort/getShort volatile");
+
+    float floatV = ThreadLocalRandom.current().nextFloat();
+
+    unsafe.putFloat(/*o=*/ null, ptr, floatV);
+    check(
+        Float.floatToRawIntBits(unsafe.getFloat(/*o=*/ null, ptr)),
+        Float.floatToRawIntBits(floatV),
+        "putFloat/getFloat");
+
+    floatV = ThreadLocalRandom.current().nextFloat();
+
+    unsafe.putFloatVolatile(/*o=*/ null, ptr, floatV);
+    check(
+        Float.floatToRawIntBits(unsafe.getFloatVolatile(/*o=*/ null, ptr)),
+        Float.floatToRawIntBits(floatV),
+        "putFloat/getFloat volatile");
+
+    double doubleV = ThreadLocalRandom.current().nextDouble();
+
+    unsafe.putDouble(/*o=*/ null, ptr, doubleV);
+    check(
+        Double.doubleToRawLongBits(unsafe.getDouble(/*o=*/ null, ptr)),
+        Double.doubleToRawLongBits(doubleV),
+        "putDouble/getDouble");
+
+    doubleV = ThreadLocalRandom.current().nextDouble();
+
+    unsafe.putDoubleVolatile(/*o=*/ null, ptr, doubleV);
+    check(
+        Double.doubleToRawLongBits(unsafe.getDoubleVolatile(/*o=*/ null, ptr)),
+        Double.doubleToRawLongBits(doubleV),
+        "putDouble/getDouble volatile");
   }
 
   private static class TestClass {
