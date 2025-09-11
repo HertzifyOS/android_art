@@ -1,32 +1,37 @@
 %def op_check_cast():
 %  slow_path = add_slow_path(op_check_cast_slow_path)
    // Fast-path which gets the class from thread-local cache.
-%  fetch_from_thread_cache("x1", miss_label="2f")
-1:
+%  fetch_from_thread_cache("x1", miss_label=slow_path)
+.L${opcode}_resume:
    lsr     w2, wINST, #8               // w2<- A
    GET_VREG w0, w2                     // w0<- vA (object)
-   cbz     w0, .L${opcode}_resume
+   cbz     w0, .L${opcode}_next
    ldr     w2, [x0, #MIRROR_OBJECT_CLASS_OFFSET]
    UNPOISON_HEAP_REF w2
    // Fast path: do a comparison without read barrier.
    cmp     w1, w2
-   bne     ${slow_path}
-.L${opcode}_resume:
+   bne     .L${opcode}_slow_path_check_hierarchy
+#ifdef USE_HEAP_POISONING
+   // The dispatch would not fit in 64B. Emit the dipatch in the slow path.
+   b .L${opcode}_next
+#else
+.L${opcode}_next:
    FETCH_ADVANCE_INST 2
    GET_INST_OPCODE ip
    GOTO_OPCODE ip
-2:
+#endif
+
+%def op_check_cast_slow_path():
    EXPORT_PC
    mov     x0, xSELF
    ldr     x1, [sp]
    mov     x2, xPC
    bl      nterp_get_class
    mov     x1, x0
-   b       1b
-
-%def op_check_cast_slow_path():
+   b       .L${opcode}_resume
+.L${opcode}_slow_path_check_hierarchy:
    // We don't do read barriers for simplicity. However, this means that x1
-   // (and all other fetched objects) may be a from-space reference. Tthat's OK as
+   // (and all other fetched objects) may be a from-space reference. That's OK as
    // we only fetch constant information from the references.
    // This also means that some of the comparisons below may lead to false negative,
    // but it will eventually be handled in the runtime.
@@ -39,14 +44,14 @@
    ldr     w2, [x2, #MIRROR_CLASS_SUPER_CLASS_OFFSET]
    UNPOISON_HEAP_REF w2
    cmp     w1, w2
-   beq     .L${opcode}_resume
+   beq     .L${opcode}_next
    cbnz    w2, 1b
 2:
    TEST_IF_MARKING 4f
 3:
    EXPORT_PC
    bl      art_quick_check_instance_of
-   b       .L${opcode}_resume
+   b       .L${opcode}_next
 4:
    bl      art_quick_read_barrier_mark_reg01
    b       3b
@@ -65,42 +70,43 @@
    cbnz    w3, 2b
    // Check if the object is a primitive array.
    ldrh    w2, [x2, #MIRROR_CLASS_OBJECT_PRIMITIVE_TYPE_OFFSET]
-   cbz     w2, .L${opcode}_resume
+   cbz     w2, .L${opcode}_next
    // Go slow path for throwing the exception.
    b 2b
+#ifdef USE_HEAP_POISONING
+.L${opcode}_next:
+   FETCH_ADVANCE_INST 2
+   GET_INST_OPCODE ip
+   GOTO_OPCODE ip
+#endif
 
 %def op_instance_of():
 %  slow_path = add_slow_path(op_instance_of_slow_path)
    /* instance-of vA, vB, class@CCCC */
    // Fast-path which gets the class from thread-local cache.
-%  fetch_from_thread_cache("x1", miss_label="2f")
-1:
+%  fetch_from_thread_cache("x1", miss_label=slow_path)
+.L${opcode}_resume:
    lsr     w2, wINST, #12              // w2<- B
    GET_VREG w0, w2                     // w0<- vB (object)
-   cbz     w0, .L${opcode}_resume
+   cbz     w0, .L${opcode}_store_result
    ldr     w2, [x0, #MIRROR_OBJECT_CLASS_OFFSET]
    UNPOISON_HEAP_REF w2
    // Fast path: do a comparison without read barrier.
    cmp     w1, w2
-   bne     ${slow_path}
+   bne     .L${opcode}_slow_path_check_hierarchy
 .L${opcode}_set_one:
    mov     w0, #1
-.L${opcode}_resume:
-   ubfx    w1, wINST, #8, #4           // w1<- A
-   SET_VREG w0, w1
-   FETCH_ADVANCE_INST 2
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
-2:
+   b       .L${opcode}_store_result
+
+%def op_instance_of_slow_path():
    EXPORT_PC
    mov     x0, xSELF
    ldr     x1, [sp]
    mov     x2, xPC
    bl      nterp_get_class
    mov     x1, x0
-   b       1b
-
-%def op_instance_of_slow_path():
+   b       .L${opcode}_resume
+.L${opcode}_slow_path_check_hierarchy:
    // Go slow path if we are marking. Checking now allows
    // not going to slow path if the super class hierarchy check fails.
    TEST_IF_MARKING 4f
@@ -117,7 +123,7 @@
    cbnz    w2, 1b
 2:
    mov     w0, #0
-   b       .L${opcode}_resume
+   b       .L${opcode}_store_result
 3:
    // Class in x1 is an array, x3 is the component type of x1, and x2 is the class of the object.
    ldr     w2, [x2, #MIRROR_CLASS_COMPONENT_TYPE_OFFSET]
@@ -137,13 +143,18 @@
    ldrh    w2, [x2, #MIRROR_CLASS_OBJECT_PRIMITIVE_TYPE_OFFSET]
    cmp     w2, #0
    cset    w0, eq
-   b       .L${opcode}_resume
+   b       .L${opcode}_store_result
 4:
    bl      art_quick_read_barrier_mark_reg01
 5:
    EXPORT_PC
    bl      artInstanceOfFromCode
-   b       .L${opcode}_resume
+.L${opcode}_store_result:
+   ubfx    w1, wINST, #8, #4           // w1<- A
+   SET_VREG w0, w1
+   FETCH_ADVANCE_INST 2
+   GET_INST_OPCODE ip
+   GOTO_OPCODE ip
 
 %def op_iget_boolean():
 %  op_iget(load="ldrb", volatile_load="ldarb", maybe_extend="", wide="0", is_object="0")
@@ -168,24 +179,18 @@
    cbz     w3, common_errNullObject    // object was null
    .if $wide
    $load   x0, [x3, x0]
-   SET_VREG_WIDE x0, w2                // fp[A] <- value
    .elseif $is_object
    $load   w0, [x3, x0]
    UNPOISON_HEAP_REF w0
    TEST_IF_MARKING .L${opcode}_read_barrier
-.L${opcode}_resume_after_read_barrier:
-   SET_VREG_OBJECT w0, w2              // fp[A] <- value
    .else
    $load   w0, [x3, x0]
-   SET_VREG w0, w2                     // fp[A] <- value
    .endif
-   FETCH_ADVANCE_INST 2
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
+   b .L${opcode}_slow_path_fetch_advance_2_store_r0_to_vreg_r2
    .if $is_object
 .L${opcode}_read_barrier:
    bl      art_quick_read_barrier_mark_reg00
-   b       .L${opcode}_resume_after_read_barrier
+   b       .L${opcode}_slow_path_fetch_advance_2_store_r0_to_vreg_r2
    .endif
 
 %def op_iget_slow_path(volatile_load, maybe_extend, wide, is_object):
@@ -216,20 +221,28 @@
    ubfx    w2, wINST, #8, #4           // w2<- A
    cbz     w3, common_errNullObject    // object was null
    add     x3, x3, x0
+
    .if $wide
    $volatile_load x0, [x3]
-   SET_VREG_WIDE x0, w2                // fp[A] <- value
    .elseif $is_object
    $volatile_load w0, [x3]
    UNPOISON_HEAP_REF w0
    TEST_IF_MARKING .L${opcode}_read_barrier
-   SET_VREG_OBJECT w0, w2              // fp[A] <- value
    .else
    $volatile_load w0, [x3]
    $maybe_extend
+   .endif
+   // `aget-object` and `new-array` handlers jump here to shorten the code.
+.L${opcode}_slow_path_fetch_advance_2_store_r0_to_vreg_r2:
+   FETCH_ADVANCE_INST 2
+   .if $wide
+   SET_VREG_WIDE x0, w2                // fp[A] <- value
+   .elseif $is_object
+   SET_VREG_OBJECT w0, w2              // fp[A] <- value
+   .else
    SET_VREG w0, w2                     // fp[A] <- value
    .endif
-   FETCH_ADVANCE_INST 2
+.L${opcode}_slow_path_dispatch:  // `op_aget` handlers jump here to shorten the code.
    GET_INST_OPCODE ip
    GOTO_OPCODE ip
 
@@ -267,14 +280,18 @@
    cbz w2, common_errNullObject
    .if $wide
    $store  x26, [x2, x0]
-   .else
-   POISON_HEAP_REF_IF_OBJECT $is_object, w26
+   FETCH_ADVANCE_INST 2
+   b .L${opcode}_slow_path_dispatch  // Dispatch would not fit in the handler.
+   .elseif $is_object
+   POISON_HEAP_REF w26
    $store  w26, [x2, x0]
-   WRITE_BARRIER_IF_OBJECT $is_object, w26, w2, .L${opcode}_skip_write_barrier
-   .endif
+   b .L${opcode}_slow_path_write_barrier  // Write barrier would not fit in the handler.
+   .else
+   $store  w26, [x2, x0]
    FETCH_ADVANCE_INST 2
    GET_INST_OPCODE ip
    GOTO_OPCODE ip
+   .endif
 
 %def op_iput_slow_path(volatile_store, wide, is_object):
    ldr     x0, [sp]
@@ -317,9 +334,11 @@
    .else
    POISON_HEAP_REF_IF_OBJECT $is_object, w26
    $volatile_store w26, [x3]
+.L${opcode}_slow_path_write_barrier:
    WRITE_BARRIER_IF_OBJECT $is_object, w26, w2, .L${opcode}_slow_path_skip_write_barrier
    .endif
    FETCH_ADVANCE_INST 2
+.L${opcode}_slow_path_dispatch:  // `op_aput` handlers jump here to shorten the code.
    GET_INST_OPCODE ip
    GOTO_OPCODE ip
 
@@ -342,7 +361,7 @@
 %  op_sget(load="ldrsh", volatile_load="ldarh", maybe_extend="sxth w0, w0", wide="0", is_object="0")
 
 %def op_sget(load="ldr", volatile_load="ldar", maybe_extend="", wide="0", is_object="0"):
-%  slow_path = add_slow_path(op_sget_slow_path, volatile_load, maybe_extend, wide, is_object)
+%  slow_path = add_slow_path(op_sget_slow_path, load, volatile_load, maybe_extend, wide, is_object)
    // Fast-path which gets the field from thread-local cache.
 %  fetch_from_thread_cache("x0", miss_label=slow_path)
 .L${opcode}_resume:
@@ -353,34 +372,34 @@
 .L${opcode}_resume_after_read_barrier:
    .if $wide
    ldr     x0, [x0, x1]
-   SET_VREG_WIDE x0, w2                // fp[A] <- value
    .elseif $is_object
    $load   w0, [x0, x1]
    UNPOISON_HEAP_REF w0
    // No need to check the marking register, we know it's not set here.
-.L${opcode}_after_reference_load:
-   SET_VREG_OBJECT w0, w2              // fp[A] <- value
    .else
    $load   w0, [x0, x1]
-   SET_VREG w0, w2                     // fp[A] <- value
    .endif
-   FETCH_ADVANCE_INST 2
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
+   b .L${opcode}_slow_path_fetch_advance_2_store_r0_to_vreg_r2
+   .if $is_object
+   // For heap poisoning, the read barrier path for `sget-object` does not fit
+   // in the 64B handler and it is therefore emitted in the slow path.
+#ifndef USE_HEAP_POISONING
 .L${opcode}_read_barrier:
    bl      art_quick_read_barrier_mark_reg00
-   .if $is_object
    $load   w0, [x0, x1]
-   UNPOISON_HEAP_REF w0
+   UNPOISON_HEAP_REF w0  // No-op under #ifndef USE_HEAP_POISONING
 .L${opcode}_mark_after_load:
    // Here, we know the marking register is set.
    bl      art_quick_read_barrier_mark_reg00
-   b       .L${opcode}_after_reference_load
+   b .L${opcode}_slow_path_fetch_advance_2_store_r0_to_vreg_r2
+#endif
    .else
+.L${opcode}_read_barrier:
+   bl      art_quick_read_barrier_mark_reg00
    b       .L${opcode}_resume_after_read_barrier
    .endif
 
-%def op_sget_slow_path(volatile_load, maybe_extend, wide, is_object):
+%def op_sget_slow_path(load, volatile_load, maybe_extend, wide, is_object):
    ldr     x0, [sp]
    ldr     w1, [x0, #ART_METHOD_ACCESS_FLAGS_OFFSET]
    tbnz    w1, #ART_METHOD_IS_OBSOLETE_FLAG_BIT, .L${opcode}_slow_path_continue
@@ -407,23 +426,40 @@
    add     x0, x0, x1
    .if $wide
    ldar    x0, [x0]
-   SET_VREG_WIDE x0, w2                // fp[A] <- value
    .elseif $is_object
    $volatile_load w0, [x0]
    UNPOISON_HEAP_REF w0
    TEST_IF_MARKING .L${opcode}_mark_after_load
-   SET_VREG_OBJECT w0, w2              // fp[A] <- value
    .else
    $volatile_load w0, [x0]
    $maybe_extend
+   .endif
+.L${opcode}_slow_path_fetch_advance_2_store_r0_to_vreg_r2:
+   FETCH_ADVANCE_INST 2
+   .if $wide
+   SET_VREG_WIDE x0, w2                // fp[A] <- value
+   .elseif $is_object
+   SET_VREG_OBJECT w0, w2              // fp[A] <- value
+   .else
    SET_VREG w0, w2                     // fp[A] <- value
    .endif
-   FETCH_ADVANCE_INST 2
    GET_INST_OPCODE ip
    GOTO_OPCODE ip
 .L${opcode}_slow_path_read_barrier:
    bl      art_quick_read_barrier_mark_reg00
    b       .L${opcode}_slow_path_resume_after_read_barrier
+#ifdef USE_HEAP_POISONING
+   .if $is_object
+.L${opcode}_read_barrier:
+   bl      art_quick_read_barrier_mark_reg00
+   $load   w0, [x0, x1]
+   UNPOISON_HEAP_REF w0
+.L${opcode}_mark_after_load:
+   // Here, we know the marking register is set.
+   bl      art_quick_read_barrier_mark_reg00
+   b .L${opcode}_slow_path_fetch_advance_2_store_r0_to_vreg_r2
+   .endif
+#endif
 
 %def op_sget_wide():
 %  op_sget(load="ldr", volatile_load="ldar", maybe_extend="", wide="1", is_object="0")
@@ -460,17 +496,18 @@
 .L${opcode}_resume_after_read_barrier:
    .if $wide
    $store  x26, [x0, x1]
-   .else
-   POISON_HEAP_REF_IF_OBJECT $is_object, w26
+   FETCH_ADVANCE_INST 2
+   b .L${opcode}_slow_path_dispatch  // Dispatch would not fit in the handler.
+   .elseif $is_object
+   POISON_HEAP_REF w26
    $store  w26, [x0, x1]
-   WRITE_BARRIER_IF_OBJECT $is_object, w26, w0, .L${opcode}_skip_write_barrier
-   .endif
+   b .L${opcode}_slow_path_write_barrier  // Write barrier would not fit in the handler.
+   .else
+   $store  w26, [x0, x1]
    FETCH_ADVANCE_INST 2
    GET_INST_OPCODE ip
    GOTO_OPCODE ip
-.L${opcode}_read_barrier:
-   bl      art_quick_read_barrier_mark_reg00
-   b       .L${opcode}_resume_after_read_barrier
+   .endif
 
 %def op_sput_slow_path(volatile_store, wide, is_object):
    ldr     x0, [sp]
@@ -514,14 +551,19 @@
    .else
    POISON_HEAP_REF_IF_OBJECT $is_object, w26
    $volatile_store    w26, [x1]
+.L${opcode}_slow_path_write_barrier:
    WRITE_BARRIER_IF_OBJECT $is_object, w26, w0, .L${opcode}_slow_path_skip_write_barrier
    .endif
    FETCH_ADVANCE_INST 2
+.L${opcode}_slow_path_dispatch:  // `op_new_instance` handler jumps here to shorten the code.
    GET_INST_OPCODE ip
    GOTO_OPCODE ip
 .L${opcode}_slow_path_read_barrier:
    bl      art_quick_read_barrier_mark_reg00
    b       .L${opcode}_slow_path_resume_after_read_barrier
+.L${opcode}_read_barrier:
+   bl      art_quick_read_barrier_mark_reg00
+   b       .L${opcode}_resume_after_read_barrier
 
 %def op_sput_wide():
 %  op_sput(store="str", volatile_store="stlr", wide="1", is_object="0")
@@ -530,26 +572,29 @@
 %  op_sput(store="str", volatile_store="stlr", wide="0", is_object="1")
 
 %def op_new_instance():
+%  slow_path = add_slow_path(op_new_instance_slow_path)
    EXPORT_PC
    // Fast-path which gets the class from thread-local cache.
-%  fetch_from_thread_cache("x0", miss_label="2f")
-   TEST_IF_MARKING 3f
-4:
+%  fetch_from_thread_cache("x0", miss_label=slow_path)
+   TEST_IF_MARKING .L${opcode}_slow_path_read_barrier
+.L${opcode}_resume_after_read_barrier:
    ldr     lr, [xSELF, #THREAD_ALLOC_OBJECT_ENTRYPOINT_OFFSET]
    blr     lr
    dmb     ishst                       // need fence for making object's class visible
-1:
+.L${opcode}_resume:
    lsr     w1, wINST, #8               // w1 <- A
    SET_VREG_OBJECT w0, w1              // fp[A] <- value
    FETCH_ADVANCE_INST 2
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
-2:
+   // To fit the handler in 64B, use the instruction dispatch in `sput-char` slow path.
+%  sput_char_opcode = re.sub("op_new_instance", "op_sput_char", opcode)
+   b .L${sput_char_opcode}_slow_path_dispatch
+
+%def op_new_instance_slow_path():
    mov     x0, xSELF
    ldr     x1, [sp]
    mov     x2, xPC
    bl      nterp_allocate_object
-   b       1b
-3:
+   b       .L${opcode}_resume
+.L${opcode}_slow_path_read_barrier:
    bl      art_quick_read_barrier_mark_reg00
-   b       4b
+   b       .L${opcode}_resume_after_read_barrier

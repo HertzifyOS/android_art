@@ -11,13 +11,14 @@
     GET_VREG w3, w1                     // w3<- vB
     GET_VREG w2, w0                     // w2<- vA
     cmp     w2, w3                      // compare (vA, vB)
-    b.${condition} 1f
+    b.${condition} 2f
     FETCH_ADVANCE_INST 2
+1:
     GET_INST_OPCODE ip                  // extract opcode from wINST
     GOTO_OPCODE ip                      // jump to next instruction
-1:
+2:
     FETCH_S wINST, 1                    // wINST<- branch offset, in code units
-    BRANCH
+    BRANCH dispatch=1b
 
 %def zcmp(compare="1", branch=""):
     /*
@@ -145,6 +146,7 @@
     .if $is_void
       // Thread fence for constructor
       dmb ishst
+.Lrestore_registers_and_return:  // `return-wide` handler jumps here to shorten the code.
     .else
       lsr     w2, wINST, #8               // w2<- AA
       .if $is_wide
@@ -161,14 +163,19 @@
         .endif
       .endif
     .endif
-    .cfi_remember_state
-    ldr ip, [xREFS, #-8]
-    mov sp, ip
-    .cfi_def_cfa sp, CALLEE_SAVES_SIZE
-    RESTORE_ALL_CALLEE_SAVES
-    ret
-    .cfi_restore_state
-    CFI_DEF_CFA_BREG_PLUS_UCONST CFI_REFS, -8, CALLEE_SAVES_SIZE
+    .if $is_wide
+      // To fit the handler in the 64B, jump to the code in `return-void`.
+      b .Lrestore_registers_and_return
+    .else
+      .cfi_remember_state
+      ldr ip, [xREFS, #-8]
+      mov sp, ip
+      .cfi_def_cfa sp, CALLEE_SAVES_SIZE
+      RESTORE_ALL_CALLEE_SAVES
+      ret
+      .cfi_restore_state
+      CFI_DEF_CFA_BREG_PLUS_UCONST CFI_REFS, -8, CALLEE_SAVES_SIZE
+    .endif
 
 %def op_return_object():
 %  op_return(is_object="1", is_void="0", is_wide="0")

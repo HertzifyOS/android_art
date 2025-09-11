@@ -9,10 +9,11 @@
    b NterpCommonInvokeCustomRange
 
 %def invoke_direct_or_super(helper="", range="", is_super=""):
+%  slow_path = add_slow_path(invoke_direct_or_super_slow_path, range, is_super)
    EXPORT_PC
    // Fast-path which gets the method from thread-local cache.
-%  fetch_from_thread_cache("x0", miss_label="2f")
-1:
+%  fetch_from_thread_cache("x0", miss_label=slow_path)
+.L${opcode}_resume:
    // Load the first argument (the 'this' pointer).
    FETCH w1, 2
    .if !$range
@@ -21,16 +22,17 @@
    GET_VREG w1, w1
    cbz w1, common_errNullObject    // bail if null
    b $helper
-2:
+
+%def invoke_direct_or_super_slow_path(range, is_super):
    mov x0, xSELF
    ldr x1, [sp]
    mov x2, xPC
    mov x3, xFP
    bl nterp_get_method
    .if $is_super
-   b 1b
+   b .L${opcode}_resume
    .else
-   tbz x0, #0, 1b
+   tbz x0, #0, .L${opcode}_resume
    and x0, x0, #-2 // Remove the extra bit that marks it's a String.<init> method.
    .if $range
    b NterpHandleStringInitRange
@@ -89,30 +91,12 @@
    // - If the first bit is set, this is a method on j.l.Object
    // - If the second bit is set, this is a default method.
    tst w26, #0x3
-   b.ne 2f
+   b.ne .L${opcode}_slow_path_edge_cases
    ldrh w3, [x26, #ART_METHOD_IMT_INDEX_OFFSET]
-1:
-   ldr x2, [x2, #MIRROR_CLASS_IMT_PTR_OFFSET_64]
-   ldr x0, [x2, w3, uxtw #3]
    .if $range
    b NterpCommonInvokeInterfaceRange
    .else
    b NterpCommonInvokeInterface
-   .endif
-2:
-   tbnz w26, #0, 3f
-   and x26, x26, #-4
-   ldrh w3, [x26, #ART_METHOD_METHOD_INDEX_OFFSET]
-   and w3, w3, #ART_METHOD_IMT_MASK
-   b 1b
-3:
-   lsr w26, w26, #16
-   add w2, w2, #MIRROR_CLASS_VTABLE_OFFSET_64
-   ldr x0, [x2, w26, uxtw #3]
-   .if $range
-   b NterpCommonInvokeInstanceRange
-   .else
-   b NterpCommonInvokeInstance
    .endif
 
 %def invoke_interface_slow_path(range):
@@ -123,6 +107,25 @@
    bl nterp_get_method
    mov x26, x0
    b .L${opcode}_resume
+.L${opcode}_slow_path_edge_cases:
+   tbnz w26, #0, 2f
+   and x26, x26, #-4
+   ldrh w3, [x26, #ART_METHOD_METHOD_INDEX_OFFSET]
+   and w3, w3, #ART_METHOD_IMT_MASK
+   .if $range
+   b NterpCommonInvokeInterfaceRange
+   .else
+   b NterpCommonInvokeInterface
+   .endif
+2:
+   lsr w26, w26, #16
+   add w2, w2, #MIRROR_CLASS_VTABLE_OFFSET_64
+   ldr x0, [x2, w26, uxtw #3]
+   .if $range
+   b NterpCommonInvokeInstanceRange
+   .else
+   b NterpCommonInvokeInstance
+   .endif
 
 %def op_invoke_interface():
 %  invoke_interface(range="0")
@@ -150,10 +153,11 @@
 %  invoke_static(helper="NterpCommonInvokeStaticRange")
 
 %def invoke_virtual(helper="", range=""):
+%  slow_path = add_slow_path(invoke_virtual_slow_path)
    EXPORT_PC
    // Fast-path which gets the method from thread-local cache.
-%  fetch_from_thread_cache("x2", miss_label="2f")
-1:
+%  fetch_from_thread_cache("x2", miss_label=slow_path)
+.L${opcode}_resume:
    FETCH w1, 2
    .if !$range
    and w1, w1, #0xf
@@ -165,14 +169,15 @@
    add w0, w0, #MIRROR_CLASS_VTABLE_OFFSET_64
    ldr x0, [x0, w2, uxtw #3]
    b $helper
-2:
+
+%def invoke_virtual_slow_path():
    mov x0, xSELF
    ldr x1, [sp]
    mov x2, xPC
    mov x3, xFP
    bl nterp_get_method
    mov x2, x0
-   b 1b
+   b .L${opcode}_resume
 
 %def op_invoke_virtual():
 %  invoke_virtual(helper="NterpCommonInvokeInstance", range="0")
