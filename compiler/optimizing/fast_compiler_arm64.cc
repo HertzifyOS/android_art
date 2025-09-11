@@ -126,7 +126,8 @@ class FastCompilerARM64 : public FastCompiler {
                     ArenaStack* arena_stack,
                     VariableSizedHandleScope* handles,
                     const CompilerOptions& compiler_options,
-                    const DexCompilationUnit& dex_compilation_unit)
+                    const DexCompilationUnit& dex_compilation_unit,
+                    bool with_loop_support = false)
       : method_(method),
         allocator_(allocator),
         handles_(handles),
@@ -149,6 +150,9 @@ class FastCompilerARM64 : public FastCompiler {
         catch_pcs_(ArenaBitVector::CreateFixedSize(
                        allocator,
                        dex_compilation_unit.GetCodeItemAccessor().InsnsSizeInCodeUnits())),
+        loop_header_pcs_(ArenaBitVector::CreateFixedSize(
+                             allocator,
+                             dex_compilation_unit.GetCodeItemAccessor().InsnsSizeInCodeUnits())),
         catch_stack_maps_(allocator->Adapter()),
         has_frame_(false),
         needs_vreg_info_(false),
@@ -163,6 +167,9 @@ class FastCompilerARM64 : public FastCompiler {
     memset(object_register_masks_.data(), ~0, object_register_masks_.size() * sizeof(uint64_t));
     memset(object_stack_masks_.data(), 0, object_stack_masks_.size() * sizeof(ArenaBitVector*));
     GetAssembler()->cfi().SetEnabled(compiler_options.GenerateAnyDebugInfo());
+    if (with_loop_support) {
+      MarkLoopHeaders();
+    }
   }
 
   void ResetTempRegisters() {
@@ -240,6 +247,11 @@ class FastCompilerARM64 : public FastCompiler {
 
   const char* GetUnimplementedReason() const {
     return unimplemented_reason_;
+  }
+
+  bool ShouldRecompileWithLoopSupport() const {
+    DCHECK(!loop_header_pcs_.IsAnyBitSet());
+    return recompile_with_loop_support_;
   }
 
  private:
@@ -504,6 +516,52 @@ class FastCompilerARM64 : public FastCompiler {
     return CPURegList(CPURegister::kVRegister, kDRegSize, fpu_spill_mask_);
   }
 
+  // Loop support
+  //
+  void MarkLoopHeaders() {
+    for (const DexInstructionPcPair& pair : GetCodeItemAccessor()) {
+      const uint32_t dex_pc = pair.DexPc();
+      const Instruction& instruction = pair.Inst();
+
+      if (instruction.IsBranch()) {
+        int32_t target_offset = instruction.GetTargetOffset();
+        if (target_offset <= 0) {
+          loop_header_pcs_.SetBit(dex_pc + target_offset);
+        }
+      }
+    }
+  }
+
+  bool IsLoopHeader(uint32_t dex_pc) const {
+    return loop_header_pcs_.IsBitSet(dex_pc);
+  }
+
+  bool CanHandleLoop(uint32_t dex_pc) {
+    if (!IsLoopHeader(dex_pc)) {
+      DCHECK(!loop_header_pcs_.IsAnyBitSet());
+      unimplemented_reason_ = "Loop retry";
+      recompile_with_loop_support_ = true;
+      return false;
+    }
+
+    // No need to check if the non-null masks match, as we disable the
+    // optimization at loop header.
+
+    DCHECK_NE(object_register_masks_[dex_pc], std::numeric_limits<uint64_t>::max()) << dex_pc;
+    if (object_register_masks_[dex_pc] !=
+            (object_register_masks_[dex_pc] & object_register_mask_)) {
+      unimplemented_reason_ = "Different register mask for loop";
+      return false;
+    }
+
+    if (!object_stack_masks_[dex_pc]->IsSubsetOf(&object_stack_mask_)) {
+      unimplemented_reason_ = "Different stack mask for loop";
+      return false;
+    }
+
+    return true;
+  }
+
   // Method being compiled.
   ArtMethod* method_;
 
@@ -536,6 +594,10 @@ class FastCompilerARM64 : public FastCompiler {
 
   // Dex pcs that are catch targets.
   BitVectorView<size_t> catch_pcs_;
+
+  // If we are compiling this method with loop support, the dex pcs that are loop headers.
+  // Empty otherwise.
+  BitVectorView<size_t> loop_header_pcs_;
 
   // Pair of {dex_pc, native_pc} collected during compilation, used when
   // generating stack map entries for catch instructions at the end of
@@ -580,6 +642,9 @@ class FastCompilerARM64 : public FastCompiler {
 
   // If non-empty, the reason the compilation could not be finished.
   const char* unimplemented_reason_ = nullptr;
+
+  // Set to true when we hit a back edge and we haven't collected loop headers.
+  bool recompile_with_loop_support_ = false;
 };
 
 bool FastCompilerARM64::InitializeParameters() {
@@ -650,6 +715,15 @@ bool FastCompilerARM64::InitializeParameters() {
     GenerateSuspendCheck();
   }
 
+  if (loop_header_pcs_.IsAnyBitSet()) {
+    // Generate the frame now. We don't want to create it lazily as the branch
+    // instruction going backwards might branch to a dex pc lower than where the
+    // frame was created.
+    if (!EnsureHasFrame()) {
+      return false;
+    }
+  }
+
   if (GetCodeItemAccessor().TriesSize() != 0) {
     if (!EnsureHasFrame()) {
       return false;
@@ -715,11 +789,25 @@ void FastCompilerARM64::StartBranchTarget(bool flow_continues, uint32_t dex_pc) 
     // Emulate a branch to this pc.
     PrepareToBranch(dex_pc);
   } else {
+    if (!BranchTargetIsInitialized(dex_pc)) {
+      DCHECK(IsLoopHeader(dex_pc));
+      // Update masks based on what we currently have. This is rather arbitrary,
+      // but a better approximation at this point than setting all masks to 0 or 1.
+      UpdateMasks(dex_pc);
+    }
     // Otherwise reset locations to known locations.
     ResetLocations();
   }
+
   // Set new masks based on all incoming edges.
-  is_non_null_mask_ = is_non_null_masks_[dex_pc];
+  if (IsLoopHeader(dex_pc)) {
+    // Disable non-null optimizations at loop header. It's preferable to perform
+    // the compilation rather than bailing out because the back edge has a
+    // different null mask.
+    is_non_null_mask_ = 0u;
+  } else {
+    is_non_null_mask_ = is_non_null_masks_[dex_pc];
+  }
   object_register_mask_ = object_register_masks_[dex_pc];
   DCHECK_NE(object_stack_masks_[dex_pc], nullptr);
   object_stack_mask_.Copy(object_stack_masks_[dex_pc]);
@@ -742,17 +830,21 @@ bool FastCompilerARM64::ProcessInstructions() {
     if (it != end) {
       const DexInstructionPcPair& next_pair = *it;
       next = &next_pair.Inst();
-      if (GetLabelOf(next_pair.DexPc())->IsLinked()) {
+      if (GetLabelOf(next_pair.DexPc())->IsLinked() || IsLoopHeader(next_pair.DexPc())) {
         // Disable the micro-optimization, as the next instruction is a branch
         // target.
         next = nullptr;
       }
     }
     vixl::aarch64::Label* label = GetLabelOf(pair.DexPc());
-    if (label->IsLinked()) {
-      DCHECK(BranchTargetIsInitialized(pair.DexPc()));
+    if (label->IsLinked() || IsLoopHeader(pair.DexPc())) {
+      DCHECK_EQ(label->IsLinked(), BranchTargetIsInitialized(pair.DexPc()));
       StartBranchTarget(flow_continues, pair.DexPc());
       __ Bind(label);
+    }
+
+    if (IsLoopHeader(pair.DexPc())) {
+      GenerateSuspendCheck();
     }
 
     if (catch_pcs_.IsBitSet(pair.DexPc())) {
@@ -1960,9 +2052,7 @@ bool FastCompilerARM64::If_21_22t(const Instruction& instruction, uint32_t dex_p
   }
   int32_t target_offset = kCompareWithZero ? instruction.VRegB_21t() : instruction.VRegC_22t();
   DCHECK_EQ(target_offset, instruction.GetTargetOffset());
-  if (target_offset < 0) {
-    // TODO: Support for negative branches requires two passes.
-    unimplemented_reason_ = "NegativeBranch";
+  if (target_offset < 0 && !CanHandleLoop(dex_pc + target_offset)) {
     return false;
   }
   int32_t register_index = kCompareWithZero ? instruction.VRegA_21t() : instruction.VRegA_22t();
@@ -2911,9 +3001,7 @@ bool FastCompilerARM64::ProcessDexInstruction(const Instruction& instruction,
     case Instruction::GOTO_16:
     case Instruction::GOTO_32: {
       int32_t target_offset = instruction.GetTargetOffset();
-      if (target_offset <= 0) {
-        // TODO: Support for negative branches requires two passes.
-        unimplemented_reason_ = "NegativeBranch";
+      if (target_offset <= 0 && !CanHandleLoop(dex_pc + target_offset)) {
         return false;
       }
       PrepareToBranch(dex_pc + target_offset);
@@ -3643,6 +3731,42 @@ bool FastCompilerARM64::Compile() {
 
 }  // namespace arm64
 
+std::unique_ptr<arm64::FastCompilerARM64> TryCompile(
+    ArtMethod* method,
+    ArenaAllocator* allocator,
+    ArenaStack* arena_stack,
+    VariableSizedHandleScope* handles,
+    const CompilerOptions& compiler_options,
+    const DexCompilationUnit& dex_compilation_unit,
+    bool with_loop_support) {
+  std::unique_ptr<arm64::FastCompilerARM64> compiler(new arm64::FastCompilerARM64(
+      method,
+      allocator,
+      arena_stack,
+      handles,
+      compiler_options,
+      dex_compilation_unit,
+      with_loop_support));
+  if (compiler->Compile()) {
+    return compiler;
+  }
+
+  if (!with_loop_support && compiler->ShouldRecompileWithLoopSupport()) {
+    compiler.reset();
+    VLOG(jit) << "Recompiling with loop support";
+    return TryCompile(method,
+                      allocator,
+                      arena_stack,
+                      handles,
+                      compiler_options,
+                      dex_compilation_unit,
+                      /* with_loop_support= */ true);
+  }
+
+  VLOG(jit) << "Did not fast compile because of " << compiler->GetUnimplementedReason();
+  return nullptr;
+}
+
 std::unique_ptr<FastCompiler> FastCompiler::CompileARM64(
     ArtMethod* method,
     ArenaAllocator* allocator,
@@ -3658,18 +3782,13 @@ std::unique_ptr<FastCompiler> FastCompiler::CompileARM64(
     // Configurations we don't support.
     return nullptr;
   }
-  std::unique_ptr<arm64::FastCompilerARM64> compiler(new arm64::FastCompilerARM64(
-      method,
-      allocator,
-      arena_stack,
-      handles,
-      compiler_options,
-      dex_compilation_unit));
-  if (compiler->Compile()) {
-    return compiler;
-  }
-  VLOG(jit) << "Did not fast compile because of " << compiler->GetUnimplementedReason();
-  return nullptr;
+  return TryCompile(method,
+                    allocator,
+                    arena_stack,
+                    handles,
+                    compiler_options,
+                    dex_compilation_unit,
+                    /* with_loop_support= */ false);
 }
 
 }  // namespace art
