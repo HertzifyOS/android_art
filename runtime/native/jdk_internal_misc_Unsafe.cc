@@ -215,19 +215,6 @@ static void Unsafe_putIntVolatile(JNIEnv* env, jobject, jobject javaObj, jlong o
   reinterpret_cast<AtomicInteger*>(raw_addr)->store(newValue, std::memory_order_seq_cst);
 }
 
-static void Unsafe_putOrderedInt(JNIEnv* env, jobject, jobject javaObj, jlong offset,
-                                 jint newValue) {
-  ScopedFastNativeObjectAccess soa(env);
-  ObjPtr<mirror::Object> obj = soa.Decode<mirror::Object>(javaObj);
-  AccessIsWithinObjectDcheck<int32_t>(obj, offset);
-
-  uint8_t* raw_addr = reinterpret_cast<uint8_t*>(obj.Ptr()) + offset;
-
-  // TODO: A release store is likely to be faster on future processors.
-  std::atomic_thread_fence(std::memory_order_release);
-  reinterpret_cast<AtomicInteger*>(raw_addr)->StoreJavaData(newValue);
-}
-
 static jlong Unsafe_getLong(JNIEnv* env, jobject, jobject javaObj, jlong offset) {
   ScopedFastNativeObjectAccess soa(env);
   ObjPtr<mirror::Object> obj = soa.Decode<mirror::Object>(javaObj);
@@ -269,18 +256,6 @@ static void Unsafe_putLongVolatile(JNIEnv* env, jobject, jobject javaObj, jlong 
   reinterpret_cast<Atomic<int64_t>*>(raw_addr)->store(newValue, std::memory_order_seq_cst);
 }
 
-static void Unsafe_putOrderedLong(JNIEnv* env, jobject, jobject javaObj, jlong offset,
-                                  jlong newValue) {
-  ScopedFastNativeObjectAccess soa(env);
-  ObjPtr<mirror::Object> obj = soa.Decode<mirror::Object>(javaObj);
-  AccessIsWithinObjectDcheck<int64_t>(obj, offset);
-
-  uint8_t* raw_addr = reinterpret_cast<uint8_t*>(obj.Ptr()) + offset;
-
-  std::atomic_thread_fence(std::memory_order_release);
-  reinterpret_cast<Atomic<int64_t>*>(raw_addr)->StoreJavaData(newValue);
-}
-
 static jobject Unsafe_getReferenceVolatile(JNIEnv* env, jobject, jobject javaObj, jlong offset) {
   ScopedFastNativeObjectAccess soa(env);
   ObjPtr<mirror::Object> obj = soa.Decode<mirror::Object>(javaObj);
@@ -311,16 +286,6 @@ static void Unsafe_putReferenceVolatile(
   ObjPtr<mirror::Object> newValue = soa.Decode<mirror::Object>(javaNewValue);
   // JNI must use non transactional mode.
   obj->SetFieldObjectVolatile<false>(MemberOffset(offset), newValue);
-}
-
-static void Unsafe_putOrderedObject(JNIEnv* env, jobject, jobject javaObj, jlong offset,
-                                    jobject javaNewValue) {
-  ScopedFastNativeObjectAccess soa(env);
-  ObjPtr<mirror::Object> obj = soa.Decode<mirror::Object>(javaObj);
-  ObjPtr<mirror::Object> newValue = soa.Decode<mirror::Object>(javaNewValue);
-  std::atomic_thread_fence(std::memory_order_release);
-  // JNI must use non transactional mode.
-  obj->SetFieldObject<false>(MemberOffset(offset), newValue);
 }
 
 static jint Unsafe_getArrayBaseOffsetForComponentType(JNIEnv* env, jclass, jclass component_class) {
@@ -793,13 +758,10 @@ static JNINativeMethod gMethods[] = {
     FAST_NATIVE_METHOD(Unsafe, putReferenceVolatile, "(Ljava/lang/Object;JLjava/lang/Object;)V"),
     FAST_NATIVE_METHOD(Unsafe, getInt, "(Ljava/lang/Object;J)I"),
     FAST_NATIVE_METHOD(Unsafe, putInt, "(Ljava/lang/Object;JI)V"),
-    FAST_NATIVE_METHOD(Unsafe, putOrderedInt, "(Ljava/lang/Object;JI)V"),
     FAST_NATIVE_METHOD(Unsafe, getLong, "(Ljava/lang/Object;J)J"),
     FAST_NATIVE_METHOD(Unsafe, putLong, "(Ljava/lang/Object;JJ)V"),
-    FAST_NATIVE_METHOD(Unsafe, putOrderedLong, "(Ljava/lang/Object;JJ)V"),
     FAST_NATIVE_METHOD(Unsafe, getReference, "(Ljava/lang/Object;J)Ljava/lang/Object;"),
     FAST_NATIVE_METHOD(Unsafe, putReference, "(Ljava/lang/Object;JLjava/lang/Object;)V"),
-    FAST_NATIVE_METHOD(Unsafe, putOrderedObject, "(Ljava/lang/Object;JLjava/lang/Object;)V"),
     FAST_NATIVE_METHOD(Unsafe, getArrayBaseOffsetForComponentType, "(Ljava/lang/Class;)I"),
     FAST_NATIVE_METHOD(Unsafe, getArrayIndexScaleForComponentType, "(Ljava/lang/Class;)I"),
     FAST_NATIVE_METHOD(Unsafe, addressSize, "()I"),

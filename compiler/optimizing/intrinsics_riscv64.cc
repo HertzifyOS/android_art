@@ -2673,11 +2673,11 @@ void IntrinsicCodeGeneratorRISCV64::VisitUnsafePutAbsolute(HInvoke* invoke) {
 }
 
 void IntrinsicLocationsBuilderRISCV64::VisitUnsafePutOrderedInt(HInvoke* invoke) {
-  VisitJdkUnsafePutOrderedInt(invoke);
+  CreateUnsafePutLocations(allocator_, invoke);
 }
 
 void IntrinsicCodeGeneratorRISCV64::VisitUnsafePutOrderedInt(HInvoke* invoke) {
-  VisitJdkUnsafePutOrderedInt(invoke);
+  GenUnsafePut(invoke, codegen_, std::memory_order_release, DataType::Type::kInt32);
 }
 
 void IntrinsicLocationsBuilderRISCV64::VisitUnsafePutVolatile(HInvoke* invoke) {
@@ -2697,11 +2697,11 @@ void IntrinsicCodeGeneratorRISCV64::VisitUnsafePutObject(HInvoke* invoke) {
 }
 
 void IntrinsicLocationsBuilderRISCV64::VisitUnsafePutOrderedObject(HInvoke* invoke) {
-  VisitJdkUnsafePutOrderedObject(invoke);
+  CreateUnsafePutLocations(allocator_, invoke);
 }
 
 void IntrinsicCodeGeneratorRISCV64::VisitUnsafePutOrderedObject(HInvoke* invoke) {
-  VisitJdkUnsafePutOrderedObject(invoke);
+  GenUnsafePut(invoke, codegen_, std::memory_order_release, DataType::Type::kReference);
 }
 
 void IntrinsicLocationsBuilderRISCV64::VisitUnsafePutObjectVolatile(HInvoke* invoke) {
@@ -2721,11 +2721,11 @@ void IntrinsicCodeGeneratorRISCV64::VisitUnsafePutLong(HInvoke* invoke) {
 }
 
 void IntrinsicLocationsBuilderRISCV64::VisitUnsafePutLongOrdered(HInvoke* invoke) {
-  VisitJdkUnsafePutLongOrdered(invoke);
+  CreateUnsafePutLocations(allocator_, invoke);
 }
 
 void IntrinsicCodeGeneratorRISCV64::VisitUnsafePutLongOrdered(HInvoke* invoke) {
-  VisitJdkUnsafePutLongOrdered(invoke);
+  GenUnsafePut(invoke, codegen_, std::memory_order_release, DataType::Type::kInt64);
 }
 
 void IntrinsicLocationsBuilderRISCV64::VisitUnsafePutLongVolatile(HInvoke* invoke) {
@@ -2760,14 +2760,6 @@ void IntrinsicCodeGeneratorRISCV64::VisitJdkUnsafePutAbsolute(HInvoke* invoke) {
   GenUnsafePutAbsolute(invoke, codegen_, std::memory_order_relaxed, DataType::Type::kInt32);
 }
 
-void IntrinsicLocationsBuilderRISCV64::VisitJdkUnsafePutOrderedInt(HInvoke* invoke) {
-  CreateUnsafePutLocations(allocator_, invoke);
-}
-
-void IntrinsicCodeGeneratorRISCV64::VisitJdkUnsafePutOrderedInt(HInvoke* invoke) {
-  GenUnsafePut(invoke, codegen_, std::memory_order_release, DataType::Type::kInt32);
-}
-
 void IntrinsicLocationsBuilderRISCV64::VisitJdkUnsafePutRelease(HInvoke* invoke) {
   CreateUnsafePutLocations(allocator_, invoke);
 }
@@ -2792,14 +2784,6 @@ void IntrinsicCodeGeneratorRISCV64::VisitJdkUnsafePutReference(HInvoke* invoke) 
   GenUnsafePut(invoke, codegen_, std::memory_order_relaxed, DataType::Type::kReference);
 }
 
-void IntrinsicLocationsBuilderRISCV64::VisitJdkUnsafePutOrderedObject(HInvoke* invoke) {
-  CreateUnsafePutLocations(allocator_, invoke);
-}
-
-void IntrinsicCodeGeneratorRISCV64::VisitJdkUnsafePutOrderedObject(HInvoke* invoke) {
-  GenUnsafePut(invoke, codegen_, std::memory_order_release, DataType::Type::kReference);
-}
-
 void IntrinsicLocationsBuilderRISCV64::VisitJdkUnsafePutReferenceRelease(HInvoke* invoke) {
   CreateUnsafePutLocations(allocator_, invoke);
 }
@@ -2822,14 +2806,6 @@ void IntrinsicLocationsBuilderRISCV64::VisitJdkUnsafePutLong(HInvoke* invoke) {
 
 void IntrinsicCodeGeneratorRISCV64::VisitJdkUnsafePutLong(HInvoke* invoke) {
   GenUnsafePut(invoke, codegen_, std::memory_order_relaxed, DataType::Type::kInt64);
-}
-
-void IntrinsicLocationsBuilderRISCV64::VisitJdkUnsafePutLongOrdered(HInvoke* invoke) {
-  CreateUnsafePutLocations(allocator_, invoke);
-}
-
-void IntrinsicCodeGeneratorRISCV64::VisitJdkUnsafePutLongOrdered(HInvoke* invoke) {
-  GenUnsafePut(invoke, codegen_, std::memory_order_release, DataType::Type::kInt64);
 }
 
 void IntrinsicLocationsBuilderRISCV64::VisitJdkUnsafePutLongRelease(HInvoke* invoke) {

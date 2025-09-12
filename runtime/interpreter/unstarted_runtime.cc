@@ -1634,9 +1634,28 @@ void UnstartedRuntime::UnstartedUnsafePutObjectVolatile(
 }
 
 void UnstartedRuntime::UnstartedUnsafePutOrderedObject(
-    Thread* self, ShadowFrame* shadow_frame, JValue* result, size_t arg_offset)
+    Thread* self, ShadowFrame* shadow_frame, [[maybe_unused]] JValue* result, size_t arg_offset)
     REQUIRES_SHARED(Locks::mutator_lock_) {
-  UnstartedJdkUnsafePutOrderedObject(self, shadow_frame, result, arg_offset);
+  // Argument 0 is the Unsafe instance, skip.
+  mirror::Object* obj = shadow_frame->GetVRegReference(arg_offset + 1);
+  if (obj == nullptr) {
+    AbortTransactionOrFail(self, "Cannot access null object, retry at runtime.");
+    return;
+  }
+  int64_t offset = shadow_frame->GetVRegLong(arg_offset + 2);
+  mirror::Object* new_value = shadow_frame->GetVRegReference(arg_offset + 4);
+  std::atomic_thread_fence(std::memory_order_release);
+  Runtime* runtime = Runtime::Current();
+  if (runtime->IsActiveTransaction()) {
+    if (runtime->GetClassLinker()->TransactionWriteConstraint(self, obj) ||
+        runtime->GetClassLinker()->TransactionWriteValueConstraint(self, new_value)) {
+      DCHECK(self->IsExceptionPending());
+      return;
+    }
+    obj->SetFieldObject<true>(MemberOffset(offset), new_value);
+  } else {
+    obj->SetFieldObject<false>(MemberOffset(offset), new_value);
+  }
 }
 
 void UnstartedRuntime::UnstartedJdkUnsafeCompareAndSetLong(
@@ -1768,33 +1787,6 @@ void UnstartedRuntime::UnstartedJdkUnsafePutReferenceVolatile(Thread* self,
     obj->SetFieldObjectVolatile<true>(MemberOffset(offset), value);
   } else {
     obj->SetFieldObjectVolatile<false>(MemberOffset(offset), value);
-  }
-}
-
-void UnstartedRuntime::UnstartedJdkUnsafePutOrderedObject(Thread* self,
-                                                          ShadowFrame* shadow_frame,
-                                                          [[maybe_unused]] JValue* result,
-                                                          size_t arg_offset)
-    REQUIRES_SHARED(Locks::mutator_lock_) {
-  // Argument 0 is the Unsafe instance, skip.
-  mirror::Object* obj = shadow_frame->GetVRegReference(arg_offset + 1);
-  if (obj == nullptr) {
-    AbortTransactionOrFail(self, "Cannot access null object, retry at runtime.");
-    return;
-  }
-  int64_t offset = shadow_frame->GetVRegLong(arg_offset + 2);
-  mirror::Object* new_value = shadow_frame->GetVRegReference(arg_offset + 4);
-  std::atomic_thread_fence(std::memory_order_release);
-  Runtime* runtime = Runtime::Current();
-  if (runtime->IsActiveTransaction()) {
-    if (runtime->GetClassLinker()->TransactionWriteConstraint(self, obj) ||
-        runtime->GetClassLinker()->TransactionWriteValueConstraint(self, new_value)) {
-      DCHECK(self->IsExceptionPending());
-      return;
-    }
-    obj->SetFieldObject<true>(MemberOffset(offset), new_value);
-  } else {
-    obj->SetFieldObject<false>(MemberOffset(offset), new_value);
   }
 }
 
