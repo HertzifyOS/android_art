@@ -332,7 +332,8 @@ bool SsaBuilder::FixAmbiguousArrayOps() {
 
     for (HArrayGet* aget_int : ambiguous_agets_) {
       HInstruction* array = aget_int->GetArray();
-      if (!array->GetReferenceTypeInfo().IsPrimitiveArrayClass()) {
+      if (!array->GetReferenceTypeInfo().IsValid() ||
+          !array->GetReferenceTypeInfo().IsPrimitiveArrayClass()) {
         // RTP did not type the input array. Bail.
         VLOG(compiler) << "Not compiled: Could not infer an array type for array operation at "
                        << aget_int->GetDexPc();
@@ -374,7 +375,8 @@ bool SsaBuilder::FixAmbiguousArrayOps() {
 
     for (HArraySet* aset : ambiguous_asets_) {
       HInstruction* array = aset->GetArray();
-      if (!array->GetReferenceTypeInfo().IsPrimitiveArrayClass()) {
+      if (!array->GetReferenceTypeInfo().IsValid() ||
+          !array->GetReferenceTypeInfo().IsPrimitiveArrayClass()) {
         // RTP did not type the input array. Bail.
         VLOG(compiler) << "Not compiled: Could not infer an array type for array operation at "
                        << aset->GetDexPc();

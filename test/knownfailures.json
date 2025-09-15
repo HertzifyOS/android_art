@@ -1072,7 +1072,8 @@
           "2281-method-handle-invoke-static-class-unload",
           "2286-invokevirtual-invokeexact",
           "2287-no-temp-component-class",
-          "2288-checker-smali-string-builder-wrong-init"
+          "2288-checker-smali-string-builder-wrong-init",
+          "2289-smali-invalid-rti"
         ],
         "variant": "jvm",
         "bug": "b/73888836",
