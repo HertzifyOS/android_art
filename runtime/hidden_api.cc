@@ -352,6 +352,7 @@ bool ShouldDenyJniAccessToMember(T* member,
     // That's not a problem for apps with a recent enough target SDK level where
     // we always check the native caller in the standard code path below, but
     // otherwise we need to check for that specific situation.
+
     AccessMethod check_only_method =
         IsCheckOnlyMethod(access_kind) ? access_kind : AccessMethod::kCheckWithPolicy;
     if (ShouldDenyAccessToMember(
@@ -365,18 +366,17 @@ bool ShouldDenyJniAccessToMember(T* member,
             check_only_method) &&
         ctx.java_caller_context.value().GetDomain() == Domain::kPlatform) {
       // The java caller is in platform and has been denied, so check the native caller.
-      if (!ShouldDenyAccessToMember(
-              member,
-              [&ctx]() REQUIRES_SHARED(Locks::mutator_lock_) {
-                AccessContext& context = ctx.GetNativeCallerContext();
-                VLOG(hiddenapi) << "hiddenapi: Native JNI caller " << context << " from "
-                                << context.GetDomain() << " (special case)";
-                return context;
-              },
-              check_only_method) &&
-          ctx.native_caller_context.value().GetNativeCallerAddr() != nullptr) {
-        // The native caller has been positively identified
-        // (GetNativeCallerAddr() != nullptr) and is allowed, so the access is fine.
+
+      AccessContext& context = ctx.GetNativeCallerContext();
+      VLOG(hiddenapi) << "hiddenapi: Native JNI caller " << context << " from "
+                      << context.GetDomain() << " (special case)";
+      if (context.GetNativeCallerAddr() == nullptr || context.IsApplicationDomain()) {
+        // If the native caller either could not be identified or it's in an
+        // app, then either the app may have access to an API that platform
+        // doesn't, or it may be an app using a method to circumvent hidden API
+        // checks. In either case we need to be conservative and allow the
+        // access for the sake of app compat, because in this situation we must
+        // not regress on that.
         return false;
       }
     }
