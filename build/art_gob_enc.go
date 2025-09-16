@@ -3,7 +3,6 @@
 package art
 
 import (
-	"android/soong/android"
 	"bytes"
 	"github.com/google/blueprint/gobtools"
 )
@@ -27,7 +26,7 @@ func (r testInstallInfo) Encode(ctx gobtools.EncContext, buf *bytes.Buffer) erro
 			if err = gobtools.EncodeString(buf, k); err != nil {
 				return err
 			}
-			if err = gobtools.EncodeInterface(ctx, buf, v); err != nil {
+			if err = gobtools.EncodeString(buf, v); err != nil {
 				return err
 			}
 		}
@@ -73,48 +72,45 @@ func (r *testInstallInfo) Decode(ctx gobtools.EncContext, buf *bytes.Reader) err
 		return err
 	}
 	if val1 != -1 {
-		r.Testcases = make(map[string]android.Path, val1)
+		r.Testcases = make(map[string]string, val1)
 		for val2 := 0; val2 < int(val1); val2++ {
 			var k string
-			var v android.Path
+			var v string
 			err = gobtools.DecodeString(buf, &k)
 			if err != nil {
 				return err
 			}
-			if val5, err := gobtools.DecodeInterface(ctx, buf); err != nil {
+			err = gobtools.DecodeString(buf, &v)
+			if err != nil {
 				return err
-			} else if val5 == nil {
-				v = nil
-			} else {
-				v = val5.(android.Path)
 			}
 			r.Testcases[k] = v
 		}
 	}
 
-	var val6 int32
-	err = gobtools.DecodeSimple[int32](buf, &val6)
+	var val5 int32
+	err = gobtools.DecodeSimple[int32](buf, &val5)
 	if err != nil {
 		return err
 	}
-	if val6 != -1 {
-		r.TestMap = make(map[string][]string, val6)
-		for val7 := 0; val7 < int(val6); val7++ {
+	if val5 != -1 {
+		r.TestMap = make(map[string][]string, val5)
+		for val6 := 0; val6 < int(val5); val6++ {
 			var k string
 			var v []string
 			err = gobtools.DecodeString(buf, &k)
 			if err != nil {
 				return err
 			}
-			var val10 int32
-			err = gobtools.DecodeSimple[int32](buf, &val10)
+			var val9 int32
+			err = gobtools.DecodeSimple[int32](buf, &val9)
 			if err != nil {
 				return err
 			}
-			if val10 != -1 {
-				v = make([]string, val10)
-				for val11 := 0; val11 < int(val10); val11++ {
-					err = gobtools.DecodeString(buf, &v[val11])
+			if val9 != -1 {
+				v = make([]string, val9)
+				for val10 := 0; val10 < int(val9); val10++ {
+					err = gobtools.DecodeString(buf, &v[val10])
 					if err != nil {
 						return err
 					}

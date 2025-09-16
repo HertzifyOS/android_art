@@ -33,7 +33,7 @@ var supportedArches = []string{"arm", "arm64", "riscv64", "x86", "x86_64"}
 
 // @auto-generate: gob
 type testInstallInfo struct {
-	Testcases map[string]android.Path
+	Testcases map[string]string
 	TestMap   map[string][]string
 }
 
@@ -326,7 +326,7 @@ func addTestcasesFile(data *testInstallInfo) func(ctx android.InstallHookContext
 			return
 		}
 
-		src := ctx.SrcPath()
+		src := ctx.SrcPath().String()
 		path := strings.Split(ctx.Path().String(), "/")
 		// Keep last two parts of the install path (e.g. bin/dex2oat).
 		dst := strings.Join(path[len(path)-2:], "/")
@@ -392,7 +392,7 @@ func artLibrary() android.Module {
 
 	android.AddLoadHook(module, addImplicitFlags)
 	data := &testInstallInfo{
-		Testcases: make(map[string]android.Path),
+		Testcases: make(map[string]string),
 	}
 	android.AddInstallHook(module, addTestcasesFile(data))
 	android.AddPostGenerateAndroidBuildActionsHook(module, setTestInstallInfo(data))
@@ -415,7 +415,7 @@ func artBinary() android.Module {
 	android.AddLoadHook(module, customLinker)
 	android.AddLoadHook(module, prefer32Bit)
 	data := &testInstallInfo{
-		Testcases: make(map[string]android.Path),
+		Testcases: make(map[string]string),
 	}
 	android.AddInstallHook(module, addTestcasesFile(data))
 	android.AddPostGenerateAndroidBuildActionsHook(module, setTestInstallInfo(data))
