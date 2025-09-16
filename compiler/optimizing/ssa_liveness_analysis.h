@@ -1031,6 +1031,10 @@ class SsaLivenessAnalysis : public ValueObject {
     return instructions_from_ssa_index_.size();
   }
 
+  // Returns the lifetime position of the back edge that has the
+  // greatest lifetime position.
+  static size_t GetLoopLifetimeEnd(const HLoopInformation* loop_info);
+
   static constexpr const char* kLivenessPassName = "liveness";
 
  private:

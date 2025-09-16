@@ -77,10 +77,6 @@ class HLoopInformation final : public ArenaObject<kArenaAllocLoopInfo> {
     return back_edges_;
   }
 
-  // Returns the lifetime position of the back edge that has the
-  // greatest lifetime position.
-  size_t GetLifetimeEnd() const;
-
   void ReplaceBackEdge(HBasicBlock* existing, HBasicBlock* new_back_edge) {
     ReplaceElement(back_edges_, existing, new_back_edge);
   }

@@ -434,7 +434,7 @@ void SsaLivenessAnalysis::ComputeLiveRanges() {
       if (kIsDebugBuild) {
         CheckNoLiveInIrreducibleLoop(*block);
       }
-      size_t last_position = block->GetLoopInformation()->GetLifetimeEnd();
+      size_t last_position = GetLoopLifetimeEnd(block->GetLoopInformation());
       // For all live_in instructions at the loop header, we need to create a range
       // that covers the full loop.
       for (uint32_t idx : live_in.Indexes()) {
@@ -500,6 +500,15 @@ void SsaLivenessAnalysis::DoCheckNoLiveInIrreducibleLoop(const HBasicBlock& bloc
     DCHECK(instruction->IsCurrentMethod() || instruction->IsConstant())
         << instruction->DebugName();
   }
+}
+
+size_t SsaLivenessAnalysis::GetLoopLifetimeEnd(const HLoopInformation* loop_info) {
+  DCHECK(loop_info != nullptr);
+  size_t last_position = 0;
+  for (HBasicBlock* back_edge : loop_info->GetBackEdges()) {
+    last_position = std::max(back_edge->GetLifetimeEnd(), last_position);
+  }
+  return last_position;
 }
 
 template <bool kEnvironmentUse>
@@ -774,7 +783,7 @@ void LiveInterval::AddBackEdgeUses(const HBasicBlock& block_at_use) {
     // all back edges is not necessary: anything used in the loop will have its use at the
     // last back edge. If we want branches in a loop to have better register allocation than
     // another branch, then it is the linear order we should change.
-    size_t back_edge_use_position = current->GetLifetimeEnd();
+    size_t back_edge_use_position = SsaLivenessAnalysis::GetLoopLifetimeEnd(current);
     if ((old_begin != uses_.end()) && (old_begin->GetPosition() <= back_edge_use_position)) {
       // There was a use already seen in this loop. Therefore the previous call to `AddUse`
       // already inserted the backedge use. We can stop going outward.
