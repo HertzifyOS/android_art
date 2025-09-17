@@ -157,10 +157,6 @@ class UsePosition : public ArenaObject<kArenaAllocSsaLiveness>,
     return user_->GetBlock()->GetLoopInformation();
   }
 
-  UsePosition* Clone(ScopedArenaAllocator* allocator) const {
-    return new (allocator) UsePosition(user_, input_index_, position_);
-  }
-
   bool RequiresRegister() const {
     if (IsSynthesized()) return false;
     Location location = GetUser()->GetLocations()->InAt(GetInputIndex());
@@ -200,10 +196,6 @@ class EnvUsePosition : public ArenaObject<kArenaAllocSsaLiveness>,
 
   void Dump(std::ostream& stream) const {
     stream << position_;
-  }
-
-  EnvUsePosition* Clone(ScopedArenaAllocator* allocator) const {
-    return new (allocator) EnvUsePosition(environment_, input_index_, position_);
   }
 
  private:
