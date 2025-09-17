@@ -2810,7 +2810,9 @@ ObjPtr<mirror::DexCache> ClassLinker::AllocDexCache(Thread* self, const DexFile&
   }
   // Use InternWeak() so that the location String can be collected when the ClassLoader
   // with this DexCache is collected.
-  dex_cache->SetLocation(intern_table_->InternWeak(location));
+  location = intern_table_->InternWeak(location);
+  CHECK(location != nullptr);
+  dex_cache->SetLocation(location);
   return dex_cache.Get();
 }
 
