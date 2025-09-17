@@ -1205,7 +1205,8 @@ bool MarkCompact::PrepareForCompaction() {
   for (size_t i = 0; i < vector_len; i++) {
     DCHECK_LE(chunk_info_vec_[i], kOffsetChunkSize)
         << "i:" << i << " vector_length:" << vector_len << " vector_length_:" << vector_length_;
-    DCHECK_EQ(chunk_info_vec_[i], live_words_bitmap_->LiveBytesInBitmapWord(i));
+    DCHECK_EQ(chunk_info_vec_[i], live_words_bitmap_->LiveBytesInBitmapWord(i))
+        << "i:" << i << " vector_length:" << vector_len << " vector_length_:" << vector_length_;
   }
   for (size_t i = vector_len; i < vector_length_; i++) {
     DCHECK_EQ(chunk_info_vec_[i], 0u);
@@ -5684,6 +5685,7 @@ void MarkCompact::MarkingPhase() {
 
 template <size_t kAlignment>
 size_t MarkCompact::LiveWordsBitmap<kAlignment>::LiveBytesInBitmapWord(size_t chunk_idx) const {
+  static_assert(kBitmapWordsPerVectorWord == 1);
   const size_t index = chunk_idx * kBitmapWordsPerVectorWord;
   size_t words = 0;
   for (uint32_t i = 0; i < kBitmapWordsPerVectorWord; i++) {
@@ -5695,6 +5697,7 @@ size_t MarkCompact::LiveWordsBitmap<kAlignment>::LiveBytesInBitmapWord(size_t ch
 void MarkCompact::UpdateLivenessInfo(mirror::Object* obj, size_t obj_size) {
   DCHECK(obj != nullptr);
   DCHECK_EQ(obj_size, obj->SizeOf<kDefaultVerifyFlags>());
+  DCHECK_EQ(Thread::Current(), thread_running_gc_);
   uintptr_t obj_begin = reinterpret_cast<uintptr_t>(obj);
   UpdateClassAfterObjectMap(obj);
   size_t size = RoundUp(obj_size, kAlignment);
@@ -5707,17 +5710,38 @@ void MarkCompact::UpdateLivenessInfo(mirror::Object* obj, size_t obj_size) {
   chunk_info_vec_[chunk_idx] += first_chunk_portion;
   DCHECK_LE(chunk_info_vec_[chunk_idx], kOffsetChunkSize)
       << "first_chunk_portion:" << first_chunk_portion
-      << " obj-size:" << RoundUp(obj_size, kAlignment);
+      << " obj-size:" << RoundUp(obj_size, kAlignment) << mirror::Object::PrettyTypeOf(obj);
+  DCHECK_EQ(chunk_info_vec_[chunk_idx], live_words_bitmap_->LiveBytesInBitmapWord(chunk_idx))
+      << "first_chunk_portion:" << first_chunk_portion
+      << " obj-size:" << RoundUp(obj_size, kAlignment) << mirror::Object::PrettyTypeOf(obj)
+      << " bitmap-word:" << std::hex << live_words_bitmap_->GetWord(chunk_idx);
   chunk_idx++;
   DCHECK_LE(first_chunk_portion, size);
   for (size -= first_chunk_portion; size > kOffsetChunkSize; size -= kOffsetChunkSize) {
-    DCHECK_EQ(chunk_info_vec_[chunk_idx], 0u);
-    chunk_info_vec_[chunk_idx++] = kOffsetChunkSize;
+    DCHECK_EQ(chunk_info_vec_[chunk_idx], 0u)
+        << "chunk_idx:" << chunk_idx << "size:" << size
+        << " obj-size:" << RoundUp(obj_size, kAlignment) << mirror::Object::PrettyTypeOf(obj);
+    chunk_info_vec_[chunk_idx] = kOffsetChunkSize;
+    DCHECK_EQ(chunk_info_vec_[chunk_idx], live_words_bitmap_->LiveBytesInBitmapWord(chunk_idx))
+        << "chunk_idx:" << chunk_idx << " size:" << size
+        << " obj-size:" << RoundUp(obj_size, kAlignment) << " " << mirror::Object::PrettyTypeOf(obj)
+        << " bitmap-word:" << std::hex << live_words_bitmap_->GetWord(chunk_idx);
+    chunk_idx++;
   }
   // It's safe to go past end of array as we allocate extra word in InitializeInfoMap().
   chunk_info_vec_[chunk_idx] += size;
-  DCHECK_LE(chunk_info_vec_[chunk_idx], kOffsetChunkSize)
-      << "size:" << size << " obj-size:" << RoundUp(obj_size, kAlignment);
+  if (chunk_idx < vector_length_) {
+    DCHECK_LE(chunk_info_vec_[chunk_idx], kOffsetChunkSize)
+        << "chunk_idx:" << chunk_idx << " size:" << size
+        << " obj-size:" << RoundUp(obj_size, kAlignment) << mirror::Object::PrettyTypeOf(obj);
+    DCHECK_EQ(chunk_info_vec_[chunk_idx], live_words_bitmap_->LiveBytesInBitmapWord(chunk_idx))
+        << "chunk_idx:" << chunk_idx << "size:" << size
+        << " obj-size:" << RoundUp(obj_size, kAlignment) << mirror::Object::PrettyTypeOf(obj)
+        << " bitmap-word:" << std::hex << live_words_bitmap_->GetWord(chunk_idx);
+  } else {
+    DCHECK_EQ(chunk_idx, vector_length_);
+    DCHECK_EQ(size, 0u) << " chunk_idx:" << chunk_idx;
+  }
 }
 
 mirror::Class* MarkCompact::ReloadScanObjClass(mirror::Object* obj) {
