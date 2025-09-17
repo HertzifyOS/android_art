@@ -429,7 +429,8 @@ MarkCompact::LiveWordsBitmap<kAlignment>* MarkCompact::LiveWordsBitmap<kAlignmen
 
 size_t MarkCompact::ComputeInfoMapSize() {
   size_t moving_space_size = bump_pointer_space_->Capacity();
-  size_t chunk_info_vec_size = moving_space_size / kOffsetChunkSize;
+  // Extra word to avoid out-of-bound access check in UpdateLivenessInfo().
+  size_t chunk_info_vec_size = moving_space_size / kOffsetChunkSize + 1;
   size_t nr_moving_pages = DivideByPageSize(moving_space_size);
   size_t nr_non_moving_pages = DivideByPageSize(heap_->GetNonMovingSpace()->Capacity());
   return chunk_info_vec_size * sizeof(uint32_t) + nr_non_moving_pages * sizeof(ObjReference) +
@@ -439,10 +440,12 @@ size_t MarkCompact::ComputeInfoMapSize() {
 size_t MarkCompact::InitializeInfoMap(uint8_t* p, size_t moving_space_sz) {
   size_t nr_moving_pages = DivideByPageSize(moving_space_sz);
 
-  chunk_info_vec_ = reinterpret_cast<uint32_t*>(p);
-  vector_length_ = moving_space_sz / kOffsetChunkSize;
-  size_t total = vector_length_ * sizeof(uint32_t);
+  first_objs_non_moving_space_ = reinterpret_cast<ObjReference*>(p);
+  size_t total = DivideByPageSize(heap_->GetNonMovingSpace()->Capacity()) * sizeof(ObjReference);
 
+  // TODO: put the following three in to a struct and have an array of that as
+  // all three fields are accessed together and would reduce cache footprint and
+  // better h/w prefetch.
   first_objs_moving_space_ = reinterpret_cast<ObjReference*>(p + total);
   total += nr_moving_pages * sizeof(ObjReference);
 
@@ -452,8 +455,10 @@ size_t MarkCompact::InitializeInfoMap(uint8_t* p, size_t moving_space_sz) {
   moving_pages_status_ = reinterpret_cast<Atomic<uint32_t>*>(p + total);
   total += nr_moving_pages * sizeof(Atomic<uint32_t>);
 
-  first_objs_non_moving_space_ = reinterpret_cast<ObjReference*>(p + total);
-  total += DivideByPageSize(heap_->GetNonMovingSpace()->Capacity()) * sizeof(ObjReference);
+  chunk_info_vec_ = reinterpret_cast<uint32_t*>(p + total);
+  vector_length_ = moving_space_sz / kOffsetChunkSize;
+  // Extra word to avoid out-of-bound access check in UpdateLivenessInfo().
+  total += (vector_length_ + 1) * sizeof(uint32_t);
   DCHECK_EQ(total, ComputeInfoMapSize());
   return total;
 }
@@ -1202,6 +1207,11 @@ bool MarkCompact::PrepareForCompaction() {
         << "i:" << i << " vector_length:" << vector_len << " vector_length_:" << vector_length_;
     DCHECK_EQ(chunk_info_vec_[i], live_words_bitmap_->LiveBytesInBitmapWord(i));
   }
+  for (size_t i = vector_len; i < vector_length_; i++) {
+    DCHECK_EQ(chunk_info_vec_[i], 0u);
+    DCHECK_EQ(chunk_info_vec_[i], live_words_bitmap_->LiveBytesInBitmapWord(i));
+  }
+  DCHECK_EQ(chunk_info_vec_[vector_length_], 0u);
 
   // TODO: We can do a lot of neat tricks with this offset vector to tune the
   // compaction as we wish. Originally, the compaction algorithm slides all
@@ -1312,34 +1322,22 @@ bool MarkCompact::PrepareForCompaction() {
                                 non_moving_space_bitmap_,
                                 first_objs_non_moving_space_);
   // Update the vector one past the heap usage as it is required for black
-  // allocated objects' post-compact address computation.
-  uint32_t total_bytes;
-  if (vector_len < vector_length_) {
-    vector_len++;
-    total_bytes = 0;
-  } else {
-    // Fetch the value stored in the last element before it gets overwritten by
-    // std::exclusive_scan().
-    total_bytes = chunk_info_vec_[vector_len - 1];
-  }
+  // allocated objects' post-compact address computation. We have already
+  // provisioned one extra word in chunk_info_vec_.
   std::exclusive_scan(chunk_info_vec_ + black_dense_idx,
-                      chunk_info_vec_ + vector_len,
+                      chunk_info_vec_ + vector_len + 1,
                       chunk_info_vec_ + black_dense_idx,
                       black_dense_idx * kOffsetChunkSize);
-  total_bytes += chunk_info_vec_[vector_len - 1];
-  post_compact_end_ = AlignUp(moving_space_begin_ + total_bytes, gPageSize);
+  post_compact_end_ = AlignUp(moving_space_begin_ + chunk_info_vec_[vector_len], gPageSize);
   CHECK_EQ(post_compact_end_, moving_space_begin_ + moving_first_objs_count_ * gPageSize)
       << "moving_first_objs_count_:" << moving_first_objs_count_
       << " black_dense_idx:" << black_dense_idx << " vector_len:" << vector_len
-      << " total_bytes:" << total_bytes
+      << " total_bytes:" << chunk_info_vec_[vector_len]
       << " black_dense_end:" << reinterpret_cast<void*>(black_dense_end_)
       << " chunk_info_per_page:" << chunk_info_per_page;
   black_objs_slide_diff_ = black_allocations_begin_ - post_compact_end_;
   // We shouldn't be consuming more space after compaction than pre-compaction.
   CHECK_GE(black_objs_slide_diff_, 0);
-  for (size_t i = vector_len; i < vector_length_; i++) {
-    DCHECK_EQ(chunk_info_vec_[i], 0u);
-  }
   if (black_objs_slide_diff_ == 0) {
     // Regardless of the gc-type, there are no pages to be compacted. Ensure
     // that we don't shrink the mid-gen, which will become old-gen in
@@ -5716,6 +5714,7 @@ void MarkCompact::UpdateLivenessInfo(mirror::Object* obj, size_t obj_size) {
     DCHECK_EQ(chunk_info_vec_[chunk_idx], 0u);
     chunk_info_vec_[chunk_idx++] = kOffsetChunkSize;
   }
+  // It's safe to go past end of array as we allocate extra word in InitializeInfoMap().
   chunk_info_vec_[chunk_idx] += size;
   DCHECK_LE(chunk_info_vec_[chunk_idx], kOffsetChunkSize)
       << "size:" << size << " obj-size:" << RoundUp(obj_size, kAlignment);
