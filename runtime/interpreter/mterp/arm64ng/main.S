@@ -94,10 +94,10 @@
 #define wMR w20
 #endif
 
-// Temporary registers while setting up a frame.
-#define xNEW_FP   x26
-#define xNEW_REFS x27
-#define CFI_NEW_REFS 27
+// Temporary registers while setting up a frame for nterp-to-nterp calls.
+#define xNEW_FP   x12
+#define xNEW_REFS x13
+#define CFI_NEW_REFS 13
 
 // +8 for the ArtMethod of the caller.
 #define OFFSET_TO_FIRST_ARGUMENT_IN_STACK (CALLEE_SAVES_SIZE + 8)
@@ -309,18 +309,6 @@ END \name
     GOTO_OPCODE ip                      // jump to next instruction
 .endm
 
-// Uses x12, x13, and x14 as temporaries.
-.macro FETCH_CODE_ITEM_INFO code_item, registers, outs, ins, load_ins
-    // Fetch dex register size.
-    ldrh \registers, [\code_item, #CODE_ITEM_REGISTERS_SIZE_OFFSET]
-    // Fetch outs size.
-    ldrh \outs, [\code_item, #CODE_ITEM_OUTS_SIZE_OFFSET]
-    .if \load_ins
-    ldrh \ins, [\code_item, #CODE_ITEM_INS_SIZE_OFFSET]
-    .endif
-    add \code_item, \code_item, #CODE_ITEM_INSNS_OFFSET
-.endm
-
 .macro TEST_IF_MARKING label
     cbnz wMR, \label
 .endm
@@ -332,11 +320,20 @@ END \name
 // - ip contains the dex registers size
 // - x28 contains the old stack pointer.
 // - \code_item is replaced with a pointer to the instructions
-// - if load_ins is 1, w15 contains the ins
+// - if \ins is not "none", \ins contains the ins size
 //
-// Uses ip, ip2, x12, x13, x14 as temporaries.
-.macro SETUP_STACK_FRAME code_item, refs, fp, cfi_refs, load_ins
-    FETCH_CODE_ITEM_INFO \code_item, wip, wip2, w15, \load_ins
+// Uses ip, ip2 and x14 as temporaries.
+.macro SETUP_STACK_FRAME code_item, refs, fp, cfi_refs, ins=none
+    // Fetch dex register size.
+    ldrh wip, [\code_item, #CODE_ITEM_REGISTERS_SIZE_OFFSET]
+    // Fetch outs size.
+    ldrh wip2, [\code_item, #CODE_ITEM_OUTS_SIZE_OFFSET]
+    // Fetch ins size if requested.
+    .ifnc \ins, none
+    ldrh \ins, [\code_item, #CODE_ITEM_INS_SIZE_OFFSET]
+    .endif
+    // Update \code_item to point to instructions.
+    add \code_item, \code_item, #CODE_ITEM_INSNS_OFFSET
 
     // Compute required frame size: ((2 * ip) + ip2) * 4 + 24
     // 24 is for saving the previous frame, pc, and method being executed.
@@ -491,7 +488,7 @@ END \name
    SPILL_ALL_CALLEE_SAVES
 
    // Setup the frame.
-   SETUP_STACK_FRAME x8, xNEW_REFS, xNEW_FP, CFI_NEW_REFS, load_ins=0
+   SETUP_STACK_FRAME x8, xNEW_REFS, xNEW_FP, CFI_NEW_REFS
    // Make x4 point to the top of the dex register array.
    add x4, xNEW_FP, ip, uxtx #2
 
@@ -1610,7 +1607,7 @@ OAT_ENTRY ExecuteNterpImpl
 
     ldr xPC, [x0, #ART_METHOD_DATA_OFFSET_64]
     // Setup the stack for executing the method.
-    SETUP_STACK_FRAME xPC, xREFS, xFP, CFI_REFS, load_ins=1
+    SETUP_STACK_FRAME xPC, xREFS, xFP, CFI_REFS, w15
 
     // Setup the parameters
     cbz w15, .Lxmm_setup_finished
@@ -1623,16 +1620,16 @@ OAT_ENTRY ExecuteNterpImpl
     // Setup pointer to inputs in FP and pointer to inputs in REFS
     add x10, xFP, x27
     add x11, xREFS, x27
-    mov x12, #0
-    SETUP_REFERENCE_PARAMETER_IN_GPR w1, x10, x11, w15, x12, .Lxmm_setup_finished
-    SETUP_REFERENCE_PARAMETER_IN_GPR w2, x10, x11, w15, x12, .Lxmm_setup_finished
-    SETUP_REFERENCE_PARAMETER_IN_GPR w3, x10, x11, w15, x12, .Lxmm_setup_finished
-    SETUP_REFERENCE_PARAMETER_IN_GPR w4, x10, x11, w15, x12, .Lxmm_setup_finished
-    SETUP_REFERENCE_PARAMETER_IN_GPR w5, x10, x11, w15, x12, .Lxmm_setup_finished
-    SETUP_REFERENCE_PARAMETER_IN_GPR w6, x10, x11, w15, x12, .Lxmm_setup_finished
-    SETUP_REFERENCE_PARAMETER_IN_GPR w7, x10, x11, w15, x12, .Lxmm_setup_finished
+    mov x14, #0
+    SETUP_REFERENCE_PARAMETER_IN_GPR w1, x10, x11, w15, x14, .Lxmm_setup_finished
+    SETUP_REFERENCE_PARAMETER_IN_GPR w2, x10, x11, w15, x14, .Lxmm_setup_finished
+    SETUP_REFERENCE_PARAMETER_IN_GPR w3, x10, x11, w15, x14, .Lxmm_setup_finished
+    SETUP_REFERENCE_PARAMETER_IN_GPR w4, x10, x11, w15, x14, .Lxmm_setup_finished
+    SETUP_REFERENCE_PARAMETER_IN_GPR w5, x10, x11, w15, x14, .Lxmm_setup_finished
+    SETUP_REFERENCE_PARAMETER_IN_GPR w6, x10, x11, w15, x14, .Lxmm_setup_finished
+    SETUP_REFERENCE_PARAMETER_IN_GPR w7, x10, x11, w15, x14, .Lxmm_setup_finished
     add x28, x28, #OFFSET_TO_FIRST_ARGUMENT_IN_STACK
-    SETUP_REFERENCE_PARAMETERS_IN_STACK x10, x11, w15, x28, x12
+    SETUP_REFERENCE_PARAMETERS_IN_STACK x10, x11, w15, x28, x14
     b .Lxmm_setup_finished
 
 .Lsetup_slow_path:
@@ -1655,7 +1652,7 @@ OAT_ENTRY ExecuteNterpImpl
     // Setup pointer to inputs in FP and pointer to inputs in REFS
     add x10, xFP, x27
     add x11, xREFS, x27
-    mov x12, #0
+    mov x14, #0
 
     add x9, xIBASE, #1  // shorty + 1  ; ie skip return arg character
     tbnz w26, #ART_METHOD_IS_STATIC_FLAG_BIT, .Lhandle_static_method
@@ -1664,27 +1661,27 @@ OAT_ENTRY ExecuteNterpImpl
     add x28, x28, #4
     b .Lcontinue_setup_gprs
 .Lhandle_static_method:
-    LOOP_OVER_SHORTY_STORING_GPRS x1, w1, x9, x12, x10, x11, .Lgpr_setup_finished
+    LOOP_OVER_SHORTY_STORING_GPRS x1, w1, x9, x14, x10, x11, .Lgpr_setup_finished
 .Lcontinue_setup_gprs:
-    LOOP_OVER_SHORTY_STORING_GPRS x2, w2, x9, x12, x10, x11, .Lgpr_setup_finished
-    LOOP_OVER_SHORTY_STORING_GPRS x3, w3, x9, x12, x10, x11, .Lgpr_setup_finished
-    LOOP_OVER_SHORTY_STORING_GPRS x4, w4, x9, x12, x10, x11, .Lgpr_setup_finished
-    LOOP_OVER_SHORTY_STORING_GPRS x5, w5, x9, x12, x10, x11, .Lgpr_setup_finished
-    LOOP_OVER_SHORTY_STORING_GPRS x6, w6, x9, x12, x10, x11, .Lgpr_setup_finished
-    LOOP_OVER_SHORTY_STORING_GPRS x7, w7, x9, x12, x10, x11, .Lgpr_setup_finished
-    LOOP_OVER_INTs x9, x12, x10, x11, x28, .Lgpr_setup_finished
+    LOOP_OVER_SHORTY_STORING_GPRS x2, w2, x9, x14, x10, x11, .Lgpr_setup_finished
+    LOOP_OVER_SHORTY_STORING_GPRS x3, w3, x9, x14, x10, x11, .Lgpr_setup_finished
+    LOOP_OVER_SHORTY_STORING_GPRS x4, w4, x9, x14, x10, x11, .Lgpr_setup_finished
+    LOOP_OVER_SHORTY_STORING_GPRS x5, w5, x9, x14, x10, x11, .Lgpr_setup_finished
+    LOOP_OVER_SHORTY_STORING_GPRS x6, w6, x9, x14, x10, x11, .Lgpr_setup_finished
+    LOOP_OVER_SHORTY_STORING_GPRS x7, w7, x9, x14, x10, x11, .Lgpr_setup_finished
+    LOOP_OVER_INTs x9, x14, x10, x11, x28, .Lgpr_setup_finished
 .Lgpr_setup_finished:
     add x9, xIBASE, #1  // shorty + 1  ; ie skip return arg character
-    mov x12, #0  // reset counter
-    LOOP_OVER_SHORTY_STORING_FPS d0, s0, x9, x12, x10, .Lxmm_setup_finished
-    LOOP_OVER_SHORTY_STORING_FPS d1, s1, x9, x12, x10, .Lxmm_setup_finished
-    LOOP_OVER_SHORTY_STORING_FPS d2, s2, x9, x12, x10, .Lxmm_setup_finished
-    LOOP_OVER_SHORTY_STORING_FPS d3, s3, x9, x12, x10, .Lxmm_setup_finished
-    LOOP_OVER_SHORTY_STORING_FPS d4, s4, x9, x12, x10, .Lxmm_setup_finished
-    LOOP_OVER_SHORTY_STORING_FPS d5, s5, x9, x12, x10, .Lxmm_setup_finished
-    LOOP_OVER_SHORTY_STORING_FPS d6, s6, x9, x12, x10, .Lxmm_setup_finished
-    LOOP_OVER_SHORTY_STORING_FPS d7, s7, x9, x12, x10, .Lxmm_setup_finished
-    LOOP_OVER_FPs x9, x12, x10, x28, .Lxmm_setup_finished
+    mov x14, #0  // reset counter
+    LOOP_OVER_SHORTY_STORING_FPS d0, s0, x9, x14, x10, .Lxmm_setup_finished
+    LOOP_OVER_SHORTY_STORING_FPS d1, s1, x9, x14, x10, .Lxmm_setup_finished
+    LOOP_OVER_SHORTY_STORING_FPS d2, s2, x9, x14, x10, .Lxmm_setup_finished
+    LOOP_OVER_SHORTY_STORING_FPS d3, s3, x9, x14, x10, .Lxmm_setup_finished
+    LOOP_OVER_SHORTY_STORING_FPS d4, s4, x9, x14, x10, .Lxmm_setup_finished
+    LOOP_OVER_SHORTY_STORING_FPS d5, s5, x9, x14, x10, .Lxmm_setup_finished
+    LOOP_OVER_SHORTY_STORING_FPS d6, s6, x9, x14, x10, .Lxmm_setup_finished
+    LOOP_OVER_SHORTY_STORING_FPS d7, s7, x9, x14, x10, .Lxmm_setup_finished
+    LOOP_OVER_FPs x9, x14, x10, x28, .Lxmm_setup_finished
 .Lxmm_setup_finished:
     CFI_DEFINE_DEX_PC_WITH_OFFSET(CFI_TMP, CFI_DEX, 0)
 
