@@ -692,6 +692,7 @@ class ElfBuilder final {
                              Elf_Word bss_size,
                              Elf_Word bss_methods_offset,
                              Elf_Word bss_roots_offset,
+                             Elf_Word bss_strings_offset,
                              Elf_Word dex_size) {
     CHECK_NE(dynamic_sections_reserved_size_, 0u);
 
@@ -758,12 +759,12 @@ class ElfBuilder final {
                     STT_OBJECT);
       }
     }
-    DCHECK_LE(bss_roots_offset, bss_size);
+    DCHECK_LE(bss_methods_offset, bss_roots_offset);
+    DCHECK_LE(bss_roots_offset, bss_strings_offset);
+    DCHECK_LE(bss_strings_offset, bss_size);
     if (bss_size != 0u) {
       Elf_Word oatbss = dynstr_.Add(GetDynamicSymbolName(DynamicSymbol::kOatBss));
       dynsym_.Add(oatbss, &bss_, bss_.GetAddress(), bss_roots_offset, STB_GLOBAL, STT_OBJECT);
-      DCHECK_LE(bss_methods_offset, bss_roots_offset);
-      DCHECK_LE(bss_roots_offset, bss_size);
       // Add a symbol marking the start of the methods part of the .bss, if not empty.
       if (bss_methods_offset != bss_roots_offset) {
         Elf_Word bss_methods_address = bss_.GetAddress() + bss_methods_offset;
@@ -779,6 +780,14 @@ class ElfBuilder final {
         Elf_Word oatbssroots = dynstr_.Add(GetDynamicSymbolName(DynamicSymbol::kOatBssRoots));
         dynsym_.Add(
             oatbssroots, &bss_, bss_roots_address, bss_roots_size, STB_GLOBAL, STT_OBJECT);
+      }
+      // Add a symbol marking the start of the strings part of the .bss, if not empty.
+      if (bss_strings_offset != bss_size) {
+        Elf_Word bss_strings_address = bss_.GetAddress() + bss_strings_offset;
+        Elf_Word bss_strings_size = bss_size - bss_strings_offset;
+        Elf_Word oatbssstrings = dynstr_.Add(GetDynamicSymbolName(DynamicSymbol::kOatBssStrings));
+        dynsym_.Add(
+            oatbssstrings, &bss_, bss_strings_address, bss_strings_size, STB_GLOBAL, STT_OBJECT);
       }
       Elf_Word oatbsslastword = dynstr_.Add(GetDynamicSymbolName(DynamicSymbol::kOatBssLastWord));
       Elf_Word bsslastword_address = bss_.GetAddress() + bss_size - 4;
@@ -1046,6 +1055,7 @@ class ElfBuilder final {
     kOatBss,
     kOatBssMethods,
     kOatBssRoots,
+    kOatBssStrings,
     kOatBssLastWord,
     kOatDex,
     kOatDexLastWord,
@@ -1077,6 +1087,8 @@ class ElfBuilder final {
         return "oatbssmethods";
       case DynamicSymbol::kOatBssRoots:
         return "oatbssroots";
+      case DynamicSymbol::kOatBssStrings:
+        return "oatbssstrings";
       case DynamicSymbol::kOatBssLastWord:
         return "oatbsslastword";
       case DynamicSymbol::kOatDex:

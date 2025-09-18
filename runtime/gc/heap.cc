@@ -44,6 +44,7 @@
 #include "base/time_utils.h"
 #include "base/utils.h"
 #include "class_root-inl.h"
+#include "com_android_art_flags.h"
 #include "common_throws.h"
 #include "debugger.h"
 #include "dex/dex_file-inl.h"
@@ -2937,6 +2938,15 @@ collector::GcType Heap::CollectGarbageInternal(collector::GcType gc_type,
     CHECK(collector != nullptr) << "Could not find garbage collector with collector_type="
                                 << static_cast<size_t>(collector_type_)
                                 << " and gc_type=" << gc_type;
+
+    if (com::android::art::flags::weak_const_string() && gc_type != collector::kGcTypeSticky) {
+      // For full collection, prune `DexCache` and .bss references to `const-string`
+      // strings, so that weak interns may be collected. Strings promoted to strong
+      // interns or reachable by some other path shall be kept.
+      ReaderMutexLock mu(self, *Locks::mutator_lock_);
+      Runtime::Current()->GetClassLinker()->PruneDexCacheAndBssStringEntries(self);
+    }
+
     collector->Run(gc_cause, clear_soft_references || runtime->IsZygote());
     IncrementFreedEver();
     RequestTrim(self);

@@ -372,6 +372,11 @@ class OatFile {
     return (bss_roots_ != nullptr) ? bss_roots_ - BssBegin() : BssSize();
   }
 
+  size_t BssStringsOffset() const {
+    // Note: This is used only for symbolizer and needs to return a valid .bss offset.
+    return (bss_strings_ != nullptr) ? bss_strings_ - BssBegin() : BssSize();
+  }
+
   size_t DexSize() const {
     return DexEnd() - DexBegin();
   }
@@ -400,6 +405,7 @@ class OatFile {
   EXPORT ArrayRef<const uint32_t> GetAppImageRelocations() const;
   EXPORT ArrayRef<ArtMethod*> GetBssMethods() const;
   EXPORT ArrayRef<GcRoot<mirror::Object>> GetBssGcRoots() const;
+  EXPORT ArrayRef<GcRoot<mirror::Object>> GetBssStrings() const;  // Note: typed as `Object`.
 
   // Initialize relocation sections (.data.img.rel.ro and .bss).
   void InitializeRelocations() const;
@@ -477,6 +483,9 @@ class OatFile {
 
   // Pointer to the beginning of the GC roots in the .bss section, if present, otherwise null.
   uint8_t* bss_roots_;
+
+  // Pointer to the beginning of the strings in the .bss section, if present, otherwise null.
+  uint8_t* bss_strings_;
 
   // Was this oat_file loaded executable?
   const bool is_executable_;
