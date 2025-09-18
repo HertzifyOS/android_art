@@ -5,37 +5,36 @@
  * for: aget, aget-boolean, aget-byte, aget-char, aget-short, aget-wide, aget-object
  *
  */
-    FETCH_B w9, 1, 0                    // w9<- BB
-    lsr     w2, wINST, #8               // w2<- AA
+    FETCH_B w2, 1, 0                    // w2<- BB
+    lsr     w9, wINST, #8               // w9<- AA
     FETCH_B w3, 1, 1                    // w3<- CC
-    GET_VREG w0, w9                     // w0<- vBB (array object)
+    GET_VREG w0, w2                     // w0<- vBB (array object)
     GET_VREG w1, w3                     // w1<- vCC (requested index)
     cbz     x0, common_errNullObject    // bail if null array object.
     ldr     w3, [x0, #MIRROR_ARRAY_LENGTH_OFFSET]    // w3<- arrayObj->length
     add     x0, x0, w1, uxtw #$shift    // w0<- arrayObj + index*width
     cmp     w1, w3                      // compare unsigned index, length
     bcs     common_errArrayIndex        // index >= length, bail
-    // To fit the handler in 64B, use the instruction dispatch in corresponding `iget` slow path.
-%  iget_opcode = re.sub("op_aget", "op_iget", opcode)
+    FETCH_ADVANCE_INST 2                // advance rPC, load rINST
+    GET_INST_OPCODE x10                 // extract opcode from wINST
     .if $wide
-    ldr     x0, [x0, #$data_offset]     // x0<- vBB[vCC]
-    FETCH_ADVANCE_INST 2                // advance rPC, load rINST
-    SET_VREG_WIDE x0, w2
-    b .L${iget_opcode}_slow_path_dispatch
+    ldr     x2, [x0, #$data_offset]     // x2<- vBB[vCC]
+    SET_VREG_WIDE x2, w9
+    GOTO_OPCODE x10                     // jump to next instruction
     .elseif $is_object
-    $load   w0, [x0, #$data_offset]     // w0<- vBB[vCC]
-    UNPOISON_HEAP_REF w0
-    TEST_IF_MARKING 1f
-    // Shorten the handler by using the "store" from `op_iget_object` slow path.
-    b .L${iget_opcode}_slow_path_fetch_advance_2_store_r0_to_vreg_r2
+    $load   w2, [x0, #$data_offset]     // w2<- vBB[vCC]
+    UNPOISON_HEAP_REF w2
+    TEST_IF_MARKING 2f
 1:
-    bl art_quick_read_barrier_mark_reg00
-    b .L${iget_opcode}_slow_path_fetch_advance_2_store_r0_to_vreg_r2
+    SET_VREG_OBJECT w2, w9              // vAA<- w2
+    GOTO_OPCODE x10                     // jump to next instruction
+2:
+    bl art_quick_read_barrier_mark_reg02
+    b 1b
     .else
-    $load   w0, [x0, #$data_offset]     // w0<- vBB[vCC]
-    FETCH_ADVANCE_INST 2                // advance rPC, load rINST
-    SET_VREG w0, w2                     // vAA<- w0
-    b .L${iget_opcode}_slow_path_dispatch
+    $load   w2, [x0, #$data_offset]     // w2<- vBB[vCC]
+    SET_VREG w2, w9                     // vAA<- w2
+    GOTO_OPCODE x10                     // jump to next instruction
     .endif
 
 %def op_aget_boolean():
@@ -91,14 +90,8 @@
     .else
     $store  w2, [x0, #$data_offset]     // vBB[vCC]<- w2
     .endif
-    .if $wide
-    // To fit the handler in 64B, use the instruction dispatch in the `iput_wide` slow path.
-%  iput_opcode = re.sub("op_aput", "op_iput", opcode)
-    b .L${iput_opcode}_slow_path_dispatch
-    .else
     GET_INST_OPCODE ip                  // extract opcode from rINST
     GOTO_OPCODE ip                      // jump to next instruction
-    .endif
 
 %def op_aput_boolean():
 %  op_aput(store="strb", shift="0", data_offset="MIRROR_BOOLEAN_ARRAY_DATA_OFFSET", wide="0", is_object="0")
@@ -168,29 +161,28 @@
 %  op_filled_new_array(helper="nterp_filled_new_array_range")
 
 %def op_new_array():
-%  slow_path = add_slow_path(op_new_array_slow_path)
    /* new-array vA, vB, class@CCCC */
    EXPORT_PC
    // Fast-path which gets the class from thread-local cache.
-%  fetch_from_thread_cache("x0", miss_label=slow_path)
-   TEST_IF_MARKING .L${opcode}_slow_path_read_barrier
-.L${opcode}_resume:
+%  fetch_from_thread_cache("x0", miss_label="2f")
+   TEST_IF_MARKING 3f
+1:
    lsr     w1, wINST, #12              // w1<- B
    GET_VREG w1, w1                     // w1<- vB (array length)
    ldr lr, [xSELF, #THREAD_ALLOC_ARRAY_ENTRYPOINT_OFFSET]
    blr lr
    dmb ishst                           // need fence for making array's class visible
-   ubfx    w2, wINST, #8, #4           // w2<- A
-   // Shorten the handler by using the "store" code from `op_iget_object` slow path.
-%  iget_object_opcode = re.sub("op_new_array", "op_iget_object", opcode)
-   b .L${iget_object_opcode}_slow_path_fetch_advance_2_store_r0_to_vreg_r2
-
-%def op_new_array_slow_path():
+   ubfx    w1, wINST, #8, #4           // w1<- A
+   SET_VREG_OBJECT w0, w1
+   FETCH_ADVANCE_INST 2
+   GET_INST_OPCODE ip
+   GOTO_OPCODE ip
+2:
    mov x0, xSELF
    ldr x1, [sp, 0]
    mov x2, xPC
    bl nterp_get_class
-   b .L${opcode}_resume
-.L${opcode}_slow_path_read_barrier:
+   b 1b
+3:
    bl art_quick_read_barrier_mark_reg00
-   b .L${opcode}_resume
+   b 1b

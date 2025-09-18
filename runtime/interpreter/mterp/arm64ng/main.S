@@ -299,22 +299,14 @@ END \name
     str    xPC, [xREFS, #-16]
 .endm
 
-// Emit a branch with the offset in code units provided in `wINST`.
-//
-// Specify the `dispatch` label if you want to emit shorter code by jumping to an existing opcode
-// dispatch. By default, we emit the opcode dispatch explicitly as part of the `BRANCH` code.
-.macro BRANCH dispatch=none
+.macro BRANCH
     add     xPC, xPC, wINST, sxtw #1    // update xPC
     // Update method counter and do a suspend check if the branch is negative or zero.
     cmp wINST, #0
     b.le NterpHotnessCheck
     FETCH wINST, 0                      // load wINST
-    .ifc \dispatch, none
     GET_INST_OPCODE ip                  // extract opcode from wINST
     GOTO_OPCODE ip                      // jump to next instruction
-    .else
-    b \dispatch
-    .endif
 .endm
 
 // Uses x12, x13, and x14 as temporaries.
@@ -1759,13 +1751,9 @@ NterpCommonInvokeInstanceRange:
     COMMON_INVOKE_RANGE suffix="invokeInstance"
 
 NterpCommonInvokeInterface:
-    ldr x2, [x2, #MIRROR_CLASS_IMT_PTR_OFFSET_64]
-    ldr x0, [x2, w3, uxtw #3]
     COMMON_INVOKE_NON_RANGE is_interface=1, suffix="invokeInterface"
 
 NterpCommonInvokeInterfaceRange:
-    ldr x2, [x2, #MIRROR_CLASS_IMT_PTR_OFFSET_64]
-    ldr x0, [x2, w3, uxtw #3]
     COMMON_INVOKE_RANGE is_interface=1, suffix="invokeInterface"
 
 NterpCommonInvokePolymorphic:
