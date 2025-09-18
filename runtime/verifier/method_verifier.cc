@@ -1849,6 +1849,12 @@ bool MethodVerifierImpl::ScanTryCatchBlocks() {
           << "'try' block starts inside an instruction (" << start << ")";
       return false;
     }
+    // `end` should be either: A) the end of the method, or B) right before an instruction.
+    if (end != insns_size && !GetInstructionFlags(end).IsOpcode()) {
+      Fail(VERIFY_ERROR_BAD_CLASS_HARD)
+          << "'try' block ends inside an instruction (" << end << ")";
+      return false;
+    }
     DexInstructionIterator end_it(code_item_accessor_.Insns(), end);
     for (DexInstructionIterator it(code_item_accessor_.Insns(), start); it < end_it; ++it) {
       GetModifiableInstructionFlags(it.DexPc()).SetInTry();
