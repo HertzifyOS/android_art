@@ -4284,7 +4284,14 @@ size_t Heap::GetDefaultMemoryGcCostFactor() {
 
   // We don't know how much memory or compute resources the device has. Pick
   // something suitable for 2025 era phones and hope for the best.
-  return static_cast<size_t>(32 * MB);
+  // The default value was set to 32MB initially to match how aggressive GC
+  // was without time based GC triggering in lab tests. In a field study we
+  // saw GC was 44% more aggressive than before, so we increased the default
+  // value to compensate. In theory GC effort is inversely proportional to the
+  // square root of this tuning knob. The 2.25x increase in the tuning knob
+  // value from 32MB to 72MB should result in √(2.25) = 1.5x, or 50% less
+  // aggressive GC behavior.
+  return static_cast<size_t>(72 * MB);
 }
 
 class Heap::TimeBasedGcThresholdCheckTask : public HeapTask {
