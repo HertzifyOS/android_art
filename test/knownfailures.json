@@ -1073,7 +1073,8 @@
           "2286-invokevirtual-invokeexact",
           "2287-no-temp-component-class",
           "2288-checker-smali-string-builder-wrong-init",
-          "2289-smali-invalid-rti"
+          "2289-smali-invalid-rti",
+          "2292-checker-smali-peek-poke-truncation"
         ],
         "variant": "jvm",
         "bug": "b/73888836",

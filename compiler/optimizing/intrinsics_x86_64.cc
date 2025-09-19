@@ -1766,8 +1766,7 @@ static void GenPoke(LocationSummary* locations, DataType::Type size, X86_64Assem
   switch (size) {
     case DataType::Type::kInt8:
       if (value.IsConstant()) {
-        __ movb(Address(address, 0),
-                Immediate(CodeGenerator::GetInt32ValueOf(value.GetConstant())));
+        __ movb(Address(address, 0), Immediate(CodeGenerator::GetInt8ValueOf(value.GetConstant())));
       } else {
         __ movb(Address(address, 0), value.AsRegister<CpuRegister>());
       }
@@ -1775,7 +1774,7 @@ static void GenPoke(LocationSummary* locations, DataType::Type size, X86_64Assem
     case DataType::Type::kInt16:
       if (value.IsConstant()) {
         __ movw(Address(address, 0),
-                Immediate(CodeGenerator::GetInt32ValueOf(value.GetConstant())));
+                Immediate(CodeGenerator::GetInt16ValueOf(value.GetConstant())));
       } else {
         __ movw(Address(address, 0), value.AsRegister<CpuRegister>());
       }
