@@ -676,6 +676,8 @@ static size_t NterpGetLocalStaticFieldInternal(mirror::Class* cls, const uint16_
   ArtField* resolved_field = cls->FindDeclaredField</*kOnlyLookAtIndex=*/true>(
       Instruction::At(dex_pc_ptr)->VRegB_21c());
   if (resolved_field != nullptr && resolved_field->IsStatic() && !resolved_field->IsVolatile()) {
+    // Note we don't store in the thread interpreter cache to leave the cache
+    // for instructions which do not have a fast path like this one.
     return reinterpret_cast<size_t>(resolved_field);
   }
   return 0u;
@@ -713,6 +715,8 @@ static size_t NterpGetLocalInstanceFieldInternal(mirror::Class* cls, const uint1
   uint16_t field_index = inst->VRegC_22c();
   ArtField* resolved_field = cls->FindDeclaredField</*kOnlyLookAtIndex=*/true>(field_index);
   if (resolved_field != nullptr && !resolved_field->IsStatic() && !resolved_field->IsVolatile()) {
+    // Note we don't store in the thread interpreter cache to leave the cache
+    // for instructions which do not have a fast path like this one.
     return resolved_field->GetOffset().Uint32Value();
   }
 
