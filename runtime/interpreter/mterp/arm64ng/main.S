@@ -67,6 +67,7 @@
  *   x23  xINST     first 16-bit code unit of current instruction
  *   x24  xIBASE    interpreted instruction base pointer, used for computed goto
  *   x25  xREFS     base of object references of dex registers.
+ *   x26  xCACHE    pointer to the interpreter cache.
  *   x28  xCSTMP    callee-save scratch register (with 32-bit version wCSTMP).
  *   x16  ip        scratch reg
  *   x17  ip2       scratch reg (used by macros)
@@ -84,6 +85,7 @@
 #define xIBASE   x24
 #define xREFS    x25
 #define CFI_REFS 25
+#define xCACHE   x26
 #define xCSTMP   x28
 #define wCSTMP   w28
 #define ip       x16
@@ -1615,10 +1617,10 @@ OAT_ENTRY ExecuteNterpImpl
     cbz w15, .Lxmm_setup_finished
 
     sub ip2, ip, x15
-    ldr w26, [x0, #ART_METHOD_ACCESS_FLAGS_OFFSET]
+    ldr wCSTMP, [x0, #ART_METHOD_ACCESS_FLAGS_OFFSET]
     lsl x27, ip2, #2 // x27 is now the offset for inputs into the registers array.
 
-    tbz w26, #ART_METHOD_NTERP_ENTRY_POINT_FAST_PATH_FLAG_BIT, .Lsetup_slow_path
+    tbz wCSTMP, #ART_METHOD_NTERP_ENTRY_POINT_FAST_PATH_FLAG_BIT, .Lsetup_slow_path
     // Setup pointer to inputs in FP and pointer to inputs in REFS
     add x10, xFP, x27
     add x11, xREFS, x27
@@ -1637,7 +1639,7 @@ OAT_ENTRY ExecuteNterpImpl
 .Lsetup_slow_path:
     // If the method is not static and there is one argument ('this'), we don't need to fetch the
     // shorty.
-    tbnz w26, #ART_METHOD_IS_STATIC_FLAG_BIT, .Lsetup_with_shorty
+    tbnz wCSTMP, #ART_METHOD_IS_STATIC_FLAG_BIT, .Lsetup_with_shorty
     str w1, [xFP, x27]
     str w1, [xREFS, x27]
     cmp w15, #1
@@ -1657,7 +1659,7 @@ OAT_ENTRY ExecuteNterpImpl
     mov x14, #0
 
     add x9, xIBASE, #1  // shorty + 1  ; ie skip return arg character
-    tbnz w26, #ART_METHOD_IS_STATIC_FLAG_BIT, .Lhandle_static_method
+    tbnz wCSTMP, #ART_METHOD_IS_STATIC_FLAG_BIT, .Lhandle_static_method
     add x10, x10, #4
     add x11, x11, #4
     add xINST, xINST, #4
@@ -1687,7 +1689,9 @@ OAT_ENTRY ExecuteNterpImpl
 .Lxmm_setup_finished:
     CFI_DEFINE_DEX_PC_WITH_OFFSET(CFI_TMP, CFI_DEX, 0)
 
-    // Set rIBASE
+    // Set xCACHE
+    add xCACHE, xSELF, #THREAD_INTERPRETER_CACHE_OFFSET
+    // Set xIBASE
     adr xIBASE, artNterpAsmInstructionStart
     /* start executing the instruction at xPC */
     START_EXECUTING_INSTRUCTIONS
@@ -1700,9 +1704,8 @@ OAT_ENTRY ExecuteNterpImpl
 %def fetch_from_thread_cache(dest_reg, miss_label):
    // Fetch some information from the thread cache.
    // Uses ip and ip2 as temporaries.
-   add      ip, xSELF, #THREAD_INTERPRETER_CACHE_OFFSET       // cache address
    ubfx     ip2, xPC, #2, #THREAD_INTERPRETER_CACHE_SIZE_LOG2  // entry index
-   add      ip, ip, ip2, lsl #4            // entry address within the cache
+   add      ip, xCACHE, ip2, lsl #4        // entry address within the cache
    ldp      ip, ${dest_reg}, [ip]          // entry key (pc) and value (offset)
    cmp      ip, xPC
    b.ne     ${miss_label}
