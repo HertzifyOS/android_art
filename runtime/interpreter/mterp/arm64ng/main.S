@@ -67,6 +67,7 @@
  *   x23  xINST     first 16-bit code unit of current instruction
  *   x24  xIBASE    interpreted instruction base pointer, used for computed goto
  *   x25  xREFS     base of object references of dex registers.
+ *   x28  xCSTMP    callee-save scratch register (with 32-bit version wCSTMP).
  *   x16  ip        scratch reg
  *   x17  ip2       scratch reg (used by macros)
  *
@@ -83,6 +84,8 @@
 #define xIBASE   x24
 #define xREFS    x25
 #define CFI_REFS 25
+#define xCSTMP   x28
+#define wCSTMP   w28
 #define ip       x16
 #define ip2      x17
 #define wip      w16
@@ -887,7 +890,7 @@ END \name
 .Linvoke_fast_path_\suffix:
      .if \is_interface
      // Setup hidden argument.
-     mov ip2, x26
+     mov ip2, xCSTMP
      .endif
      ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
@@ -929,7 +932,7 @@ END \name
      b.eq .Lget_shorty_and_invoke_\suffix
      .if \is_interface
      // Setup hidden argument.
-     mov ip2, x26
+     mov ip2, xCSTMP
      .endif
      ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
@@ -949,7 +952,7 @@ END \name
    // - xINST contains shorty (in callee-save to switch over return value after call).
    // - x0 contains method
    // - x1 contains 'this' pointer for instance method.
-   // - for interface calls, x26 contains the interface method.
+   // - for interface calls, xCSTMP contains the interface method.
    add x9, xINST, #1  // shorty + 1  ; ie skip return arg character
    FETCH w11, 2 // arguments
    .if \is_string_init
@@ -992,7 +995,7 @@ END \name
    .else
       .if \is_interface
       // Setup hidden argument.
-      mov ip2, x26
+      mov ip2, xCSTMP
       .endif
       ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
       blr lr
@@ -1237,7 +1240,7 @@ END \name
 .Linvoke_fast_path_range_\suffix:
      .if \is_interface
      // Setup hidden argument.
-     mov ip2, x26
+     mov ip2, xCSTMP
      .endif
      ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
@@ -1274,7 +1277,7 @@ END \name
      b.eq .Lget_shorty_and_invoke_range_\suffix
      .if \is_interface
      // Setup hidden argument.
-     mov ip2, x26
+     mov ip2, xCSTMP
      .endif
      ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
@@ -1293,7 +1296,7 @@ END \name
    // - xINST contains shorty (in callee-save to switch over return value after call).
    // - x0 contains method
    // - x1 contains 'this' pointer for instance method.
-   // - for interface calls, x26 contains the interface method.
+   // - for interface calls, xCSTMP contains the interface method.
    add x9, xINST, #1  // shorty + 1  ; ie skip return arg character
    FETCH w10, 2 // arguments
    .if \is_string_init
@@ -1347,7 +1350,7 @@ END \name
    .else
       .if \is_interface
       // Setup hidden argument.
-      mov ip2, x26
+      mov ip2, xCSTMP
       .endif
       ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
       blr lr
