@@ -250,6 +250,7 @@ std::unique_ptr<CompilerOptions> CreateCompilerOptions(bool is_baseline) {
   opt->implicit_so_checks_ = true;
   opt->implicit_suspend_checks_ = kRuntimeISA == InstructionSet::kArm64;
   opt->baseline_ = is_baseline;
+  opt->inline_max_code_units_ = CompilerOptions::kDefaultInlineMaxCodeUnits;
   return opt;
 }
 
