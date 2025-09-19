@@ -2095,5 +2095,51 @@ test_suite_package {
     include_host_shared_libs_in_main_zip: true,
     art_data_zips: [
         ":art_host_test_data",
+        ":art_test_common_host_jars_zip",
+        ":apex_icu_dat_zip",
     ],
+}
+
+genrule {
+    name: "art_test_common_host_jars_zip",
+    device_first_srcs: [
+        ":core-oj",
+        ":core-libart",
+        ":okhttp",
+        ":bouncycastle",
+        ":apache-xml",
+        ":com.android.conscrypt", //conscrypt.jar
+        ":com.android.i18n", //core-icu4j.jar
+    ],
+    tools: ["soong_zip"],
+    out: ["art_test_common_host_jars_zip.zip"],
+    cmd: "TEMP_DIR=$(genDir)/tmp && rm -rf $$TEMP_DIR && " +
+        "LIB_DIR=$$TEMP_DIR/host/testcases/art_common/out/host/linux-x86/apex/com.android.art/javalib && " +
+        "CONSCRYPT_DIR=$$TEMP_DIR/host/testcases/art_common/out/host/linux-x86/apex/com.android.conscrypt/javalib && " +
+        "CORE_ICU4J_DIR=$$TEMP_DIR/host/testcases/art_common/out/host/linux-x86/apex/com.android.i18n/javalib && " +
+        "mkdir -p $$LIB_DIR && " +
+        "mkdir -p $$CONSCRYPT_DIR && " +
+        "mkdir -p $$CORE_ICU4J_DIR && " +
+        "cp $(location :core-oj) $$LIB_DIR/core-oj.jar && " +
+        "cp $(location :core-libart) $$LIB_DIR/core-libart.jar && " +
+        "cp $(location :okhttp) $$LIB_DIR/okhttp.jar && " +
+        "cp $(location :bouncycastle) $$LIB_DIR/bouncycastle.jar && " +
+        "cp $(location :apache-xml) $$LIB_DIR/apache-xml.jar && " +
+        "cp $(location :com.android.conscrypt) $$CONSCRYPT_DIR/conscrypt.jar && " +
+        "cp $(location :com.android.i18n) $$CORE_ICU4J_DIR/core-icu4j.jar && " +
+        "$(location soong_zip) -o $(out) -C $$TEMP_DIR -D $$TEMP_DIR/host",
+}
+
+genrule {
+    name: "apex_icu_dat_zip",
+    srcs: [
+        ":icu_dat",
+    ],
+    tools: ["soong_zip"],
+    out: ["apex_icu_dat.zip"],
+    cmd: "TEMP_DIR=$(genDir)/tmp32 && rm -rf $$TEMP_DIR && " +
+        "LIB_DIR=$$TEMP_DIR/host/testcases/art_common/out/host/linux-x86/com.android.i18n/etc/icu && " +
+        "mkdir -p $$LIB_DIR && " +
+        "cp $(location :icu_dat) $$LIB_DIR && " +
+        "$(location soong_zip) -o $(out) -C $$TEMP_DIR -D $$TEMP_DIR/host",
 }
