@@ -253,24 +253,24 @@
 
 %def op_iput(store="str", volatile_store="stlr", wide="0", is_object="0"):
 %  slow_path = add_slow_path(op_iput_slow_path, volatile_store, wide, is_object)
-   ubfx    w1, wINST, #8, #4           // w1<- A
-   .if $wide
-   GET_VREG_WIDE x26, w1               // x26<- fp[A]/fp[A+1]
-   .else
-   GET_VREG w26, w1                    // w26 <- v[A]
-   .endif
    // Fast-path which gets the field from thread-local cache.
 %  fetch_from_thread_cache("x0", miss_label=slow_path)
 .L${opcode}_resume:
    lsr     w2, wINST, #12              // w2<- B
+   ubfx    w1, wINST, #8, #4           // w1<- A
    GET_VREG w2, w2                     // vB (object we're operating on)
+   .if $wide
+   GET_VREG_WIDE x1, w1                // x1<- fp[A]/fp[A+1]
+   .else
+   GET_VREG w1, w1                     // w1 <- v[A]
+   .endif
    cbz w2, common_errNullObject
    .if $wide
-   $store  x26, [x2, x0]
+   $store  x1, [x2, x0]
    .else
-   POISON_HEAP_REF_IF_OBJECT $is_object, w26
-   $store  w26, [x2, x0]
-   WRITE_BARRIER_IF_OBJECT $is_object, w26, w2, .L${opcode}_skip_write_barrier
+   POISON_HEAP_REF_IF_OBJECT $is_object, w1
+   $store  w1, [x2, x0]
+   WRITE_BARRIER_IF_OBJECT $is_object, w1, w2, .L${opcode}_skip_write_barrier
    .endif
    FETCH_ADVANCE_INST 2
    GET_INST_OPCODE ip
@@ -301,23 +301,24 @@
    // needed as the value is used below via wider X0 register - AARCH64 AAPCS specifies that
    // "... any unused bits in the register have unspecified value" (see 6.8.2, 6.9).
    mov     w0, w0
-   .if $is_object
-   // Reload the value as it may have moved.
-   ubfx    w1, wINST, #8, #4           // w1<- A
-   GET_VREG w26, w1                    // w26 <- v[A]
-   .endif
    tbz     w0, #31, .L${opcode}_resume
    CLEAR_INSTANCE_VOLATILE_MARKER w0
    lsr     w2, wINST, #12              // w2<- B
+   ubfx    w1, wINST, #8, #4           // w1<- A
    GET_VREG w2, w2                     // vB (object we're operating on)
+   .if $wide
+   GET_VREG_WIDE x1, w1                // x1<- fp[A]/fp[A+1]
+   .else
+   GET_VREG w1, w1                     // w1 <- v[A]
+   .endif
    cbz     w2, common_errNullObject
    add     x3, x2, x0
    .if $wide
-   $volatile_store x26, [x3]
+   $volatile_store x1, [x3]
    .else
-   POISON_HEAP_REF_IF_OBJECT $is_object, w26
-   $volatile_store w26, [x3]
-   WRITE_BARRIER_IF_OBJECT $is_object, w26, w2, .L${opcode}_slow_path_skip_write_barrier
+   POISON_HEAP_REF_IF_OBJECT $is_object, w1
+   $volatile_store w1, [x3]
+   WRITE_BARRIER_IF_OBJECT $is_object, w1, w2, .L${opcode}_slow_path_skip_write_barrier
    .endif
    FETCH_ADVANCE_INST 2
    GET_INST_OPCODE ip
@@ -445,12 +446,7 @@
 
 %def op_sput(store="str", volatile_store="stlr", wide="0", is_object="0"):
 %  slow_path = add_slow_path(op_sput_slow_path, volatile_store, wide, is_object)
-   lsr     w2, wINST, #8               // w2 <- A
-   .if $wide
-   GET_VREG_WIDE x26, w2               // x26 <- v[A]
-   .else
-   GET_VREG w26, w2                    // w26 <- v[A]
-   .endif
+   lsr     wINST, wINST, #8            // wINST <- A
    // Fast-path which gets the field from thread-local cache.
 %  fetch_from_thread_cache("x0", miss_label=slow_path)
 .L${opcode}_resume:
@@ -459,11 +455,13 @@
    TEST_IF_MARKING .L${opcode}_read_barrier
 .L${opcode}_resume_after_read_barrier:
    .if $wide
-   $store  x26, [x0, x1]
+   GET_VREG_WIDE x2, wINST             // x2 <- v[A]
+   $store  x2, [x0, x1]
    .else
-   POISON_HEAP_REF_IF_OBJECT $is_object, w26
-   $store  w26, [x0, x1]
-   WRITE_BARRIER_IF_OBJECT $is_object, w26, w0, .L${opcode}_skip_write_barrier
+   GET_VREG w2, wINST                  // w2 <- v[A]
+   POISON_HEAP_REF_IF_OBJECT $is_object, w2
+   $store  w2, [x0, x1]
+   WRITE_BARRIER_IF_OBJECT $is_object, w2, w0, .L${opcode}_skip_write_barrier
    .endif
    FETCH_ADVANCE_INST 2
    GET_INST_OPCODE ip
@@ -491,17 +489,12 @@
    ldr     x1, [sp]
    mov     x2, xPC
    .if $is_object
-   mov     x3, x26
+   GET_VREG w3, wINST                 // w3 <- v[A]
    .else
    mov     x3, #0
    .endif
    EXPORT_PC
    bl      nterp_get_static_field
-   .if $is_object
-   // Reload the value as it may have moved.
-   lsr     w2, wINST, #8               // w2 <- A
-   GET_VREG w26, w2                    // w26 <- v[A]
-   .endif
    tbz     x0, #0, .L${opcode}_resume
    CLEAR_STATIC_VOLATILE_MARKER x0
    ldr     w1, [x0, #ART_FIELD_OFFSET_OFFSET]
@@ -510,11 +503,13 @@
 .L${opcode}_slow_path_resume_after_read_barrier:
    add     x1, x0, x1
    .if $wide
-   $volatile_store    x26, [x1]
+   GET_VREG_WIDE x2, wINST             // x2 <- v[A]
+   $volatile_store    x2, [x1]
    .else
-   POISON_HEAP_REF_IF_OBJECT $is_object, w26
-   $volatile_store    w26, [x1]
-   WRITE_BARRIER_IF_OBJECT $is_object, w26, w0, .L${opcode}_slow_path_skip_write_barrier
+   GET_VREG w2, wINST                  // w2 <- v[A]
+   POISON_HEAP_REF_IF_OBJECT $is_object, w2
+   $volatile_store    w2, [x1]
+   WRITE_BARRIER_IF_OBJECT $is_object, w2, w0, .L${opcode}_slow_path_skip_write_barrier
    .endif
    FETCH_ADVANCE_INST 2
    GET_INST_OPCODE ip
