@@ -318,12 +318,11 @@ END \name
 //
 // Outputs
 // - ip contains the dex registers size
-// - x28 contains the old stack pointer.
-// - \code_item is replaced with a pointer to the instructions
+// - \old_sp contains the old stack pointer.
 // - if \ins is not "none", \ins contains the ins size
 //
 // Uses ip, ip2 and x14 as temporaries.
-.macro SETUP_STACK_FRAME code_item, refs, fp, cfi_refs, ins=none
+.macro SETUP_STACK_FRAME code_item, refs, fp, cfi_refs, old_sp, ins=none
     // Fetch dex register size.
     ldrh wip, [\code_item, #CODE_ITEM_REGISTERS_SIZE_OFFSET]
     // Fetch outs size.
@@ -332,8 +331,6 @@ END \name
     .ifnc \ins, none
     ldrh \ins, [\code_item, #CODE_ITEM_INS_SIZE_OFFSET]
     .endif
-    // Update \code_item to point to instructions.
-    add \code_item, \code_item, #CODE_ITEM_INSNS_OFFSET
 
     // Compute required frame size: ((2 * ip) + ip2) * 4 + 24
     // 24 is for saving the previous frame, pc, and method being executed.
@@ -354,10 +351,10 @@ END \name
     add \fp, \refs, ip, lsl #2
 
     // Now setup the stack pointer.
-    mov x28, sp
-    .cfi_def_cfa_register x28
+    mov \old_sp, sp
+    .cfi_def_cfa_register \old_sp
     mov sp, x14
-    str x28, [\refs, #-8]
+    str \old_sp, [\refs, #-8]
     CFI_DEF_CFA_BREG_PLUS_UCONST \cfi_refs, -8, CALLEE_SAVES_SIZE
 
     // Put nulls in reference frame.
@@ -487,8 +484,8 @@ END \name
    // are called by compiled code or nterp.
    SPILL_ALL_CALLEE_SAVES
 
-   // Setup the frame.
-   SETUP_STACK_FRAME x8, xNEW_REFS, xNEW_FP, CFI_NEW_REFS
+   // Setup the frame. Use x2 for `old_sp` as the old SP is not needed after the setup.
+   SETUP_STACK_FRAME x8, xNEW_REFS, xNEW_FP, CFI_NEW_REFS, x2
    // Make x4 point to the top of the dex register array.
    add x4, xNEW_FP, ip, uxtx #2
 
@@ -498,8 +495,8 @@ END \name
    // TODO: we could avoid this as instance invokes already fetch it.
    FETCH w3, 2
 
-   // Set the dex pc pointer.
-   mov xPC, x8
+   // Set the dex pc pointer to point to instructions.
+   add xPC, x8, #CODE_ITEM_INSNS_OFFSET
    CFI_DEFINE_DEX_PC_WITH_OFFSET(CFI_TMP, CFI_DEX, 0)
 .endm
 
@@ -1606,8 +1603,10 @@ OAT_ENTRY ExecuteNterpImpl
     SPILL_ALL_CALLEE_SAVES
 
     ldr xPC, [x0, #ART_METHOD_DATA_OFFSET_64]
-    // Setup the stack for executing the method.
-    SETUP_STACK_FRAME xPC, xREFS, xFP, CFI_REFS, w15
+    // Setup the stack for executing the method. Use xINST as a callee-save temporary.
+    SETUP_STACK_FRAME xPC, xREFS, xFP, CFI_REFS, xINST, w15
+    // Update xPC to point to instructions.
+    add xPC, xPC, #CODE_ITEM_INSNS_OFFSET
 
     // Setup the parameters
     cbz w15, .Lxmm_setup_finished
@@ -1628,8 +1627,8 @@ OAT_ENTRY ExecuteNterpImpl
     SETUP_REFERENCE_PARAMETER_IN_GPR w5, x10, x11, w15, x14, .Lxmm_setup_finished
     SETUP_REFERENCE_PARAMETER_IN_GPR w6, x10, x11, w15, x14, .Lxmm_setup_finished
     SETUP_REFERENCE_PARAMETER_IN_GPR w7, x10, x11, w15, x14, .Lxmm_setup_finished
-    add x28, x28, #OFFSET_TO_FIRST_ARGUMENT_IN_STACK
-    SETUP_REFERENCE_PARAMETERS_IN_STACK x10, x11, w15, x28, x14
+    add xINST, xINST, #OFFSET_TO_FIRST_ARGUMENT_IN_STACK
+    SETUP_REFERENCE_PARAMETERS_IN_STACK x10, x11, w15, xINST, x14
     b .Lxmm_setup_finished
 
 .Lsetup_slow_path:
@@ -1658,7 +1657,7 @@ OAT_ENTRY ExecuteNterpImpl
     tbnz w26, #ART_METHOD_IS_STATIC_FLAG_BIT, .Lhandle_static_method
     add x10, x10, #4
     add x11, x11, #4
-    add x28, x28, #4
+    add xINST, xINST, #4
     b .Lcontinue_setup_gprs
 .Lhandle_static_method:
     LOOP_OVER_SHORTY_STORING_GPRS x1, w1, x9, x14, x10, x11, .Lgpr_setup_finished
@@ -1669,7 +1668,7 @@ OAT_ENTRY ExecuteNterpImpl
     LOOP_OVER_SHORTY_STORING_GPRS x5, w5, x9, x14, x10, x11, .Lgpr_setup_finished
     LOOP_OVER_SHORTY_STORING_GPRS x6, w6, x9, x14, x10, x11, .Lgpr_setup_finished
     LOOP_OVER_SHORTY_STORING_GPRS x7, w7, x9, x14, x10, x11, .Lgpr_setup_finished
-    LOOP_OVER_INTs x9, x14, x10, x11, x28, .Lgpr_setup_finished
+    LOOP_OVER_INTs x9, x14, x10, x11, xINST, .Lgpr_setup_finished
 .Lgpr_setup_finished:
     add x9, xIBASE, #1  // shorty + 1  ; ie skip return arg character
     mov x14, #0  // reset counter
@@ -1681,7 +1680,7 @@ OAT_ENTRY ExecuteNterpImpl
     LOOP_OVER_SHORTY_STORING_FPS d5, s5, x9, x14, x10, .Lxmm_setup_finished
     LOOP_OVER_SHORTY_STORING_FPS d6, s6, x9, x14, x10, .Lxmm_setup_finished
     LOOP_OVER_SHORTY_STORING_FPS d7, s7, x9, x14, x10, .Lxmm_setup_finished
-    LOOP_OVER_FPs x9, x14, x10, x28, .Lxmm_setup_finished
+    LOOP_OVER_FPs x9, x14, x10, xINST, .Lxmm_setup_finished
 .Lxmm_setup_finished:
     CFI_DEFINE_DEX_PC_WITH_OFFSET(CFI_TMP, CFI_DEX, 0)
 
