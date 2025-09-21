@@ -3304,10 +3304,10 @@ bool MarkCompact::FreeFromSpacePages(size_t cur_page_idx, int mode, size_t end_i
       ptrdiff_t available = cur_reclaimable_page_.load(std::memory_order_relaxed) - reclaim_begin;
       // We should retain more pages in case of MOVE ioctl (as compared to COPY
       // ioctl) as mutators also use pages from here.
-      ssize_t gBufferPages = 128 * gPageSize;
-      DCHECK_LT(gBufferPages, kMinFromSpaceMadviseSize);
+      constexpr ssize_t kBufferPages = 2 * MB;
+      static_assert(kBufferPages < kMinFromSpaceMadviseSize);
       while (available >= kMinFromSpaceMadviseSize) {
-        size = available - gBufferPages;
+        size = available - kBufferPages;
         uint8_t* addr = GetRecyclablePages(size, /*atomic=*/true);
         if (addr != nullptr) {
           int ret = madvise(addr + from_space_slide_diff_, size, MADV_DONTNEED);
