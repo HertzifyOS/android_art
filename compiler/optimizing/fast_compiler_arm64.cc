@@ -2075,7 +2075,11 @@ bool FastCompilerARM64::If_21_22t(const Instruction& instruction, uint32_t dex_p
         DO_CASE(vixl::aarch64::ge, >=, 0);
       }
       return true;
-    } else if (location.IsRegister()) {
+    } else {
+      location = GetExistingRegisterLocation(register_index, DataType::Type::kInt32);
+      if (HitUnimplemented()) {
+        return false;
+      }
       CPURegister reg = CPURegisterFrom(location, DataType::Type::kInt32);
       switch (kCond) {
         case vixl::aarch64::eq: {
@@ -2092,11 +2096,9 @@ bool FastCompilerARM64::If_21_22t(const Instruction& instruction, uint32_t dex_p
           return true;
         }
       }
-    } else {
-      DCHECK(location.IsStackSlot()) << location;
-      unimplemented_reason_ = "CompareWithZeroOnStackSlot";
     }
-    return false;
+    LOG(FATAL) << "UNREACHABLE";
+    UNREACHABLE();
   }
 
   // !kCompareWithZero
@@ -2118,18 +2120,16 @@ bool FastCompilerARM64::If_21_22t(const Instruction& instruction, uint32_t dex_p
     return true;
   }
   // Reload the locations, which can now be registers.
-  location = vreg_locations_[register_index];
-  other_location = vreg_locations_[instruction.VRegB_22t()];
-  if (location.IsRegister() && other_location.IsRegister()) {
-    CPURegister reg = CPURegisterFrom(location, DataType::Type::kInt32);
-    CPURegister other_reg = CPURegisterFrom(other_location, DataType::Type::kInt32);
-    __ Cmp(Register(reg), Register(other_reg));
-    __ B(kCond, label);
-    return true;
+  location = GetExistingRegisterLocation(register_index, DataType::Type::kInt32);
+  other_location = GetExistingRegisterLocation(instruction.VRegB_22t(), DataType::Type::kInt32);
+  if (HitUnimplemented()) {
+    return false;
   }
-
-  unimplemented_reason_ = "UnimplementedCompare";
-  return false;
+  CPURegister reg = CPURegisterFrom(location, DataType::Type::kInt32);
+  CPURegister other_reg = CPURegisterFrom(other_location, DataType::Type::kInt32);
+  __ Cmp(Register(reg), Register(other_reg));
+  __ B(kCond, label);
+  return true;
 }
 #undef DO_CASE
 
@@ -2535,11 +2535,12 @@ bool FastCompilerARM64::DoPut(const MemOperand& mem,
         return false;
       }
     }
-  } else if (src.IsStackSlot()) {
-    unimplemented_reason_ = "IPUTOnStackSlot";
-    return false;
   }
   if (is_object) {
+    src = GetExistingRegisterLocation(source_reg, DataType::Type::kReference);
+    if (HitUnimplemented()) {
+      return false;
+    }
     Register reg = WRegisterFrom(src);
     {
       // Ensure the pc position is recorded immediately after the store instruction.
@@ -2578,6 +2579,7 @@ bool FastCompilerARM64::DoPut(const MemOperand& mem,
     case Instruction::IPUT_BYTE:
     case Instruction::SPUT_BOOLEAN:
     case Instruction::SPUT_BYTE: {
+      src = GetExistingRegisterLocation(source_reg, DataType::Type::kInt32);
       __ Strb(WRegisterFrom(src), mem);
       break;
     }
@@ -2585,6 +2587,7 @@ bool FastCompilerARM64::DoPut(const MemOperand& mem,
     case Instruction::IPUT_SHORT:
     case Instruction::SPUT_CHAR:
     case Instruction::SPUT_SHORT: {
+      src = GetExistingRegisterLocation(source_reg, DataType::Type::kInt32);
       __ Strh(WRegisterFrom(src), mem);
       break;
     }
@@ -2593,6 +2596,7 @@ bool FastCompilerARM64::DoPut(const MemOperand& mem,
       if (src.IsFpuRegister()) {
         __ Str(SRegisterFrom(src), mem);
       } else {
+        src = GetExistingRegisterLocation(source_reg, DataType::Type::kInt32);
         __ Str(WRegisterFrom(src), mem);
       }
       break;
@@ -2602,6 +2606,7 @@ bool FastCompilerARM64::DoPut(const MemOperand& mem,
       if (src.IsFpuRegister()) {
         __ Str(DRegisterFrom(src), mem);
       } else {
+        src = GetExistingRegisterLocation(source_reg, DataType::Type::kInt64);
         __ Str(XRegisterFrom(src), mem);
       }
       break;
@@ -2609,6 +2614,10 @@ bool FastCompilerARM64::DoPut(const MemOperand& mem,
     default:
       unimplemented_reason_ = Instruction::Name(opcode);
       return false;
+  }
+
+  if (HitUnimplemented()) {
+    return false;
   }
   if (can_receiver_be_null) {
     RecordPcInfo(dex_pc);
