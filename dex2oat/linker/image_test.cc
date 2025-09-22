@@ -198,16 +198,16 @@ TEST_F(ImageTest, TestImageClassWithArrayClassWithUnresolvedComponent) {
                               "LClassWithStaticConst;",
                               "[LClassWithMissingInterface;",
                               "[[LClassWithMissingInterface;",
-                              "[LClassWithMissingSuper",
-                              "[[LClassWithMissingSuper"},
+                              "[LClassWithMissingSuper;",
+                              "[[LClassWithMissingSuper;"},
           /*image_classes_failing_aot_clinit=*/ {
                               "LClassWithStatic;",
                               "LClassWithStaticConst;"},
           /*image_classes_failing_resolution=*/ {
                               "[LClassWithMissingInterface;",
                               "[[LClassWithMissingInterface;",
-                              "[LClassWithMissingSuper",
-                              "[[LClassWithMissingSuper"});
+                              "[LClassWithMissingSuper;",
+                              "[[LClassWithMissingSuper;"});
 }
 
 TEST_F(ImageTest, TestSuperWithAccessChecks) {
