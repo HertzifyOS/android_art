@@ -16,10 +16,12 @@ package art
 
 import (
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
 	"android/soong/android"
+	"android/soong/cc/config"
 )
 
 func init() {
@@ -45,6 +47,19 @@ func getArtHostTestDataZipPath(ctx android.PathContext, name string) android.Wri
 }
 
 func (s *artHostTestDataSingleton) GenerateBuildActions(ctx android.SingletonContext) {
+
+	outputZip := getArtHostTestDataZipPath(ctx, "art_host_test_data")
+
+	if runtime.GOOS == "darwin" {
+		// On Darwin, the host prebuilt tools required for this test data zip do not exist.
+		// Instead of failing at Soong configuration time (which would break CI builds that
+		// don't actually need this artifact), we defer the failure to build execution time
+		// by creating an error rule that will explicitly fail when another module depends on this
+		// target.
+		android.ErrorRule(ctx, outputZip, "ART host test data (art-host-test-data.zip) cannot be built on Darwin, as required prebuilt tools are missing.")
+		return
+	}
+
 	// A simple struct to hold the source path and its intended destination path inside the zip.
 	type collectedFileInfo struct {
 		SrcPath  android.Path
@@ -77,16 +92,34 @@ func (s *artHostTestDataSingleton) GenerateBuildActions(ctx android.SingletonCon
 		}
 	})
 
+	// Add prebuilt tools.
+	// The original prebuilts directory is not accessible when running tests remotely.
+	prebuiltToolsForTests := []string{
+		"bin/clang",
+		"bin/clang-real",
+		"bin/llvm-addr2line",
+		"bin/llvm-dwarfdump",
+		"bin/llvm-objdump",
+		"lib/libc++.so",
+	}
+
+	for _, tool := range prebuiltToolsForTests {
+		src := config.ClangPath(ctx, tool).String()
+		collectedFiles = append(collectedFiles, collectedFileInfo{
+			SrcPath:  android.PathForSource(ctx, src),
+			DestPath: filepath.Join("host/testcases/art_common", src),
+		})
+	}
 	// If no data was collected, there's nothing to do.
 	if len(collectedFiles) == 0 {
 		return
 	}
 
-	outputZip := getArtHostTestDataZipPath(ctx, "art_host_test_data")
 	rule := android.NewRuleBuilder(pctx, ctx)
 	cmd := rule.Command().
 		BuiltTool("soong_zip").
 		Flag("-j").
+		Flag("-symlinks=false"). // Dereference symlinks.
 		FlagWithOutput("-o ", outputZip)
 
 	// Sort the collected files by destination path for a deterministic command line.
