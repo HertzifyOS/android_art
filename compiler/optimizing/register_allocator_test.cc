@@ -122,7 +122,7 @@ bool RegisterAllocatorTest::Check(const std::vector<uint16_t>& data) {
  * tests are based on this validation method.
  */
 TEST_F(RegisterAllocatorTest, ValidateIntervals) {
-  HGraph* graph = CreateGraph();
+  CreateGraph();
   std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
   if (codegen == nullptr) {
     GTEST_SKIP() << "X86 codegen is unavailable.";
