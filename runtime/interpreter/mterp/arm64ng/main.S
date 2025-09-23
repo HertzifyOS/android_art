@@ -67,7 +67,9 @@
  *   x23  xINST     first 16-bit code unit of current instruction
  *   x24  xIBASE    interpreted instruction base pointer, used for computed goto
  *   x25  xREFS     base of object references of dex registers.
- *   x26  xCACHE    pointer to the interpreter cache.
+ *   x26  xCACHE    pointer to the interpreter cache entry; we initialize this register with
+ *                  the pointer to the interpreter cache and then we use BFI to insert the key
+ *                  bits to form the entry pointer, replacing previously inserted key if any.
  *   x28  xCSTMP    callee-save scratch register (with 32-bit version wCSTMP).
  *   x16  ip        scratch reg
  *   x17  ip2       scratch reg (used by macros)
@@ -1689,8 +1691,8 @@ OAT_ENTRY ExecuteNterpImpl
 .Lxmm_setup_finished:
     CFI_DEFINE_DEX_PC_WITH_OFFSET(CFI_TMP, CFI_DEX, 0)
 
-    // Set xCACHE
-    add xCACHE, xSELF, #THREAD_INTERPRETER_CACHE_OFFSET
+    // Load the address of the interpreter cache to xCACHE.
+    ldr xCACHE, [xSELF, #THREAD_INTERPRETER_CACHE_OFFSET]
     // Set xIBASE
     adr xIBASE, artNterpAsmInstructionStart
     /* start executing the instruction at xPC */
@@ -1704,9 +1706,16 @@ OAT_ENTRY ExecuteNterpImpl
 %def fetch_from_thread_cache(dest_reg, miss_label):
    // Fetch some information from the thread cache.
    // Uses ip and ip2 as temporaries.
-   ubfx     ip2, xPC, #2, #THREAD_INTERPRETER_CACHE_SIZE_LOG2  // entry index
-   add      ip, xCACHE, ip2, lsl #4        // entry address within the cache
-   ldp      ip, ${dest_reg}, [ip]          // entry key (pc) and value (offset)
+#if THREAD_INTERPRETER_CACHE_KEY_LOW_BIT != 1
+#error "Unexpected THREAD_INTERPRETER_CACHE_KEY_LOW_BIT"
+#endif
+   // The lowest bit of xPC is always clear and we insert it with the required bits of the key
+   // to the `xCACHE` to form the entry address. The `xCACHE` loaded from `Thread` is aligned at
+   // the size of the `InterpreterCache`, so this inserts the bits to the initially unset bits,
+   // adding the entry's offset to the cache's base address and replacing the old key if any.
+   bfi      xCACHE, xPC, #(THREAD_INTERPRETER_CACHE_ENTRY_SIZE_LOG2 - 1), \
+                         #(THREAD_INTERPRETER_CACHE_SIZE_LOG2 + 1)
+   ldp      ip, ${dest_reg}, [xCACHE]      // entry key (pc) and value (offset)
    cmp      ip, xPC
    b.ne     ${miss_label}
 

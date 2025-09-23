@@ -2651,6 +2651,15 @@ Thread::Thread(bool daemon)
     : tls32_(daemon),
       wait_monitor_(nullptr),
       is_runtime_thread_(false) {
+  auto maybe_aligned_alloc = [](auto& interpreter_cache) {
+    if constexpr (std::is_same_v<decltype(interpreter_cache), InterpreterCache*&>) {
+      static_assert(IsPowerOfTwo(sizeof(InterpreterCache)));
+      void* storage = std::aligned_alloc(sizeof(InterpreterCache), sizeof(InterpreterCache));
+      CHECK(storage != nullptr);  // Out of memory?
+      interpreter_cache = new (storage) InterpreterCache();
+    }
+  };
+  maybe_aligned_alloc(interpreter_cache_);
   wait_mutex_ = new Mutex("a thread wait mutex", LockLevel::kThreadWaitLock);
   wait_cond_ = new ConditionVariable("a thread wait condition variable", *wait_mutex_);
   tlsPtr_.mutator_lock = Locks::mutator_lock_;
@@ -2854,6 +2863,13 @@ Thread::~Thread() {
   Runtime::Current()->GetHeap()->AssertThreadLocalBuffersAreRevoked(this);
 
   TearDownAlternateSignalStack();
+
+  auto maybe_free = [](auto& interpreter_cache) {
+    if constexpr (std::is_same_v<decltype(interpreter_cache), InterpreterCache*&>) {
+      std::free(interpreter_cache);
+    }
+  };
+  maybe_free(interpreter_cache_);
 }
 
 void Thread::HandleUncaughtExceptions() {

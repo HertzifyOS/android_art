@@ -32,6 +32,10 @@ ASM_DEFINE(THREAD_INTERPRETER_CACHE_OFFSET,
            art::Thread::InterpreterCacheOffset<art::kRuntimePointerSize>().Int32Value())
 ASM_DEFINE(THREAD_INTERPRETER_CACHE_SIZE_LOG2,
            art::Thread::InterpreterCacheSizeLog2())
+ASM_DEFINE(THREAD_INTERPRETER_CACHE_ENTRY_SIZE_LOG2,
+           art::Thread::InterpreterCacheEntrySizeLog2())
+ASM_DEFINE(THREAD_INTERPRETER_CACHE_KEY_LOW_BIT,
+           art::Thread::InterpreterCacheKeyLowBit())
 ASM_DEFINE(THREAD_INTERPRETER_CACHE_SIZE_MASK,
            (sizeof(art::InterpreterCache::Entry) * (art::InterpreterCache::kSize - 1)))
 ASM_DEFINE(THREAD_INTERPRETER_CACHE_SIZE_SHIFT,
