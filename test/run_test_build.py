@@ -561,6 +561,7 @@ def create_setup_script(is64: bool):
     f"--oat-file={out}/{isa}/boot.oat",
   ]
   return [
+    f"su root setenforce 0",
     f"rm -rf {out}/{isa}",
     f"mkdir -p {out}/{isa}",
     " ".join(cmd),
