@@ -209,15 +209,16 @@ bool HInliner::Run() {
   // always throwing.
   // To check if we added an always throwing method we can either:
   //   1) Pass a boolean throughout the pipeline and get an accurate result, or
-  //   2) Just check that the `HasAlwaysThrowingInvokes()` flag is true now. This is not 100%
-  //     accurate but the only other part where we set `HasAlwaysThrowingInvokes` is constant
-  //     folding the DivideUnsigned intrinsics for when the divisor is known to be 0. This case is
-  //     rare enough that changing the pipeline for this is not worth it. In the case of the false
-  //     positive (i.e. A) we didn't inline at all, B) the graph already had an always throwing
-  //     invoke, and C) we didn't set any new always throwing invokes), we will be running constant
+  //   2) Just check that the `HasAlwaysThrowingNonHThrowInstructions()` flag is true now. This is
+  //     not 100% accurate but the only other part where we set
+  //     `HasAlwaysThrowingNonHThrowInstructions` is constant folding the DivideUnsigned intrinsics
+  //     and DivZeroCheck for when the divisor is known to be 0. These cases are rare enough that
+  //     changing the pipeline for this is not worth it. In the case of the false positive (i.e. A)
+  //     we didn't inline at all, B) the graph already had HasAlwaysThrowingNonHThrowInstructions
+  //     set, and C) we didn't have any new always throwing invokes), we will be running constant
   //     folding, instruction simplifier, and dead code elimination one more time even though it
   //     shouldn't change things. There's no false negative case.
-  return did_inline || graph_->HasAlwaysThrowingInvokes();
+  return did_inline || graph_->HasAlwaysThrowingNonHThrowInstructions();
 }
 
 static bool IsMethodOrDeclaringClassFinal(ArtMethod* method)
@@ -532,7 +533,7 @@ bool HInliner::TryInline(HInvoke* invoke_instruction) {
       // Set always throws property for non-inlined method call with single target.
       if (invoke_instruction->AlwaysThrows() || AlwaysThrows(actual_method)) {
         invoke_to_analyze->SetAlwaysThrows(/* always_throws= */ true);
-        graph_->SetHasAlwaysThrowingInvokes(/* value= */ true);
+        graph_->SetHasAlwaysThrowingNonHThrowInstructions(/* value= */ true);
       }
     }
     return result;
@@ -2082,7 +2083,7 @@ bool HInliner::CanInlineBody(const HGraph* callee_graph,
       // particular call. We don't mark speculative inlines (e.g. the ones from the inline cache) as
       // always throwing since they might not throw when executed.
       invoke->SetAlwaysThrows(/* always_throws= */ true);
-      graph_->SetHasAlwaysThrowingInvokes(/* value= */ true);
+      graph_->SetHasAlwaysThrowingNonHThrowInstructions(/* value= */ true);
     }
 
     // Methods that contain infinite loops with try catches fall into this line too as we construct

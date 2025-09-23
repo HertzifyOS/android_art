@@ -280,11 +280,17 @@ ALWAYS_INLINE inline void HConstantFoldingVisitor::HandleBinaryOperation(Instruc
 }
 
 void HConstantFoldingVisitor::VisitDivZeroCheck(HDivZeroCheck* inst) {
-  // We can safely remove the check if the input is a non-null constant.
   HInstruction* check_input = inst->InputAt(0);
-  if (check_input->IsConstant() && !check_input->AsConstant()->IsArithmeticZero()) {
-    inst->ReplaceWith(check_input);
-    inst->GetBlock()->RemoveInstruction(inst);
+  if (check_input->IsConstant()) {
+    if (check_input->AsConstant()->IsArithmeticZero()) {
+      // We will be throwing due to a division by zero.
+      inst->SetAlwaysThrows(true);
+      GetGraph()->SetHasAlwaysThrowingNonHThrowInstructions(true);
+    } else {
+      // We can safely remove the check if the input is a non-null constant.
+      inst->ReplaceWith(check_input);
+      inst->GetBlock()->RemoveInstruction(inst);
+    }
   }
 }
 
@@ -543,7 +549,7 @@ void HConstantFoldingVisitor::FoldDivideUnsignedIntrinsic(HInvoke* inst) {
       (!is_int_intrinsic && divisor->AsLongConstant()->IsArithmeticZero())) {
     // We will be throwing, don't constant fold.
     inst->SetAlwaysThrows(true);
-    GetGraph()->SetHasAlwaysThrowingInvokes(true);
+    GetGraph()->SetHasAlwaysThrowingNonHThrowInstructions(true);
     return;
   }
 

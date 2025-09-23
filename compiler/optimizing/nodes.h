@@ -4836,6 +4836,9 @@ class HDivZeroCheck final : public HExpression<1> {
   HDivZeroCheck(HInstruction* value, uint32_t dex_pc)
       : HExpression(kDivZeroCheck, value->GetType(), SideEffects::None(), dex_pc) {
     SetRawInputAt(0, value);
+    // For simplicity, this is only set to true during constant folding. This is done to guarantee
+    // an HGraph to set the corresponding flag.
+    SetAlwaysThrows(false);
   }
 
   bool IsClonable() const override { return true; }
@@ -4848,10 +4851,20 @@ class HDivZeroCheck final : public HExpression<1> {
   bool NeedsEnvironment() const override { return true; }
   bool CanThrow() const override { return true; }
 
+  void SetAlwaysThrows(bool always_throws) { SetPackedFlag<kFlagAlwaysThrows>(always_throws); }
+
+  bool AlwaysThrows() const override final { return GetPackedFlag<kFlagAlwaysThrows>(); }
+
   DECLARE_INSTRUCTION(DivZeroCheck);
 
  protected:
   DEFAULT_COPY_CONSTRUCTOR(DivZeroCheck);
+
+ private:
+  static constexpr size_t kFlagAlwaysThrows = kNumberOfGenericPackedBits;
+  static constexpr size_t kNumberOfDivZeroCheckPackedBits = kFlagAlwaysThrows + 1;
+  static_assert(kNumberOfDivZeroCheckPackedBits <= kMaxNumberOfPackedBits,
+                "Too many packed fields.");
 };
 
 class HShl final : public HBinaryOperation {
