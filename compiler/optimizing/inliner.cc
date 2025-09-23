@@ -2026,8 +2026,8 @@ bool HInliner::CanInlineBody(const HGraph* callee_graph,
       // If the last instruction chain is Return/ReturnVoid -> TryBoundary -> Exit we will have to
       // split a critical edge in InlineInto and might recompute loop information, which is
       // unsupported for irreducible loops.
-      if ((last_instruction->IsReturn() || last_instruction->IsReturnVoid()) &&
-          graph_->HasIrreducibleLoops()) {
+      if (!last_instruction->IsThrow() && graph_->HasIrreducibleLoops()) {
+        DCHECK(last_instruction->IsReturn() || last_instruction->IsReturnVoid());
         // TODO(ngeoffray): Support re-computing loop information to graphs with
         // irreducible loops?
         LOG_FAIL(stats_, MethodCompilationStat::kNotInlinedIrreducibleLoopCaller)
@@ -2038,13 +2038,7 @@ bool HInliner::CanInlineBody(const HGraph* callee_graph,
       }
     }
 
-    if (last_instruction->IsGoto() && last_instruction->GetPrevious() != nullptr) {
-      last_instruction = last_instruction->GetPrevious();
-      DCHECK(!last_instruction->IsThrow());
-      DCHECK(last_instruction->AlwaysThrows());
-    }
-
-    if (last_instruction->AlwaysThrows()) {
+    if (last_instruction->IsThrow()) {
       if (graph_->GetExitBlock() == nullptr) {
         // TODO(ngeoffray): Support adding HExit in the caller graph.
         LOG_FAIL(stats_, MethodCompilationStat::kNotInlinedInfiniteLoop)
