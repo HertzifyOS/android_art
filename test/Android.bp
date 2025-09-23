@@ -2227,6 +2227,7 @@ genrule {
     tools: ["merge_zips"],
     host_first_srcs: [
         ":art_common_host_test_first_arch_libs",
+        ":art_boot_images{.zip}",
     ],
     host_second_srcs: [
         ":art_common_host_test_second_arch_libs",
