@@ -10,7 +10,7 @@
     FETCH_B w3, 1, 1                    // w3<- CC
     GET_VREG w0, w2                     // w0<- vBB (array object)
     GET_VREG w1, w3                     // w1<- vCC (requested index)
-    cbz     x0, common_errNullObject    // bail if null array object.
+    // Note: if x0 is null, this will be handled by our SIGSEGV handler.
     ldr     w3, [x0, #MIRROR_ARRAY_LENGTH_OFFSET]    // w3<- arrayObj->length
     add     x0, x0, w1, uxtw #$shift    // w0<- arrayObj + index*width
     cmp     w1, w3                      // compare unsigned index, length
@@ -67,7 +67,7 @@
     FETCH_B w3, 1, 1                    // w3<- CC
     GET_VREG w0, w2                     // w0<- vBB (array object)
     GET_VREG w1, w3                     // w1<- vCC (requested index)
-    cbz     w0, common_errNullObject    // bail if null
+    // Note: if x0 is null, this will be handled by our SIGSEGV handler.
     ldr     w3, [x0, #MIRROR_ARRAY_LENGTH_OFFSET]     // w3<- arrayObj->length
     .if !$is_object
     add     x0, x0, w1, uxtw #$shift    // w0<- arrayObj + index*width
