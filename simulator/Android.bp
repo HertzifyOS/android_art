@@ -136,6 +136,11 @@ cc_defaults {
         "libbase_headers",
         "libart_headers",
         "art_libartbase_headers",
+        "jni_platform_headers",
+        "libdexfile_all_headers",
+    ],
+    shared_libs: [
+        "art-aconfig-flags-lib", // For com_android_art_flags.h.
     ],
     export_include_dirs: ["."], // TODO: Consider a proper separation.
 }
