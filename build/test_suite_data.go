@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	"android/soong/android"
-	"android/soong/cc/config"
 )
 
 func init() {
@@ -78,25 +77,6 @@ func (s *artHostTestDataSingleton) GenerateBuildActions(ctx android.SingletonCon
 		}
 	})
 
-	// Add prebuilt tools.
-	// The original prebuilts directory is not accessible when running tests remotely.
-	prebuiltToolsForTests := []string{
-		"bin/clang",
-		"bin/clang-real",
-		"bin/llvm-addr2line",
-		"bin/llvm-dwarfdump",
-		"bin/llvm-objdump",
-		"lib/libc++.so",
-	}
-
-	for _, tool := range prebuiltToolsForTests {
-		src := config.ClangPath(ctx, tool).String()
-		collectedFiles = append(collectedFiles, collectedFileInfo{
-			SrcPath:  android.PathForSource(ctx, src),
-			DestPath: filepath.Join("host/testcases/art_common", src),
-		})
-	}
-
 	// If no data was collected, there's nothing to do.
 	if len(collectedFiles) == 0 {
 		return
@@ -107,7 +87,6 @@ func (s *artHostTestDataSingleton) GenerateBuildActions(ctx android.SingletonCon
 	cmd := rule.Command().
 		BuiltTool("soong_zip").
 		Flag("-j").
-		Flag("-symlinks=false"). // Dereference symlinks.
 		FlagWithOutput("-o ", outputZip)
 
 	// Sort the collected files by destination path for a deterministic command line.
