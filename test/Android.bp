@@ -2171,7 +2171,8 @@ genrule_defaults {
     ],
     tools: ["soong_zip"],
     cmd: "TEMP_DIR=$(genDir)/tmp && rm -rf $$TEMP_DIR && " +
-        "LIB_DIR=$$TEMP_DIR/host/testcases/art_common/out/host/linux-x86/$$CC_MULTILIB && " +
+        "LIB_SUBDIR=$$(echo $$CC_MULTILIB | sed 's/lib32/lib/') && " +
+        "LIB_DIR=$$TEMP_DIR/host/testcases/art_common/out/host/linux-x86/$$LIB_SUBDIR && " +
         "mkdir -p $$LIB_DIR && " +
         "cp $(location :libbase) $$LIB_DIR/libbase.so && " +
         "cp $(location :libc++) $$LIB_DIR/libc++.so && " +
