@@ -1486,19 +1486,10 @@ bool HInstructionBuilder::BuildInvokePolymorphic(uint32_t dex_pc,
 
   MethodReference method_reference(&graph_->GetDexFile(), method_idx);
 
-  // MethodHandle.invokeExact intrinsic needs to check whether call-site matches with MethodHandle's
-  // type. To do that, MethodType corresponding to the call-site is passed as an extra input.
-  // Other invoke-polymorphic calls do not need it.
-  bool can_be_intrinsified =
-      static_cast<Intrinsics>(resolved_method->GetIntrinsic()) ==
-          Intrinsics::kMethodHandleInvokeExact;
-
-  uint32_t number_of_other_inputs = can_be_intrinsified ? 1u : 0u;
-
   HInvoke* invoke = new (allocator_) HInvokePolymorphic(allocator_,
                                                         number_of_arguments,
                                                         operands.GetNumberOfOperands(),
-                                                        number_of_other_inputs,
+                                                        /*number_of_other_inputs=*/ 0u,
                                                         return_type,
                                                         dex_pc,
                                                         method_reference,
@@ -1508,8 +1499,6 @@ bool HInstructionBuilder::BuildInvokePolymorphic(uint32_t dex_pc,
   if (!HandleInvoke(invoke, operands, shorty, /* is_unresolved= */ false)) {
     return false;
   }
-
-  DCHECK_EQ(invoke->AsInvokePolymorphic()->IsMethodHandleInvokeExact(), can_be_intrinsified);
 
   if (invoke->GetIntrinsic() != Intrinsics::kNone &&
       invoke->GetIntrinsic() != Intrinsics::kMethodHandleInvoke &&
@@ -1990,26 +1979,6 @@ bool HInstructionBuilder::SetupInvokeArguments(HInstruction* invoke,
                           graph_->GetCurrentMethod());
   }
 
-  if (invoke->IsInvokePolymorphic()) {
-    HInvokePolymorphic* invoke_polymorphic = invoke->AsInvokePolymorphic();
-
-    // MethodHandle.invokeExact intrinsic expects MethodType corresponding to the call-site as an
-    // extra input to determine whether to throw WrongMethodTypeException or execute target method.
-    if (invoke_polymorphic->IsMethodHandleInvokeExact()) {
-      HLoadMethodType* load_method_type =
-          new (allocator_) HLoadMethodType(graph_->GetCurrentMethod(),
-                                           invoke_polymorphic->GetProtoIndex(),
-                                           graph_->GetDexFile(),
-                                           invoke_polymorphic->GetDexPc());
-      HSharpening::ProcessLoadMethodType(load_method_type,
-                                         code_generator_,
-                                         *dex_compilation_unit_,
-                                         graph_->GetHandleCache()->GetHandles());
-      invoke->SetRawInputAt(invoke_polymorphic->GetNumberOfArguments(), load_method_type);
-      AppendInstruction(load_method_type);
-    }
-  }
-
   return true;
 }
 
@@ -2025,6 +1994,61 @@ bool HInstructionBuilder::HandleInvoke(HInvoke* invoke,
       : (is_unresolved ? ReceiverArg::kPlainArg : ReceiverArg::kNullCheckedArg);
   if (!SetupInvokeArguments(invoke, operands, shorty, receiver_arg)) {
     return false;
+  }
+
+  if (invoke->IsInvokePolymorphic()) {
+    HInvokePolymorphic* invoke_polymorphic = invoke->AsInvokePolymorphic();
+
+    // invokeExact has to check that target method handle matches exactly with the call site type.
+    // Doing it in IR instead of intrinsics: IR can be reasoned about and eventually this check
+    // and const-method-type instructions could be eliminated.
+    if (invoke_polymorphic->IsMethodHandleInvokeExact()) {
+      HLoadMethodType* load_method_type =
+          new (allocator_) HLoadMethodType(graph_->GetCurrentMethod(),
+                                           invoke_polymorphic->GetProtoIndex(),
+                                           graph_->GetDexFile(),
+                                           invoke_polymorphic->GetDexPc());
+      HSharpening::ProcessLoadMethodType(load_method_type,
+                                         code_generator_,
+                                         *dex_compilation_unit_,
+                                         graph_->GetHandleCache()->GetHandles());
+      AppendInstruction(load_method_type);
+
+      ArtMethod* resolved_method = WellKnownClasses::java_lang_invoke_Invokers_checkExactType;
+      MethodReference target_method(nullptr, 0);
+      {
+          ScopedObjectAccess soa(Thread::Current());
+          target_method =
+              MethodReference(resolved_method->GetDexFile(), resolved_method->GetDexMethodIndex());
+      }
+
+      HInvokeStaticOrDirect::DispatchInfo dispatch_info =
+          HSharpening::SharpenLoadMethod(resolved_method,
+                                         /* has_method_id= */ true,
+                                         /* for_interface_call= */ false,
+                                         code_generator_);
+
+      HInvokeStaticOrDirect* check_exact_type = new (allocator_) HInvokeStaticOrDirect(
+          allocator_,
+          /*number_of_arguments=*/ 2u,
+          /*number_of_out_vregs=*/ 0u,
+          DataType::Type::kVoid,
+          invoke->GetDexPc(),
+          /*method_reference=*/ target_method,
+          resolved_method,
+          dispatch_info,
+          kStatic,
+          target_method,
+          HInvokeStaticOrDirect::ClinitCheckRequirement::kNone,
+          /*enable_intrinsic_opt=*/ true);
+      check_exact_type->SetRawInputAt(0u, invoke->InputAt(0u));
+      check_exact_type->SetRawInputAt(1u, load_method_type);
+
+      if (HInvokeStaticOrDirect::NeedsCurrentMethodInput(dispatch_info)) {
+        check_exact_type->SetRawInputAt(2u, graph_->GetCurrentMethod());
+      }
+      AppendInstruction(check_exact_type);
+    }
   }
 
   AppendInstruction(invoke);

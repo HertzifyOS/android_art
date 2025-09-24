@@ -2722,6 +2722,7 @@ HSPLjava/lang/VMClassLoader;->getResource(Ljava/lang/String;)Ljava/net/URL;
 HSPLjava/lang/VMClassLoader;->getResources(Ljava/lang/String;)Ljava/util/List;
 HSPLjava/lang/invoke/FieldVarHandle;-><init>(Ljava/lang/reflect/Field;Ljava/lang/Class;)V
 HSPLjava/lang/invoke/FieldVarHandle;->create(Ljava/lang/reflect/Field;)Ljava/lang/invoke/FieldVarHandle;
+HSPLjava/lang/invoke/Invokers;->checkExactType(Ljava/lang/invoke/MethodHandle;Ljava/lang/invoke/MethodType;)V
 HSPLjava/lang/invoke/MethodHandle;-><init>(JILjava/lang/invoke/MethodType;)V
 HSPLjava/lang/invoke/MethodHandleImpl;-><init>(JILjava/lang/invoke/MethodType;)V
 HSPLjava/lang/invoke/MethodHandles$Lookup;-><init>(Ljava/lang/Class;)V

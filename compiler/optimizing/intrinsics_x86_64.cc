@@ -4209,9 +4209,6 @@ void IntrinsicLocationsBuilderX86_64::VisitMethodHandleInvokeExact(HInvoke* invo
   Location receiver_mh_loc = calling_convention.GetNextLocation(DataType::Type::kReference);
   locations->SetInAt(0, receiver_mh_loc);
 
-  // The last input is MethodType object corresponding to the call-site.
-  locations->SetInAt(number_of_args, Location::RequiresCoreRegister());
-
   locations->AddTemp(Location::RequiresCoreRegister());
   // Hidden arg for invoke-interface.
   locations->AddTemp(Location::CoreRegister(RAX));
@@ -4239,25 +4236,9 @@ void IntrinsicCodeGeneratorX86_64::VisitMethodHandleInvokeExact(HInvoke* invoke)
       new (codegen_->GetScopedAllocator()) InvokePolymorphicSlowPathX86_64(invoke, method_handle);
   codegen_->AddSlowPath(slow_path);
 
-  CpuRegister call_site_type =
-      locations->InAt(invoke->GetNumberOfArguments()).AsRegister<CpuRegister>();
-
   CpuRegister temp = locations->GetTemp(0).AsRegister<CpuRegister>();
-
-  // Call site should match with MethodHandle's type.
-  if (kPoisonHeapReferences) {
-    // call_site_type should be left intact as it 1) might be in callee-saved register 2) is known
-    // for GC to contain a reference.
-    __ movl(temp, call_site_type);
-    __ PoisonHeapReference(temp);
-    __ cmpl(temp, Address(method_handle, mirror::MethodHandle::MethodTypeOffset()));
-    __ j(kNotEqual, slow_path->GetEntryLabel());
-  } else {
-    __ cmpl(call_site_type, Address(method_handle, mirror::MethodHandle::MethodTypeOffset()));
-    __ j(kNotEqual, slow_path->GetEntryLabel());
-  }
-
   CpuRegister method = CpuRegister(kMethodRegisterArgument);
+
   __ movq(method, Address(method_handle, mirror::MethodHandle::ArtFieldOrMethodOffset()));
 
   Label execute_target_method;

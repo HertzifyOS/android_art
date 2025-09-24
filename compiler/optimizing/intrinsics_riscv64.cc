@@ -5746,9 +5746,6 @@ void IntrinsicLocationsBuilderRISCV64::VisitMethodHandleInvokeExact(HInvoke* inv
   Location receiver_mh_loc = calling_convention.GetNextLocation(DataType::Type::kReference);
   locations->SetInAt(0, receiver_mh_loc);
 
-  // The last input is MethodType object corresponding to the call-site.
-  locations->SetInAt(number_of_args, Location::RequiresCoreRegister());
-
   locations->AddTemp(calling_convention.GetMethodLocation());
   locations->AddRegisterTemps(2);
 
@@ -5775,16 +5772,10 @@ void IntrinsicCodeGeneratorRISCV64::VisitMethodHandleInvokeExact(HInvoke* invoke
       new (codegen_->GetScopedAllocator()) InvokePolymorphicSlowPathRISCV64(invoke, method_handle);
 
   codegen_->AddSlowPath(slow_path);
-  XRegister call_site_type =
-      locations->InAt(invoke->GetNumberOfArguments()).AsRegister<XRegister>();
 
-  // Call site should match with MethodHandle's type.
   XRegister temp = locations->GetTemp(1).AsRegister<XRegister>();
-  __ Loadwu(temp, method_handle, mirror::MethodHandle::MethodTypeOffset().Int32Value());
-  codegen_->MaybeUnpoisonHeapReference(temp);
-  __ Bne(call_site_type, temp, slow_path->GetEntryLabel());
-
   XRegister method = locations->GetTemp(0).AsRegister<XRegister>();
+
   __ Loadd(method, method_handle, mirror::MethodHandle::ArtFieldOrMethodOffset().Int32Value());
 
   Riscv64Label execute_target_method;
