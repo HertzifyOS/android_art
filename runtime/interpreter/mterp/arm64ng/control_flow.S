@@ -152,21 +152,28 @@
         fmov d0, x0
       .else
         GET_VREG w0, w2                     // r0<- vAA
-        .if !$is_object
+        .if $is_object
+.Lrestore_registers_and_return:  // `return-wide` handler jumps here to shorten the code.
+        .else
         // In case we're going back to compiled code, put the
         // result also in s0.
         fmov s0, w0
         .endif
       .endif
     .endif
-    .cfi_remember_state
-    ldr ip, [xREFS, #-8]
-    mov sp, ip
-    .cfi_def_cfa sp, CALLEE_SAVES_SIZE
-    RESTORE_ALL_CALLEE_SAVES
-    ret
-    .cfi_restore_state
-    CFI_DEF_CFA_BREG_PLUS_UCONST CFI_REFS, -8, CALLEE_SAVES_SIZE
+    .if $is_wide
+      // To fit the handler in the 64B, jump to the code in `return-object`.
+      b .Lrestore_registers_and_return
+    .else
+      .cfi_remember_state
+      ldr ip, [xREFS, #-8]
+      mov sp, ip
+      .cfi_def_cfa sp, CALLEE_SAVES_SIZE
+      RESTORE_ALL_CALLEE_SAVES
+      ret
+      .cfi_restore_state
+      CFI_DEF_CFA_BREG_PLUS_UCONST CFI_REFS, -8, CALLEE_SAVES_SIZE
+    .endif
 
 %def op_return_object():
 %  op_return(is_object="1", is_void="0", is_wide="0")

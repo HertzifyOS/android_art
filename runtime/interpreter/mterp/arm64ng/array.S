@@ -25,6 +25,7 @@
     .elseif $is_object
     $load   w0, [x0, #$data_offset]     // w0<- vBB[vCC]
     UNPOISON_HEAP_REF w0
+    // Shorten the handler by using the code from `op_iget_object` slow path.
     TEST_IF_MARKING .L${iget_opcode}_slow_path_mark_and_store_r0_to_vreg_r2_fetch_advance_2_dispatch
     FETCH_ADVANCE_INST 2                // advance rPC, load rINST
     SET_VREG_OBJECT w0, w2              // vAA<- w0
@@ -161,28 +162,29 @@
 %  op_filled_new_array(helper="nterp_filled_new_array_range")
 
 %def op_new_array():
+%  slow_path = add_slow_path(op_new_array_slow_path)
    /* new-array vA, vB, class@CCCC */
    EXPORT_PC
    // Fast-path which gets the class from thread-local cache.
-%  fetch_from_thread_cache("x0", miss_label="2f")
-   TEST_IF_MARKING 3f
-1:
+%  fetch_from_thread_cache("x0", miss_label=slow_path)
+   TEST_IF_MARKING .L${opcode}_slow_path_read_barrier
+.L${opcode}_resume:
    lsr     w1, wINST, #12              // w1<- B
    GET_VREG w1, w1                     // w1<- vB (array length)
    ldr lr, [xSELF, #THREAD_ALLOC_ARRAY_ENTRYPOINT_OFFSET]
    blr lr
    dmb ishst                           // need fence for making array's class visible
-   ubfx    w1, wINST, #8, #4           // w1<- A
-   SET_VREG_OBJECT w0, w1
-   FETCH_ADVANCE_INST 2
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
-2:
+   ubfx    w2, wINST, #8, #4           // w2<- A
+   // Shorten the handler by using the dispatch from `op_iget_object` slow path.
+%  iget_object_opcode = re.sub("op_new_array", "op_iget_object", opcode)
+   b .L${iget_object_opcode}_slow_path_store_r0_to_vreg_r2_fetch_advance_2_dispatch
+
+%def op_new_array_slow_path():
    mov x0, xSELF
    ldr x1, [sp, 0]
    mov x2, xPC
    bl nterp_get_class
-   b 1b
-3:
+   b .L${opcode}_resume
+.L${opcode}_slow_path_read_barrier:
    bl art_quick_read_barrier_mark_reg00
-   b 1b
+   b .L${opcode}_resume

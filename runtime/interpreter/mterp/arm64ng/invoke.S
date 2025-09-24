@@ -102,10 +102,16 @@
    ldrh w3, [xCSTMP, #ART_METHOD_IMT_INDEX_OFFSET]
 .L${opcode}_resume_with_imt_index:
    ldr x2, [x2, #MIRROR_CLASS_IMT_PTR_OFFSET_64]
-   ldr x0, [x2, w3, uxtw #3]
    .if $range
+   ldr x0, [x2, w3, uxtw #3]
    b NterpCommonInvokeInterfaceRange
    .else
+#ifdef USE_HEAP_POISONING
+   // The unpoisoning above means we need to move the LDR to the
+   // `NterpCommonInvokeInterface` to keep the handler size 64B.
+#else
+   ldr x0, [x2, w3, uxtw #3]
+#endif
    b NterpCommonInvokeInterface
    .endif
 
