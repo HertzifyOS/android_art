@@ -119,7 +119,7 @@ def main():
                 "utils/python/**/*.py",
                 ":art-run-test-bootclasspath",
                 ":development_docs",
-                ":asm-9.6-filegroup",
+                ":ow2-asm",
                 ":ojluni-AbstractCollection",
                 "988-method-trace/expected-stdout.txt",
                 "988-method-trace/expected-stderr.txt",
