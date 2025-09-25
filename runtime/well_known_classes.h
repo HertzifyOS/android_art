@@ -101,7 +101,6 @@ struct EXPORT WellKnownClasses {
   static jclass java_lang_Record;
   static jclass java_lang_reflect_Parameter__array;
   static jclass java_lang_StringFactory;
-  static jclass java_lang_System;
   static jclass java_lang_Void;
   static jclass libcore_reflect_AnnotationMember__array;
 
@@ -283,6 +282,7 @@ struct EXPORT WellKnownClasses {
   static constexpr ClassFromMethod<&java_lang_RuntimeException_init> java_lang_RuntimeException;
   static constexpr ClassFromMethod<&java_lang_StackOverflowError_init>
       java_lang_StackOverflowError;
+  static constexpr ClassFromField<&java_lang_System_in> java_lang_System;
   static constexpr ClassFromField<&java_lang_Thread_daemon> java_lang_Thread;
   static constexpr ClassFromField<&java_lang_ThreadGroup_groups> java_lang_ThreadGroup;
   static constexpr ClassFromMethod<&java_lang_invoke_MethodHandle_invokeExact>

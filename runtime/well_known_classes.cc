@@ -57,7 +57,6 @@ jclass WellKnownClasses::java_lang_ClassValue;
 jclass WellKnownClasses::java_lang_Record;
 jclass WellKnownClasses::java_lang_reflect_Parameter__array;
 jclass WellKnownClasses::java_lang_StringFactory;
-jclass WellKnownClasses::java_lang_System;
 jclass WellKnownClasses::java_lang_Void;
 jclass WellKnownClasses::libcore_reflect_AnnotationMember__array;
 
@@ -393,7 +392,6 @@ void WellKnownClasses::Init(JNIEnv* env) {
   java_lang_Record = CacheClass(env, "java/lang/Record");
   java_lang_reflect_Parameter__array = CacheClass(env, "[Ljava/lang/reflect/Parameter;");
   java_lang_StringFactory = CacheClass(env, "java/lang/StringFactory");
-  java_lang_System = CacheClass(env, "java/lang/System");
   java_lang_Void = CacheClass(env, "java/lang/Void");
   libcore_reflect_AnnotationMember__array = CacheClass(env, "[Llibcore/reflect/AnnotationMember;");
 
@@ -453,7 +451,7 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
   java_lang_Long_value = CacheValueInBoxField(
       class_linker, self, "Ljava/lang/Long;", "J");
 
-  StackHandleScope<50u> hs(self);
+  StackHandleScope<51u> hs(self);
   Handle<mirror::Class> d_s_bdcl =
       hs.NewHandle(FindSystemClass(class_linker, self, "Ldalvik/system/BaseDexClassLoader;"));
   Handle<mirror::Class> d_s_dlcl =
@@ -502,6 +500,8 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
       hs.NewHandle(FindSystemClass(class_linker, self, "Ljava/lang/RuntimeException;"));
   Handle<mirror::Class> j_l_StackOverflowError =
       hs.NewHandle(FindSystemClass(class_linker, self, "Ljava/lang/StackOverflowError;"));
+  Handle<mirror::Class> j_l_System =
+      hs.NewHandle(FindSystemClass(class_linker, self, "Ljava/lang/System;"));
   Handle<mirror::Class> j_l_Thread =
       hs.NewHandle(FindSystemClass(class_linker, self, "Ljava/lang/Thread;"));
   Handle<mirror::Class> j_l_tg =
@@ -884,11 +884,11 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
       CacheField(j_l_String, /*is_static=*/ true, "EMPTY", "Ljava/lang/String;");
 
   java_lang_System_in =
-      CacheField(ToClass(java_lang_System), /*is_static=*/ true, "in", "Ljava/io/InputStream;");
+      CacheField(j_l_System.Get(), /*is_static=*/ true, "in", "Ljava/io/InputStream;");
   java_lang_System_out =
-      CacheField(ToClass(java_lang_System), /*is_static=*/ true, "out", "Ljava/io/PrintStream;");
+      CacheField(j_l_System.Get(), /*is_static=*/ true, "out", "Ljava/io/PrintStream;");
   java_lang_System_err =
-      CacheField(ToClass(java_lang_System), /*is_static=*/ true, "err", "Ljava/io/PrintStream;");
+      CacheField(j_l_System.Get(), /*is_static=*/ true, "err", "Ljava/io/PrintStream;");
 
   java_lang_Thread_cont =
       CacheField(j_l_Thread.Get(), /*is_static=*/false, "cont", "Ljdk/internal/vm/Continuation;");
@@ -1022,7 +1022,6 @@ void WellKnownClasses::Clear() {
   java_lang_Record = nullptr;
   java_lang_reflect_Parameter__array = nullptr;
   java_lang_StringFactory = nullptr;
-  java_lang_System = nullptr;
   java_lang_Void = nullptr;
   libcore_reflect_AnnotationMember__array = nullptr;
 
