@@ -141,7 +141,7 @@ using ::android::base::unique_fd;
 using ::android::base::WriteStringToFd;
 using ::android::base::WriteStringToFile;
 using ::android::fs_mgr::FstabEntry;
-using ::art::service::ValidateClassLoaderContext;
+using ::art::service::FlattenAndValidateClassLoaderContext;
 using ::art::service::ValidateDexPath;
 using ::art::tools::CmdlineBuilder;
 using ::art::tools::Fatal;
@@ -1667,6 +1667,20 @@ ScopedAStatus Artd::initProfileSaveNotification(const PrimaryCurProfilePath& in_
   return ScopedAStatus::ok();
 }
 
+ScopedAStatus Artd::hasAllClcDexFiles(const std::string& in_dexFile,
+                                      const std::string& in_classLoaderContext,
+                                      bool* _aidl_return) {
+  *_aidl_return = true;
+  for (const std::string& path :
+       OR_RETURN_FATAL(FlattenAndValidateClassLoaderContext(in_dexFile, in_classLoaderContext))) {
+    if (OR_RETURN_NON_FATAL(GetFileVisibility(path)) == FileVisibility::NOT_FOUND) {
+      *_aidl_return = false;
+      break;
+    }
+  }
+  return ScopedAStatus::ok();
+}
+
 ScopedAStatus ArtdNotification::wait(int in_timeoutMs, bool* _aidl_return) {
   auto cleanup = make_scope_guard([&, this] { CleanUp(); });
 
@@ -2363,7 +2377,8 @@ ScopedAStatus Artd::validateClassLoaderContext(const std::string& in_dexFile,
                                                const std::string& in_classLoaderContext,
                                                std::optional<std::string>* _aidl_return) {
   RETURN_FATAL_IF_NOT_PRE_REBOOT(options_);
-  if (Result<void> result = ValidateClassLoaderContext(in_dexFile, in_classLoaderContext);
+  if (Result<std::vector<std::string>> result =
+          FlattenAndValidateClassLoaderContext(in_dexFile, in_classLoaderContext);
       !result.ok()) {
     *_aidl_return = result.error().message();
   } else {

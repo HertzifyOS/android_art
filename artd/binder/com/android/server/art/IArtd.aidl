@@ -319,6 +319,13 @@ interface IArtd {
             in com.android.server.art.ProfilePath.PrimaryCurProfilePath profilePath, int pid);
 
     /**
+     * Returns true if all dex files referenced by the given class loader context exist.
+     *
+     * Throws fatal and non-fatal errors.
+     */
+    boolean hasAllClcDexFiles(@utf8InCpp String dexFile, @utf8InCpp String classLoaderContext);
+
+    /**
      * Moves the staged files of the given artifacts and profiles to the permanent locations,
      * replacing old files if they exist. Removes the staged files and restores the old files at
      * best effort if any error occurs.

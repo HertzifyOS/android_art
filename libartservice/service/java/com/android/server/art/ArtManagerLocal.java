@@ -286,6 +286,7 @@ public final class ArtManagerLocal {
                         ArtFileManager.Options.builder()
                                 .setForPrimaryDex((flags & ArtFlags.FLAG_FOR_PRIMARY_DEX) != 0)
                                 .setForSecondaryDex((flags & ArtFlags.FLAG_FOR_SECONDARY_DEX) != 0)
+                                .setExcludeObsoleteClcs(true)
                                 .build());
 
         try (var pin = mInjector.createArtdPin()) {

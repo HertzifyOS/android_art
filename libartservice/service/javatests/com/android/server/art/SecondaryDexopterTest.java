@@ -150,8 +150,9 @@ public class SecondaryDexopterTest {
 
         List<CheckedSecondaryDexInfo> secondaryDexInfo = createSecondaryDexInfo();
         lenient()
-                .when(mDexUseManager.getCheckedSecondaryDexInfo(
-                        eq(PKG_NAME), eq(true) /* excludeObsoleteDexesAndLoaders */))
+                .when(mDexUseManager.getCheckedSecondaryDexInfo(eq(PKG_NAME),
+                        eq(true) /* excludeObsoleteDexesAndLoaders */,
+                        eq(true) /* excludeObsoleteClcs */))
                 .thenReturn(secondaryDexInfo);
 
         prepareProfiles();

@@ -259,12 +259,13 @@ public class DexUseManagerLocal {
      * purpose, such as dumpsys.
      *
      * @see #getCheckedSecondaryDexInfo(String)
+     *
      * @hide
      */
     public @NonNull List<? extends SecondaryDexInfo> getSecondaryDexInfo(
             @NonNull String packageName) {
-        return getSecondaryDexInfoImpl(
-                packageName, false /* checkDexFile */, false /* excludeObsoleteDexesAndLoaders */);
+        return getSecondaryDexInfoImpl(packageName, false /* checkDexFile */,
+                false /* excludeObsoleteDexesAndLoaders */, false /* excludeObsoleteClcs */);
     }
 
     /**
@@ -275,13 +276,16 @@ public class DexUseManagerLocal {
      *         on file visibility. More specifically, excludes loaders that can no longer load a
      *         secondary dex file due to a file visibility change, and excludes secondary dex files
      *         that are not found or only have obsolete loaders
+     * @param excludeObsoleteClcs If true, excludes CLCs of the secondary dex files that contain
+     *         non-existing dex files
      *
      * @hide
      */
     public @NonNull List<CheckedSecondaryDexInfo> getCheckedSecondaryDexInfo(
-            @NonNull String packageName, boolean excludeObsoleteDexesAndLoaders) {
-        return getSecondaryDexInfoImpl(
-                packageName, true /* checkDexFile */, excludeObsoleteDexesAndLoaders);
+            @NonNull String packageName, boolean excludeObsoleteDexesAndLoaders,
+            boolean excludeObsoleteClcs) {
+        return getSecondaryDexInfoImpl(packageName, true /* checkDexFile */,
+                excludeObsoleteDexesAndLoaders, excludeObsoleteClcs);
     }
 
     /**
@@ -322,10 +326,12 @@ public class DexUseManagerLocal {
      *         if this argument is false
      * @param excludeObsoleteDexesAndLoaders see {@link #getCheckedSecondaryDexInfo}. Only takes
      *         effect if {@code checkDexFile} is true
+     * @param excludeObsoleteClcs see {@link #getCheckedSecondaryDexInfo}. Only takes effect if
+     *         {@code checkDexFile} is true
      */
     private @NonNull List<CheckedSecondaryDexInfo> getSecondaryDexInfoImpl(
             @NonNull String packageName, boolean checkDexFile,
-            boolean excludeObsoleteDexesAndLoaders) {
+            boolean excludeObsoleteDexesAndLoaders, boolean excludeObsoleteClcs) {
         synchronized (mLock) {
             PackageDexUse packageDexUse =
                     mDexUse.mPackageDexUseByOwningPackageName.get(packageName);
@@ -362,8 +368,10 @@ public class DexUseManagerLocal {
                                 .stream()
                                 .map(record -> Utils.assertNonEmpty(record.mClassLoaderContext))
                                 .filter(clc
-                                        -> !clc.equals(
-                                                SecondaryDexInfo.UNSUPPORTED_CLASS_LOADER_CONTEXT))
+                                        -> !clc.equals(SecondaryDexInfo
+                                                           .UNSUPPORTED_CLASS_LOADER_CONTEXT)
+                                                && (!checkDexFile || !excludeObsoleteClcs
+                                                        || hasAllClcDexFiles(dexPath, clc)))
                                 .distinct()
                                 .toList();
                 String clc;
@@ -828,6 +836,17 @@ public class DexUseManagerLocal {
         }
     }
 
+    private boolean hasAllClcDexFiles(@NonNull String dexPath, @NonNull String classLoaderContext) {
+        try {
+            return mInjector.getArtd().hasAllClcDexFiles(dexPath, classLoaderContext);
+        } catch (ServiceSpecificException | RemoteException e) {
+            AsLog.e("Failed to check dex file existence of CLC '%s' for '%s".formatted(
+                            classLoaderContext, dexPath),
+                    e);
+            return false;
+        }
+    }
+
     /** @hide */
     @Nullable
     public String getSecondaryClassLoaderContext(
@@ -923,8 +942,8 @@ public class DexUseManagerLocal {
                 continue;
             }
 
-            cleanupRecordsLocked(
-                    primaryDexUse.mRecordByLoader, packageNames, visibility, owningPackageName);
+            cleanupRecordsLocked(primaryDexUse.mRecordByLoader, packageNames, visibility,
+                    owningPackageName, dexFile);
 
             if (primaryDexUse.mRecordByLoader.isEmpty()) {
                 it.remove();
@@ -959,8 +978,8 @@ public class DexUseManagerLocal {
                 continue;
             }
 
-            cleanupRecordsLocked(
-                    secondaryDexUse.mRecordByLoader, packageNames, visibility, owningPackageName);
+            cleanupRecordsLocked(secondaryDexUse.mRecordByLoader, packageNames, visibility,
+                    owningPackageName, dexFile);
 
             if (secondaryDexUse.mRecordByLoader.isEmpty()) {
                 it.remove();
@@ -972,7 +991,7 @@ public class DexUseManagerLocal {
     @GuardedBy("mLock")
     private void cleanupRecordsLocked(@NonNull Map<DexLoader, ?> records,
             @NonNull Set<String> packageNames, @FileVisibility int visibility,
-            @NonNull String owningPackageName) {
+            @NonNull String owningPackageName, @NonNull String dexFile) {
         for (var it = records.entrySet().iterator(); it.hasNext();) {
             Map.Entry<DexLoader, ?> entry = it.next();
             DexLoader loader = entry.getKey();
@@ -991,6 +1010,13 @@ public class DexUseManagerLocal {
                 it.remove();
                 mRevision++;
                 continue;
+            }
+
+            if (entry.getValue() instanceof SecondaryDexUseRecord record) {
+                if (record.mClassLoaderContext != SecondaryDexInfo.UNSUPPORTED_CLASS_LOADER_CONTEXT
+                        && !hasAllClcDexFiles(dexFile, record.mClassLoaderContext)) {
+                    record.mClassLoaderContext = SecondaryDexInfo.UNSUPPORTED_CLASS_LOADER_CONTEXT;
+                }
             }
         }
     }

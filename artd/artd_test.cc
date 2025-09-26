@@ -2857,6 +2857,38 @@ TEST_F(ArtdProfileSaveNotificationTest, initProcessGone) {
   EXPECT_TRUE(aidl_return);
 }
 
+TEST_F(ArtdTest, hasAllClcDexFilesTrue) {
+  CreateFile(android_data_ + "/app/~~nkfeankfna==/com.android.foo-jfoeaofiew==/base.apk",
+             "base_apk");
+  CreateFile(android_data_ + "/user/0/com.android.foo/secondary1.jar", "secondary1_jar");
+  CreateFile(android_data_ + "/user/0/com.android.foo/secondary2.jar", "secondary2_jar");
+
+  bool aidl_return;
+  ASSERT_STATUS_OK(artd_->hasAllClcDexFiles(
+      android_data_ + "/user/0/com.android.foo/secondary2.jar",
+      ART_FORMAT(
+          "PCL[secondary1.jar];PCL[{}/app/~~nkfeankfna==/com.android.foo-jfoeaofiew==/base.apk]",
+          android_data_),
+      &aidl_return));
+  EXPECT_TRUE(aidl_return);
+}
+
+TEST_F(ArtdTest, hasAllClcDexFilesFalse) {
+  // Simulate that the base APK has gone (e.g., moved to a different directory due to an app
+  // update).
+  CreateFile(android_data_ + "/user/0/com.android.foo/secondary1.jar", "secondary1_jar");
+  CreateFile(android_data_ + "/user/0/com.android.foo/secondary2.jar", "secondary2_jar");
+
+  bool aidl_return;
+  ASSERT_STATUS_OK(artd_->hasAllClcDexFiles(
+      android_data_ + "/user/0/com.android.foo/secondary2.jar",
+      ART_FORMAT(
+          "PCL[secondary1.jar];PCL[{}/app/~~nkfeankfna==/com.android.foo-jfoeaofiew==/base.apk]",
+          android_data_),
+      &aidl_return));
+  EXPECT_FALSE(aidl_return);
+}
+
 TEST_F(ArtdTest, commitPreRebootStagedFiles) {
   CreateFile(android_data_ + "/dalvik-cache/arm64/system@app@Foo@Foo.apk@classes.dex.staged",
              "new_odex_1");

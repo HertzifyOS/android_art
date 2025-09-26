@@ -280,13 +280,15 @@ public class ArtManagerLocalTest {
         lenient()
                 .doReturn(List.of(mPkg1SecondaryDexInfo1, mPkg1SecondaryDexInfoNotFound))
                 .when(mDexUseManager)
-                .getCheckedSecondaryDexInfo(
-                        eq(PKG_NAME_1), eq(false) /* excludeObsoleteDexesAndLoaders */);
+                .getCheckedSecondaryDexInfo(eq(PKG_NAME_1),
+                        eq(false) /* excludeObsoleteDexesAndLoaders */,
+                        anyBoolean() /* excludeObsoleteClcs */);
         lenient()
                 .doReturn(List.of(mPkg1SecondaryDexInfo1))
                 .when(mDexUseManager)
-                .getCheckedSecondaryDexInfo(
-                        eq(PKG_NAME_1), eq(true) /* excludeObsoleteDexesAndLoaders */);
+                .getCheckedSecondaryDexInfo(eq(PKG_NAME_1),
+                        eq(true) /* excludeObsoleteDexesAndLoaders */,
+                        anyBoolean() /* excludeObsoleteClcs */);
 
         // Set up the primary dex loaders.
         Set<DexLoader> loaders = new HashSet<>();
@@ -538,6 +540,11 @@ public class ArtManagerLocalTest {
                 .comparingElementsUsing(TestingUtils.<DexContainerFileDexoptStatus>deepEquality())
                 .containsExactly(expectedDexContainerFileDexoptStatuses.toArray(
                         DexContainerFileDexoptStatus[] ::new));
+
+        verify(mDexUseManager)
+                .getCheckedSecondaryDexInfo(eq(PKG_NAME_1),
+                        eq(false) /* excludeObsoleteDexesAndLoaders */,
+                        eq(true) /* excludeObsoleteClcs */);
     }
 
     @Test(expected = IllegalArgumentException.class)
@@ -1472,8 +1479,9 @@ public class ArtManagerLocalTest {
         lenient()
                 .doReturn(List.of(mPkg1SecondaryDexInfo1, pkg1SecondaryDexInfo2))
                 .when(mDexUseManager)
-                .getCheckedSecondaryDexInfo(
-                        eq(PKG_NAME_1), eq(true) /* excludeObsoleteDexesAndLoaders */);
+                .getCheckedSecondaryDexInfo(eq(PKG_NAME_1),
+                        eq(true) /* excludeObsoleteDexesAndLoaders */,
+                        anyBoolean() /* excludeObsoleteClcs */);
 
         // It should count all artifacts, but not runtime images.
         doReturn(createGetDexoptStatusResult("speed-profile", "bg-dexopt", "location",
@@ -1601,6 +1609,11 @@ public class ArtManagerLocalTest {
         verify(mArtd, times(expectedGetVdexFileSizeCalls)).getVdexFileSize(any());
         verify(mArtd, times(expectedGetRuntimeArtifactsSizeCalls)).getRuntimeArtifactsSize(any());
         verify(mArtd, times(expectedGetProfileSizeCalls)).getProfileSize(any());
+
+        verify(mDexUseManager)
+                .getCheckedSecondaryDexInfo(eq(PKG_NAME_1),
+                        eq(true) /* excludeObsoleteDexesAndLoaders */,
+                        eq(true) /* excludeObsoleteClcs */);
     }
 
     @Test
