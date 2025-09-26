@@ -2090,7 +2090,7 @@ art_host_test_data {
 }
 
 test_suite_package {
-    name: "art-host-tests-bp",
+    name: "art-host-tests",
     include_host_shared_libs_in_main_zip: true,
     art_data_zips: [
         ":art_host_test_data",
