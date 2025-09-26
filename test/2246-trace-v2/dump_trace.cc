@@ -144,6 +144,7 @@ bool ProcessTraceEntries(std::unique_ptr<File>& file,
                          std::map<uint64_t, std::string>& method_map,
                          bool is_dual_clock,
                          const char* thread_name_filter,
+                         const char* method_name_filter,
                          std::map<uint64_t, std::string>& ignored_method_map,
                          std::map<int64_t, int>& ignored_method_depth_map) {
   uint8_t header[11];
@@ -193,9 +194,14 @@ bool ProcessTraceEntries(std::unique_ptr<File>& file,
     if (method_map.find(method_id) == method_map.end()) {
       LOG(FATAL) << "No entry for method " << std::hex << method_id;
     }
-    if (print_thread_events) {
+    std::string method_name = method_map[method_id];
+    bool print_method_events = true;
+    if (method_name_filter != nullptr) {
+      print_method_events = (method_name.find(method_name_filter) != std::string::npos);
+    }
+    if (print_thread_events && print_method_events) {
       PrintTraceEntry(thread_name,
-                      method_map[method_id],
+                      method_name,
                       event_type,
                       &current_depth,
                       ignored_method,
@@ -218,9 +224,14 @@ bool ProcessTraceEntries(std::unique_ptr<File>& file,
 extern "C" JNIEXPORT void JNICALL Java_Main_dumpTrace(JNIEnv* env,
                                                       jclass,
                                                       jstring fileName,
-                                                      jstring threadName) {
+                                                      jstring threadName,
+                                                      jstring methodName) {
   const char* file_name = env->GetStringUTFChars(fileName, nullptr);
   const char* thread_name = env->GetStringUTFChars(threadName, nullptr);
+  const char* method_name_filter = nullptr;
+  if (methodName != nullptr) {
+    method_name_filter = env->GetStringUTFChars(methodName, nullptr);
+  }
   std::map<uint64_t, std::string> thread_map;
   std::map<uint64_t, std::string> method_map;
   std::map<uint64_t, std::string> ignored_method_map;
@@ -271,6 +282,7 @@ extern "C" JNIEXPORT void JNICALL Java_Main_dumpTrace(JNIEnv* env,
                             method_map,
                             is_dual_clock,
                             thread_name,
+                            method_name_filter,
                             ignored_method_map,
                             ignored_method_depth_map);
         break;
