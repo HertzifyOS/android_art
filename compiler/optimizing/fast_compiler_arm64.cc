@@ -536,8 +536,8 @@ class FastCompilerARM64 : public FastCompiler {
     return loop_header_pcs_.IsBitSet(dex_pc);
   }
 
-  bool CanHandleLoop(uint32_t dex_pc) {
-    if (!IsLoopHeader(dex_pc)) {
+  bool CanHandleBackwardsBranch(uint32_t dex_pc, bool is_catch = false) {
+    if (!IsLoopHeader(dex_pc) && !is_catch) {
       DCHECK(!loop_header_pcs_.IsAnyBitSet());
       unimplemented_reason_ = "Loop retry";
       recompile_with_loop_support_ = true;
@@ -790,7 +790,6 @@ void FastCompilerARM64::StartBranchTarget(bool flow_continues, uint32_t dex_pc) 
     PrepareToBranch(dex_pc);
   } else {
     if (!BranchTargetIsInitialized(dex_pc)) {
-      DCHECK(IsLoopHeader(dex_pc));
       // Update masks based on what we currently have. This is rather arbitrary,
       // but a better approximation at this point than setting all masks to 0 or 1.
       UpdateMasks(dex_pc);
@@ -829,30 +828,31 @@ bool FastCompilerARM64::ProcessInstructions() {
     const Instruction* next = nullptr;
     if (it != end) {
       const DexInstructionPcPair& next_pair = *it;
-      next = &next_pair.Inst();
-      if (GetLabelOf(next_pair.DexPc())->IsLinked() || IsLoopHeader(next_pair.DexPc())) {
+      if (GetLabelOf(next_pair.DexPc())->IsLinked() ||
+          IsLoopHeader(next_pair.DexPc()) ||
+          catch_pcs_.IsBitSet(next_pair.DexPc())) {
         // Disable the micro-optimization, as the next instruction is a branch
         // target.
         next = nullptr;
+      } else {
+        next = &next_pair.Inst();
       }
     }
+
     vixl::aarch64::Label* label = GetLabelOf(pair.DexPc());
-    if (label->IsLinked() || IsLoopHeader(pair.DexPc())) {
-      DCHECK_EQ(label->IsLinked(), BranchTargetIsInitialized(pair.DexPc()));
+    bool is_catch = catch_pcs_.IsBitSet(pair.DexPc());
+    bool is_loop_header = IsLoopHeader(pair.DexPc());
+    bool is_linked = label->IsLinked();
+    if (is_linked || is_loop_header || is_catch) {
       StartBranchTarget(flow_continues, pair.DexPc());
+    }
+    if (is_linked || is_loop_header) {
       __ Bind(label);
-    }
-
-    if (IsLoopHeader(pair.DexPc())) {
-      GenerateSuspendCheck();
-    }
-
-    if (catch_pcs_.IsBitSet(pair.DexPc())) {
-      if (!BranchTargetIsInitialized(pair.DexPc())) {
-        unimplemented_reason_ = "BackwardsCatch";
-        return false;
+      if (is_loop_header) {
+        GenerateSuspendCheck();
       }
-      StartBranchTarget(flow_continues, pair.DexPc());
+    }
+    if (is_catch) {
       catch_stack_maps_.push_back(std::make_pair(pair.DexPc(), GetAssembler()->CodePosition()));
     }
 
@@ -865,8 +865,8 @@ bool FastCompilerARM64::ProcessInstructions() {
         for (CatchHandlerIterator iterator(GetCodeItemAccessor(), *try_item);
              iterator.HasNext();
              iterator.Next()) {
-          if (iterator.GetHandlerAddress() <= pair.DexPc()) {
-            unimplemented_reason_ = "BackwardsCatch";
+          if (iterator.GetHandlerAddress() <= pair.DexPc() &&
+              !CanHandleBackwardsBranch(iterator.GetHandlerAddress(), /* is_catch= */ true)) {
             return false;
           }
           UpdateMasks(iterator.GetHandlerAddress());
@@ -2052,7 +2052,7 @@ bool FastCompilerARM64::If_21_22t(const Instruction& instruction, uint32_t dex_p
   }
   int32_t target_offset = kCompareWithZero ? instruction.VRegB_21t() : instruction.VRegC_22t();
   DCHECK_EQ(target_offset, instruction.GetTargetOffset());
-  if (target_offset < 0 && !CanHandleLoop(dex_pc + target_offset)) {
+  if (target_offset < 0 && !CanHandleBackwardsBranch(dex_pc + target_offset)) {
     return false;
   }
   int32_t register_index = kCompareWithZero ? instruction.VRegA_21t() : instruction.VRegA_22t();
@@ -3010,7 +3010,7 @@ bool FastCompilerARM64::ProcessDexInstruction(const Instruction& instruction,
     case Instruction::GOTO_16:
     case Instruction::GOTO_32: {
       int32_t target_offset = instruction.GetTargetOffset();
-      if (target_offset <= 0 && !CanHandleLoop(dex_pc + target_offset)) {
+      if (target_offset <= 0 && !CanHandleBackwardsBranch(dex_pc + target_offset)) {
         return false;
       }
       PrepareToBranch(dex_pc + target_offset);
