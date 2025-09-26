@@ -11,13 +11,11 @@
     GET_VREG w3, w1                     // w3<- vB
     GET_VREG w2, w0                     // w2<- vA
     cmp     w2, w3                      // compare (vA, vB)
-    b.${condition} 1f
+    b.${condition} .L${opcode}z_branch  // If taken, use the branch code in corresponding
+                                        // `if-{cond}z` instruction to keep this handler under 64B.
     FETCH_ADVANCE_INST 2
     GET_INST_OPCODE ip                  // extract opcode from wINST
     GOTO_OPCODE ip                      // jump to next instruction
-1:
-    FETCH_S wINST, 1                    // wINST<- branch offset, in code units
-    BRANCH
 
 %def zcmp(compare="1", branch=""):
     /*
@@ -32,11 +30,11 @@
     .if ${compare}
     cmp     w2, #0                      // compare (vA, 0)
     .endif
-    ${branch} 1f
+    ${branch} .L${opcode}_branch
     FETCH_ADVANCE_INST 2
     GET_INST_OPCODE ip                  // extract opcode from wINST
     GOTO_OPCODE ip                      // jump to next instruction
-1:
+.L${opcode}_branch:                     // `if-{cond}` handlers also jump here to shorten the code.
     FETCH_S wINST, 1                    // w1<- branch offset, in code units
     BRANCH
 
