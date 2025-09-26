@@ -152,7 +152,7 @@ static inline void Append2LE(uint8_t* buf, uint16_t val) {
 }
 
 // TODO: put this somewhere with the big-endian equivalent used by JDWP.
-static inline void Append3LE(uint8_t* buf, uint16_t val) {
+static inline void Append3LE(uint8_t* buf, uint32_t val) {
   *buf++ = static_cast<uint8_t>(val);
   *buf++ = static_cast<uint8_t>(val >> 8);
   *buf++ = static_cast<uint8_t>(val >> 16);

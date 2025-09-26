@@ -1385,7 +1385,10 @@ void TraceWriter::FlushAllThreadBuffers() {
       }
     }
   }
-  Trace::RemoveListeners();
+  if (overflow_) {
+    // The buffer is full, we cannot record any more data.
+    Trace::RemoveListeners();
+  }
   return;
 }
 
