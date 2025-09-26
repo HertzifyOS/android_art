@@ -1135,7 +1135,6 @@
     },
     {
         "tests": ["178-app-image-native-method",
-                  "184-dex2oat-dlc",
                   "530-checker-peel-unroll",
                   "595-profile-saving",
                   "616-cha-unloading",
@@ -1259,9 +1258,14 @@
         "description": ["Trace prevents class unloading."]
     },
     {
-        "tests": "677-fsi",
+        "tests": ["677-fsi"],
         "variant": "no-image | no-prebuild | jvm",
         "description": ["Test requires a successful dex2oat invocation"]
+    },
+    {
+        "tests": ["184-dex2oat-dlc"],
+        "variant": "no-image | no-prebuild | debuggable | jvm",
+        "description": ["Test requires successful dex2oat invocations and image loading"]
     },
     {
         "tests": ["990-field-trace",
