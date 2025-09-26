@@ -1753,14 +1753,7 @@ class EXPORT Thread {
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   ALWAYS_INLINE InterpreterCache* GetInterpreterCache() {
-    auto get_interpreter_cache = [](auto& interpreter_cache) {
-      if constexpr (std::is_same_v<decltype(interpreter_cache), InterpreterCache*&>) {
-        return interpreter_cache;
-      } else {
-        return &interpreter_cache;
-      }
-    };
-    return get_interpreter_cache(interpreter_cache_);
+    return &interpreter_cache_;
   }
 
   // Clear all thread-local interpreter caches.
@@ -1780,14 +1773,6 @@ class EXPORT Thread {
 
   static constexpr int InterpreterCacheSizeLog2() {
     return WhichPowerOf2(InterpreterCache::kSize);
-  }
-
-  static constexpr int InterpreterCacheEntrySizeLog2() {
-    return WhichPowerOf2(sizeof(InterpreterCache::Entry));
-  }
-
-  static constexpr int InterpreterCacheKeyLowBit() {
-    return InterpreterCache::kKeyLowBit;
   }
 
   static constexpr uint32_t AllThreadFlags() {
@@ -2574,8 +2559,7 @@ class EXPORT Thread {
   // Small thread-local cache to be used from the interpreter.
   // It is keyed by dex instruction pointer.
   // The value is opcode-depended (e.g. field offset).
-  std::conditional_t<kRuntimeISA == InstructionSet::kArm64, InterpreterCache*, InterpreterCache>
-      interpreter_cache_;
+  InterpreterCache interpreter_cache_;
 
   // All fields below this line should not be accessed by native code. This means these fields can
   // be modified, rearranged, added or removed without having to modify asm_support.h

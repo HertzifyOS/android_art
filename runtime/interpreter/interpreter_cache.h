@@ -20,7 +20,6 @@
 #include <array>
 #include <atomic>
 
-#include "arch/instruction_set.h"
 #include "base/bit_utils.h"
 #include "base/macros.h"
 
@@ -54,8 +53,6 @@ class ALIGNED(16) InterpreterCache {
   // Value of 256 has around 75% cache hit rate.
   static constexpr size_t kSize = 256;
 
-  static constexpr size_t kKeyLowBit = (kRuntimeISA == InstructionSet::kArm64) ? 1u : 2u;
-
   InterpreterCache() {
     // We can not use the Clear() method since the constructor will not
     // be called from the owning thread.
@@ -76,7 +73,7 @@ class ALIGNED(16) InterpreterCache {
  private:
   static ALWAYS_INLINE size_t IndexOf(const void* key) {
     static_assert(IsPowerOfTwo(kSize), "Size must be power of two");
-    size_t index = (reinterpret_cast<uintptr_t>(key) >> kKeyLowBit) & (kSize - 1);
+    size_t index = (reinterpret_cast<uintptr_t>(key) >> 2) & (kSize - 1);
     DCHECK_LT(index, kSize);
     return index;
   }
