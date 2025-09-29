@@ -1378,6 +1378,11 @@
         "description": "Interpreting BigInteger.add() is too slow (timeouts)"
     },
     {
+        "tests": ["656-checker-simd-opt-no-interp-ac"],
+        "variant": "interp-ac",
+        "description": ["Slow test. Prone to timeouts."]
+    },
+    {
         "tests": ["2029-contended-monitors", "2043-reference-pauses"],
         "variant": "interpreter | interp-ac | gcstress | trace | stream",
         "description": ["Slow tests. Prone to timeouts."]
