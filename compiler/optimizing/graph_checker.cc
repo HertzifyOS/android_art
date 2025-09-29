@@ -160,13 +160,12 @@ void GraphChecker::CheckGraphFlags() {
                      StrBool(flag_info_.seen_bounds_checks)));
   }
 
-  if (GetGraph()->HasAlwaysThrowingNonHThrowInstructions() !=
-      flag_info_.seen_always_throwing_non_hthrow_instructions) {
-    AddError(StringPrintf(
-        "Flag mismatch: HasAlwaysThrowingNonHThrowInstructions() (%s) should be equal to "
-        "flag_info_.seen_always_throwing_non_hthrow_instructions (%s)",
-        StrBool(GetGraph()->HasAlwaysThrowingNonHThrowInstructions()),
-        StrBool(flag_info_.seen_always_throwing_non_hthrow_instructions)));
+  if (GetGraph()->HasAlwaysThrowingInvokes() != flag_info_.seen_always_throwing_invokes) {
+    AddError(
+        StringPrintf("Flag mismatch: HasAlwaysThrowingInvokes() (%s) should be equal to "
+                     "flag_info_.seen_always_throwing_invokes (%s)",
+                     StrBool(GetGraph()->HasAlwaysThrowingInvokes()),
+                     StrBool(flag_info_.seen_always_throwing_invokes)));
   }
 }
 
@@ -738,18 +737,6 @@ void GraphChecker::VisitInstruction(HInstruction* instruction) {
       }
     }
   }
-
-  if (!instruction->IsThrow() && instruction->AlwaysThrows()) {
-    if (!GetGraph()->HasAlwaysThrowingNonHThrowInstructions()) {
-      AddError(StringPrintf(
-          "The graph doesn't have the HasAlwaysThrowingNonHThrowInstructions flag set but we saw "
-          "%s:%d in block %d and it always throws.",
-          instruction->DebugName(),
-          instruction->GetId(),
-          instruction->GetBlock()->GetBlockId()));
-    }
-    flag_info_.seen_always_throwing_non_hthrow_instructions = true;
-  }
 }
 
 void GraphChecker::VisitInvoke(HInvoke* invoke) {
@@ -763,6 +750,18 @@ void GraphChecker::VisitInvoke(HInvoke* invoke) {
                           invoke->GetId(),
                           input_count,
                           num_args));
+  }
+
+  if (invoke->AlwaysThrows()) {
+    if (!GetGraph()->HasAlwaysThrowingInvokes()) {
+      AddError(
+          StringPrintf("The graph doesn't have the HasAlwaysThrowingInvokes flag set but we saw "
+                       "%s:%d in block %d and it always throws.",
+                       invoke->DebugName(),
+                       invoke->GetId(),
+                       invoke->GetBlock()->GetBlockId()));
+    }
+    flag_info_.seen_always_throwing_invokes = true;
   }
 
   // Check for intrinsics which should have been replaced by intermediate representation in the

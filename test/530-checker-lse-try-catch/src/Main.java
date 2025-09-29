@@ -353,9 +353,15 @@ public class Main {
   }
 
   /// CHECK-START: int Main.$noinline$test40() load_store_elimination (before)
-  /// CHECK:                     InvokeStaticOrDirect method_name:Main.fillArrayTest40 always_throws:true
+  /// CHECK:                     ArraySet
+  /// CHECK:                     DivZeroCheck
+  /// CHECK:                     ArraySet
+  /// CHECK:                     ArraySet
   //
-  /// CHECK:                     InvokeStaticOrDirect method_name:Main.fillArrayTest40 always_throws:true
+  /// CHECK:                     ArraySet
+  /// CHECK:                     ArraySet
+  /// CHECK:                     DivZeroCheck
+  /// CHECK:                     ArraySet
   //
   /// CHECK:                     ArraySet
   /// CHECK:                     ArraySet
@@ -363,43 +369,40 @@ public class Main {
   /// CHECK-NOT:                 ArraySet
 
   /// CHECK-START: int Main.$noinline$test40() load_store_elimination (after)
-  /// CHECK:                     InvokeStaticOrDirect method_name:Main.fillArrayTest40 always_throws:true
-  //
-  /// CHECK:                     InvokeStaticOrDirect method_name:Main.fillArrayTest40 always_throws:true
+  /// CHECK:                     ArraySet
+  /// CHECK:                     DivZeroCheck
+  /// CHECK:                     ArraySet
   //
   /// CHECK:                     ArraySet
+  /// CHECK:                     DivZeroCheck
+  /// CHECK:                     ArraySet
+  //
   /// CHECK-NOT:                 ArraySet
 
-  // Like `test40` from 530-checker-lse so we can check that we have the array set inside try catches too.
-  // Since we are inlining, we know the parameters and are able to eliminate (some) of the
+  // Like `test40` from 530-checker-lse but with $inline$ for the inner method so we check that we
+  // have the array set inside try catches too.
+  // Since we are inlining, we know the parameters and are able to elimnate (some) of the
   // `ArraySet`s.
   private static int $noinline$test40() {
     int[] array = new int[1];
     try {
-      // Fails to inline.
-      fillArrayTest40(array, 100, 0);
+      $inline$fillArrayTest40(array, 100, 0);
       System.out.println("UNREACHABLE");
     } catch (Throwable expected) {
     }
     assertEquals(1, array[0]);
     try {
-      // Fails to inline.
-      fillArrayTest40(array, 100, 1);
+      $inline$fillArrayTest40(array, 100, 1);
       System.out.println("UNREACHABLE");
     } catch (Throwable expected) {
     }
     assertEquals(2, array[0]);
-    try {
-      // Gets inlined and optimized.
-      fillArrayTest40(array, 100, 2);
-    } catch (Throwable unexpected) {
-      System.out.println("UNREACHABLE");
-    }
+    $inline$fillArrayTest40(array, 100, 2);
     assertEquals(150, array[0]);
     return array[0];
   }
 
-  /// CHECK-START: void Main.fillArrayTest40(int[], int, int) load_store_elimination (before)
+  /// CHECK-START: void Main.$inline$fillArrayTest40(int[], int, int) load_store_elimination (before)
   /// CHECK:                     ArraySet
   /// CHECK:                     DivZeroCheck
   /// CHECK:                     ArraySet
@@ -407,7 +410,7 @@ public class Main {
   /// CHECK:                     ArraySet
   /// CHECK-NOT:                 ArraySet
 
-  /// CHECK-START: void Main.fillArrayTest40(int[], int, int) load_store_elimination (after)
+  /// CHECK-START: void Main.$inline$fillArrayTest40(int[], int, int) load_store_elimination (after)
   /// CHECK:                     ArraySet
   /// CHECK:                     DivZeroCheck
   /// CHECK:                     ArraySet
@@ -416,7 +419,7 @@ public class Main {
   /// CHECK-NOT:                 ArraySet
 
   // Check that the stores to array[0] are not eliminated since we can throw in between the stores.
-  private static void fillArrayTest40(int[] array, int a, int b) {
+  private static void $inline$fillArrayTest40(int[] array, int a, int b) {
     array[0] = 1;
     int x = a / b;
     array[0] = 2;

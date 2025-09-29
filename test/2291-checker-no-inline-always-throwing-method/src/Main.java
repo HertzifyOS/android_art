@@ -21,21 +21,15 @@ public class Main {
             throw new Error("Was expecting an ArithmeticException");
         } catch (ArithmeticException expected) {
         }
-
-        try {
-            $noinline$testRegularDivisionByZero();
-            throw new Error("Was expecting an ArithmeticException");
-        } catch (ArithmeticException expected) {
-        }
     }
 
     // divideAndThrow shouldn't be inlined as it ends in an always-throwing instruction.
 
     /// CHECK-START: void Main.$noinline$testDivideUnsignedLong() inliner (before)
-    /// CHECK: InvokeStaticOrDirect method_name:Main.divideAndThrow always_throws:false
+    /// CHECK: InvokeStaticOrDirect method_name:Main.divideAndThrow
 
     /// CHECK-START: void Main.$noinline$testDivideUnsignedLong() inliner (after)
-    /// CHECK: InvokeStaticOrDirect method_name:Main.divideAndThrow always_throws:true
+    /// CHECK: InvokeStaticOrDirect method_name:Main.divideAndThrow
     private static void $noinline$testDivideUnsignedLong() {
         divideAndThrow();
     }
@@ -61,39 +55,5 @@ public class Main {
         if (expected != result) {
             throw new Error("Expected: " + expected + ", found: " + result);
         }
-    }
-
-    // divideByZero shouldn't be inlined as it ends in an always-throwing instruction.
-
-    /// CHECK-START: void Main.$noinline$testRegularDivisionByZero() inliner (before)
-    /// CHECK: InvokeStaticOrDirect method_name:Main.divideByZero always_throws:false
-
-    /// CHECK-START: void Main.$noinline$testRegularDivisionByZero() inliner (after)
-    /// CHECK: InvokeStaticOrDirect method_name:Main.divideByZero always_throws:true
-    private static void $noinline$testRegularDivisionByZero() {
-        divideByZero();
-    }
-
-    /// CHECK-START: int Main.divideByZero() dead_code_elimination$initial (before)
-    /// CHECK:     Add
-    /// CHECK:     Mul
-
-    /// CHECK-START: int Main.divideByZero() dead_code_elimination$initial (after)
-    /// CHECK-NOT: Add
-
-    /// CHECK-START: int Main.divideByZero() dead_code_elimination$initial (after)
-    /// CHECK-NOT: Mul
-    private static int divideByZero() {
-        int dividend = 1234;
-        int divisor = 0;
-        int result = dividend / divisor;
-        // Do calculations that should be eliminated since the divisor is zero
-        result += 2;
-        if (result == 456) {
-            result = 789;
-        } else {
-            result = result * result;
-        }
-        return result;
     }
 }

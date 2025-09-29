@@ -163,7 +163,7 @@ class GraphChecker final : public CRTPGraphVisitor<GraphChecker> {
     bool seen_irreducible_loop = false;
     bool seen_SIMD = false;
     bool seen_bounds_checks = false;
-    bool seen_always_throwing_non_hthrow_instructions = false;
+    bool seen_always_throwing_invokes = false;
   };
   FlagInfo flag_info_;
 

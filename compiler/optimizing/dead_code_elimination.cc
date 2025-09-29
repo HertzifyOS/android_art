@@ -250,7 +250,7 @@ static bool RemoveNonNullControlDependences(HBasicBlock* block, HBasicBlock* thr
 // for example.
 bool HDeadCodeElimination::SimplifyAlwaysThrows() {
   HBasicBlock* exit = graph_->GetExitBlock();
-  if (!graph_->HasAlwaysThrowingNonHThrowInstructions() || exit == nullptr) {
+  if (!graph_->HasAlwaysThrowingInvokes() || exit == nullptr) {
     return false;
   }
 
@@ -268,7 +268,7 @@ bool HDeadCodeElimination::SimplifyAlwaysThrows() {
     // throw, the first one will throw and the second one will never be reached.
     HInstruction* throwing_invoke = nullptr;
     for (HInstructionIteratorPrefetchNext it(block->GetInstructions()); !it.Done(); it.Advance()) {
-      if (!it.Current()->IsThrow() && it.Current()->AlwaysThrows()) {
+      if (it.Current()->IsInvoke() && it.Current()->AsInvoke()->AlwaysThrows()) {
         throwing_invoke = it.Current();
         break;
       }
@@ -969,7 +969,7 @@ void HDeadCodeElimination::UpdateGraphFlags() {
         }
       } else if (instruction->IsBoundsCheck()) {
         has_bounds_checks = true;
-      } else if (!instruction->IsThrow() && instruction->AlwaysThrows()) {
+      } else if (instruction->IsInvoke() && instruction->AsInvoke()->AlwaysThrows()) {
         has_always_throwing_invokes = true;
       }
     }
@@ -979,7 +979,7 @@ void HDeadCodeElimination::UpdateGraphFlags() {
   graph_->SetHasTraditionalSIMD(has_traditional_simd);
   graph_->SetHasPredicatedSIMD(has_predicated_simd);
   graph_->SetHasBoundsChecks(has_bounds_checks);
-  graph_->SetHasAlwaysThrowingNonHThrowInstructions(has_always_throwing_invokes);
+  graph_->SetHasAlwaysThrowingInvokes(has_always_throwing_invokes);
 }
 
 bool HDeadCodeElimination::Run() {

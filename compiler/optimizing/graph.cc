@@ -861,8 +861,8 @@ HInstruction* HGraph::InlineInto(HGraph* outer_graph, HInvoke* invoke) {
   if (HasPredicatedSIMD()) {
     outer_graph->SetHasPredicatedSIMD(true);
   }
-  if (HasAlwaysThrowingNonHThrowInstructions()) {
-    outer_graph->SetHasAlwaysThrowingNonHThrowInstructions(true);
+  if (HasAlwaysThrowingInvokes()) {
+    outer_graph->SetHasAlwaysThrowingInvokes(true);
   }
 
   HInstruction* return_value = nullptr;
