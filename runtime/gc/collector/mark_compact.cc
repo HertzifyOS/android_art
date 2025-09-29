@@ -2311,6 +2311,32 @@ size_t MarkCompact::UpdateRefsForCompaction(mirror::Object* obj,
   uint32_t class_flags = from_klass->GetClassFlags<kVerifyNone>();
   if (class_flags == 0) {
     DCHECK(klass != from_klass && reinterpret_cast<uint8_t*>(klass) < black_dense_end_);
+    // We should never see 0 class-flags with copy ioctl
+    // TODO: once the issue is resolved, make the condition be only enabled in
+    // debug builds
+    if (UNLIKELY(!use_move_ioctl_)) {
+      uintptr_t class_flags_addr =
+          reinterpret_cast<uintptr_t>(from_klass) + mirror::Class::ClassFlagsOffset().Int32Value();
+      LOG(FATAL_WITHOUT_ABORT)
+          << "Class-flags found to be 0 in COPY-ioctl mode for obj:" << obj
+          << " from-klass:" << static_cast<void*>(from_klass) << " memory around class-flags:"
+          << heap_->GetVerification()->DumpRAMAroundAddress(class_flags_addr, 8 * kObjectAlignment)
+          << " klass:" << static_cast<void*>(klass) << " cur_reclaimable_page:"
+          << static_cast<void*>(cur_reclaimable_page_ + from_space_slide_diff_)
+          << " last_reclaimable_page:"
+          << static_cast<void*>(last_reclaimable_page_ + from_space_slide_diff_)
+          << " black_dense_end: " << static_cast<void*>(black_dense_end_)
+          << " mid_gen_end: " << static_cast<void*>(mid_gen_end_)
+          << " prev_post_compact_end: " << prev_post_compact_end_
+          << " prev_black_allocations_begin: " << prev_black_allocations_begin_
+          << " prev_black_dense_end: " << prev_black_dense_end_
+          << " prev_moving_space_end_at_compaction: " << prev_moving_space_end_at_compaction_
+          << " prev_gc_young: " << prev_gc_young_
+          << " prev_gc_performed_compaction: " << prev_gc_performed_compaction_;
+      heap_->GetVerification()->LogHeapCorruption(
+          obj, mirror::Object::ClassOffset(), klass, /*fatal=*/true);
+      UNREACHABLE();
+    }
     // The page containing class-flags has been moved to the to-space. Re-read from there.
     class_flags = klass->GetClassFlags<kVerifyNone>();
   }
@@ -5754,11 +5780,16 @@ mirror::Class* MarkCompact::ReloadScanObjClass(mirror::Object* obj) {
     usleep(1000);
     klass = obj->GetClass<kVerifyNone, kWithoutReadBarrier>();
     if (klass != nullptr) {
+      // There is no point continuing if an invalid class is found.
+      if (!heap_->GetVerification()->IsValidClass(klass)) {
+        LOG(FATAL_WITHOUT_ABORT) << "Invalid klass got stored (after " << i << " re-loads";
+        break;
+      }
       return klass;
     }
   }
   // It must be heap corruption.
-  LOG(FATAL_WITHOUT_ABORT) << "klass pointer for obj: " << obj << " found to be null."
+  LOG(FATAL_WITHOUT_ABORT) << "klass pointer for obj: " << obj << " found to be " << klass
                            << " black_dense_end: " << static_cast<void*>(black_dense_end_)
                            << " mid_gen_end: " << static_cast<void*>(mid_gen_end_)
                            << " prev_post_compact_end: " << prev_post_compact_end_
