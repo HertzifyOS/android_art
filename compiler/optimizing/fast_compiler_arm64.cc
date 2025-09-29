@@ -2634,7 +2634,7 @@ bool FastCompilerARM64::BuildStaticFieldAccess(const Instruction& instruction,
     unimplemented_reason_ = "AOTStaticFieldAccess";
     return false;
   }
-  // We need a frame for the read barrier.
+  // We need a frame for the read barrier and the clinit check.
   if (!EnsureHasFrame()) {
     return false;
   }
@@ -2643,6 +2643,7 @@ bool FastCompilerARM64::BuildStaticFieldAccess(const Instruction& instruction,
   uint32_t source_or_dest_reg = instruction.VRegA_21c();
   UseScratchRegisterScope temps(GetVIXLAssembler());
   Register temp = temps.AcquireX();
+  bool generate_clinit_check = false;
   {
     ScopedObjectAccess soa(Thread::Current());
     field = ResolveFieldWithAccessChecks(soa.Self(),
@@ -2656,10 +2657,7 @@ bool FastCompilerARM64::BuildStaticFieldAccess(const Instruction& instruction,
       return false;
     }
     Handle<mirror::Class> h_klass = handles_->NewHandle(field->GetDeclaringClass());
-    if (!h_klass->IsVisiblyInitialized()) {
-      unimplemented_reason_ = "UninitializedStaticAccess";
-      return false;
-    }
+    generate_clinit_check = !h_klass->IsVisiblyInitialized();
     __ Ldr(temp.W(), jit_patches_.DeduplicateJitClassLiteral(h_klass->GetDexFile(),
                                                              h_klass->GetDexTypeIndex(),
                                                              h_klass,
@@ -2667,6 +2665,18 @@ bool FastCompilerARM64::BuildStaticFieldAccess(const Instruction& instruction,
   }
   __ Ldr(temp.W(), MemOperand(temp.X()));
   DoReadBarrierOn(temp);
+  if (generate_clinit_check) {
+    vixl::aarch64::Label cont;
+    UseScratchRegisterScope temps2(GetVIXLAssembler());
+    InvokeRuntimeCallingConvention calling_convention;
+    Register reg = temps2.AcquireW();
+    __ Ldrb(reg, HeapOperand(temp.W(), kClassStatusByteOffset));
+    __ Cmp(reg, kShiftedVisiblyInitializedValue);
+    __ B(hs, &cont);
+    __ Mov(calling_convention.GetRegisterAt(0).W(), temp.W());
+    InvokeRuntime(kQuickInitializeStaticStorage, dex_pc);
+    __ Bind(&cont);
+  }
   MemOperand mem = HeapOperand(temp.W(), field->GetOffset());
   if (is_put) {
     return DoPut(mem,
