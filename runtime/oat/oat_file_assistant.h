@@ -29,6 +29,7 @@
 
 #include "arch/instruction_set.h"
 #include "base/compiler_filter.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/os.h"
 #include "base/scoped_flock.h"
@@ -389,6 +390,8 @@ class OatFileAssistant {
                                              std::string_view oat_boot_class_path,
                                              /*out*/ std::string* error_msg);
 
+  EXPORT void SetLogger(ArtLogger logger) { logger_ = std::move(logger); }
+
  private:
   enum class OatFileType {
     kNone,
@@ -704,6 +707,9 @@ class OatFileAssistant {
 
   // Owned or unowned instance of OatFileAssistantContext.
   std::variant<std::unique_ptr<OatFileAssistantContext>, OatFileAssistantContext*> ofa_context_;
+
+  // The logger to log messages about the oat file status.
+  ArtLogger logger_;
 
   friend class OatFileAssistantTest;
 

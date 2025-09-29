@@ -101,7 +101,7 @@ public final class PrimaryDexopterReporterTest extends PrimaryDexopterTestBase {
         // Dexopt is by default needed and successful.
         lenient()
                 .when(mArtd.getDexoptNeeded(
-                        anyString(), anyString(), anyString(), anyString(), anyInt()))
+                        anyString(), anyString(), anyString(), anyString(), anyInt(), any()))
                 .thenReturn(dexoptIsNeeded());
 
         mockPrimaryDexopter(DEXOPT_PARAMS_SPEED_PROFILE);

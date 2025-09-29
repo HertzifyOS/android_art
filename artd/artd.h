@@ -232,6 +232,7 @@ class Artd : public aidl::com::android::server::art::BnArtd {
       const std::optional<std::string>& in_classLoaderContext,
       const std::string& in_compilerFilter,
       int32_t in_dexoptTrigger,
+      const ndk::ScopedFileDescriptor& in_loggingFd,
       aidl::com::android::server::art::GetDexoptNeededResult* _aidl_return) override;
 
   ndk::ScopedAStatus maybeCreateSdc(

@@ -138,7 +138,7 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
 
         // Dexopt is by default needed and successful.
         lenient()
-                .when(mArtd.getDexoptNeeded(any(), any(), any(), any(), anyInt()))
+                .when(mArtd.getDexoptNeeded(any(), any(), any(), any(), anyInt(), any()))
                 .thenReturn(dexoptIsNeeded());
         lenient()
                 .when(mArtd.dexopt(any(), any(), any(), any(), any(), any(), any(), any(), anyInt(),
@@ -167,7 +167,7 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
             @ArtifactsLocation int location, Supplier<VdexPath> inputVdexMatcher) throws Exception {
         doReturn(dexoptIsNeeded(location))
                 .when(mArtd)
-                .getDexoptNeeded(eq(mDexPath), eq("arm64"), any(), any(), anyInt());
+                .getDexoptNeeded(eq(mDexPath), eq("arm64"), any(), any(), anyInt(), any());
 
         List<DexContainerFileDexoptResult> results = mPrimaryDexopter.dexopt();
         verifyStatusAllOk(results);
@@ -250,24 +250,24 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
         List<DexContainerFileDexoptResult> results = mPrimaryDexopter.dexopt();
         verifyStatusAllOk(results);
 
-        verify(mArtd).getDexoptNeeded(
-                eq(mDexPath), eq("arm64"), any(), eq("speed-profile"), eq(mDefaultDexoptTrigger));
+        verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm64"), any(), eq("speed-profile"),
+                eq(mDefaultDexoptTrigger), any());
         checkDexoptWithProfile(
                 verify(mArtd), mDexPath, "arm64", mRefProfile, false /* isOtherReadable */);
 
         // There is no profile for split 0, so it should fall back to "verify".
-        verify(mArtd).getDexoptNeeded(
-                eq(mSplit0DexPath), eq("arm64"), any(), eq("verify"), eq(mDefaultDexoptTrigger));
+        verify(mArtd).getDexoptNeeded(eq(mSplit0DexPath), eq("arm64"), any(), eq("verify"),
+                eq(mDefaultDexoptTrigger), any());
         checkDexoptWithNoProfile(verify(mArtd), mSplit0DexPath, "arm64", "verify");
 
         if (!Flags.dexoptSecondaryIsaOnlyWhenNeeded()) {
-            verify(mArtd).getDexoptNeeded(
-                    eq(mDexPath), eq("arm"), any(), eq("speed-profile"), eq(mDefaultDexoptTrigger));
+            verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm"), any(), eq("speed-profile"),
+                    eq(mDefaultDexoptTrigger), any());
             checkDexoptWithProfile(
                     verify(mArtd), mDexPath, "arm", mRefProfile, false /* isOtherReadable */);
 
-            verify(mArtd).getDexoptNeeded(
-                    eq(mSplit0DexPath), eq("arm"), any(), eq("verify"), eq(mDefaultDexoptTrigger));
+            verify(mArtd).getDexoptNeeded(eq(mSplit0DexPath), eq("arm"), any(), eq("verify"),
+                    eq(mDefaultDexoptTrigger), any());
             checkDexoptWithNoProfile(verify(mArtd), mSplit0DexPath, "arm", "verify");
         }
         verifyProfileNotUsed(mPrebuiltProfile);
@@ -352,13 +352,13 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
 
         // It should use `mBetterOrSameDexoptTrigger` and the merged profile for both ISAs.
         inOrder.verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm64"), any(), eq("speed-profile"),
-                eq(mBetterOrSameDexoptTrigger));
+                eq(mBetterOrSameDexoptTrigger), any());
         checkDexoptWithProfile(inOrder.verify(mArtd), mDexPath, "arm64",
                 ProfilePath.tmpProfilePath(mPrivateOutputProfile.profilePath),
                 false /* isOtherReadable */);
 
         inOrder.verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm"), any(), eq("speed-profile"),
-                eq(mBetterOrSameDexoptTrigger));
+                eq(mBetterOrSameDexoptTrigger), any());
         checkDexoptWithProfile(inOrder.verify(mArtd), mDexPath, "arm",
                 ProfilePath.tmpProfilePath(mPrivateOutputProfile.profilePath),
                 false /* isOtherReadable */);
@@ -401,13 +401,13 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
         verifyStatusAllOk(results);
 
         // It should still use "speed-profile", but with the existing reference profile only.
-        verify(mArtd).getDexoptNeeded(
-                eq(mDexPath), eq("arm64"), any(), eq("speed-profile"), eq(mDefaultDexoptTrigger));
+        verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm64"), any(), eq("speed-profile"),
+                eq(mDefaultDexoptTrigger), any());
         checkDexoptWithProfile(
                 verify(mArtd), mDexPath, "arm64", mRefProfile, true /* isOtherReadable */);
 
-        verify(mArtd).getDexoptNeeded(
-                eq(mDexPath), eq("arm"), any(), eq("speed-profile"), eq(mDefaultDexoptTrigger));
+        verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm"), any(), eq("speed-profile"),
+                eq(mDefaultDexoptTrigger), any());
         checkDexoptWithProfile(
                 verify(mArtd), mDexPath, "arm", mRefProfile, true /* isOtherReadable */);
 
@@ -623,14 +623,14 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
                 deepEq(mDmProfile), deepEq(mPublicOutputProfile), eq(mDexPath));
 
         // It should re-compile anyway.
-        verify(mArtd).getDexoptNeeded(
-                eq(mDexPath), eq("arm64"), any(), eq("speed-profile"), eq(mForceDexoptTrigger));
+        verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm64"), any(), eq("speed-profile"),
+                eq(mForceDexoptTrigger), any());
         checkDexoptWithProfile(verify(mArtd), mDexPath, "arm64",
                 ProfilePath.tmpProfilePath(mPublicOutputProfile.profilePath),
                 true /* isOtherReadable */);
 
-        verify(mArtd).getDexoptNeeded(
-                eq(mDexPath), eq("arm"), any(), eq("speed-profile"), eq(mForceDexoptTrigger));
+        verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm"), any(), eq("speed-profile"),
+                eq(mForceDexoptTrigger), any());
         checkDexoptWithProfile(verify(mArtd), mDexPath, "arm",
                 ProfilePath.tmpProfilePath(mPublicOutputProfile.profilePath),
                 true /* isOtherReadable */);
@@ -660,10 +660,10 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
         verifyStatusAllOk(results);
 
         // It should use the default dexopt trigger.
-        verify(mArtd).getDexoptNeeded(
-                eq(mDexPath), eq("arm64"), any(), eq("speed-profile"), eq(mDefaultDexoptTrigger));
-        verify(mArtd).getDexoptNeeded(
-                eq(mDexPath), eq("arm"), any(), eq("speed-profile"), eq(mDefaultDexoptTrigger));
+        verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm64"), any(), eq("speed-profile"),
+                eq(mDefaultDexoptTrigger), any());
+        verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm"), any(), eq("speed-profile"),
+                eq(mDefaultDexoptTrigger), any());
     }
 
     @Test
@@ -676,12 +676,12 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
         verifyStatusAllOk(results);
 
         verify(mArtd).getDexoptNeeded(eq(mSplit0DexPath), eq("arm64"), any(), eq("speed-profile"),
-                eq(mDefaultDexoptTrigger));
+                eq(mDefaultDexoptTrigger), any());
         checkDexoptWithProfile(verify(mArtd), mSplit0DexPath, "arm64", mSplit0RefProfile,
                 false /* isOtherReadable */);
 
         verify(mArtd).getDexoptNeeded(eq(mSplit0DexPath), eq("arm"), any(), eq("speed-profile"),
-                eq(mDefaultDexoptTrigger));
+                eq(mDefaultDexoptTrigger), any());
         checkDexoptWithProfile(verify(mArtd), mSplit0DexPath, "arm", mSplit0RefProfile,
                 false /* isOtherReadable */);
     }
@@ -839,7 +839,7 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
     @Test
     public void testDexoptDexStatus() throws Exception {
         lenient()
-                .when(mArtd.getDexoptNeeded(any(), any(), any(), any(), anyInt()))
+                .when(mArtd.getDexoptNeeded(any(), any(), any(), any(), anyInt(), any()))
                 .thenReturn(dexoptIsNotNeeded(false /* hasDexCode */),
                         dexoptIsNotNeeded(false /* hasDexCode */),
                         dexoptIsNotNeeded(true /* hasDexCode */), dexoptIsNeeded());

@@ -538,7 +538,7 @@ public abstract class Dexopter<DexInfoType extends DetailedDexInfo> {
         // skipped because we are only going to verify the dex code (see `adjustCompilerFilter`).
         GetDexoptNeededResult result = mInjector.getArtd().getDexoptNeeded(
                 target.dexInfo().dexPath(), target.isa(), target.dexInfo().classLoaderContext(),
-                target.compilerFilter(), dexoptTrigger);
+                target.compilerFilter(), dexoptTrigger, mParams.getLoggingFd());
 
         return result;
     }

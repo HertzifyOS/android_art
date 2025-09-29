@@ -159,7 +159,7 @@ public class SecondaryDexopterTest {
 
         // Dexopt is always needed and successful.
         lenient()
-                .when(mArtd.getDexoptNeeded(any(), any(), any(), any(), anyInt()))
+                .when(mArtd.getDexoptNeeded(any(), any(), any(), any(), anyInt(), any()))
                 .thenReturn(dexoptIsNeeded());
         lenient()
                 .when(mArtd.dexopt(any(), any(), any(), any(), any(), any(), any(), any(), anyInt(),
@@ -194,8 +194,8 @@ public class SecondaryDexopterTest {
                 deepEq(mDex1PrivateOutputProfile), deepEq(List.of(DEX_1)),
                 deepEq(mMergeProfileOptions));
 
-        verify(mArtd).getDexoptNeeded(
-                eq(DEX_1), eq("arm64"), any(), eq("speed-profile"), eq(mBetterOrSameDexoptTrigger));
+        verify(mArtd).getDexoptNeeded(eq(DEX_1), eq("arm64"), any(), eq("speed-profile"),
+                eq(mBetterOrSameDexoptTrigger), any());
         checkDexoptWithPrivateProfile(verify(mArtd), DEX_1, "arm64",
                 ProfilePath.tmpProfilePath(mDex1PrivateOutputProfile.profilePath), "CLC_FOR_DEX_1");
 
@@ -209,12 +209,12 @@ public class SecondaryDexopterTest {
         verify(mArtd, never()).mergeProfiles(any(), deepEq(mDex2RefProfile), any(), any(), any());
 
         verify(mArtd).getDexoptNeeded(
-                eq(DEX_2), eq("arm64"), any(), eq("speed"), eq(mDefaultDexoptTrigger));
+                eq(DEX_2), eq("arm64"), any(), eq("speed"), eq(mDefaultDexoptTrigger), any());
         checkDexoptWithNoProfile(
                 verify(mArtd), DEX_2, "arm64", "speed", "CLC_FOR_DEX_2", true /* isPublic */);
 
         verify(mArtd).getDexoptNeeded(
-                eq(DEX_2), eq("arm"), any(), eq("speed"), eq(mDefaultDexoptTrigger));
+                eq(DEX_2), eq("arm"), any(), eq("speed"), eq(mDefaultDexoptTrigger), any());
         checkDexoptWithNoProfile(
                 verify(mArtd), DEX_2, "arm", "speed", "CLC_FOR_DEX_2", true /* isPublic */);
 
@@ -224,7 +224,7 @@ public class SecondaryDexopterTest {
         verify(mArtd, never()).mergeProfiles(any(), deepEq(mDex3RefProfile), any(), any(), any());
 
         verify(mArtd).getDexoptNeeded(
-                eq(DEX_3), eq("arm64"), isNull(), eq("verify"), eq(mDefaultDexoptTrigger));
+                eq(DEX_3), eq("arm64"), isNull(), eq("verify"), eq(mDefaultDexoptTrigger), any());
         checkDexoptWithNoProfile(verify(mArtd), DEX_3, "arm64", "verify",
                 null /* classLoaderContext */, false /* isPublic */);
     }
