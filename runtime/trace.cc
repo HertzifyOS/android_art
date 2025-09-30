@@ -207,6 +207,7 @@ class TraceEntriesWriterTask final : public TraceWriterTask {
       : TraceWriterTask(trace_writer, index, buffer, cur_offset, tid) {}
 
   void ProcessBuffer(uintptr_t* buffer, size_t cur_offset, size_t thread_id) override {
+    ScopedTrace trace("FlushTraceEntries");
     std::unordered_map<ArtMethod*, std::string> method_infos;
     TraceWriter* trace_writer = GetTraceWriter();
     if (trace_writer->GetTraceFormatVersion() == Trace::kFormatV1) {
@@ -444,6 +445,7 @@ class RecordMethodInfoClassVisitor : public ClassVisitor {
 
 void Trace::ClassPrepare([[maybe_unused]] Handle<mirror::Class> temp_klass,
                          Handle<mirror::Class> klass) {
+  ScopedTrace trace("RecordMethodInfo");
   MutexLock mu(Thread::Current(), *Locks::trace_lock_);
   if (the_trace_ == nullptr) {
     return;
@@ -477,6 +479,7 @@ bool TraceWriter::WriteToFile(uint8_t* buffer, size_t length) {
 }
 
 bool TraceWriter::WriteToFileLocked(const void* buffer, size_t length) {
+  ScopedTrace trace("WriteToFile");
   if (!trace_file_->WriteFully(buffer, length)) {
     PLOG(WARNING) << "Failed streaming a tracing event.";
     return false;
@@ -488,6 +491,7 @@ bool TraceWriter::WriteToFileLocked(const void* header,
                                     size_t header_len,
                                     const void* buffer,
                                     size_t buffer_len) {
+  ScopedTrace trace("WriteToFile");
   if (!trace_file_->WriteFully(header, header_len) ||
       !trace_file_->WriteFully(buffer, buffer_len)) {
     PLOG(WARNING) << "Failed streaming a tracing event.";
@@ -704,6 +708,7 @@ void Trace::Start(std::unique_ptr<File>&& trace_file_in,
     the_trace_ = new Trace(trace_file.release(), buffer_size, flags, output_mode, trace_mode);
     num_trace_starts_++;
     if (is_trace_format_v2) {
+      ScopedTrace trace("RecordMethodInfo");
       // Record all the methods that are currently loaded. We log all methods when any new class
       // is loaded. This will allow us to process the trace entries without requiring a mutator
       // lock.
@@ -1102,6 +1107,7 @@ std::string TraceWriter::CreateSummary(int flags) {
 }
 
 void TraceWriter::FinishTracing(int flags, bool flush_entries) {
+  ScopedTrace trace("StopTracing");
   Thread* self = Thread::Current();
 
   if (!flush_entries) {
@@ -1337,6 +1343,7 @@ void TraceWriter::PreProcessTraceForMethodInfos(
     uintptr_t* method_trace_entries,
     size_t current_offset,
     std::unordered_map<ArtMethod*, std::string>& method_infos) {
+  ScopedTrace trace("PreProcessMethodInfos");
   // Compute the method infos before we process the entries. We don't want to assign an encoding
   // for the method here. The expectation is that once we assign a method id we write it to the
   // file before any other thread can see the method id. So we should assign method encoding while
@@ -1359,6 +1366,7 @@ void TraceWriter::PreProcessTraceForMethodInfos(
 }
 
 void TraceWriter::RecordMethodInfoV1(const std::string& method_info_line, uint64_t method_id) {
+  ScopedTrace trace("RecordMethodInfo");
   // Write a special block with the name.
   std::string method_line;
   size_t header_size;
@@ -1438,6 +1446,7 @@ uintptr_t* TraceWriter::AcquireTraceBuffer(size_t tid) {
     }
   }
 
+  ScopedTrace trace("WaitingForBuffer");
   // Increment a counter so we know how many threads are potentially suspended in the tracing code.
   // We need this when stopping tracing. We need to wait for all these threads to finish executing
   // this code so we can safely delete the trace related data.
@@ -1757,6 +1766,7 @@ void TraceWriter::FlushBuffer(uintptr_t* method_trace_entries,
                               size_t current_offset,
                               size_t tid,
                               const std::unordered_map<ArtMethod*, std::string>& method_infos) {
+  ScopedTrace trace("ProcessTraceEvents");
   size_t num_entries = GetNumEntries(clock_source_);
   size_t num_records = (kPerThreadBufSize - current_offset) / num_entries;
   DCHECK_EQ((kPerThreadBufSize - current_offset) % num_entries, 0u);
@@ -1940,6 +1950,17 @@ LowOverheadTraceType Trace::GetTraceType() {
     return LowOverheadTraceType::kAllMethodsWithFlush;
   }
   return LowOverheadTraceType::kNone;
+}
+
+void TraceLowOverhead::HandleBufferOverflow(Thread* self, ArtMethod* method, bool is_entry) {
+  ScopedTrace trace("HandleBufferOverflow");
+  // MethodEntered / MethodExited flush the buffer if full and record the current trace event.
+  if (is_entry) {
+    low_overhead_trace_->MethodEntered(self, method);
+  } else {
+    JValue return_value;
+    low_overhead_trace_->MethodExited(self, method, {}, return_value);
+  }
 }
 
 }  // namespace art

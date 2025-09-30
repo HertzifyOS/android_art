@@ -652,15 +652,8 @@ class TraceLowOverhead {
 
   static void Stop() { low_overhead_trace_ = nullptr; }
 
-  static void LogMethodTraceEvent(Thread* self, ArtMethod* method, bool is_entry)
-      REQUIRES_SHARED(Locks::mutator_lock_) {
-    if (is_entry) {
-      low_overhead_trace_->MethodEntered(self, method);
-    } else {
-      JValue return_value;
-      low_overhead_trace_->MethodExited(self, method, {}, return_value);
-    }
-  }
+  static void HandleBufferOverflow(Thread* self, ArtMethod* method, bool is_entry)
+      REQUIRES_SHARED(Locks::mutator_lock_);
 
  private:
   static Trace* low_overhead_trace_;
