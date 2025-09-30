@@ -87,6 +87,11 @@ bool MethodInIgnoreList(const std::string& method_name) {
       return true;
     }
   }
+
+  // Also ignore clinit methods. Classes maybe pre-initialized if they are a part of the image.
+  if (method_name.find("<clinit>") != std::string::npos) {
+    return true;
+  }
   return false;
 }
 

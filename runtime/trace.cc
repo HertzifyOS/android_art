@@ -505,27 +505,29 @@ void TraceWriter::RecordMethodInfoV2(mirror::Class* klass, uint8_t** buffer, siz
     if (!method.IsInvokable()) {
       continue;
     }
-
+    uint64_t method_id = reinterpret_cast<uint64_t>(&method);
+    // We use the method's pointer as the unique identifier for the trace. However, for proxy
+    // methods, we should get the name and signature from the  base method from the interface.
+    ArtMethod* base_method = method.GetInterfaceMethodIfProxy(kRuntimePointerSize);
     std::string class_name;
     const char* source_file;
-    if (method.IsCopied()) {
+    if (base_method->IsCopied()) {
       // For copied methods use method's declaring class which may not be the current class.
-      class_name = method.GetDeclaringClass()->PrettyDescriptor();
-      source_file = method.GetDeclaringClass()->GetSourceFile();
+      class_name = base_method->GetDeclaringClass()->PrettyDescriptor();
+      source_file = base_method->GetDeclaringClass()->GetSourceFile();
     } else {
-      DCHECK(klass == method.GetDeclaringClass());
+      DCHECK(base_method->IsProxyMethod() || klass == method.GetDeclaringClass());
       class_name = class_name_current;
       source_file = source_file_current;
     }
     int class_name_len = class_name.length();
     int source_file_len = strlen(source_file);
 
-    uint64_t method_id = reinterpret_cast<uint64_t>(&method);
     // TODO(mythria): Change how we report method infos in V2 to reduce the
     // repetition of the information about class and the source file.
-    const char* name = method.GetName();
+    const char* name = base_method->GetName();
     int name_len = strlen(name);
-    std::string signature = method.GetSignature().ToString();
+    std::string signature = base_method->GetSignature().ToString();
     int signature_len = signature.length();
     // We need 3 tabs in between and a \n at the end and hence 4 additional characters.
     int method_info_length = class_name_len + name_len + signature_len + source_file_len + 4;
