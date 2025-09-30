@@ -104,6 +104,9 @@ TEST_F(ThreadTest, ThreadExitSignalTest) {
 // Ensure that ScopedPriorityChange works correctly and interacts properly with
 // GetNicenessBeforeBoost().
 TEST_F(ThreadTest, ScopedPriorityChangeTest) {
+  // This is disabled on VM because it does not emulate Android's more generous
+  // setpriority() handling.
+  TEST_DISABLED_ON_VM();
 #if defined(ART_TARGET_ANDROID)
   Thread* self = Thread::Current();
   ASSERT_FALSE(self == nullptr);
