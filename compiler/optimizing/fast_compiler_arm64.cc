@@ -28,6 +28,7 @@
 #include "code_generation_data.h"
 #include "code_generator_arm64.h"
 #include "data_type-inl.h"
+#include "dex/bytecode_utils.h"
 #include "dex/code_item_accessors-inl.h"
 #include "dex/dex_file_exception_helpers.h"
 #include "dex/dex_instruction-inl.h"
@@ -400,6 +401,7 @@ class FastCompilerARM64 : public FastCompiler {
             CPURegister second,
             uint32_t dex_pc,
             DataType::Type type);
+  bool BuildSwitch(const Instruction& instruction, uint32_t dex_pc);
 
   // Update registers and masks for the merge point.
   void PrepareToBranch(uint32_t dex_pc) {
@@ -527,6 +529,14 @@ class FastCompilerARM64 : public FastCompiler {
         int32_t target_offset = instruction.GetTargetOffset();
         if (target_offset <= 0) {
           loop_header_pcs_.SetBit(dex_pc + target_offset);
+        }
+      } else if (instruction.IsSwitch()) {
+        DexSwitchTable table(instruction, dex_pc);
+        for (DexSwitchTableIterator s_it(table); !s_it.Done(); s_it.Advance()) {
+          int32_t target_offset = s_it.CurrentTargetOffset();
+          if (target_offset <= 0) {
+            loop_header_pcs_.SetBit(dex_pc + target_offset);
+          }
         }
       }
     }
@@ -2880,6 +2890,39 @@ bool FastCompilerARM64::BuildMoveResult(const Instruction& instruction,
   return true;
 }
 
+bool FastCompilerARM64::BuildSwitch(const Instruction& instruction, uint32_t dex_pc) {
+  if (!EnsureHasFrame()) {
+    return false;
+  }
+  Register reg = RegisterFrom(
+      GetExistingRegisterLocation(instruction.VRegA_31t(), DataType::Type::kInt32),
+      DataType::Type::kInt32);
+  if (HitUnimplemented()) {
+    return false;
+  }
+  DexSwitchTable table(instruction, dex_pc);
+
+  if (table.GetNumEntries() == 0) {
+    return true;
+  }
+  UseScratchRegisterScope temps(GetVIXLAssembler());
+  Register temp = temps.AcquireW();
+  MoveConstantsAndFpusToRegisters();
+  for (DexSwitchTableIterator it(table); !it.Done(); it.Advance()) {
+    int32_t target_offset = it.CurrentTargetOffset();
+    if (target_offset <= 0 && !CanHandleBackwardsBranch(dex_pc + target_offset)) {
+      return false;
+    }
+    vixl::aarch64::Label* label = GetLabelOf(dex_pc + target_offset);
+    UpdateMasks(dex_pc + it.CurrentTargetOffset());
+    __ Mov(temp, it.CurrentKey());
+    __ Cmp(reg, temp);
+    __ B(eq, label);
+  }
+  // The default case is a fallthrough to the next opcode..
+  return true;
+}
+
 // Don't error on the stack size of `ProcessDexInstruction`, we know we are not
 // going to stack overflow in the compiler.
 #pragma GCC diagnostic push
@@ -3661,7 +3704,7 @@ bool FastCompilerARM64::ProcessDexInstruction(const Instruction& instruction,
 
     case Instruction::SPARSE_SWITCH:
     case Instruction::PACKED_SWITCH: {
-      break;
+      return BuildSwitch(instruction, dex_pc);
     }
 
     case Instruction::UNUSED_3E ... Instruction::UNUSED_43:
