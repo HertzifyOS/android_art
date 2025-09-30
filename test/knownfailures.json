@@ -1379,7 +1379,7 @@
     },
     {
         "tests": ["656-checker-simd-opt-no-interp-ac"],
-        "variant": "interp-ac | trace",
+        "variant": "interp-ac | trace | stream",
         "description": ["Slow test. Prone to timeouts."]
     },
     {
