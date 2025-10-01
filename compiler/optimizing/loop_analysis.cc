@@ -175,7 +175,11 @@ class Arm64LoopHelper : public ArchDefaultLoopHelper {
     //  - The loop body shouldn't be "too big" (heuristic).
 
     uint32_t uf1 = kArm64SimdHeuristicMaxBodySizeInstr / instruction_count;
-    uint32_t uf2 = (trip_count - max_peel) / vector_length;
+    // Do the calculation in int64_t to get the right result, and bring it down to `UINT32_MAX` if
+    // it's bigger than that. Note that we are going to do a std::min with `unroll_cnt` below
+    // anyway (which is uint_32t).
+    int64_t unroll_factor_64 = (trip_count - max_peel) / vector_length;
+    uint32_t uf2 = (unroll_factor_64 > UINT32_MAX) ? UINT32_MAX : unroll_factor_64;
     uint32_t unroll_factor =
         TruncToPowerOfTwo(std::min({uf1, uf2, kArm64SimdMaxUnrollFactor}));
     DCHECK_GE(unroll_factor, 1u);
