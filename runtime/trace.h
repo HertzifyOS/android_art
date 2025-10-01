@@ -301,7 +301,12 @@ class TraceWriter {
       REQUIRES_SHARED(Locks::mutator_lock_) REQUIRES(!trace_writer_lock_);
 
   // Writes buffer contents to the file.
-  void WriteToFile(uint8_t* buffer, size_t offset);
+  bool WriteToFile(uint8_t* buffer, size_t bufer_len) REQUIRES(!trace_writer_lock_);
+  bool WriteToFileLocked(const void* buffer, size_t buffer_len) REQUIRES(trace_writer_lock_);
+  bool WriteToFileLocked(const void* header,
+                         size_t header_len,
+                         const void* buffer,
+                         size_t buffer_len) REQUIRES(trace_writer_lock_);
 
  private:
   void ReadValuesFromRecord(uintptr_t* method_trace_entries,
@@ -350,18 +355,8 @@ class TraceWriter {
   void EncodeEventBlockHeader(uint8_t* ptr, uint32_t thread_id, uint32_t num_records, uint32_t size)
       REQUIRES(trace_writer_lock_);
 
-  // Ensures there is sufficient space in the buffer to record the requested_size. If there is not
-  // enough sufficient space the current contents of the buffer are written to the file and
-  // current_index is reset to 0. This doesn't check if buffer_size is big enough to hold the
-  // requested size.
-  void EnsureSpace(uint8_t* buffer,
-                   size_t* current_index,
-                   size_t buffer_size,
-                   size_t required_size);
-
   // Flush tracing buffers from all the threads.
   void FlushAllThreadBuffers() REQUIRES(!Locks::thread_list_lock_) REQUIRES(!trace_writer_lock_);
-
 
   // Methods to output traced methods and threads.
   void DumpMethodList(std::ostream& os) REQUIRES_SHARED(Locks::mutator_lock_)

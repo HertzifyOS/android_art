@@ -471,11 +471,29 @@ uint8_t* TraceWriter::AddMethodInfoWriteTask(uint8_t* buffer,
   return reinterpret_cast<uint8_t*>(new_buf);
 }
 
-void TraceWriter::WriteToFile(uint8_t* buffer, size_t offset) {
+bool TraceWriter::WriteToFile(uint8_t* buffer, size_t length) {
   MutexLock mu(Thread::Current(), trace_writer_lock_);
-  if (!trace_file_->WriteFully(buffer, offset)) {
+  return WriteToFileLocked(buffer, length);
+}
+
+bool TraceWriter::WriteToFileLocked(const void* buffer, size_t length) {
+  if (!trace_file_->WriteFully(buffer, length)) {
     PLOG(WARNING) << "Failed streaming a tracing event.";
+    return false;
   }
+  return true;
+}
+
+bool TraceWriter::WriteToFileLocked(const void* header,
+                                    size_t header_len,
+                                    const void* buffer,
+                                    size_t buffer_len) {
+  if (!trace_file_->WriteFully(header, header_len) ||
+      !trace_file_->WriteFully(buffer, buffer_len)) {
+    PLOG(WARNING) << "Failed streaming a tracing event.";
+    return false;
+  }
+  return true;
 }
 
 void TraceWriter::RecordMethodInfoV2(mirror::Class* klass, uint8_t** buffer, size_t* offset) {
@@ -993,9 +1011,7 @@ TraceWriter::TraceWriter(File* trace_file,
   if (output_mode == TraceOutputMode::kStreaming || trace_format_version_ == Trace::kFormatV2) {
     // Flush the header information to the file. We use a per thread buffer, so
     // it is easier to just write the header information directly to file.
-    if (!trace_file_->WriteFully(buf_.get(), kTraceHeaderLength)) {
-      PLOG(WARNING) << "Failed streaming a tracing event.";
-    }
+    WriteToFileLocked(buf_.get(), kTraceHeaderLength);
     cur_offset_ = 0;
   }
   // Thread index of 0 is a special identifier used to distinguish between trace
@@ -1131,14 +1147,13 @@ void TraceWriter::FinishTracing(int flags, bool flush_entries) {
       Append4LE(buf + 3, static_cast<uint32_t>(summary.length()));
       // Write the trace summary. The summary is identical to the file header when
       // the output mode is not streaming (except for methods).
-      if (!trace_file_->WriteFully(buf, sizeof(buf)) ||
-          !trace_file_->WriteFully(summary.c_str(), summary.length())) {
-        PLOG(WARNING) << "Failed streaming a tracing event.";
-      }
+      MutexLock mu(Thread::Current(), trace_writer_lock_);
+      WriteToFileLocked(buf, sizeof(buf), summary.c_str(), summary.length());
     } else if (trace_output_mode_ == TraceOutputMode::kFile) {
       DCHECK_NE(trace_file_.get(), nullptr);
-      if (!trace_file_->WriteFully(summary.c_str(), summary.length()) ||
-          !trace_file_->WriteFully(buf_.get(), final_offset)) {
+      MutexLock mu(Thread::Current(), trace_writer_lock_);
+      if (!WriteToFileLocked(summary.c_str(), summary.length()) ||
+          !WriteToFileLocked(buf_.get(), final_offset)) {
         std::string detail(StringPrintf("Trace data write failed: %s", strerror(errno)));
         PLOG(ERROR) << detail;
         ThrowRuntimeException("%s", detail.c_str());
@@ -1158,9 +1173,7 @@ void TraceWriter::FinishTracing(int flags, bool flush_entries) {
     DCHECK(trace_output_mode_ != TraceOutputMode::kDDMS);
 
     if (trace_output_mode_ == TraceOutputMode::kFile) {
-      if (!trace_file_->WriteFully(buf_.get(), final_offset)) {
-        PLOG(WARNING) << "Failed to write trace output";
-      }
+      WriteToFile(buf_.get(), final_offset);
     }
 
     // Write the summary packet
@@ -1169,10 +1182,8 @@ void TraceWriter::FinishTracing(int flags, bool flush_entries) {
     Append2LE(buf + 1, static_cast<uint32_t>(summary.length()));
     // Write the trace summary. Reports information about tracing mode, number of records and
     // clock overhead in plain text format.
-    if (!trace_file_->WriteFully(buf, sizeof(buf)) ||
-        !trace_file_->WriteFully(summary.c_str(), summary.length())) {
-      PLOG(WARNING) << "Failed streaming a tracing event.";
-    }
+    MutexLock mu(Thread::Current(), trace_writer_lock_);
+    WriteToFileLocked(buf, sizeof(buf), summary.c_str(), summary.length());
   }
 
   if (trace_file_.get() != nullptr) {
@@ -1316,11 +1327,10 @@ void TraceWriter::RecordThreadInfo(Thread* thread) {
   DCHECK(thread_name.length() < (1 << 16));
   Append2LE(header + 5, static_cast<uint16_t>(thread_name.length()));
 
-  if (!trace_file_->WriteFully(header, kThreadNameHeaderSize) ||
-      !trace_file_->WriteFully(reinterpret_cast<const uint8_t*>(thread_name.c_str()),
-                               thread_name.length())) {
-    PLOG(WARNING) << "Failed streaming a tracing event.";
-  }
+  WriteToFileLocked(header,
+                    kThreadNameHeaderSize,
+                    reinterpret_cast<const uint8_t*>(thread_name.c_str()),
+                    thread_name.length());
 }
 
 void TraceWriter::PreProcessTraceForMethodInfos(
@@ -1366,10 +1376,7 @@ void TraceWriter::RecordMethodInfoV1(const std::string& method_info_line, uint64
   header_size = kMethodNameHeaderSize;
 
   const uint8_t* ptr = reinterpret_cast<const uint8_t*>(method_line.c_str());
-  if (!trace_file_->WriteFully(method_header, header_size) ||
-      !trace_file_->WriteFully(ptr, method_line_length)) {
-    PLOG(WARNING) << "Failed streaming a tracing event.";
-  }
+  WriteToFileLocked(method_header, header_size, ptr, method_line_length);
 }
 
 void TraceWriter::FlushAllThreadBuffers() {
@@ -1661,9 +1668,7 @@ size_t TraceWriter::FlushEntriesFormatV1(
 
   if (trace_output_mode_ == TraceOutputMode::kStreaming) {
     // Flush the contents of buffer to file.
-    if (!trace_file_->WriteFully(buffer_ptr, buffer_index)) {
-      PLOG(WARNING) << "Failed streaming a tracing event.";
-    }
+    WriteToFileLocked(buffer_ptr, buffer_index);
   } else {
     // In non-streaming mode, we keep the data in the buffer and write to the
     // file when tracing has stopped. Just update the offset of the buffer.
@@ -1741,9 +1746,7 @@ size_t TraceWriter::FlushEntriesFormatV2(uintptr_t* method_trace_entries,
       return curr_record_index;
     } else {
       // Flush the contents of the buffer to the file.
-      if (!trace_file_->WriteFully(init_buffer_ptr, current_buffer_ptr - init_buffer_ptr)) {
-        PLOG(WARNING) << "Failed streaming a tracing event.";
-      }
+      WriteToFileLocked(init_buffer_ptr, current_buffer_ptr - init_buffer_ptr);
     }
   }
 
@@ -1754,20 +1757,21 @@ void TraceWriter::FlushBuffer(uintptr_t* method_trace_entries,
                               size_t current_offset,
                               size_t tid,
                               const std::unordered_map<ArtMethod*, std::string>& method_infos) {
-  // Take a trace_writer_lock_ to serialize writes across threads. We also need to allocate a unique
-  // method id for each method. We do that by maintaining a map from id to method for each newly
-  // seen method. trace_writer_lock_ is required to serialize these.
-  MutexLock mu(Thread::Current(), trace_writer_lock_);
-
   size_t num_entries = GetNumEntries(clock_source_);
   size_t num_records = (kPerThreadBufSize - current_offset) / num_entries;
   DCHECK_EQ((kPerThreadBufSize - current_offset) % num_entries, 0u);
 
   int num_records_written = 0;
   if (trace_format_version_ == Trace::kFormatV1) {
+    // Take a trace_writer_lock_ to serialize writes across threads. We also need to allocate a
+    // unique method id for each method. We do that by maintaining a map from id to method for each
+    // newly seen method. trace_writer_lock_ is required to serialize these.
+    MutexLock mu(Thread::Current(), trace_writer_lock_);
     num_records_written =
         FlushEntriesFormatV1(method_trace_entries, tid, method_infos, current_offset, num_records);
   } else {
+    // TODO: refactor v2 so only non-streaming takes the lock.
+    MutexLock mu(Thread::Current(), trace_writer_lock_);
     num_records_written = FlushEntriesFormatV2(method_trace_entries, tid, num_records);
   }
   num_records_ += num_records_written;
@@ -1875,20 +1879,6 @@ void TraceWriter::EncodeEventBlockHeader(uint8_t* ptr,
   DCHECK_LT(num_records, 1u << 24);
   Append3LE(ptr + 5, num_records);
   Append4LE(ptr + 8, size);
-}
-
-void TraceWriter::EnsureSpace(uint8_t* buffer,
-                              size_t* current_index,
-                              size_t buffer_size,
-                              size_t required_size) {
-  if (*current_index + required_size < buffer_size) {
-    return;
-  }
-
-  if (!trace_file_->WriteFully(buffer, *current_index)) {
-    PLOG(WARNING) << "Failed streaming a tracing event.";
-  }
-  *current_index = 0;
 }
 
 void TraceWriter::DumpMethodList(std::ostream& os) {
