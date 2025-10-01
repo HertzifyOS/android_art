@@ -323,7 +323,8 @@ class Monitor {
   static uint32_t stack_dump_lock_profiling_threshold_;
   static bool capture_method_eagerly_;
 
-  // Holding the monitor N times is represented by holding monitor_lock_ N times.
+  // monitor_lock_ is acquired on outermost acquisition of monitor, and held while the monitor is
+  // held.
   Mutex monitor_lock_ DEFAULT_MUTEX_ACQUIRED_AFTER;
 
   // Pretend to unlock monitor lock.
