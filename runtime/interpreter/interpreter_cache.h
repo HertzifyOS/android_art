@@ -53,6 +53,9 @@ class ALIGNED(16) InterpreterCache {
   // Value of 256 has around 75% cache hit rate.
   static constexpr size_t kSize = 256;
 
+  // The lowest bit of the key that's used for index calculation.
+  static constexpr size_t kKeyLowBit = 2u;
+
   InterpreterCache() {
     // We can not use the Clear() method since the constructor will not
     // be called from the owning thread.
@@ -73,7 +76,7 @@ class ALIGNED(16) InterpreterCache {
  private:
   static ALWAYS_INLINE size_t IndexOf(const void* key) {
     static_assert(IsPowerOfTwo(kSize), "Size must be power of two");
-    size_t index = (reinterpret_cast<uintptr_t>(key) >> 2) & (kSize - 1);
+    size_t index = (reinterpret_cast<uintptr_t>(key) >> kKeyLowBit) & (kSize - 1);
     DCHECK_LT(index, kSize);
     return index;
   }

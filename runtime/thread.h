@@ -1775,6 +1775,14 @@ class EXPORT Thread {
     return WhichPowerOf2(InterpreterCache::kSize);
   }
 
+  static constexpr int InterpreterCacheEntrySizeLog2() {
+    return WhichPowerOf2(sizeof(InterpreterCache::Entry));
+  }
+
+  static constexpr int InterpreterCacheKeyLowBit() {
+    return InterpreterCache::kKeyLowBit;
+  }
+
   static constexpr uint32_t AllThreadFlags() {
     return enum_cast<uint32_t>(ThreadFlag::kLastFlag) |
            (enum_cast<uint32_t>(ThreadFlag::kLastFlag) - 1u);

@@ -1683,7 +1683,8 @@ OAT_ENTRY ExecuteNterpImpl
    // Fetch some information from the thread cache.
    // Uses ip and lr as temporaries.
    add      ip, rSELF, #THREAD_INTERPRETER_CACHE_OFFSET       // cache address
-   ubfx     lr, rPC, #2, #THREAD_INTERPRETER_CACHE_SIZE_LOG2  // entry index
+   ubfx     lr, rPC, #THREAD_INTERPRETER_CACHE_KEY_LOW_BIT, #THREAD_INTERPRETER_CACHE_SIZE_LOG2
+                                           // entry index
    add      ip, ip, lr, lsl #3             // entry address within the cache
    // In T32, we would use `ldrd ip, \dest_reg, [ip]`
    ldr      ${dest_reg}, [ip, #4]          // value (offset)

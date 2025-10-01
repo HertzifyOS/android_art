@@ -230,13 +230,13 @@ END \name
 #if (THREAD_INTERPRETER_CACHE_SIZE_LOG2 != 8)
 #error Expected interpreter cache array size = 256 elements
 #endif
-#if (THREAD_INTERPRETER_CACHE_SIZE_SHIFT != 2)
-#error Expected interpreter cache entry size = 16 bytes
+#if (THREAD_INTERPRETER_CACHE_KEY_TO_ENTRY_SHIFT != 2)
+#error Expected interpreter cache key to entry shift 2
 #endif
 #if ((THREAD_INTERPRETER_CACHE_OFFSET & 0x3) != 0)
 #error Expected interpreter cache offset to be 4-byte aligned
 #endif
-    andi \z0, xPC, 0xFF << 2
+    andi \z0, xPC, THREAD_INTERPRETER_CACHE_KEY_MASK
     addi \z0, \z0, THREAD_INTERPRETER_CACHE_OFFSET >> 2
     sh2add \z0, \z0, xSELF  // z0 := entry's address
     ld \z1, (\z0)           // z1 := dex PC

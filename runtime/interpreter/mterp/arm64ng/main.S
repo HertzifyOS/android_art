@@ -1704,7 +1704,8 @@ OAT_ENTRY ExecuteNterpImpl
 %def fetch_from_thread_cache(dest_reg, miss_label):
    // Fetch some information from the thread cache.
    // Uses ip and ip2 as temporaries.
-   ubfx     ip2, xPC, #2, #THREAD_INTERPRETER_CACHE_SIZE_LOG2  // entry index
+   ubfx     ip2, xPC, #THREAD_INTERPRETER_CACHE_KEY_LOW_BIT, #THREAD_INTERPRETER_CACHE_SIZE_LOG2
+                                           // entry index
    add      ip, xCACHE, ip2, lsl #4        // entry address within the cache
    ldp      ip, ${dest_reg}, [ip]          // entry key (pc) and value (offset)
    cmp      ip, xPC

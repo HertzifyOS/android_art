@@ -1789,8 +1789,8 @@ OAT_ENTRY ExecuteNterpImpl
    // Uses rax, rdx, rcx as temporaries.
    movq rSELF:THREAD_SELF_OFFSET, %rax
    movq rPC, %rdx
-   salq MACRO_LITERAL(THREAD_INTERPRETER_CACHE_SIZE_SHIFT), %rdx
-   andq MACRO_LITERAL(THREAD_INTERPRETER_CACHE_SIZE_MASK), %rdx
+   andq MACRO_LITERAL(THREAD_INTERPRETER_CACHE_KEY_MASK), %rdx
+   salq MACRO_LITERAL(THREAD_INTERPRETER_CACHE_KEY_TO_ENTRY_SHIFT), %rdx
    cmpq THREAD_INTERPRETER_CACHE_OFFSET(%rax, %rdx, 1), rPC
    jne ${miss_label}
    movq __SIZEOF_POINTER__+THREAD_INTERPRETER_CACHE_OFFSET(%rax, %rdx, 1), ${dest_reg}

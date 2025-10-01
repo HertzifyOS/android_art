@@ -1861,8 +1861,8 @@ OAT_ENTRY ExecuteNterpImpl
    // Uses eax, and ecx as temporaries.
    movl rSELF:THREAD_SELF_OFFSET, %eax
    movl rPC, %ecx
-   sall MACRO_LITERAL(THREAD_INTERPRETER_CACHE_SIZE_SHIFT), %ecx
-   andl MACRO_LITERAL(THREAD_INTERPRETER_CACHE_SIZE_MASK), %ecx
+   andl MACRO_LITERAL(THREAD_INTERPRETER_CACHE_KEY_MASK), %ecx
+   sall MACRO_LITERAL(THREAD_INTERPRETER_CACHE_KEY_TO_ENTRY_SHIFT), %ecx
    cmpl THREAD_INTERPRETER_CACHE_OFFSET(%eax, %ecx, 1), rPC
    jne  ${miss_label}
    movl __SIZEOF_POINTER__+THREAD_INTERPRETER_CACHE_OFFSET(%eax, %ecx, 1), ${dest_reg}
