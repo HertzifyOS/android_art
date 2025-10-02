@@ -268,6 +268,7 @@ class FastCompilerARM64 : public FastCompiler {
 
   bool GenerateFrame();
   void GenerateSuspendCheck();
+  void IncrementHotness(Register method);
 
   // Generate code for a frame exit.
   void PopFrameAndReturn();
@@ -862,6 +863,10 @@ bool FastCompilerARM64::ProcessInstructions() {
       __ Bind(label);
       if (is_loop_header) {
         GenerateSuspendCheck();
+        UseScratchRegisterScope temps(GetVIXLAssembler());
+        Register temp = temps.AcquireX();
+        __ Ldr(temp, MemOperand(sp, 0));
+        IncrementHotness(temp);
       }
     }
     if (is_catch) {
@@ -1263,6 +1268,25 @@ bool FastCompilerARM64::EnsureHasFrame() {
   return true;
 }
 
+void FastCompilerARM64::IncrementHotness(Register method) {
+  UseScratchRegisterScope temps(GetVIXLAssembler());
+  Register counter = temps.AcquireW();
+  vixl::aarch64::Label increment, done;
+  uint32_t entrypoint_offset =
+      GetThreadOffset<kArm64PointerSize>(kQuickCompileBaseline).Int32Value();
+
+  __ Ldrh(counter, MemOperand(method, ArtMethod::HotnessCountOffset().Int32Value()));
+  __ Cbnz(counter, &increment);
+  __ Ldr(lr, MemOperand(tr, entrypoint_offset));
+  // Note: we don't record the call here (and therefore don't generate a stack
+  // map), as the entrypoint should never be suspended.
+  __ Blr(lr);
+  __ Bind(&increment);
+  __ Add(counter, counter, -1);
+  __ Strh(counter, MemOperand(method, ArtMethod::HotnessCountOffset().Int32Value()));
+  __ Bind(&done);
+}
+
 bool FastCompilerARM64::GenerateFrame() {
   DCHECK(!has_frame_);
   has_frame_ = true;
@@ -1342,22 +1366,7 @@ bool FastCompilerARM64::GenerateFrame() {
   // Increment hotness. We use the ArtMethod's counter as we're not allocating a
   // `ProfilingInfo` object in the fast baseline compiler.
   if (!Runtime::Current()->IsAotCompiler()) {
-    UseScratchRegisterScope temps(masm);
-    Register counter = temps.AcquireW();
-    vixl::aarch64::Label increment, done;
-    uint32_t entrypoint_offset =
-        GetThreadOffset<kArm64PointerSize>(kQuickCompileBaseline).Int32Value();
-
-    __ Ldrh(counter, MemOperand(kArtMethodRegister, ArtMethod::HotnessCountOffset().Int32Value()));
-    __ Cbnz(counter, &increment);
-    __ Ldr(lr, MemOperand(tr, entrypoint_offset));
-    // Note: we don't record the call here (and therefore don't generate a stack
-    // map), as the entrypoint should never be suspended.
-    __ Blr(lr);
-    __ Bind(&increment);
-    __ Add(counter, counter, -1);
-    __ Strh(counter, MemOperand(kArtMethodRegister, ArtMethod::HotnessCountOffset().Int32Value()));
-    __ Bind(&done);
+    IncrementHotness(kArtMethodRegister);
   }
   return true;
 }
