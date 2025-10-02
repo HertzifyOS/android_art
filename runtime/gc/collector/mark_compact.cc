@@ -1526,7 +1526,7 @@ void MarkCompact::ReMarkRoots(Runtime* runtime) {
 }
 
 void MarkCompact::MarkingPause() {
-  TimingLogger::ScopedTiming t("(Paused)MarkingPause", GetTimings());
+  TimingLogger::ScopedTiming t("MarkingPause", GetTimings());
   Runtime* runtime = Runtime::Current();
   ScopedPause pause(this);
   {
@@ -1534,6 +1534,7 @@ void MarkCompact::MarkingPause() {
     WriterMutexLock mu(thread_running_gc_, *Locks::heap_bitmap_lock_);
     VerifyNoMissingCardMarks();
     {
+      TimingLogger::ScopedTiming t2("(Paused)StackScan", GetTimings());
       MutexLock mu2(thread_running_gc_, *Locks::runtime_shutdown_lock_);
       MutexLock mu3(thread_running_gc_, *Locks::thread_list_lock_);
       std::list<Thread*> thread_list = runtime->GetThreadList()->GetList();
@@ -1564,11 +1565,9 @@ void MarkCompact::MarkingPause() {
     ReMarkRoots(runtime);
     // Scan dirty objects.
     RecursiveMarkDirtyObjects(/*paused*/ true, accounting::CardTable::kCardDirty);
-    {
-      TimingLogger::ScopedTiming t2("SwapStacks", GetTimings());
-      heap_->SwapStacks();
-      live_stack_freeze_size_ = heap_->GetLiveStack()->Size();
-    }
+
+    heap_->SwapStacks();
+    live_stack_freeze_size_ = heap_->GetLiveStack()->Size();
   }
   // TODO: For PreSweepingGcVerification(), find correct strategy to visit/walk
   // objects in bump-pointer space when we have a mark-bitmap to indicate live
