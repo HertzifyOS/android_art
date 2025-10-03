@@ -3352,10 +3352,25 @@ bool MethodVerifier<kVerifierDebug>::CodeFlowVerifyInstruction(uint32_t* start_g
     }
     case Instruction::IF_EQ:
     case Instruction::IF_NE: {
+      // Compatibility table for comparison. Note that:
+      //   - IsIntegralTypes includes IsZero, and IsReferenceTypes includes both IsZero/IsNull
+      //   - null is comparable with the same types as non-null reference, in particular,
+      //     it's not comparable with non-zero integral types
+      //
+      // Abbreviations: Z: IsZero, N: IsNull, R: IsReferenceTypes, I: IsIntegralTypes, X: other.
+      //
+      //         | Z       N       R-{Z,N} I-{Z}   X
+      // --------|----------------------------------
+      // Z       | .       .       .       .       x
+      // N       | .       .       .       x       x
+      // R-{Z,N} | .       .       .       x       x
+      // I-{Z}   | .       x       x       .       x
+      // X       | x       x       x       x       x
+      //
       const RegType& reg_type1 = work_line_->GetRegisterType(this, inst->VRegA_22t(inst_data));
       const RegType& reg_type2 = work_line_->GetRegisterType(this, inst->VRegB_22t(inst_data));
       bool mismatch = false;
-      if (reg_type1.IsZeroOrNull()) {  // zero then integral or reference expected
+      if (reg_type1.IsZero()) {  // zero then integral or reference expected
         mismatch = !reg_type2.IsReferenceTypes() && !reg_type2.IsIntegralTypes();
       } else if (reg_type1.IsReferenceTypes()) {  // both references?
         mismatch = !reg_type2.IsReferenceTypes();
