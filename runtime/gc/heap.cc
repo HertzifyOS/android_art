@@ -418,6 +418,7 @@ Heap::Heap(size_t initial_size,
       use_homogeneous_space_compaction_for_oom_(use_homogeneous_space_compaction_for_oom),
       use_generational_gc_(use_generational_gc),
       running_collection_is_blocking_(false),
+      running_collection_delayed_allocation_(false),
       blocking_gc_count_(0U),
       blocking_gc_time_(0U),
       last_update_time_gc_count_rate_histograms_(  // Round down by the window duration.
@@ -2871,6 +2872,8 @@ collector::GcType Heap::CollectGarbageInternal(collector::GcType gc_type,
       }
       collector_type_running_ = collector_type_;
       last_gc_cause_ = gc_cause;
+      running_collection_delayed_allocation_ |= (gc_cause == kGcCauseForAlloc);
+      running_collection_is_blocking_ |= running_collection_delayed_allocation_;
     }
     if (gc_cause == kGcCauseForAlloc && runtime->HasStatsEnabled()) {
       ++runtime->GetStats()->gc_for_alloc_count;
@@ -3044,6 +3047,7 @@ void Heap::FinishGC(Thread* self, collector::GcType gc_type) {
   }
   // Reset.
   running_collection_is_blocking_ = false;
+  running_collection_delayed_allocation_ = false;
   thread_running_gc_ = nullptr;
   if (gc_type != collector::kGcTypeNone) {
     gcs_completed_.fetch_add(1, std::memory_order_release);
@@ -3738,6 +3742,7 @@ collector::GcType Heap::WaitForGcToCompleteLocked(GcCause cause, Thread* self, b
         // task daemon thread, the currently running collection is
         // considered as a blocking GC.
         running_collection_is_blocking_ = true;
+        running_collection_delayed_allocation_ |= (cause == kGcCauseForAlloc);
         VLOG(gc) << "Waiting for a blocking GC " << cause;
       }
       SCOPED_TRACE << "GC: Wait For Completion " << cause;
@@ -3752,12 +3757,6 @@ collector::GcType Heap::WaitForGcToCompleteLocked(GcCause cause, Thread* self, b
       LOG(INFO) << "WaitForGcToComplete blocked " << cause << " on " << last_gc_cause << " for "
                 << PrettyDuration(wait_time);
     }
-  }
-  if (!task_processor_->IsRunningThread(self)) {
-    // The current thread is about to run a collection. If the thread
-    // is not the heap task daemon thread, it's considered as a
-    // blocking GC (i.e., blocking itself).
-    running_collection_is_blocking_ = true;
   }
   DCHECK(only_one || collector_type_running_ == kCollectorTypeNone);
   return last_gc_type;
@@ -3834,7 +3833,8 @@ void Heap::GrowForUtilization(collector::GarbageCollector* collector_ran,
 
   uint64_t target_size, grow_bytes;
   collector::GcType gc_type = collector_ran->GetGcType();
-  MutexLock mu(Thread::Current(), process_state_update_lock_);
+  Thread* self = Thread::Current();
+  MutexLock mu(self, process_state_update_lock_);
   // Use the multiplier to grow more for foreground.
   const double multiplier = HeapGrowthMultiplier();
   collector::GarbageCollector* next_collector = nullptr;
@@ -3917,12 +3917,12 @@ void Heap::GrowForUtilization(collector::GarbageCollector* collector_ran,
         time_based_gc_threshold_ = time_based_gc_threshold_factor_ * expected_gc_cost_ms;
         last_gc_start_time_ = current_gc_iteration_.GetStartTime();
 
-        RequestTimeBasedGcThresholdCheck(Thread::Current());
+        RequestTimeBasedGcThresholdCheck(self);
       }
 
-      const uint64_t freed_bytes = current_gc_iteration_.GetFreedBytes() +
-          current_gc_iteration_.GetFreedLargeObjectBytes() +
-          current_gc_iteration_.GetFreedRevokeBytes();
+      const size_t freed_bytes = current_gc_iteration_.GetFreedBytes() +
+                                 current_gc_iteration_.GetFreedLargeObjectBytes() +
+                                 current_gc_iteration_.GetFreedRevokeBytes();
       // Records the number of bytes allocated at the time of GC finish,excluding the number of
       // bytes allocated during GC.
       num_bytes_alive_after_gc_ = UnsignedDifference(bytes_allocated_before_gc, freed_bytes);
@@ -3932,6 +3932,33 @@ void Heap::GrowForUtilization(collector::GarbageCollector* collector_ran,
       const size_t bytes_allocated_during_gc =
           UnsignedDifference(bytes_allocated + freed_bytes, bytes_allocated_before_gc);
       // Calculate when to perform the next ConcurrentGC.
+      {
+        MutexLock mu2(self, *gc_complete_lock_);  // For running_collection_is_blocking_.
+        if (running_collection_delayed_allocation_) {
+          // Some threads were not able to allocate at normal rate.  bytes_allocated_during_gc is
+          // not indicative of true allocation rate.
+          // It is tempting to get out of this mess by immediately collecting again, increasing
+          // our chance of not blocking. But it is likely that we did not allocate much during the
+          // "allocate black" section of the last GC, and if the next GC is sticky, the window
+          // before we allocate black again tends to be short. So there will not be enough to
+          // collect for the GC to be effective. So try to give ourselves a little bit of time
+          // before we collect again.
+          uint64_t headroom = std::min(freed_bytes, growth_limit_ - bytes_allocated);
+          size_t fraction_allocated_before_start;
+          if (headroom < 11 * bytes_allocated_during_gc / 10) {
+            // We managed to allocate almost as much during our GC as our remaining headroom,
+            // making the situation somewhat hopeless. It's probably best just to collect again
+            // immediately, and maybe push back the next jank episode a bit.
+            fraction_allocated_before_start = 1000;  // An otherwise arbitrary large number.
+          } else {
+            fraction_allocated_before_start =
+                next_gc_type_ == collector::kGcTypeSticky ? 3 : 5;  // FIXME: needs tuning.
+          }
+          min_foreground_concurrent_start_bytes_ = concurrent_start_bytes_ =
+              bytes_allocated + headroom / fraction_allocated_before_start;
+          return;
+        }
+      }
       // Estimate how many remaining bytes we will have when we need to start the next GC.
       size_t remaining_bytes = bytes_allocated_during_gc;
       // If the gc-type is changing then adjust remaining_bytes such that we don't give too
