@@ -261,12 +261,17 @@ public class BackgroundDexoptJob implements ArtServiceJobInterface {
                 long freedBytes = mInjector.getArtManagerLocal().cleanup(snapshot);
                 AsLog.i(String.format("Freed %d bytes", freedBytes));
             }
-            // Clean up files for legacy dexopt.
-            new File(Environment.getDataDirectory(), "system/package-cstats.list").delete();
-            new File(Environment.getDataDirectory(), "system/package-dex-usage.list").delete();
-            // TODO(b/258223472): Also delete "package-dcl.list" and "package-usage.list".
+            cleanupLegacyDexoptFiles();
         }
         return CompletedResult.create(dexoptResultByPass, durationMsByPass);
+    }
+
+    private void cleanupLegacyDexoptFiles() {
+        new File(Environment.getDataDirectory(), "system/package-dex-usage.list").delete();
+        if (Build.VERSION.SDK_INT_FULL >= Build.VERSION_CODES_FULL.BAKLAVA_1) {
+            new File(Environment.getDataDirectory(), "system/package-cstats.list").delete();
+        }
+        // TODO(b/258223472): Also delete "package-dcl.list" and "package-usage.list".
     }
 
     private void writeStats(@NonNull Result result) {
