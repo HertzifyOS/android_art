@@ -16,11 +16,11 @@ func (r testInstallInfo) Encode(ctx gobtools.EncContext, buf *bytes.Buffer) erro
 	var err error
 
 	if r.Testcases == nil {
-		if err = gobtools.EncodeSimple(buf, int32(-1)); err != nil {
+		if err = gobtools.EncodeInt(buf, -1); err != nil {
 			return err
 		}
 	} else {
-		if err = gobtools.EncodeSimple(buf, int32(len(r.Testcases))); err != nil {
+		if err = gobtools.EncodeInt(buf, len(r.Testcases)); err != nil {
 			return err
 		}
 		for k, v := range r.Testcases {
@@ -34,11 +34,11 @@ func (r testInstallInfo) Encode(ctx gobtools.EncContext, buf *bytes.Buffer) erro
 	}
 
 	if r.TestMap == nil {
-		if err = gobtools.EncodeSimple(buf, int32(-1)); err != nil {
+		if err = gobtools.EncodeInt(buf, -1); err != nil {
 			return err
 		}
 	} else {
-		if err = gobtools.EncodeSimple(buf, int32(len(r.TestMap))); err != nil {
+		if err = gobtools.EncodeInt(buf, len(r.TestMap)); err != nil {
 			return err
 		}
 		for k, v := range r.TestMap {
@@ -46,11 +46,11 @@ func (r testInstallInfo) Encode(ctx gobtools.EncContext, buf *bytes.Buffer) erro
 				return err
 			}
 			if v == nil {
-				if err = gobtools.EncodeSimple(buf, int32(-1)); err != nil {
+				if err = gobtools.EncodeInt(buf, -1); err != nil {
 					return err
 				}
 			} else {
-				if err = gobtools.EncodeSimple(buf, int32(len(v))); err != nil {
+				if err = gobtools.EncodeInt(buf, len(v)); err != nil {
 					return err
 				}
 				for val1 := 0; val1 < len(v); val1++ {
@@ -67,8 +67,8 @@ func (r testInstallInfo) Encode(ctx gobtools.EncContext, buf *bytes.Buffer) erro
 func (r *testInstallInfo) Decode(ctx gobtools.EncContext, buf *bytes.Reader) error {
 	var err error
 
-	var val1 int32
-	err = gobtools.DecodeSimple[int32](buf, &val1)
+	var val1 int
+	err = gobtools.DecodeInt(buf, &val1)
 	if err != nil {
 		return err
 	}
@@ -92,8 +92,8 @@ func (r *testInstallInfo) Decode(ctx gobtools.EncContext, buf *bytes.Reader) err
 		}
 	}
 
-	var val6 int32
-	err = gobtools.DecodeSimple[int32](buf, &val6)
+	var val6 int
+	err = gobtools.DecodeInt(buf, &val6)
 	if err != nil {
 		return err
 	}
@@ -106,8 +106,8 @@ func (r *testInstallInfo) Decode(ctx gobtools.EncContext, buf *bytes.Reader) err
 			if err != nil {
 				return err
 			}
-			var val10 int32
-			err = gobtools.DecodeSimple[int32](buf, &val10)
+			var val10 int
+			err = gobtools.DecodeInt(buf, &val10)
 			if err != nil {
 				return err
 			}
