@@ -23,11 +23,11 @@ func (r testInstallInfo) Encode(ctx gobtools.EncContext, buf *bytes.Buffer) erro
 		if err = gobtools.EncodeInt(buf, len(r.Testcases)); err != nil {
 			return err
 		}
-		for k, v := range r.Testcases {
-			if err = gobtools.EncodeString(buf, k); err != nil {
+		for val1, val2 := range r.Testcases {
+			if err = gobtools.EncodeString(buf, val1); err != nil {
 				return err
 			}
-			if err = gobtools.EncodeInterface(ctx, buf, v); err != nil {
+			if err = gobtools.EncodeInterface(ctx, buf, val2); err != nil {
 				return err
 			}
 		}
@@ -41,20 +41,20 @@ func (r testInstallInfo) Encode(ctx gobtools.EncContext, buf *bytes.Buffer) erro
 		if err = gobtools.EncodeInt(buf, len(r.TestMap)); err != nil {
 			return err
 		}
-		for k, v := range r.TestMap {
-			if err = gobtools.EncodeString(buf, k); err != nil {
+		for val3, val4 := range r.TestMap {
+			if err = gobtools.EncodeString(buf, val3); err != nil {
 				return err
 			}
-			if v == nil {
+			if val4 == nil {
 				if err = gobtools.EncodeInt(buf, -1); err != nil {
 					return err
 				}
 			} else {
-				if err = gobtools.EncodeInt(buf, len(v)); err != nil {
+				if err = gobtools.EncodeInt(buf, len(val4)); err != nil {
 					return err
 				}
-				for val1 := 0; val1 < len(v); val1++ {
-					if err = gobtools.EncodeString(buf, v[val1]); err != nil {
+				for val5 := 0; val5 < len(val4); val5++ {
+					if err = gobtools.EncodeString(buf, val4[val5]); err != nil {
 						return err
 					}
 				}
@@ -75,52 +75,52 @@ func (r *testInstallInfo) Decode(ctx gobtools.EncContext, buf *bytes.Reader) err
 	if val1 != -1 {
 		r.Testcases = make(map[string]android.Path, val1)
 		for val2 := 0; val2 < int(val1); val2++ {
-			var k string
-			var v android.Path
-			err = gobtools.DecodeString(buf, &k)
+			var val3 string
+			var val4 android.Path
+			err = gobtools.DecodeString(buf, &val3)
 			if err != nil {
 				return err
 			}
-			if val5, err := gobtools.DecodeInterface(ctx, buf); err != nil {
+			if val7, err := gobtools.DecodeInterface(ctx, buf); err != nil {
 				return err
-			} else if val5 == nil {
-				v = nil
+			} else if val7 == nil {
+				val4 = nil
 			} else {
-				v = val5.(android.Path)
+				val4 = val7.(android.Path)
 			}
-			r.Testcases[k] = v
+			r.Testcases[val3] = val4
 		}
 	}
 
-	var val6 int
-	err = gobtools.DecodeInt(buf, &val6)
+	var val8 int
+	err = gobtools.DecodeInt(buf, &val8)
 	if err != nil {
 		return err
 	}
-	if val6 != -1 {
-		r.TestMap = make(map[string][]string, val6)
-		for val7 := 0; val7 < int(val6); val7++ {
-			var k string
-			var v []string
-			err = gobtools.DecodeString(buf, &k)
+	if val8 != -1 {
+		r.TestMap = make(map[string][]string, val8)
+		for val9 := 0; val9 < int(val8); val9++ {
+			var val10 string
+			var val11 []string
+			err = gobtools.DecodeString(buf, &val10)
 			if err != nil {
 				return err
 			}
-			var val10 int
-			err = gobtools.DecodeInt(buf, &val10)
+			var val14 int
+			err = gobtools.DecodeInt(buf, &val14)
 			if err != nil {
 				return err
 			}
-			if val10 != -1 {
-				v = make([]string, val10)
-				for val11 := 0; val11 < int(val10); val11++ {
-					err = gobtools.DecodeString(buf, &v[val11])
+			if val14 != -1 {
+				val11 = make([]string, val14)
+				for val15 := 0; val15 < int(val14); val15++ {
+					err = gobtools.DecodeString(buf, &val11[val15])
 					if err != nil {
 						return err
 					}
 				}
 			}
-			r.TestMap[k] = v
+			r.TestMap[val10] = val11
 		}
 	}
 
