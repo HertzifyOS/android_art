@@ -151,7 +151,7 @@ class RegisterAllocatorLinearScan::LinearScan {
   LinearScan(RegisterAllocatorLinearScan* register_allocator, CoreRegisterTag /*tag*/)
       : codegen_(register_allocator->codegen_),
         number_of_registers_(codegen_->GetNumberOfCoreRegisters()),
-        register_type_(RegisterType::kCoreRegister),
+        register_type_(PhysicalRegisterType::kCoreRegister),
         registers_blocked_for_call_(
             register_allocator->registers_blocked_for_call_.GetCoreRegisterSet()),
         available_registers_(register_allocator->available_registers_.GetCoreRegisterSet()),
@@ -171,7 +171,7 @@ class RegisterAllocatorLinearScan::LinearScan {
   LinearScan(RegisterAllocatorLinearScan* register_allocator, FpRegisterTag /*tag*/)
       : codegen_(register_allocator->codegen_),
         number_of_registers_(codegen_->GetNumberOfFloatingPointRegisters()),
-        register_type_(RegisterType::kFpRegister),
+        register_type_(PhysicalRegisterType::kFpuRegister),
         registers_blocked_for_call_(
             register_allocator->registers_blocked_for_call_.GetFpuRegisterSet()),
         available_registers_(register_allocator->available_registers_.GetFpuRegisterSet()),
@@ -191,7 +191,7 @@ class RegisterAllocatorLinearScan::LinearScan {
   LinearScan(RegisterAllocatorLinearScan* register_allocator, VectorRegisterTag /*tag*/)
       : codegen_(register_allocator->codegen_),
         number_of_registers_(codegen_->GetNumberOfVectorRegisters()),
-        register_type_(RegisterType::kVectorRegister),
+        register_type_(PhysicalRegisterType::kVectorRegister),
         registers_blocked_for_call_(
             register_allocator->registers_blocked_for_call_.GetVecRegisterSet()),
         available_registers_(register_allocator->available_registers_.GetVecRegisterSet()),
@@ -317,7 +317,7 @@ class RegisterAllocatorLinearScan::LinearScan {
   size_t number_of_registers_;
 
   // The register type processed by this `LinearScan` object.
-  const RegisterType register_type_;
+  const PhysicalRegisterType register_type_;
 
   // Mask of registers blocked for a call.
   const uint32_t registers_blocked_for_call_;
@@ -403,8 +403,8 @@ void RegisterAllocatorLinearScan::AllocateRegisters() {
                ArrayRef<LiveInterval* const>(temp_intervals_));
 
   if (kIsDebugBuild) {
-    ValidateInternal(RegisterType::kCoreRegister, /*log_fatal_on_failure=*/ true);
-    ValidateInternal(RegisterType::kFpRegister, /*log_fatal_on_failure=*/ true);
+    ValidateInternal(PhysicalRegisterType::kCoreRegister, /*log_fatal_on_failure=*/ true);
+    ValidateInternal(PhysicalRegisterType::kFpuRegister, /*log_fatal_on_failure=*/ true);
     // Check that the linear order is still correct with regards to lifetime positions.
     // Since only parallel moves have been inserted during the register allocation,
     // these checks are mostly for making sure these moves have been added correctly.
@@ -428,8 +428,8 @@ void RegisterAllocatorLinearScan::AllocateRegisters() {
 }
 
 bool RegisterAllocatorLinearScan::Validate(bool log_fatal_on_failure) {
-  return ValidateInternal(RegisterType::kCoreRegister, log_fatal_on_failure) &&
-         ValidateInternal(RegisterType::kFpRegister, log_fatal_on_failure);
+  return ValidateInternal(PhysicalRegisterType::kCoreRegister, log_fatal_on_failure) &&
+         ValidateInternal(PhysicalRegisterType::kFpuRegister, log_fatal_on_failure);
 }
 
 void RegisterAllocatorLinearScan::BlockRegister(Location location,
@@ -761,15 +761,15 @@ inline size_t RegisterAllocatorLinearScan::GetNumberOfSpillSlots() const {
          catch_phi_spill_slots_;
 }
 
-bool RegisterAllocatorLinearScan::ValidateInternal(RegisterType current_register_type,
+bool RegisterAllocatorLinearScan::ValidateInternal(PhysicalRegisterType current_register_type,
                                                    bool log_fatal_on_failure) const {
   auto should_process = [current_register_type](LiveInterval* interval) {
     if (interval == nullptr) {
       return false;
     }
-    RegisterType register_type = DataType::IsFloatingPointType(interval->GetType())
-        ? RegisterType::kFpRegister
-        : RegisterType::kCoreRegister;
+    PhysicalRegisterType register_type = DataType::IsFloatingPointType(interval->GetType())
+        ? PhysicalRegisterType::kFpuRegister
+        : PhysicalRegisterType::kCoreRegister;
     return register_type == current_register_type;
   };
 
@@ -792,7 +792,7 @@ bool RegisterAllocatorLinearScan::ValidateInternal(RegisterType current_register
     }
   }
   const ScopedArenaVector<LiveInterval*>* physical_register_intervals =
-      (current_register_type == RegisterType::kCoreRegister)
+      (current_register_type == PhysicalRegisterType::kCoreRegister)
           ? &physical_core_register_intervals_
           : &physical_fp_register_intervals_;
   for (LiveInterval* fixed : *physical_register_intervals) {
@@ -998,13 +998,13 @@ void RegisterAllocatorLinearScan::LinearScan::Run() {
     }
   }
   switch (register_type_) {
-    case RegisterType::kCoreRegister:
+    case PhysicalRegisterType::kCoreRegister:
       codegen_->AddAllocatedCoreRegisterSet(allocated_registers);
       break;
-    case RegisterType::kFpRegister:
+    case PhysicalRegisterType::kFpuRegister:
       codegen_->AddAllocatedFpuRegisterSet(allocated_registers);
       break;
-    case RegisterType::kVectorRegister:
+    case PhysicalRegisterType::kVectorRegister:
       codegen_->AddAllocatedVectorRegisterSet(allocated_registers);
       break;
   }

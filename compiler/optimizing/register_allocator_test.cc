@@ -72,7 +72,7 @@ class RegisterAllocatorTest : public CommonCompilerTest, public OptimizingUnitTe
                                                 /* number_of_out_slots= */ 0u,
                                                 codegen,
                                                 /*liveness=*/ nullptr,
-                                                RegisterAllocator::RegisterType::kCoreRegister,
+                                                PhysicalRegisterType::kCoreRegister,
                                                 /* log_fatal_on_failure= */ false);
   }
 

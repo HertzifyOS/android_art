@@ -106,42 +106,30 @@ class AllRangesIterator : public ValueObject {
 
 void RegisterAllocator::DumpRegister(std::ostream& stream,
                                      int reg,
-                                     RegisterType register_type,
+                                     PhysicalRegisterType register_type,
                                      const CodeGenerator* codegen) {
   switch (register_type) {
-    case RegisterType::kCoreRegister:
+    case PhysicalRegisterType::kCoreRegister:
       codegen->DumpCoreRegister(stream, reg);
       break;
-    case RegisterType::kFpRegister:
+    case PhysicalRegisterType::kFpuRegister:
       codegen->DumpFloatingPointRegister(stream, reg);
       break;
-    case RegisterType::kVectorRegister:
+    case PhysicalRegisterType::kVectorRegister:
       codegen->DumpVectorRegister(stream, reg);
       break;
   }
 }
 
-static inline uint32_t RegisterSetForType(const RegisterSet& register_set,
-                                          RegisterAllocator::RegisterType register_type) {
-  switch (register_type) {
-    case RegisterAllocator::RegisterType::kCoreRegister:
-      return register_set.GetCoreRegisterSet();
-    case RegisterAllocator::RegisterType::kFpRegister:
-      return register_set.GetFpuRegisterSet();
-    case RegisterAllocator::RegisterType::kVectorRegister:
-      return register_set.GetVecRegisterSet();
-  }
-}
-
 uint32_t RegisterAllocator::GetRegisterMask(LiveInterval* interval,
-                                            RegisterType register_type) const {
+                                            PhysicalRegisterType register_type) const {
   if (interval->HasRegisters()) {
     return GetNormalRegisterMask(interval, register_type);
   } else if (interval->IsFixed()) {
     return GetBlockedRegistersMask(interval,
                                    liveness_.GetInstructionsFromPositions(),
-                                   RegisterSetForType(available_registers_, register_type),
-                                   RegisterSetForType(registers_blocked_for_call_, register_type));
+                                   available_registers_.GetRegisterSet(register_type),
+                                   registers_blocked_for_call_.GetRegisterSet(register_type));
   } else {
     return 0u;
   }
@@ -152,15 +140,15 @@ bool RegisterAllocator::ValidateIntervals(ArrayRef<LiveInterval* const> interval
                                           size_t number_of_out_slots,
                                           const CodeGenerator& codegen,
                                           const SsaLivenessAnalysis* liveness,
-                                          RegisterType register_type,
+                                          PhysicalRegisterType register_type,
                                           bool log_fatal_on_failure) {
-  size_t number_of_registers = (register_type == RegisterType::kCoreRegister)
+  size_t number_of_registers = (register_type == PhysicalRegisterType::kCoreRegister)
       ? codegen.GetNumberOfCoreRegisters()
       : codegen.GetNumberOfFloatingPointRegisters();
-  uint32_t blocked_registers = RegisterSetForType(codegen.GetBlockedRegisters(), register_type);
-  uint32_t available_registers = RegisterSetForType(GetAvailableRegisters(&codegen), register_type);
+  uint32_t blocked_registers = codegen.GetBlockedRegisters().GetRegisterSet(register_type);
+  uint32_t available_registers = GetAvailableRegisters(&codegen).GetRegisterSet(register_type);
   uint32_t registers_blocked_for_call =
-      RegisterSetForType(GetBlockedRegistersForCall(&codegen), register_type);
+      GetBlockedRegistersForCall(&codegen).GetRegisterSet(register_type);
 
   // A copy of `GetRegisterMask()` using local `number_of_registers` and
   // `registers_blocked_for_call` instead of the cached per-type members
@@ -233,8 +221,7 @@ bool RegisterAllocator::ValidateIntervals(ArrayRef<LiveInterval* const> interval
         if (kIsDebugBuild && log_fatal_on_failure && !current->IsFixed()) {
           // Only check when an error is fatal. Only tests code ask for non-fatal failures
           // and test code may not properly fill the right information to the code generator.
-          CHECK_NE(RegisterSetForType(codegen.GetAllocatedRegisters(), register_type) & (1u << reg),
-                   0u);
+          CHECK_NE(codegen.GetAllocatedRegisters().GetRegisterSet(register_type) & (1u << reg), 0u);
         }
         BitVector* liveness_of_register = liveness_of_values[reg];
         for (size_t j = it.CurrentRange()->GetStart(); j < it.CurrentRange()->GetEnd(); ++j) {

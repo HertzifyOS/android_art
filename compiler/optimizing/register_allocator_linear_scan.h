@@ -67,7 +67,8 @@ class RegisterAllocatorLinearScan : public RegisterAllocator {
   // Helper methods.
   void AllocateRegistersInternal();
   void ProcessInstruction(HInstruction* instruction);
-  bool ValidateInternal(RegisterType current_register_type, bool log_fatal_on_failure) const;
+  bool ValidateInternal(PhysicalRegisterType current_register_type,
+                        bool log_fatal_on_failure) const;
 
   // If any inputs require specific registers, block those registers
   // at the position of this instruction.

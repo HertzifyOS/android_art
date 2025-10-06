@@ -21,6 +21,7 @@
 #include "base/macros.h"
 #include "base/bit_utils.h"
 #include "base/value_object.h"
+#include "physical_register_type.h"
 
 namespace art HIDDEN {
 
@@ -90,6 +91,17 @@ class RegisterSet : public ValueObject {
     return vec_register_set_;
   }
 
+  uint32_t GetRegisterSet(PhysicalRegisterType type) const {
+    switch (type) {
+      case PhysicalRegisterType::kCoreRegister:
+        return GetCoreRegisterSet();
+      case PhysicalRegisterType::kFpuRegister:
+        return GetFpuRegisterSet();
+      case PhysicalRegisterType::kVectorRegister:
+        return GetVecRegisterSet();
+    }
+  }
+
   static uint32_t RegisterSet::* GetCoreRegisterSetAccessor() {
     return &RegisterSet::core_register_set_;
   }
@@ -100,6 +112,17 @@ class RegisterSet : public ValueObject {
 
   static uint32_t RegisterSet::* GetVecRegisterSetAccessor() {
     return &RegisterSet::vec_register_set_;
+  }
+
+  static uint32_t RegisterSet::* GetRegisterSetAccessor(PhysicalRegisterType type) {
+    switch (type) {
+      case PhysicalRegisterType::kCoreRegister:
+        return GetCoreRegisterSetAccessor();
+      case PhysicalRegisterType::kFpuRegister:
+        return GetFpuRegisterSetAccessor();
+      case PhysicalRegisterType::kVectorRegister:
+        return GetVecRegisterSetAccessor();
+    }
   }
 
   RegisterSet Union(const RegisterSet& other) const {
