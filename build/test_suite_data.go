@@ -100,7 +100,6 @@ func (s *artHostTestDataSingleton) GenerateBuildActions(ctx android.SingletonCon
 		"bin/llvm-addr2line",
 		"bin/llvm-dwarfdump",
 		"bin/llvm-objdump",
-		"lib/libc++.so",
 	}
 
 	for _, tool := range prebuiltToolsForTests {
