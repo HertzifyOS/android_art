@@ -16,7 +16,6 @@ package art
 
 import (
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 
@@ -49,16 +48,6 @@ func getArtHostTestDataZipPath(ctx android.PathContext, name string) android.Wri
 func (s *artHostTestDataSingleton) GenerateBuildActions(ctx android.SingletonContext) {
 
 	outputZip := getArtHostTestDataZipPath(ctx, "art_host_test_data")
-
-	if runtime.GOOS == "darwin" {
-		// On Darwin, the host prebuilt tools required for this test data zip do not exist.
-		// Instead of failing at Soong configuration time (which would break CI builds that
-		// don't actually need this artifact), we defer the failure to build execution time
-		// by creating an error rule that will explicitly fail when another module depends on this
-		// target.
-		android.ErrorRule(ctx, outputZip, "ART host test data (art-host-test-data.zip) cannot be built on Darwin, as required prebuilt tools are missing.")
-		return
-	}
 
 	// A simple struct to hold the source path and its intended destination path inside the zip.
 	type collectedFileInfo struct {
@@ -104,10 +93,23 @@ func (s *artHostTestDataSingleton) GenerateBuildActions(ctx android.SingletonCon
 
 	for _, tool := range prebuiltToolsForTests {
 		src := config.ClangPath(ctx, tool).String()
-		collectedFiles = append(collectedFiles, collectedFileInfo{
-			SrcPath:  android.PathForSource(ctx, src),
-			DestPath: filepath.Join("host/testcases/art_common", src),
-		})
+		srcPath := android.ExistentPathForSource(ctx, src)
+		if srcPath.Valid() {
+			collectedFiles = append(collectedFiles, collectedFileInfo{
+				SrcPath:  srcPath.Path(),
+				DestPath: filepath.Join("host/testcases/art_common", src),
+			})
+		} else {
+			// On some platforms (like Darwin), or when using older versions of clang,
+			// the host prebuilt tools required for this test data zip may not exist.
+			// Instead of breaking the build at Soong configuration time
+			// (which would break CI builds that don't actually need this artifact),
+			// we defer the failure to build execution time by creating an error rule.
+			// This allows projects that do not depend on this target to build successfully.
+			// For example, see b/449220418.
+			android.ErrorRule(ctx, outputZip, "Error: ART host test data cannot be built because required prebuilt tool "+tool+" is missing.")
+			return
+		}
 	}
 	// If no data was collected, there's nothing to do.
 	if len(collectedFiles) == 0 {
