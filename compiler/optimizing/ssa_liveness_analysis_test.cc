@@ -164,8 +164,8 @@ TEST_F(SsaLivenessAnalysisTest, TestDeoptimize) {
 // end adjusted. Otherwise we risk invalidating cached search start positions that the register
 // allocator may keep. See also `RegisterAllocatorTest.SplitSpillSlotLiveRangeHint`. Bug: 426785078
 TEST_F(SsaLivenessAnalysisTest, SplitRange) {
-  LiveInterval* interval =
-      LiveInterval::MakeInterval(GetScopedAllocator(), DataType::Type::kInt32, /*is_pair=*/ false);
+  LiveInterval* interval = LiveInterval::MakeInterval(
+      GetScopedAllocator(), DataType::Type::kInt32, /*is_pair=*/ false, /*instruction=*/ nullptr);
   interval->AddRange(0u, 10u * kLivenessPositionsPerInstruction);
   LiveRange* first_range = interval->GetFirstRange();
   ASSERT_TRUE(first_range != nullptr);

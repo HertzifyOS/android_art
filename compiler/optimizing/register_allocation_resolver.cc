@@ -698,7 +698,7 @@ Location RegisterAllocationResolver::GetLocation(LiveInterval* interval) {
       }
     }
   } else {
-    HInstruction* defined_by = interval->GetParent()->GetDefinedBy();
+    HInstruction* defined_by = interval->GetDefinedBy();
     if (defined_by->IsConstant()) {
       return defined_by->GetLocations()->Out();
     } else if (interval->GetParent()->HasSpillSlot()) {

@@ -604,7 +604,8 @@ LiveInterval* LiveInterval::SplitAt(size_t position) {
     return nullptr;
   }
 
-  LiveInterval* new_interval = new (allocator_) LiveInterval(allocator_, type_, IsPair());
+  LiveInterval* new_interval =
+      new (allocator_) LiveInterval(allocator_, type_, is_pair_, defined_by_);
 
   new_interval->next_sibling_ = next_sibling_;
   next_sibling_ = new_interval;
@@ -712,9 +713,9 @@ void LiveInterval::DumpWithContext(std::ostream& stream,
     stream << ", spill slot:" << GetSpillSlot();
   }
   stream << ", requires_register:" << (GetDefinedBy() != nullptr && RequiresRegister());
-  if (GetParent()->GetDefinedBy() != nullptr) {
-    stream << ", defined_by:" << GetParent()->GetDefinedBy()->GetKind();
-    stream << "(" << GetParent()->GetDefinedBy()->GetLifetimePosition() << ")";
+  if (GetDefinedBy() != nullptr) {
+    stream << ", defined_by:" << GetDefinedBy()->GetKind();
+    stream << "(" << GetDefinedBy()->GetLifetimePosition() << ")";
   }
 }
 
@@ -737,7 +738,7 @@ bool LiveInterval::SameRegisterKind(Location other) const {
 size_t LiveInterval::NumberOfSpillSlotsNeeded() const {
   // For a SIMD operation, compute the number of needed spill slots.
   // TODO: do through vector type?
-  HInstruction* definition = GetParent()->GetDefinedBy();
+  HInstruction* definition = GetDefinedBy();
   if (definition != nullptr && HVecOperation::ReturnsSIMDValue(definition)) {
     if (definition->IsPhi()) {
       definition = definition->InputAt(1);  // SIMD always appears on back-edge

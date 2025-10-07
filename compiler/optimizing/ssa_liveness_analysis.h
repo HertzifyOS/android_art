@@ -245,7 +245,7 @@ class LiveInterval : public ArenaObject<kArenaAllocSsaLiveness> {
   static LiveInterval* MakeInterval(ScopedArenaAllocator* allocator,
                                     DataType::Type type,
                                     bool is_pair,
-                                    HInstruction* instruction = nullptr) {
+                                    HInstruction* instruction) {
     return new (allocator) LiveInterval(allocator, type, is_pair, instruction);
   }
 
@@ -562,6 +562,7 @@ class LiveInterval : public ArenaObject<kArenaAllocSsaLiveness> {
   }
 
   HInstruction* GetDefinedBy() const {
+    DCHECK(parent_->defined_by_ == defined_by_);
     return defined_by_;
   }
 
@@ -792,7 +793,7 @@ class LiveInterval : public ArenaObject<kArenaAllocSsaLiveness> {
   LiveInterval(ScopedArenaAllocator* allocator,
                DataType::Type type,
                bool is_pair,
-               HInstruction* defined_by = nullptr,
+               HInstruction* defined_by,
                bool is_fixed = false,
                uint32_t regs = kNoRegisters,
                int8_t temp_index = kNoTempIndex)

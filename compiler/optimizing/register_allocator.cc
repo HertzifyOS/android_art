@@ -194,7 +194,7 @@ bool RegisterAllocator::ValidateIntervals(ArrayRef<LiveInterval* const> interval
   for (LiveInterval* start_interval : intervals) {
     for (AllRangesIterator it(start_interval); !it.Done(); it.Advance()) {
       LiveInterval* current = it.CurrentInterval();
-      HInstruction* defined_by = current->GetParent()->GetDefinedBy();
+      HInstruction* defined_by = current->GetDefinedBy();
       if (current->GetParent()->HasSpillSlot()
            // Parameters and current method have their own stack slot.
            && !(defined_by != nullptr && (defined_by->IsParameterValue()

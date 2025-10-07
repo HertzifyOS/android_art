@@ -1561,10 +1561,10 @@ std::pair<bool, uint32_t> RegisterAllocatorLinearScan::LinearScan::AllocateBlock
         HInstruction* at =
             instructions_from_positions_[first_register_use / kLivenessPositionsPerInstruction];
         CHECK(false) << "There is not enough registers available for "
-          << current->GetParent()->GetDefinedBy()->DebugName() << " "
-          << current->GetParent()->GetDefinedBy()->GetId()
-          << " at " << first_register_use - 1 << " "
-          << (at == nullptr ? "" : at->DebugName());
+            << current->GetDefinedBy()->DebugName() << " "
+            << current->GetDefinedBy()->GetId()
+            << " at " << first_register_use - 1 << " "
+            << (at == nullptr ? "" : at->DebugName());
       }
 
       // If we're allocating a register for `current` because the instruction at
