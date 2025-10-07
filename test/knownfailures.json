@@ -1638,7 +1638,8 @@
       "env_vars": {"ART_TEST_ON_VM": "true"}
     },
     {
-      "tests": ["2042-reference-processing"],
+      "tests": ["2042-reference-processing",
+                "656-checker-simd-opt-no-interp-ac"],
       "description": ["Timeout on QEMU"],
       "env_vars": {"ART_TEST_ON_VM": "true"}
     },
