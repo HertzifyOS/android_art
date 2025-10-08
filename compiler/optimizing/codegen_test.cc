@@ -440,7 +440,6 @@ TEST_F(CodegenTest, NonMaterializedCondition) {
     then_block->AddSuccessor(exit_block);
     else_block->AddSuccessor(exit_block);
 
-    MakeExit(exit_block);
     MakeReturn(then_block, constant0);
     MakeReturn(else_block, constant1);
 
@@ -516,7 +515,6 @@ TEST_F(CodegenTest, MaterializedCondition2) {
       HBasicBlock* if_true_block = AddNewBlock();
       HBasicBlock* if_false_block = AddNewBlock();
       HBasicBlock* exit_block = AddExitBlock();
-      MakeExit(exit_block);
 
       graph->SetEntryBlock(entry_block);
       entry_block->AddSuccessor(if_block);
