@@ -269,6 +269,10 @@ class RegType {
            (IsUnresolvedTypes() && !IsUnresolvedMergedReference()));
     return descriptor_;
   }
+
+  // Returns true if the RegType is a non-array final class.
+  bool IsNonArrayFinalClass() const REQUIRES_SHARED(Locks::mutator_lock_);
+
   ObjPtr<mirror::Class> GetClass() const REQUIRES_SHARED(Locks::mutator_lock_);
   Handle<mirror::Class> GetClassHandle() const REQUIRES_SHARED(Locks::mutator_lock_);
   uint16_t GetId() const { return cache_id_; }

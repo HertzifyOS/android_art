@@ -4804,11 +4804,16 @@ ArtMethod* MethodVerifierImpl::VerifyInvocationArgsFromIterator(
         }
       }
       if (!IsAssignableFrom(*res_method_class, adjusted_type)) {
-        Fail(adjusted_type.IsUnresolvedTypes()
-                 ? VERIFY_ERROR_UNRESOLVED_TYPE_CHECK
-                 : VERIFY_ERROR_BAD_CLASS_HARD)
-            << "'this' argument '" << actual_arg_type << "' not instance of '"
-            << *res_method_class << "'";
+        // We return a soft unresolved type check failure as long as:
+        //   1) `adjusted_type` is unresolved
+        //   2) `res_method_class` is not a non-array final class.
+        // In this case, potentially the unresolved class becomes resolved and everything is okay.
+        const bool soft_unresolved_failure =
+            adjusted_type.IsUnresolvedTypes() && !res_method_class->IsNonArrayFinalClass();
+        Fail(soft_unresolved_failure ? VERIFY_ERROR_UNRESOLVED_TYPE_CHECK
+                                     : VERIFY_ERROR_BAD_CLASS_HARD)
+            << "'this' argument '" << actual_arg_type << "' not instance of '" << *res_method_class
+            << "'";
         // Continue on soft failures. We need to find possible hard failures to avoid problems in
         // the compiler.
         if (flags_.have_pending_hard_failure_) {

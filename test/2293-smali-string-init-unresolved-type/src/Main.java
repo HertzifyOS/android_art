@@ -14,17 +14,12 @@
  * limitations under the License.
  */
 
-import java.lang.reflect.InvocationTargetException;
-
 public class Main {
     public static void main(String[] args) throws Exception {
         try {
-            Class.forName("B445143421").getDeclaredMethod("main").invoke(null);
-            throw new Error("Didn't get npe");
-        } catch (InvocationTargetException expected) {
-            if (!(expected.getCause() instanceof NullPointerException)) {
-                throw new Error("Expected NPE, got: " + expected);
-            }
+            B450263516.fakeInit();
+            throw new Error("Didn't get VerifyError");
+        } catch (VerifyError expected) {
         }
     }
 }
