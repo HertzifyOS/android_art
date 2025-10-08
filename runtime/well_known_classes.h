@@ -102,6 +102,7 @@ struct EXPORT WellKnownClasses {
   static jclass java_lang_reflect_Parameter__array;
   static jclass java_lang_StringFactory;
   static jclass java_lang_Void;
+  static jclass java_util_concurrent_atomic_ARFU;
   static jclass libcore_reflect_AnnotationMember__array;
 
   static ArtMethod* dalvik_system_BaseDexClassLoader_getLdLibraryPath;

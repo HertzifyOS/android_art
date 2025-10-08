@@ -1242,7 +1242,8 @@
                   "2270-mh-internal-hiddenapi-use",
                   "2271-profile-inline-cache",
                   "2279-aconfig-flags",
-                  "2286-method-tracing-aot-code"],
+                  "2286-method-tracing-aot-code",
+                  "2396-unmodifiable-final-fields"],
         "variant": "jvm",
         "description": ["Doesn't run on RI."]
     },

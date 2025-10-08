@@ -66,7 +66,22 @@ inline bool Field::IsMonotonic() REQUIRES_SHARED(Locks::mutator_lock_) {
     return false;
   }
 
-  return IsStatic() && IsFinal();
+  // static final fields can't be modified once initialized.
+  if (IsStatic()) {
+    return true;
+  }
+
+  // Certain instance final fields will also be treated as monotonic. That's not applicable to
+  // app classes, so bailing out early if so.
+  if (!GetDeclaringClass()->IsBootStrapClassLoaded()) {
+    return false;
+  }
+
+  // Treat final fields in java.lang.invoke and java.util.concurrent.atomic as truly final.
+  return GetDeclaringClass()->IsInSamePackage(
+              WellKnownClasses::java_lang_invoke_MethodHandle.Get())
+         || GetDeclaringClass()->IsInSamePackage(
+              WellKnownClasses::ToClass(WellKnownClasses::java_util_concurrent_atomic_ARFU));
 }
 
 inline bool Field::IsWriteProtected() {
