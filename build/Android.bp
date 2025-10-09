@@ -24,7 +24,7 @@ bootstrap_go_package {
     ],
     srcs: [
         "art.go",
-        "art_gob_enc.go",
+        "art_enc.go",
         "codegen.go",
         "makevars.go",
         "test_suite_data.go",

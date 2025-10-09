@@ -8,6 +8,7 @@ import (
 	"github.com/google/blueprint/gobtools"
 )
 
+// begin of art.go
 func init() {
 	testInstallInfoGobRegId = gobtools.RegisterType(func() gobtools.CustomDec { return new(testInstallInfo) })
 }
@@ -132,3 +133,5 @@ var testInstallInfoGobRegId int16
 func (r testInstallInfo) GetTypeId() int16 {
 	return testInstallInfoGobRegId
 }
+
+// end of art.go
