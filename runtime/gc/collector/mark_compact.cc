@@ -438,16 +438,17 @@ size_t MarkCompact::ComputeInfoMapSize() {
 }
 
 size_t MarkCompact::InitializeInfoMap(uint8_t* p, size_t moving_space_sz) {
+  size_t total;
   size_t nr_moving_pages = DivideByPageSize(moving_space_sz);
 
-  first_objs_non_moving_space_ = reinterpret_cast<ObjReference*>(p);
-  size_t total = DivideByPageSize(heap_->GetNonMovingSpace()->Capacity()) * sizeof(ObjReference);
-
-  // TODO: put the following three in to a struct and have an array of that as
-  // all three fields are accessed together and would reduce cache footprint and
-  // better h/w prefetch.
-  first_objs_moving_space_ = reinterpret_cast<ObjReference*>(p + total);
-  total += nr_moving_pages * sizeof(ObjReference);
+  // Make sure to keep this array first as we retain entries corresponding to
+  // old-gen for next young GCs. By keeping this array first in `info_map_` we
+  // can madvise everything else in a single invocation.
+  // Also, since we are now keeping some pages dirty across GCs in this array,
+  // it's better to keep this array separate to minimize RSS increase. Otherwise,
+  // we could have created one array with three fields for the following three arrays.
+  first_objs_moving_space_ = reinterpret_cast<ObjReference*>(p);
+  total = nr_moving_pages * sizeof(ObjReference);
 
   pre_compact_offset_moving_space_ = reinterpret_cast<uint32_t*>(p + total);
   total += nr_moving_pages * sizeof(uint32_t);
@@ -455,10 +456,14 @@ size_t MarkCompact::InitializeInfoMap(uint8_t* p, size_t moving_space_sz) {
   moving_pages_status_ = reinterpret_cast<Atomic<uint32_t>*>(p + total);
   total += nr_moving_pages * sizeof(Atomic<uint32_t>);
 
+  first_objs_non_moving_space_ = reinterpret_cast<ObjReference*>(p + total);
+  total += DivideByPageSize(heap_->GetNonMovingSpace()->Capacity()) * sizeof(ObjReference);
+
   chunk_info_vec_ = reinterpret_cast<uint32_t*>(p + total);
   vector_length_ = moving_space_sz / kOffsetChunkSize;
   // Extra word to avoid out-of-bound access check in UpdateLivenessInfo().
   total += (vector_length_ + 1) * sizeof(uint32_t);
+
   DCHECK_EQ(total, ComputeInfoMapSize());
   return total;
 }
@@ -597,6 +602,9 @@ MarkCompact::MarkCompact(Heap* heap)
 }
 
 void MarkCompact::ResetGenerationalState() {
+  DCHECK(use_generational_);
+  size_t len = DivideByPageSize(old_gen_end_ - moving_space_begin_) * sizeof(ObjReference);
+  ZeroAndReleaseMemory(info_map_.Begin(), RoundUp(len, gPageSize));
   black_dense_end_ = mid_gen_end_ = moving_space_begin_;
   post_compact_end_ = nullptr;
   class_after_obj_map_.clear();
@@ -811,6 +819,10 @@ void MarkCompact::InitializePhase() {
   last_reclaimable_page_.store(moving_space_end_, std::memory_order_relaxed);
   cur_reclaimable_page_.store(moving_space_begin_, std::memory_order_relaxed);
   if (use_generational_ && !young_gen_) {
+    // 'first_objs_moving_space_' entries for old-gen pages are maintained from
+    // last GC. Clear them as this is a full-GC and they are not going to be valid.
+    size_t len = DivideByPageSize(old_gen_end_ - moving_space_begin_) * sizeof(ObjReference);
+    ZeroAndReleaseMemory(info_map_.Begin(), RoundUp(len, gPageSize));
     class_after_obj_map_.clear();
   }
   // TODO: Would it suffice to read it once in the constructor, which is called
@@ -1250,10 +1262,6 @@ bool MarkCompact::PrepareForCompaction() {
       mid_gen_end_ = black_allocations_begin_;
       return false;
     }
-    InitNonMovingFirstObjects(reinterpret_cast<uintptr_t>(moving_space_begin_),
-                              reinterpret_cast<uintptr_t>(old_gen_end_),
-                              moving_space_bitmap_,
-                              first_objs_moving_space_);
   } else if (gc_cause != kGcCauseExplicit && gc_cause != kGcCauseCollectorTransition &&
              !GetCurrentIteration()->GetClearSoftReferences()) {
     uint64_t live_bytes = 0, total_bytes = 0;
@@ -6263,6 +6271,42 @@ void MarkCompact::FinishPhase(bool performed_compaction) {
           card_table->MarkCard(obj);
         }
       }
+      // We can re-create 'first_objs_moving_space_' entries corresponding to
+      // old-gen pages in PrepareForCompaction(). However, that requires
+      // fetching obj-size in InitNonMovingFirstObjects() which means almost
+      // every page in old-gen gets accessed, resulting in quite a few swap-ins.
+      // We can easily avoid that if we retain the entries and keep it updated as
+      // old-gen size increases.
+      if (LIKELY(performed_compaction && old_gen_end_ < mid_gen_end_)) {
+        size_t start_idx = DivideByPageSize(old_gen_end_ - moving_space_begin_);
+        size_t end_idx = DivideByPageSize(mid_gen_end_ - moving_space_begin_);
+        // This is the best and likely case. We already have entries for pages
+        // in [old-gen-end, mid-gen-end) range, but they are with pre-compact
+        // addresses of first-objects. Simply update with post-compact address.
+        for (size_t i = 0; i < start_idx; i++) {
+          mirror::Object* obj = first_objs_moving_space_[i].AsMirrorPtr();
+          if (obj != nullptr) {
+            DCHECK_LT(obj, reinterpret_cast<mirror::Object*>(old_gen_end_));
+            DCHECK(moving_space_bitmap_->Test(obj));
+          }
+        }
+        for (size_t i = start_idx; i < end_idx; i++) {
+          mirror::Object* obj = first_objs_moving_space_[i].AsMirrorPtr();
+          DCHECK(obj != nullptr);
+          mirror::Object* post_compact_obj =
+              PostCompactAddress(obj, old_gen_end_, moving_space_end_);
+          DCHECK_LT(post_compact_obj, reinterpret_cast<mirror::Object*>(mid_gen_end_));
+          first_objs_moving_space_[i].Assign(post_compact_obj);
+        }
+      } else {
+        // We may have not prepared data structures required for computing
+        // post-compact addresses in this case. So populate using obj-size.
+        // Since this is an unlikely case, it doesn't impact performance.
+        InitNonMovingFirstObjects(reinterpret_cast<uintptr_t>(moving_space_begin_),
+                                  reinterpret_cast<uintptr_t>(mid_gen_end_),
+                                  moving_space_bitmap_,
+                                  first_objs_moving_space_);
+      }
     }
     dirty_cards_later_vec_.clear();
 
@@ -6331,7 +6375,15 @@ void MarkCompact::FinishPhase(bool performed_compaction) {
   CHECK(mark_stack_->IsEmpty());  // Ensure that the mark stack is empty.
   mark_stack_->Reset();
   compaction_buffers_map_.MadviseDontNeedAndZero();
-  info_map_.MadviseDontNeedAndZero();
+  if (use_generational_) {
+    // Retain 'first_objs_moving_space_' entries corresponding to old-gen pages
+    // for next young GC.
+    uint8_t* begin = info_map_.Begin() +
+                     DivideByPageSize(old_gen_end_ - moving_space_begin_) * sizeof(ObjReference);
+    ZeroAndReleaseMemory(begin, info_map_.End() - begin);
+  } else {
+    info_map_.MadviseDontNeedAndZero();
+  }
   live_words_bitmap_->ClearBitmap();
   DCHECK_EQ(thread_running_gc_, Thread::Current());
   if (kIsDebugBuild) {
