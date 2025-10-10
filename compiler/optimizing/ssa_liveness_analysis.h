@@ -523,12 +523,6 @@ class LiveInterval : public ArenaObject<kArenaAllocSsaLiveness> {
     return IsTemp() ? start : FirstRegisterUseAfter(start);
   }
 
-  // Whether the interval requires a register rather than a stack location.
-  // If needed for performance, this could be cached.
-  bool RequiresRegister() const {
-    return !HasRegisters() && FirstRegisterUse() != kNoLifetime;
-  }
-
   size_t FirstUseAfter(size_t position) const {
     DCHECK(!IsTemp());
     if (IsDefiningPosition(position)) {
@@ -600,10 +594,6 @@ class LiveInterval : public ArenaObject<kArenaAllocSsaLiveness> {
   }
 
   void Dump(std::ostream& stream) const;
-
-  // Same as Dump, but adds context such as the instruction defining this interval, and
-  // the register currently assigned to this interval.
-  void DumpWithContext(std::ostream& stream, const CodeGenerator& codegen) const;
 
   LiveInterval* GetNextSibling() const { return next_sibling_; }
   LiveInterval* GetLastSibling() {

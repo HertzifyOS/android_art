@@ -689,36 +689,6 @@ void LiveInterval::Dump(std::ostream& stream) const {
   stream << " is_pair: " << IsPair();
 }
 
-void LiveInterval::DumpWithContext(std::ostream& stream,
-                                   const CodeGenerator& codegen) const {
-  Dump(stream);
-  if (IsFixed()) {
-    if (HasRegisters()) {
-      stream << ", registers:0x" << GetRegisters() << std::dec << "(";
-      const char* delim = "";
-      for (uint32_t reg : LowToHighBits(GetRegisters())) {
-        stream << delim;
-        delim = ",";
-        if (IsFloatingPoint()) {
-          codegen.DumpFloatingPointRegister(stream, reg);
-        } else {
-          codegen.DumpCoreRegister(stream, reg);
-        }
-      }
-      stream << ")";
-    } else {
-      stream << ", registers:none";
-    }
-  } else {
-    stream << ", spill slot:" << GetSpillSlot();
-  }
-  stream << ", requires_register:" << (GetDefinedBy() != nullptr && RequiresRegister());
-  if (GetDefinedBy() != nullptr) {
-    stream << ", defined_by:" << GetDefinedBy()->GetKind();
-    stream << "(" << GetDefinedBy()->GetLifetimePosition() << ")";
-  }
-}
-
 bool LiveInterval::SameRegisterKind(Location other) const {
   if (IsFloatingPoint()) {
     if (IsPair()) {
