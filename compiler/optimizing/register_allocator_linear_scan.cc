@@ -596,6 +596,7 @@ void RegisterAllocatorLinearScan::ProcessInstruction(HInstruction* instruction) 
   // If needed, add interval to the list of unhandled intervals.
   if (current->HasSpillSlot() || instruction->IsConstant()) {
     // Split just before first register use.
+    DCHECK(!current->RequiresRegisterForDefinitionAt(current->GetStart()));
     size_t first_register_use = current->FirstRegisterUse();
     if (first_register_use != kNoLifetime) {
       LiveInterval* split = SplitBetween(current,
@@ -1078,6 +1079,7 @@ bool RegisterAllocatorLinearScan::LinearScan::TryUsingSpillSlotHint(LiveInterval
     data = new_data;
   }
   current->SetSpillSlot(hint);
+  DCHECK(!current->RequiresRegisterForDefinitionAt(current->GetStart()));
   size_t first_register_use = current->FirstRegisterUse();
   if (first_register_use != kNoLifetime) {
     LiveInterval* split = SplitBetween(current, current->GetStart(), first_register_use - 1);
@@ -1121,6 +1123,7 @@ int RegisterAllocatorLinearScan::LinearScan::FindFirstRegisterHint(
     // will avoid a move between the two blocks.
     HBasicBlock* block = SsaLivenessAnalysis::GetBlockFromPosition(
         interval->GetStart() / kLivenessPositionsPerInstruction, instructions_from_positions_);
+    DCHECK(!interval->RequiresRegisterForDefinitionAt(interval->GetStart()));
     size_t next_register_use = interval->FirstRegisterUse();
     for (HBasicBlock* predecessor : block->GetPredecessors()) {
       size_t position = predecessor->GetLifetimeEnd() - 1;
@@ -1475,7 +1478,10 @@ uint32_t RegisterAllocatorLinearScan::LinearScan::TrySplitNonPairOrUnalignedPair
 // we spill `current` instead.
 std::pair<bool, uint32_t> RegisterAllocatorLinearScan::LinearScan::AllocateBlockedReg(
     LiveInterval* current) {
-  size_t first_register_use = current->FirstRegisterUse();
+  size_t first_register_use =
+      (current->IsTemp() || current->RequiresRegisterForDefinitionAt(current->GetStart()))
+          ? current->GetStart()
+          : current->FirstRegisterUse();
   if (first_register_use == kNoLifetime) {
     AllocateSpillSlotFor(current);
     return {false, 0u};
@@ -1492,7 +1498,9 @@ std::pair<bool, uint32_t> RegisterAllocatorLinearScan::LinearScan::AllocateBlock
     DCHECK_NE(register_mask, 0u);
     size_t use = start;
     if (active->HasRegisters()) {
-      if (!active->IsFixed() && !active->IsTemp()) {
+      if (!active->IsFixed() &&
+          !active->IsTemp() &&
+          !active->RequiresRegisterForDefinitionAt(use)) {
         use = active->FirstRegisterUseAfter(use);
         if (use == kNoLifetime) {
           continue;
@@ -1619,6 +1627,7 @@ std::pair<bool, uint32_t> RegisterAllocatorLinearScan::LinearScan::AllocateBlock
           DCHECK_EQ(start, split->GetStart());
           AllocateSpillSlotFor(split);
           handled_.push_back(split);
+          DCHECK(!split->RequiresRegisterForDefinitionAt(start));
           size_t register_use = split->FirstRegisterUseAfter(start);
           if (register_use != kNoLifetime) {
             LiveInterval* second_split = SplitBetween(split, start, register_use - 1);

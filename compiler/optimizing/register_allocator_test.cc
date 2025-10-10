@@ -391,7 +391,8 @@ TEST_F(RegisterAllocatorTest, FirstRegisterUse) {
   ASSERT_TRUE(interval->GetNextSibling() == nullptr);
 
   // We need a register for the output of the instruction.
-  ASSERT_EQ(interval->FirstRegisterUse(), first_xor->GetLifetimePosition());
+  ASSERT_TRUE(interval->RequiresRegisterForDefinitionAt(interval->GetStart()));
+  ASSERT_EQ(interval->FirstRegisterUse(), last_xor->GetLifetimePosition());
 
   // Split at the next instruction.
   interval = interval->SplitAt(first_xor->GetLifetimePosition() + 2);

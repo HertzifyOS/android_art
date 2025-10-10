@@ -497,9 +497,6 @@ class LiveInterval : public ArenaObject<kArenaAllocSsaLiveness> {
 
   size_t FirstRegisterUseAfter(size_t position) const {
     DCHECK(!IsTemp());
-    if (IsDefiningPosition(position) && DefinitionRequiresRegister()) {
-      return position;
-    }
 
     size_t end = GetEnd();
     for (const UsePosition& use : GetUses()) {
@@ -516,19 +513,14 @@ class LiveInterval : public ArenaObject<kArenaAllocSsaLiveness> {
     return kNoLifetime;
   }
 
-  // Returns the location of the first register use for this live interval,
-  // including a register definition if applicable.
+  // Returns the location of the first register use for this live interval.
   size_t FirstRegisterUse() const {
-    size_t start = GetStart();
-    return IsTemp() ? start : FirstRegisterUseAfter(start);
+    return FirstRegisterUseAfter(GetStart());
   }
 
   size_t FirstUseAfter(size_t position) const {
     DCHECK(!IsTemp());
-    if (IsDefiningPosition(position)) {
-      DCHECK(defined_by_->GetLocations()->Out().IsValid());
-      return position;
-    }
+    DCHECK(!IsDefiningPosition(position));
 
     size_t end = GetEnd();
     for (const UsePosition& use : GetUses()) {
@@ -692,7 +684,11 @@ class LiveInterval : public ArenaObject<kArenaAllocSsaLiveness> {
     range_search_start_ = first_range_;
   }
 
-  bool DefinitionRequiresRegister() const {
+  bool RequiresRegisterForDefinitionAt(size_t position) const {
+    DCHECK(!IsTemp());
+    if (!IsDefiningPosition(position)) {
+      return false;
+    }
     DCHECK(IsParent());
     LocationSummary* locations = defined_by_->GetLocations();
     Location location = locations->Out();
