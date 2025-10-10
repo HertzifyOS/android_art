@@ -2764,20 +2764,27 @@ bool FastCompilerARM64::BuildStaticFieldAccess(const Instruction& instruction,
                                                              h_klass->GetDexTypeIndex(),
                                                              h_klass,
                                                              code_generation_data_.get()));
-  }
-  __ Ldr(temp.W(), MemOperand(temp.X()));
-  DoReadBarrierOn(temp);
-  if (generate_clinit_check) {
-    vixl::aarch64::Label cont;
-    UseScratchRegisterScope temps2(GetVIXLAssembler());
-    InvokeRuntimeCallingConvention calling_convention;
-    Register reg = temps2.AcquireW();
-    __ Ldrb(reg, HeapOperand(temp.W(), kClassStatusByteOffset));
-    __ Cmp(reg, kShiftedVisiblyInitializedValue);
-    __ B(hs, &cont);
-    __ Mov(calling_convention.GetRegisterAt(0).W(), temp.W());
-    InvokeRuntime(kQuickInitializeStaticStorage, dex_pc);
-    __ Bind(&cont);
+    __ Ldr(temp.W(), MemOperand(temp.X()));
+    DoReadBarrierOn(temp);
+    if (generate_clinit_check) {
+      vixl::aarch64::Label cont;
+      UseScratchRegisterScope temps2(GetVIXLAssembler());
+      InvokeRuntimeCallingConvention calling_convention;
+      Register reg = temps2.AcquireW();
+      __ Ldrb(reg, HeapOperand(temp.W(), kClassStatusByteOffset));
+      __ Cmp(reg, kShiftedVisiblyInitializedValue);
+      __ B(hs, &cont);
+      __ Mov(calling_convention.GetRegisterAt(0).W(), temp.W());
+      InvokeRuntime(kQuickInitializeStaticStorage, dex_pc);
+      // Reload the class in the temporary register.
+      __ Ldr(temp.W(), jit_patches_.DeduplicateJitClassLiteral(h_klass->GetDexFile(),
+                                                               h_klass->GetDexTypeIndex(),
+                                                               h_klass,
+                                                               code_generation_data_.get()));
+      __ Ldr(temp.W(), MemOperand(temp.X()));
+      DoReadBarrierOn(temp);
+      __ Bind(&cont);
+    }
   }
   MemOperand mem = HeapOperand(temp.W(), field->GetOffset());
   if (is_put) {
