@@ -156,7 +156,7 @@ class Location : public ValueObject {
     return Location(kFpuRegisterPair, low << 16 | high);
   }
 
-  bool IsRegister() const {
+  bool IsCoreRegister() const {
     return GetKind() == kCoreRegister;
   }
 
@@ -168,7 +168,7 @@ class Location : public ValueObject {
     return GetKind() == kVecRegister;
   }
 
-  bool IsRegisterPair() const {
+  bool IsCoreRegisterPair() const {
     return GetKind() == kCoreRegisterPair;
   }
 
@@ -177,15 +177,15 @@ class Location : public ValueObject {
   }
 
   bool IsRegisterKind() const {
-    return IsRegister() ||
+    return IsCoreRegister() ||
            IsFpuRegister() ||
            IsVecRegister() ||
-           IsRegisterPair() ||
+           IsCoreRegisterPair() ||
            IsFpuRegisterPair();
   }
 
   int reg() const {
-    DCHECK(IsRegister() || IsFpuRegister() || IsVecRegister());
+    DCHECK(IsCoreRegister() || IsFpuRegister() || IsVecRegister());
     return GetPayload();
   }
 
@@ -201,7 +201,7 @@ class Location : public ValueObject {
 
   template <typename T>
   T AsRegister() const {
-    DCHECK(IsRegister());
+    DCHECK(IsCoreRegister());
     return static_cast<T>(reg());
   }
 
@@ -219,13 +219,13 @@ class Location : public ValueObject {
 
   template <typename T>
   T AsRegisterPairLow() const {
-    DCHECK(IsRegisterPair());
+    DCHECK(IsCoreRegisterPair());
     return static_cast<T>(low());
   }
 
   template <typename T>
   T AsRegisterPairHigh() const {
-    DCHECK(IsRegisterPair());
+    DCHECK(IsCoreRegisterPair());
     return static_cast<T>(high());
   }
 
@@ -242,11 +242,11 @@ class Location : public ValueObject {
   }
 
   bool IsPair() const {
-    return IsRegisterPair() || IsFpuRegisterPair();
+    return IsCoreRegisterPair() || IsFpuRegisterPair();
   }
 
   Location ToLow() const {
-    if (IsRegisterPair()) {
+    if (IsCoreRegisterPair()) {
       return CoreRegister(low());
     } else if (IsFpuRegisterPair()) {
       return FpuRegister(low());
@@ -257,7 +257,7 @@ class Location : public ValueObject {
   }
 
   Location ToHigh() const {
-    if (IsRegisterPair()) {
+    if (IsCoreRegisterPair()) {
       return CoreRegister(high());
     } else if (IsFpuRegisterPair()) {
       return FpuRegister(high());
@@ -684,7 +684,7 @@ class LocationSummary : public ArenaObject<kArenaAllocLocationSummary> {
 
   bool IsFixedInput(uint32_t input_index) const {
     Location input = Inputs()[input_index];
-    return input.IsRegister()
+    return input.IsCoreRegister()
         || input.IsFpuRegister()
         || input.IsPair()
         || input.IsStackSlot()

@@ -682,7 +682,7 @@ bool FastCompilerARM64::InitializeParameters() {
     vreg_locations_[vreg_parameter_index] = convention.GetNextLocation(DataType::Type::kReference);
     if (needs_spill) {
       Location new_location = CreateNewLocation(vreg_parameter_index, DataType::Type::kReference);
-      DCHECK(vreg_locations_[vreg_parameter_index].IsRegister());
+      DCHECK(vreg_locations_[vreg_parameter_index].IsCoreRegister());
       MoveLocation(new_location, vreg_locations_[vreg_parameter_index], DataType::Type::kReference);
       vreg_locations_[vreg_parameter_index] = new_location;
     }
@@ -929,9 +929,9 @@ bool FastCompilerARM64::MoveLocation(Location destination,
   if (source.Equals(destination)) {
     return true;
   }
-  if (destination.IsRegister()) {
+  if (destination.IsCoreRegister()) {
     Register dst = RegisterFrom(destination, hint_type);
-    if (source.IsRegister()) {
+    if (source.IsCoreRegister()) {
       __ Mov(dst, RegisterFrom(source, hint_type));
       return true;
     }
@@ -979,7 +979,7 @@ bool FastCompilerARM64::MoveLocation(Location destination,
       __ Ldr(dst, StackOperandFrom(source));
       return true;
     }
-    if (source.IsRegister()) {
+    if (source.IsCoreRegister()) {
       Register src = RegisterFrom(
           source, dst.Is64Bits() ? DataType::Type::kInt64 : DataType::Type::kInt32);
       __ Fmov(dst, src);
@@ -1001,7 +1001,7 @@ bool FastCompilerARM64::MoveLocation(Location destination,
   }
 
   if (destination.IsStackSlot()) {
-    if (source.IsRegister()) {
+    if (source.IsCoreRegister()) {
       DataType::Type src_type = DataType::Is64BitType(hint_type)
           ? DataType::Type::kInt64
           : DataType::Type::kInt32;
@@ -1092,7 +1092,7 @@ Location FastCompilerARM64::CreateNewRegisterLocation(uint32_t reg,
     return vreg_locations_[reg];
   }
 
-  if (vreg_locations_[reg].IsRegister()) {
+  if (vreg_locations_[reg].IsCoreRegister()) {
     // Re-use existing register.
     return vreg_locations_[reg];
   }
@@ -1145,7 +1145,7 @@ Location FastCompilerARM64::GetExistingRegisterLocation(uint32_t reg, DataType::
     return new_location;
   }
 
-  if (vreg_locations_[reg].IsRegister()) {
+  if (vreg_locations_[reg].IsCoreRegister()) {
     return vreg_locations_[reg];
   }
 
@@ -1330,7 +1330,7 @@ bool FastCompilerARM64::GenerateFrame() {
     // Move registers which are currently allocated from caller-saves to callee-saves,
     // and adjust the offsets of stack locations.
     for (uint32_t i = 0; i < number_of_vregs; ++i) {
-      if (vreg_locations_[i].IsRegister()) {
+      if (vreg_locations_[i].IsCoreRegister()) {
         Location new_location =
             Location::CoreRegister(kAvailableCalleeSaveRegisters[i].GetCode());
         if (!MoveLocation(new_location, vreg_locations_[i], DataType::Type::kInt64)) {
@@ -1853,7 +1853,7 @@ bool FastCompilerARM64::BuildFilledNewArray(uint32_t dex_pc,
     for (int32_t i = 0; i < number_of_operands; ++i) {
       Location loc = vreg_locations_[operands.GetOperand(i)];
       Register value;
-      if (loc.IsRegister()) {
+      if (loc.IsCoreRegister()) {
         value = RegisterFrom(loc, type);
       } else {
         MoveLocation(Location::CoreRegister(temp.GetCode()), loc, type);

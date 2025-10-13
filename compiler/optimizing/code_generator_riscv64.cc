@@ -162,7 +162,7 @@ std::pair<uint64_t, int32_t> SplitJitAddress(uint64_t address) {
 }
 
 int32_t ReadBarrierMarkEntrypointOffset(Location ref) {
-  DCHECK(ref.IsRegister());
+  DCHECK(ref.IsCoreRegister());
   int reg = ref.reg();
   DCHECK(T0 <= reg && reg <= T6 && reg != TR) << reg;
   // Note: Entrypoints for registers X30 (T5) and X31 (T6) are stored in entries
@@ -455,7 +455,8 @@ class LoadClassSlowPathRISCV64 : public SlowPathCodeRISCV64 {
 
     // Move the class to the desired location.
     if (out.IsValid()) {
-      DCHECK(out.IsRegister() && !locations->GetLiveRegisters()->ContainsCoreRegister(out.reg()));
+      DCHECK(out.IsCoreRegister());
+      DCHECK(!locations->GetLiveRegisters()->ContainsCoreRegister(out.reg()));
       DataType::Type type = DataType::Type::kReference;
       DCHECK_EQ(type, instruction_->GetType());
       riscv64_codegen->MoveLocation(out, calling_convention.GetReturnLocation(type), type);
@@ -689,7 +690,7 @@ class ReadBarrierMarkSlowPathRISCV64 : public SlowPathCodeRISCV64 {
  public:
   ReadBarrierMarkSlowPathRISCV64(HInstruction* instruction, Location ref, Location entrypoint)
       : SlowPathCodeRISCV64(instruction), ref_(ref), entrypoint_(entrypoint) {
-    DCHECK(entrypoint.IsRegister());
+    DCHECK(entrypoint.IsCoreRegister());
   }
 
   const char* GetDescription() const override { return "ReadBarrierMarkSlowPathRISCV64"; }
@@ -1382,7 +1383,7 @@ void InstructionCodeGeneratorRISCV64::GenerateTestAndBranch(HInstruction* instru
   if (IsBooleanValueOrMaterializedCondition(cond)) {
     // The condition instruction has been materialized, compare the output to 0.
     Location cond_val = instruction->GetLocations()->InAt(condition_input_index);
-    DCHECK(cond_val.IsRegister());
+    DCHECK(cond_val.IsCoreRegister());
     if (true_target == nullptr) {
       __ Beqz(cond_val.AsRegister<XRegister>(), false_target);
     } else {
@@ -1899,7 +1900,7 @@ void CodeGeneratorRISCV64::GenerateReferenceLoadWithBakerReadBarrier(HInstructio
   XRegister reg = ref.AsRegister<XRegister>();
   if (index.IsValid()) {
     DCHECK(!needs_null_check);
-    DCHECK(index.IsRegister());
+    DCHECK(index.IsCoreRegister());
     DataType::Type type = DataType::Type::kReference;
     DCHECK_EQ(type, instruction->GetType());
     if (instruction->IsArrayGet()) {
@@ -4218,7 +4219,7 @@ void LocationsBuilderRISCV64::VisitInvokeStaticOrDirect(HInvokeStaticOrDirect* i
       // Use the next argument register, if usable for C.LD, as the target method temp. Otherwise,
       // we'll use RA. We prefer the low register temp that allows shorter encoding than RA.
       Location maybe_temp = calling_convention_visitor.GetNextLocation(DataType::Type::kInt32);
-      if (maybe_temp.IsRegister() && maybe_temp.reg() <= A5) {
+      if (maybe_temp.IsCoreRegister() && maybe_temp.reg() <= A5) {
         instruction->GetLocations()->AddTemp(maybe_temp);
       }
     }
@@ -6289,7 +6290,7 @@ void CodeGeneratorRISCV64::GenerateFrameExit() {
 void CodeGeneratorRISCV64::Bind(HBasicBlock* block) { __ Bind(GetLabelOf(block)); }
 
 void CodeGeneratorRISCV64::MoveConstant(Location destination, int32_t value) {
-  DCHECK(destination.IsRegister());
+  DCHECK(destination.IsCoreRegister());
   __ LoadConst32(destination.AsRegister<XRegister>(), value);
 }
 
@@ -6308,23 +6309,23 @@ void CodeGeneratorRISCV64::MoveLocation(Location destination,
   // TODO(riscv64): Can unspecified `dst_type` move 32-bit GPR to FPR without NaN-boxing?
   CHECK(!unspecified_type);
 
-  if (destination.IsRegister() || destination.IsFpuRegister()) {
+  if (destination.IsCoreRegister() || destination.IsFpuRegister()) {
     if (unspecified_type) {
       HConstant* src_cst = source.IsConstant() ? source.GetConstant() : nullptr;
       if (source.IsStackSlot() ||
           (src_cst != nullptr &&
            (src_cst->IsIntConstant() || src_cst->IsFloatConstant() || src_cst->IsNullConstant()))) {
         // For stack slots and 32-bit constants, a 32-bit type is appropriate.
-        dst_type = destination.IsRegister() ? DataType::Type::kInt32 : DataType::Type::kFloat32;
+        dst_type = destination.IsCoreRegister() ? DataType::Type::kInt32 : DataType::Type::kFloat32;
       } else {
         // If the source is a double stack slot or a 64-bit constant, a 64-bit type
         // is appropriate. Else the source is a register, and since the type has not
         // been specified, we chose a 64-bit type to force a 64-bit move.
-        dst_type = destination.IsRegister() ? DataType::Type::kInt64 : DataType::Type::kFloat64;
+        dst_type = destination.IsCoreRegister() ? DataType::Type::kInt64 : DataType::Type::kFloat64;
       }
     }
     DCHECK((destination.IsFpuRegister() && DataType::IsFloatingPointType(dst_type)) ||
-           (destination.IsRegister() && !DataType::IsFloatingPointType(dst_type)));
+           (destination.IsCoreRegister() && !DataType::IsFloatingPointType(dst_type)));
 
     if (source.IsStackSlot() || source.IsDoubleStackSlot()) {
       // Move to GPR/FPR from stack
@@ -6364,8 +6365,8 @@ void CodeGeneratorRISCV64::MoveLocation(Location destination,
       } else if (dst_type == DataType::Type::kFloat64) {
         __ FMvDX(destination.AsFpuRegister<FRegister>(), gpr);
       }
-    } else if (source.IsRegister()) {
-      if (destination.IsRegister()) {
+    } else if (source.IsCoreRegister()) {
+      if (destination.IsCoreRegister()) {
         // Move to GPR from GPR
         __ Mv(destination.AsRegister<XRegister>(), source.AsRegister<XRegister>());
       } else {
@@ -6391,7 +6392,7 @@ void CodeGeneratorRISCV64::MoveLocation(Location destination,
           }
         }
       } else {
-        DCHECK(destination.IsRegister());
+        DCHECK(destination.IsCoreRegister());
         if (DataType::Is64BitType(dst_type)) {
           __ FMvXD(destination.AsRegister<XRegister>(), source.AsFpuRegister<FRegister>());
         } else {
@@ -6404,9 +6405,9 @@ void CodeGeneratorRISCV64::MoveLocation(Location destination,
     UNREACHABLE();
   } else {  // The destination is not a register. It must be a stack slot.
     DCHECK(destination.IsStackSlot() || destination.IsDoubleStackSlot());
-    if (source.IsRegister() || source.IsFpuRegister()) {
+    if (source.IsCoreRegister() || source.IsFpuRegister()) {
       if (unspecified_type) {
-        if (source.IsRegister()) {
+        if (source.IsCoreRegister()) {
           dst_type = destination.IsStackSlot() ? DataType::Type::kInt32 : DataType::Type::kInt64;
         } else {
           dst_type =
@@ -6420,13 +6421,13 @@ void CodeGeneratorRISCV64::MoveLocation(Location destination,
                      destination.IsDoubleStackSlot() == DataType::Is64BitType(dst_type));
       // Move to stack from GPR/FPR
       if (destination.IsDoubleStackSlot()) {
-        if (source.IsRegister()) {
+        if (source.IsCoreRegister()) {
           __ Stored(source.AsRegister<XRegister>(), SP, destination.GetStackIndex());
         } else {
           __ FStored(source.AsFpuRegister<FRegister>(), SP, destination.GetStackIndex());
         }
       } else {
-        if (source.IsRegister()) {
+        if (source.IsCoreRegister()) {
           __ Storew(source.AsRegister<XRegister>(), SP, destination.GetStackIndex());
         } else {
           __ FStorew(source.AsFpuRegister<FRegister>(), SP, destination.GetStackIndex());
@@ -6469,7 +6470,7 @@ void CodeGeneratorRISCV64::MoveLocation(Location destination,
 }
 
 void CodeGeneratorRISCV64::AddLocationAsTemp(Location location, LocationSummary* locations) {
-  if (location.IsRegister()) {
+  if (location.IsCoreRegister()) {
     locations->AddTemp(location);
   } else {
     UNIMPLEMENTED(FATAL) << "AddLocationAsTemp not implemented for location " << location;
@@ -7285,7 +7286,7 @@ void CodeGeneratorRISCV64::SwapLocations(Location loc1, Location loc2, DataType:
   bool is_fp_reg2 = loc2.IsFpuRegister();
 
   if ((is_slot1 != is_slot2) ||
-      (loc2.IsRegister() && loc1.IsRegister()) ||
+      (loc2.IsCoreRegister() && loc1.IsCoreRegister()) ||
       (is_fp_reg2 && is_fp_reg1)) {
     if ((is_fp_reg2 && is_fp_reg1) && GetGraph()->HasSIMD()) {
       LOG(FATAL) << "Unsupported";

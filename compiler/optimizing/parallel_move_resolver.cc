@@ -78,7 +78,7 @@ void ParallelMoveResolverWithSwap::EmitNativeCode(HParallelMove* parallel_move) 
 }
 
 Location LowOf(Location location) {
-  if (location.IsRegisterPair()) {
+  if (location.IsCoreRegisterPair()) {
     return Location::CoreRegister(location.low());
   } else if (location.IsFpuRegisterPair()) {
     return Location::FpuRegister(location.low());
@@ -90,7 +90,7 @@ Location LowOf(Location location) {
 }
 
 Location HighOf(Location location) {
-  if (location.IsRegisterPair()) {
+  if (location.IsCoreRegisterPair()) {
     return Location::CoreRegister(location.high());
   } else if (location.IsFpuRegisterPair()) {
     return Location::FpuRegister(location.high());

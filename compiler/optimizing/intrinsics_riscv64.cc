@@ -1830,7 +1830,7 @@ void IntrinsicCodeGeneratorRISCV64::VisitSystemArrayCopy(HInvoke* invoke) {
     // Null constant length: not need to emit the loop code at all.
   } else {
     Riscv64Label skip_copy_and_write_barrier;
-    if (length.IsRegister()) {
+    if (length.IsCoreRegister()) {
       // Don't enter the copy loop if the length is null.
       __ Beqz(length.AsRegister<XRegister>(), &skip_copy_and_write_barrier);
     }
@@ -5752,7 +5752,7 @@ void IntrinsicLocationsBuilderRISCV64::VisitMethodHandleInvokeExact(HInvoke* inv
   locations->AddTemp(calling_convention.GetMethodLocation());
   locations->AddRegisterTemps(2);
 
-  if (!receiver_mh_loc.IsRegister()) {
+  if (!receiver_mh_loc.IsCoreRegister()) {
     locations->AddTemp(Location::RequiresRegister());
   }
 }
@@ -5762,11 +5762,11 @@ void IntrinsicCodeGeneratorRISCV64::VisitMethodHandleInvokeExact(HInvoke* invoke
   Riscv64Assembler* assembler = GetAssembler();
 
   Location receiver_mh_loc = locations->InAt(0);
-  XRegister method_handle = receiver_mh_loc.IsRegister()
+  XRegister method_handle = receiver_mh_loc.IsCoreRegister()
       ? locations->InAt(0).AsRegister<XRegister>()
       : locations->GetTemp(3).AsRegister<XRegister>();
 
-  if (!receiver_mh_loc.IsRegister()) {
+  if (!receiver_mh_loc.IsCoreRegister()) {
     DCHECK(receiver_mh_loc.IsStackSlot());
     __ Loadwu(method_handle, SP, receiver_mh_loc.GetStackIndex());
   }

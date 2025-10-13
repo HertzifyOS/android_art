@@ -435,10 +435,10 @@ bool RegisterAllocatorLinearScan::Validate(bool log_fatal_on_failure) {
 void RegisterAllocatorLinearScan::BlockRegister(Location location,
                                                 size_t position,
                                                 bool will_call) {
-  DCHECK(location.IsRegister() || location.IsFpuRegister() || location.IsVecRegister());
+  DCHECK(location.IsCoreRegister() || location.IsFpuRegister() || location.IsVecRegister());
   int reg = location.reg();
   // Ensure that an explicit input/output/temporary register is marked as being allocated.
-  if (location.IsRegister()) {
+  if (location.IsCoreRegister()) {
     codegen_->AddAllocatedCoreRegister(reg);
   } else if (location.IsFpuRegister()) {
     codegen_->AddAllocatedFpuRegister(reg);
@@ -446,7 +446,7 @@ void RegisterAllocatorLinearScan::BlockRegister(Location location,
     codegen_->AddAllocatedVectorRegister(reg);
   }
   if (will_call) {
-    uint32_t registers_blocked_for_call = location.IsRegister()
+    uint32_t registers_blocked_for_call = location.IsCoreRegister()
         ? registers_blocked_for_call_.GetCoreRegisterSet()
         : location.IsFpuRegister() ? registers_blocked_for_call_.GetFpuRegisterSet()
                                    : registers_blocked_for_call_.GetVecRegisterSet();
@@ -455,11 +455,11 @@ void RegisterAllocatorLinearScan::BlockRegister(Location location,
       return;
     }
   }
-  ArrayRef<LiveInterval*> physical_register_intervals(location.IsRegister()
+  ArrayRef<LiveInterval*> physical_register_intervals(location.IsCoreRegister()
       ? physical_core_register_intervals_
       : location.IsFpuRegister() ? physical_fp_register_intervals_
                                  : physical_vector_register_intervals_);
-  DataType::Type type = location.IsRegister()
+  DataType::Type type = location.IsCoreRegister()
       ? DataType::Type::kInt32
       : location.IsFpuRegister() ? DataType::Type::kFloat32 : DataType::Type::kFloat64;
   LiveInterval* interval = physical_register_intervals[reg];
@@ -625,7 +625,7 @@ void RegisterAllocatorLinearScan::CheckForTempLiveIntervals(HInstruction* instru
   // Create synthesized intervals for temporaries.
   for (size_t i = 0; i < locations->GetTempCount(); ++i) {
     Location temp = locations->GetTemp(i);
-    if (temp.IsRegister() || temp.IsFpuRegister() || temp.IsVecRegister()) {
+    if (temp.IsCoreRegister() || temp.IsFpuRegister() || temp.IsVecRegister()) {
       BlockRegister(temp, position, will_call);
     } else {
       DCHECK(temp.IsUnallocated());
@@ -674,7 +674,7 @@ void RegisterAllocatorLinearScan::CheckForFixedInputs(HInstruction* instruction,
   size_t position = instruction->GetLifetimePosition();
   for (size_t i = 0; i < locations->GetInputCount(); ++i) {
     Location input = locations->InAt(i);
-    if (input.IsRegister() || input.IsFpuRegister() || input.IsVecRegister()) {
+    if (input.IsCoreRegister() || input.IsFpuRegister() || input.IsVecRegister()) {
       BlockRegister(input, position, will_call);
     } else if (input.IsPair()) {
       BlockRegister(input.ToLow(), position, will_call);
@@ -699,7 +699,7 @@ void RegisterAllocatorLinearScan::CheckForFixedOutput(HInstruction* instruction,
     if (output.GetPolicy() == Location::kSameAsFirstInput) {
       DCHECK(locations->OutputCanOverlapWithInputs());
       Location first = locations->InAt(0);
-      if (first.IsRegister() || first.IsFpuRegister() || first.IsVecRegister()) {
+      if (first.IsCoreRegister() || first.IsFpuRegister() || first.IsVecRegister()) {
         current->SetFrom(position + kLivenessPositionOfFixedOutput);
         current->SetRegisters(1u << first.reg());
       } else if (first.IsPair()) {
@@ -710,7 +710,7 @@ void RegisterAllocatorLinearScan::CheckForFixedOutput(HInstruction* instruction,
                !locations->OutputCanOverlapWithInputs()) {
       current->SetFrom(position + kLivenessPositionOfNonOverlappingOutput);
     }
-  } else if (output.IsRegister() || output.IsFpuRegister() || output.IsVecRegister()) {
+  } else if (output.IsCoreRegister() || output.IsFpuRegister() || output.IsVecRegister()) {
     // Shift the interval's start by one to account for the blocked register.
     current->SetFrom(position + kLivenessPositionOfFixedOutput);
     current->SetRegisters(1u << output.reg());

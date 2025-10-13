@@ -531,7 +531,8 @@ class LoadClassSlowPathARMVIXL : public SlowPathCodeARMVIXL {
 
     // Move the class to the desired location.
     if (out.IsValid()) {
-      DCHECK(out.IsRegister() && !locations->GetLiveRegisters()->ContainsCoreRegister(out.reg()));
+      DCHECK(out.IsCoreRegister());
+      DCHECK(!locations->GetLiveRegisters()->ContainsCoreRegister(out.reg()));
       arm_codegen->Move32(locations->Out(), LocationFrom(r0));
     }
     RestoreLiveRegisters(codegen, locations);
@@ -817,7 +818,7 @@ class ReadBarrierForHeapReferenceSlowPathARMVIXL : public SlowPathCodeARMVIXL {
         // Though UnsafeGet's offset location is a register pair, we only pass the low
         // part (high part is irrelevant for 32-bit addresses) to the slow path.
         // For VarHandle intrinsics, the index is always just a register.
-        DCHECK(index_.IsRegister());
+        DCHECK(index_.IsCoreRegister());
         index = index_;
       }
     }
@@ -1485,7 +1486,7 @@ static std::pair<vixl32::Condition, vixl32::Condition> GenerateLongTest(
   Location left = locations->InAt(0);
   Location right = locations->InAt(1);
 
-  DCHECK(right.IsRegisterPair());
+  DCHECK(right.IsCoreRegisterPair());
 
   switch (cond) {
     case kCondEQ:
@@ -1626,7 +1627,7 @@ static void GenerateEqualLong(HCondition* cond, CodeGeneratorARMVIXL* codegen) {
     temp = temps.Acquire();
     __ Sub(temp, left_high, right_high);
   } else {
-    DCHECK(right.IsRegisterPair());
+    DCHECK(right.IsCoreRegisterPair());
     temp = temps.Acquire();
     __ Sub(temp, left_high, HighRegisterFrom(right));
     __ Sub(out, left_low, LowRegisterFrom(right));
@@ -1837,7 +1838,7 @@ static bool CanGenerateConditionalMove(const Location& out, const Location& src)
   // Since IT blocks longer than a 16-bit instruction are deprecated by ARMv8,
   // we check that we are not dealing with floating-point output (there is no
   // 16-bit VMOV encoding).
-  if (!out.IsRegister() && !out.IsRegisterPair()) {
+  if (!out.IsCoreRegister() && !out.IsCoreRegisterPair()) {
     return false;
   }
 
@@ -1849,12 +1850,12 @@ static bool CanGenerateConditionalMove(const Location& out, const Location& src)
       return false;
     }
 
-    if (out.IsRegister()) {
+    if (out.IsCoreRegister()) {
       if (!RegisterFrom(out).IsLow()) {
         return false;
       }
     } else {
-      DCHECK(out.IsRegisterPair());
+      DCHECK(out.IsCoreRegisterPair());
 
       if (!HighRegisterFrom(out).IsLow()) {
         return false;
@@ -2713,8 +2714,8 @@ void CodeGeneratorARMVIXL::Move32(Location destination, Location source) {
   if (source.Equals(destination)) {
     return;
   }
-  if (destination.IsRegister()) {
-    if (source.IsRegister()) {
+  if (destination.IsCoreRegister()) {
+    if (source.IsCoreRegister()) {
       __ Mov(RegisterFrom(destination), RegisterFrom(source));
     } else if (source.IsFpuRegister()) {
       __ Vmov(RegisterFrom(destination), SRegisterFrom(source));
@@ -2725,7 +2726,7 @@ void CodeGeneratorARMVIXL::Move32(Location destination, Location source) {
                                      source.GetStackIndex());
     }
   } else if (destination.IsFpuRegister()) {
-    if (source.IsRegister()) {
+    if (source.IsCoreRegister()) {
       __ Vmov(SRegisterFrom(destination), RegisterFrom(source));
     } else if (source.IsFpuRegister()) {
       __ Vmov(SRegisterFrom(destination), SRegisterFrom(source));
@@ -2734,7 +2735,7 @@ void CodeGeneratorARMVIXL::Move32(Location destination, Location source) {
     }
   } else {
     DCHECK(destination.IsStackSlot()) << destination;
-    if (source.IsRegister()) {
+    if (source.IsCoreRegister()) {
       GetAssembler()->StoreToOffset(kStoreWord,
                                     RegisterFrom(source),
                                     sp,
@@ -2752,7 +2753,7 @@ void CodeGeneratorARMVIXL::Move32(Location destination, Location source) {
 }
 
 void CodeGeneratorARMVIXL::MoveConstant(Location location, int32_t value) {
-  DCHECK(location.IsRegister());
+  DCHECK(location.IsCoreRegister());
   __ Mov(RegisterFrom(location), value);
 }
 
@@ -2765,9 +2766,9 @@ void CodeGeneratorARMVIXL::MoveLocation(Location dst, Location src, DataType::Ty
 }
 
 void CodeGeneratorARMVIXL::AddLocationAsTemp(Location location, LocationSummary* locations) {
-  if (location.IsRegister()) {
+  if (location.IsCoreRegister()) {
     locations->AddTemp(location);
-  } else if (location.IsRegisterPair()) {
+  } else if (location.IsCoreRegisterPair()) {
     locations->AddTemp(LocationFrom(LowRegisterFrom(location)));
     locations->AddTemp(LocationFrom(HighRegisterFrom(location)));
   } else {
@@ -2939,7 +2940,7 @@ void InstructionCodeGeneratorARMVIXL::GenerateTestAndBranch(HInstruction* instru
     // Condition has been materialized, compare the output to 0.
     if (kIsDebugBuild) {
       Location cond_val = instruction->GetLocations()->InAt(condition_input_index);
-      DCHECK(cond_val.IsRegister());
+      DCHECK(cond_val.IsCoreRegister());
     }
     if (true_target == nullptr) {
       __ CompareAndBranchIfZero(InputRegisterAt(instruction, condition_input_index),
@@ -3173,17 +3174,17 @@ void InstructionCodeGeneratorARMVIXL::VisitSelect(HSelect* select) {
         cond = GenerateTest(condition->AsCondition(), invert, codegen_);
       }
 
-      const size_t instr_count = out.IsRegisterPair() ? 4 : 2;
+      const size_t instr_count = out.IsCoreRegisterPair() ? 4 : 2;
       // We use the scope because of the IT block that follows.
       ExactAssemblyScope guard(GetVIXLAssembler(),
                                instr_count * vixl32::k16BitT32InstructionSizeInBytes,
                                CodeBufferCheckScope::kExactSize);
 
-      if (out.IsRegister()) {
+      if (out.IsCoreRegister()) {
         __ it(cond.first);
         __ mov(cond.first, RegisterFrom(out), OperandFrom(src, type));
       } else {
-        DCHECK(out.IsRegisterPair());
+        DCHECK(out.IsCoreRegisterPair());
 
         Operand operand_high(0);
         Operand operand_low(0);
@@ -3194,7 +3195,7 @@ void InstructionCodeGeneratorARMVIXL::VisitSelect(HSelect* select) {
           operand_high = High32Bits(value);
           operand_low = Low32Bits(value);
         } else {
-          DCHECK(src.IsRegisterPair());
+          DCHECK(src.IsCoreRegisterPair());
           operand_high = HighRegisterFrom(src);
           operand_low = LowRegisterFrom(src);
         }
@@ -3610,7 +3611,7 @@ void LocationsBuilderARMVIXL::VisitInvokeStaticOrDirect(HInvokeStaticOrDirect* i
     // Use the next argument register, if any, as the target method temp. Otherwise, we'll use LR.
     // We prefer the low register temp that allows shorter encoding than LR.
     Location maybe_temp = calling_convention_visitor.GetNextLocation(DataType::Type::kInt32);
-    if (maybe_temp.IsRegister()) {
+    if (maybe_temp.IsCoreRegister()) {
       invoke->GetLocations()->AddTemp(maybe_temp);
     }
   } else {
@@ -4113,8 +4114,8 @@ void InstructionCodeGeneratorARMVIXL::VisitTypeConversion(HTypeConversion* conve
     case DataType::Type::kInt32:
       switch (input_type) {
         case DataType::Type::kInt64:
-          DCHECK(out.IsRegister());
-          if (in.IsRegisterPair()) {
+          DCHECK(out.IsCoreRegister());
+          if (in.IsCoreRegisterPair()) {
             __ Mov(OutputRegister(conversion), LowRegisterFrom(in));
           } else if (in.IsDoubleStackSlot()) {
             GetAssembler()->LoadFromOffset(kLoadWord,
@@ -4157,8 +4158,8 @@ void InstructionCodeGeneratorARMVIXL::VisitTypeConversion(HTypeConversion* conve
         case DataType::Type::kUint16:
         case DataType::Type::kInt16:
         case DataType::Type::kInt32:
-          DCHECK(out.IsRegisterPair());
-          DCHECK(in.IsRegister());
+          DCHECK(out.IsCoreRegisterPair());
+          DCHECK(in.IsCoreRegister());
           __ Mov(LowRegisterFrom(out), InputRegisterAt(conversion, 0));
           // Sign extension.
           __ Asr(HighRegisterFrom(out), LowRegisterFrom(out), 31);
@@ -4304,7 +4305,7 @@ void InstructionCodeGeneratorARMVIXL::VisitAdd(HAdd* add) {
         uint64_t value = static_cast<uint64_t>(Int64FromConstant(second.GetConstant()));
         GenerateAddLongConst(out, first, value);
       } else {
-        DCHECK(second.IsRegisterPair());
+        DCHECK(second.IsCoreRegisterPair());
         __ Adds(LowRegisterFrom(out), LowRegisterFrom(first), LowRegisterFrom(second));
         __ Adc(HighRegisterFrom(out), HighRegisterFrom(first), HighRegisterFrom(second));
       }
@@ -4365,7 +4366,7 @@ void InstructionCodeGeneratorARMVIXL::VisitSub(HSub* sub) {
         uint64_t value = static_cast<uint64_t>(Int64FromConstant(second.GetConstant()));
         GenerateAddLongConst(out, first, -value);
       } else {
-        DCHECK(second.IsRegisterPair());
+        DCHECK(second.IsCoreRegisterPair());
         __ Subs(LowRegisterFrom(out), LowRegisterFrom(first), LowRegisterFrom(second));
         __ Sbc(HighRegisterFrom(out), HighRegisterFrom(first), HighRegisterFrom(second));
       }
@@ -5234,7 +5235,7 @@ void InstructionCodeGeneratorARMVIXL::VisitDivZeroCheck(HDivZeroCheck* instructi
     case DataType::Type::kUint16:
     case DataType::Type::kInt16:
     case DataType::Type::kInt32: {
-      if (value.IsRegister()) {
+      if (value.IsCoreRegister()) {
         __ CompareAndBranchIfZero(InputRegisterAt(instruction, 0), slow_path->GetEntryLabel());
       } else {
         DCHECK(value.IsConstant()) << value;
@@ -5245,7 +5246,7 @@ void InstructionCodeGeneratorARMVIXL::VisitDivZeroCheck(HDivZeroCheck* instructi
       break;
     }
     case DataType::Type::kInt64: {
-      if (value.IsRegisterPair()) {
+      if (value.IsCoreRegisterPair()) {
         UseScratchRegisterScope temps(GetVIXLAssembler());
         vixl32::Register temp = temps.Acquire();
         __ Orrs(temp, LowRegisterFrom(value), HighRegisterFrom(value));
@@ -5503,7 +5504,7 @@ void InstructionCodeGeneratorARMVIXL::HandleShift(HBinaryOperation* op) {
     case DataType::Type::kInt32: {
       vixl32::Register out_reg = OutputRegister(op);
       vixl32::Register first_reg = InputRegisterAt(op, 0);
-      if (second.IsRegister()) {
+      if (second.IsCoreRegister()) {
         vixl32::Register second_reg = RegisterFrom(second);
         // ARM doesn't mask the shift count so we need to do it ourselves.
         __ And(out_reg, second_reg, kMaxIntShiftDistance);
@@ -5536,7 +5537,7 @@ void InstructionCodeGeneratorARMVIXL::HandleShift(HBinaryOperation* op) {
       vixl32::Register high = HighRegisterFrom(first);
       vixl32::Register low = LowRegisterFrom(first);
 
-      if (second.IsRegister()) {
+      if (second.IsCoreRegister()) {
         vixl32::Register temp = RegisterFrom(locations->GetTemp(0));
 
         vixl32::Register second_reg = RegisterFrom(second);
@@ -6968,7 +6969,7 @@ void InstructionCodeGeneratorARMVIXL::VisitArraySet(HArraySet* instruction) {
           size_t offset = (Int32ConstantFrom(index) << TIMES_4) + data_offset;
           GetAssembler()->StoreToOffset(kStoreWord, value, array, offset);
         } else {
-          DCHECK(index.IsRegister()) << index;
+          DCHECK(index.IsCoreRegister()) << index;
           UseScratchRegisterScope temps(GetVIXLAssembler());
           vixl32::Register temp = temps.Acquire();
           __ Add(temp, array, data_offset);
@@ -7099,7 +7100,7 @@ void InstructionCodeGeneratorARMVIXL::VisitArraySet(HArraySet* instruction) {
           size_t offset = (Int32ConstantFrom(index) << TIMES_4) + data_offset;
           GetAssembler()->StoreToOffset(kStoreWord, source, array, offset);
         } else {
-          DCHECK(index.IsRegister()) << index;
+          DCHECK(index.IsCoreRegister()) << index;
 
           UseScratchRegisterScope temps(GetVIXLAssembler());
           vixl32::Register temp = temps.Acquire();
@@ -7223,7 +7224,7 @@ void InstructionCodeGeneratorARMVIXL::VisitIntermediateAddress(HIntermediateAddr
   vixl32::Register first = InputRegisterAt(instruction, 0);
   Location second = instruction->GetLocations()->InAt(1);
 
-  if (second.IsRegister()) {
+  if (second.IsCoreRegister()) {
     __ Add(out, first, RegisterFrom(second));
   } else {
     __ Add(out, first, Int32ConstantFrom(second));
@@ -7431,8 +7432,8 @@ void ParallelMoveResolverARMVIXL::EmitMove(size_t index) {
   Location source = move->GetSource();
   Location destination = move->GetDestination();
 
-  if (source.IsRegister()) {
-    if (destination.IsRegister()) {
+  if (source.IsCoreRegister()) {
+    if (destination.IsCoreRegister()) {
       __ Mov(RegisterFrom(destination), RegisterFrom(source));
     } else if (destination.IsFpuRegister()) {
       __ Vmov(SRegisterFrom(destination), RegisterFrom(source));
@@ -7444,7 +7445,7 @@ void ParallelMoveResolverARMVIXL::EmitMove(size_t index) {
                                     destination.GetStackIndex());
     }
   } else if (source.IsStackSlot()) {
-    if (destination.IsRegister()) {
+    if (destination.IsCoreRegister()) {
       GetAssembler()->LoadFromOffset(kLoadWord,
                                      RegisterFrom(destination),
                                      sp,
@@ -7458,7 +7459,7 @@ void ParallelMoveResolverARMVIXL::EmitMove(size_t index) {
       GetAssembler()->StoreToOffset(kStoreWord, temp, sp, destination.GetStackIndex());
     }
   } else if (source.IsFpuRegister()) {
-    if (destination.IsRegister()) {
+    if (destination.IsCoreRegister()) {
       __ Vmov(RegisterFrom(destination), SRegisterFrom(source));
     } else if (destination.IsFpuRegister()) {
       __ Vmov(SRegisterFrom(destination), SRegisterFrom(source));
@@ -7471,7 +7472,7 @@ void ParallelMoveResolverARMVIXL::EmitMove(size_t index) {
       vixl32::DRegister temp = temps.AcquireD();
       GetAssembler()->LoadDFromOffset(temp, sp, source.GetStackIndex());
       GetAssembler()->StoreDToOffset(temp, sp, destination.GetStackIndex());
-    } else if (destination.IsRegisterPair()) {
+    } else if (destination.IsCoreRegisterPair()) {
       DCHECK(ExpectedPairLayout(destination));
       GetAssembler()->LoadFromOffset(
           kLoadWordPair, LowRegisterFrom(destination), sp, source.GetStackIndex());
@@ -7479,8 +7480,8 @@ void ParallelMoveResolverARMVIXL::EmitMove(size_t index) {
       DCHECK(destination.IsFpuRegisterPair()) << destination;
       GetAssembler()->LoadDFromOffset(DRegisterFrom(destination), sp, source.GetStackIndex());
     }
-  } else if (source.IsRegisterPair()) {
-    if (destination.IsRegisterPair()) {
+  } else if (source.IsCoreRegisterPair()) {
+    if (destination.IsCoreRegisterPair()) {
       __ Mov(LowRegisterFrom(destination), LowRegisterFrom(source));
       __ Mov(HighRegisterFrom(destination), HighRegisterFrom(source));
     } else if (destination.IsFpuRegisterPair()) {
@@ -7494,7 +7495,7 @@ void ParallelMoveResolverARMVIXL::EmitMove(size_t index) {
                                     destination.GetStackIndex());
     }
   } else if (source.IsFpuRegisterPair()) {
-    if (destination.IsRegisterPair()) {
+    if (destination.IsCoreRegisterPair()) {
       __ Vmov(LowRegisterFrom(destination), HighRegisterFrom(destination), DRegisterFrom(source));
     } else if (destination.IsFpuRegisterPair()) {
       __ Vmov(DRegisterFrom(destination), DRegisterFrom(source));
@@ -7507,7 +7508,7 @@ void ParallelMoveResolverARMVIXL::EmitMove(size_t index) {
     HConstant* constant = source.GetConstant();
     if (constant->IsIntConstant() || constant->IsNullConstant()) {
       int32_t value = CodeGenerator::GetInt32ValueOf(constant);
-      if (destination.IsRegister()) {
+      if (destination.IsCoreRegister()) {
         __ Mov(RegisterFrom(destination), value);
       } else {
         DCHECK(destination.IsStackSlot());
@@ -7517,7 +7518,7 @@ void ParallelMoveResolverARMVIXL::EmitMove(size_t index) {
       }
     } else if (constant->IsLongConstant()) {
       int64_t value = Int64ConstantFrom(source);
-      if (destination.IsRegisterPair()) {
+      if (destination.IsCoreRegisterPair()) {
         __ Mov(LowRegisterFrom(destination), Low32Bits(value));
         __ Mov(HighRegisterFrom(destination), High32Bits(value));
       } else {
@@ -7591,16 +7592,16 @@ void ParallelMoveResolverARMVIXL::EmitSwap(size_t index) {
   Location destination = move->GetDestination();
   UseScratchRegisterScope temps(GetAssembler()->GetVIXLAssembler());
 
-  if (source.IsRegister() && destination.IsRegister()) {
+  if (source.IsCoreRegister() && destination.IsCoreRegister()) {
     vixl32::Register temp = temps.Acquire();
     DCHECK(!RegisterFrom(source).Is(temp));
     DCHECK(!RegisterFrom(destination).Is(temp));
     __ Mov(temp, RegisterFrom(destination));
     __ Mov(RegisterFrom(destination), RegisterFrom(source));
     __ Mov(RegisterFrom(source), temp);
-  } else if (source.IsRegister() && destination.IsStackSlot()) {
+  } else if (source.IsCoreRegister() && destination.IsStackSlot()) {
     Exchange(RegisterFrom(source), destination.GetStackIndex());
-  } else if (source.IsStackSlot() && destination.IsRegister()) {
+  } else if (source.IsStackSlot() && destination.IsCoreRegister()) {
     Exchange(RegisterFrom(destination), source.GetStackIndex());
   } else if (source.IsStackSlot() && destination.IsStackSlot()) {
     Exchange(source.GetStackIndex(), destination.GetStackIndex());
@@ -7609,16 +7610,16 @@ void ParallelMoveResolverARMVIXL::EmitSwap(size_t index) {
     __ Vmov(temp, SRegisterFrom(source));
     __ Vmov(SRegisterFrom(source), SRegisterFrom(destination));
     __ Vmov(SRegisterFrom(destination), temp);
-  } else if (source.IsRegisterPair() && destination.IsRegisterPair()) {
+  } else if (source.IsCoreRegisterPair() && destination.IsCoreRegisterPair()) {
     vixl32::DRegister temp = temps.AcquireD();
     __ Vmov(temp, LowRegisterFrom(source), HighRegisterFrom(source));
     __ Mov(LowRegisterFrom(source), LowRegisterFrom(destination));
     __ Mov(HighRegisterFrom(source), HighRegisterFrom(destination));
     __ Vmov(LowRegisterFrom(destination), HighRegisterFrom(destination), temp);
-  } else if (source.IsRegisterPair() || destination.IsRegisterPair()) {
-    vixl32::Register low_reg = LowRegisterFrom(source.IsRegisterPair() ? source : destination);
-    int mem = source.IsRegisterPair() ? destination.GetStackIndex() : source.GetStackIndex();
-    DCHECK(ExpectedPairLayout(source.IsRegisterPair() ? source : destination));
+  } else if (source.IsCoreRegisterPair() || destination.IsCoreRegisterPair()) {
+    vixl32::Register low_reg = LowRegisterFrom(source.IsCoreRegisterPair() ? source : destination);
+    int mem = source.IsCoreRegisterPair() ? destination.GetStackIndex() : source.GetStackIndex();
+    DCHECK(ExpectedPairLayout(source.IsCoreRegisterPair() ? source : destination));
     vixl32::DRegister temp = temps.AcquireD();
     __ Vmov(temp, low_reg, vixl32::Register(low_reg.GetCode() + 1));
     GetAssembler()->LoadFromOffset(kLoadWordPair, low_reg, sp, mem);
@@ -9076,7 +9077,7 @@ void InstructionCodeGeneratorARMVIXL::GenerateReferenceLoadOneRegister(
   vixl32::Register out_reg = RegisterFrom(out);
   if (read_barrier_option == kWithReadBarrier) {
     DCHECK(codegen_->EmitReadBarrier());
-    DCHECK(maybe_temp.IsRegister()) << maybe_temp;
+    DCHECK(maybe_temp.IsCoreRegister()) << maybe_temp;
     if (kUseBakerReadBarrier) {
       // Load with fast path based Baker's read barrier.
       // /* HeapReference<Object> */ out = *(out + offset)
@@ -9112,7 +9113,7 @@ void InstructionCodeGeneratorARMVIXL::GenerateReferenceLoadTwoRegisters(
   if (read_barrier_option == kWithReadBarrier) {
     DCHECK(codegen_->EmitReadBarrier());
     if (kUseBakerReadBarrier) {
-      DCHECK(maybe_temp.IsRegister()) << maybe_temp;
+      DCHECK(maybe_temp.IsCoreRegister()) << maybe_temp;
       // Load with fast path based Baker's read barrier.
       // /* HeapReference<Object> */ out = *(obj + offset)
       codegen_->GenerateFieldLoadWithBakerReadBarrier(

@@ -66,12 +66,12 @@ inline int ARTRegCodeFromVIXL(int code) {
 }
 
 inline vixl::aarch64::Register XRegisterFrom(Location location) {
-  DCHECK(location.IsRegister()) << location;
+  DCHECK(location.IsCoreRegister()) << location;
   return vixl::aarch64::XRegister(VIXLRegCodeFromART(location.reg()));
 }
 
 inline vixl::aarch64::Register WRegisterFrom(Location location) {
-  DCHECK(location.IsRegister()) << location;
+  DCHECK(location.IsCoreRegister()) << location;
   return vixl::aarch64::WRegister(VIXLRegCodeFromART(location.reg()));
 }
 
@@ -168,7 +168,7 @@ inline int64_t Int64FromLocation(Location location) {
 }
 
 inline vixl::aarch64::Operand OperandFrom(Location location, DataType::Type type) {
-  if (location.IsRegister()) {
+  if (location.IsCoreRegister()) {
     return vixl::aarch64::Operand(RegisterFrom(location, type));
   } else {
     return vixl::aarch64::Operand(Int64FromLocation(location));

@@ -1650,7 +1650,7 @@ void IntrinsicCodeGeneratorX86_64::VisitStringGetCharsNoCheck(HInvoke* invoke) {
   if (srcBegin.IsConstant()) {
     __ subl(CpuRegister(RCX), Immediate(srcBegin_value));
   } else {
-    DCHECK(srcBegin.IsRegister());
+    DCHECK(srcBegin.IsCoreRegister());
     __ subl(CpuRegister(RCX), srcBegin.AsRegister<CpuRegister>());
   }
   if (mirror::kUseStringCompression) {
@@ -3010,7 +3010,7 @@ static void GenBitCount(X86_64Assembler* assembler,
     return;
   }
 
-  if (src.IsRegister()) {
+  if (src.IsCoreRegister()) {
     if (is_long) {
       __ popcntq(out, src.AsRegister<CpuRegister>());
     } else {
@@ -3082,13 +3082,13 @@ static void GenOneBit(X86_64Assembler* assembler,
 
   // Handle the non-constant cases.
   if (!is_high && codegen->GetInstructionSetFeatures().HasAVX2() &&
-      src.IsRegister()) {
+      src.IsCoreRegister()) {
       __ blsi(out, src.AsRegister<CpuRegister>());
   } else {
     CpuRegister tmp = locations->GetTemp(0).AsRegister<CpuRegister>();
     if (is_high) {
       // Use architectural support: basically 1 << bsr.
-      if (src.IsRegister()) {
+      if (src.IsCoreRegister()) {
         if (is_long) {
           __ bsrq(tmp, src.AsRegister<CpuRegister>());
         } else {
@@ -3116,7 +3116,7 @@ static void GenOneBit(X86_64Assembler* assembler,
       __ Bind(&done);
     } else  {
       // Copy input into temporary.
-      if (src.IsRegister()) {
+      if (src.IsCoreRegister()) {
         if (is_long) {
           __ movq(tmp, src.AsRegister<CpuRegister>());
         } else {
@@ -3202,7 +3202,7 @@ static void GenLeadingZeros(X86_64Assembler* assembler,
   }
 
   // Handle the non-constant cases.
-  if (src.IsRegister()) {
+  if (src.IsCoreRegister()) {
     if (is_long) {
       __ bsrq(out, src.AsRegister<CpuRegister>());
     } else {
@@ -3274,7 +3274,7 @@ static void GenTrailingZeros(X86_64Assembler* assembler,
   }
 
   // Handle the non-constant cases.
-  if (src.IsRegister()) {
+  if (src.IsCoreRegister()) {
     if (is_long) {
       __ bsfq(out, src.AsRegister<CpuRegister>());
     } else {
@@ -4216,7 +4216,7 @@ void IntrinsicLocationsBuilderX86_64::VisitMethodHandleInvokeExact(HInvoke* invo
   // Hidden arg for invoke-interface.
   locations->AddTemp(Location::CoreRegister(RAX));
 
-  if (!receiver_mh_loc.IsRegister()) {
+  if (!receiver_mh_loc.IsCoreRegister()) {
     locations->AddTemp(Location::RequiresRegister());
   }
 }
@@ -4226,11 +4226,11 @@ void IntrinsicCodeGeneratorX86_64::VisitMethodHandleInvokeExact(HInvoke* invoke)
   X86_64Assembler* assembler = codegen_->GetAssembler();
 
   Location receiver_mh_loc = locations->InAt(0);
-  CpuRegister method_handle = receiver_mh_loc.IsRegister()
+  CpuRegister method_handle = receiver_mh_loc.IsCoreRegister()
       ? receiver_mh_loc.AsRegister<CpuRegister>()
       : locations->GetTemp(2).AsRegister<CpuRegister>();
 
-  if (!receiver_mh_loc.IsRegister()) {
+  if (!receiver_mh_loc.IsCoreRegister()) {
     DCHECK(receiver_mh_loc.IsStackSlot());
     __ movl(method_handle, Address(CpuRegister(RSP), receiver_mh_loc.GetStackIndex()));
   }

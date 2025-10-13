@@ -473,8 +473,8 @@ void RegisterAllocationResolver::ConnectSplitSiblings(LiveInterval* interval,
 }
 
 static bool IsValidDestination(Location destination) {
-  return destination.IsRegister()
-      || destination.IsRegisterPair()
+  return destination.IsCoreRegister()
+      || destination.IsCoreRegisterPair()
       || destination.IsFpuRegister()
       || destination.IsFpuRegisterPair()
       || destination.IsStackSlot()

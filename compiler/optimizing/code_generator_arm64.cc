@@ -352,7 +352,8 @@ class LoadClassSlowPathARM64 : public SlowPathCodeARM64 {
 
     // Move the class to the desired location.
     if (out.IsValid()) {
-      DCHECK(out.IsRegister() && !locations->GetLiveRegisters()->ContainsCoreRegister(out.reg()));
+      DCHECK(out.IsCoreRegister());
+      DCHECK(!locations->GetLiveRegisters()->ContainsCoreRegister(out.reg()));
       DataType::Type type = instruction_->GetType();
       arm64_codegen->MoveLocation(out, calling_convention.GetReturnLocation(type), type);
     }
@@ -730,7 +731,7 @@ class ReadBarrierForHeapReferenceSlowPathARM64 : public SlowPathCodeARM64 {
                IsUnsafeCASReference(invoke) ||
                IsVarHandleCASFamily(invoke)) << invoke->GetIntrinsic();
         DCHECK_EQ(offset_, 0u);
-        DCHECK(index_.IsRegister());
+        DCHECK(index_.IsCoreRegister());
       }
     }
 
@@ -1244,7 +1245,7 @@ Location ParallelMoveResolverARM64::AllocateScratchLocationFor(Location::Kind ki
 }
 
 void ParallelMoveResolverARM64::FreeScratchLocation(Location loc) {
-  if (loc.IsRegister()) {
+  if (loc.IsCoreRegister()) {
     vixl_temps_.Release(XRegisterFrom(loc));
   } else {
     DCHECK(loc.IsFpuRegister());
@@ -1617,12 +1618,12 @@ void CodeGeneratorARM64::Bind(HBasicBlock* block) {
 }
 
 void CodeGeneratorARM64::MoveConstant(Location location, int32_t value) {
-  DCHECK(location.IsRegister());
+  DCHECK(location.IsCoreRegister());
   __ Mov(RegisterFrom(location, DataType::Type::kInt32), value);
 }
 
 void CodeGeneratorARM64::AddLocationAsTemp(Location location, LocationSummary* locations) {
-  if (location.IsRegister()) {
+  if (location.IsCoreRegister()) {
     locations->AddTemp(location);
   } else {
     UNIMPLEMENTED(FATAL) << "AddLocationAsTemp not implemented for location " << location;
@@ -1813,7 +1814,7 @@ void CodeGeneratorARM64::MoveLocation(Location destination,
   // checks the coherency of the locations and the type.
   bool unspecified_type = (dst_type == DataType::Type::kVoid);
 
-  if (destination.IsRegister() || destination.IsFpuRegister()) {
+  if (destination.IsCoreRegister() || destination.IsFpuRegister()) {
     if (unspecified_type) {
       HConstant* src_cst = source.IsConstant() ? source.GetConstant() : nullptr;
       if (source.IsStackSlot() ||
@@ -1821,17 +1822,17 @@ void CodeGeneratorARM64::MoveLocation(Location destination,
                                   || src_cst->IsFloatConstant()
                                   || src_cst->IsNullConstant()))) {
         // For stack slots and 32bit constants, a 64bit type is appropriate.
-        dst_type = destination.IsRegister() ? DataType::Type::kInt32 : DataType::Type::kFloat32;
+        dst_type = destination.IsCoreRegister() ? DataType::Type::kInt32 : DataType::Type::kFloat32;
       } else {
         // If the source is a double stack slot or a 64bit constant, a 64bit
         // type is appropriate. Else the source is a register, and since the
         // type has not been specified, we chose a 64bit type to force a 64bit
         // move.
-        dst_type = destination.IsRegister() ? DataType::Type::kInt64 : DataType::Type::kFloat64;
+        dst_type = destination.IsCoreRegister() ? DataType::Type::kInt64 : DataType::Type::kFloat64;
       }
     }
     DCHECK((destination.IsFpuRegister() && DataType::IsFloatingPointType(dst_type)) ||
-           (destination.IsRegister() && !DataType::IsFloatingPointType(dst_type)));
+           (destination.IsCoreRegister() && !DataType::IsFloatingPointType(dst_type)));
     CPURegister dst = CPURegisterFrom(destination, dst_type);
     if (source.IsStackSlot() || source.IsDoubleStackSlot()) {
       DCHECK(dst.Is64Bits() == source.IsDoubleStackSlot());
@@ -1841,8 +1842,8 @@ void CodeGeneratorARM64::MoveLocation(Location destination,
     } else if (source.IsConstant()) {
       DCHECK(CoherentConstantAndType(source, dst_type));
       MoveConstant(dst, source.GetConstant());
-    } else if (source.IsRegister()) {
-      if (destination.IsRegister()) {
+    } else if (source.IsCoreRegister()) {
+      if (destination.IsCoreRegister()) {
         __ Mov(Register(dst), RegisterFrom(source, dst_type));
       } else {
         DCHECK(destination.IsFpuRegister());
@@ -1853,7 +1854,7 @@ void CodeGeneratorARM64::MoveLocation(Location destination,
       }
     } else {
       DCHECK(source.IsFpuRegister());
-      if (destination.IsRegister()) {
+      if (destination.IsCoreRegister()) {
         DataType::Type source_type = DataType::Is64BitType(dst_type)
             ? DataType::Type::kFloat64
             : DataType::Type::kFloat32;
@@ -1871,9 +1872,9 @@ void CodeGeneratorARM64::MoveLocation(Location destination,
     GetInstructionCodeGeneratorArm64()->MoveToSIMDStackSlot(destination, source);
   } else {  // The destination is not a register. It must be a stack slot.
     DCHECK(destination.IsStackSlot() || destination.IsDoubleStackSlot());
-    if (source.IsRegister() || source.IsFpuRegister()) {
+    if (source.IsCoreRegister() || source.IsFpuRegister()) {
       if (unspecified_type) {
-        if (source.IsRegister()) {
+        if (source.IsCoreRegister()) {
           dst_type = destination.IsStackSlot() ? DataType::Type::kInt32 : DataType::Type::kInt64;
         } else {
           dst_type =
@@ -3982,7 +3983,7 @@ void InstructionCodeGeneratorARM64::GenerateTestAndBranch(HInstruction* instruct
   if (IsBooleanValueOrMaterializedCondition(cond)) {
     // The condition instruction has been materialized, compare the output to 0.
     Location cond_val = instruction->GetLocations()->InAt(condition_input_index);
-    DCHECK(cond_val.IsRegister());
+    DCHECK(cond_val.IsCoreRegister());
     if (true_target == nullptr) {
       __ Cbz(InputRegisterAt(instruction, condition_input_index), false_target);
     } else {
@@ -7197,12 +7198,12 @@ void CodeGeneratorARM64::GenerateFieldLoadWithBakerReadBarrier(HInstruction* ins
   DCHECK_ALIGNED(offset, sizeof(mirror::HeapReference<mirror::Object>));
   Register base = obj;
   if (use_load_acquire) {
-    DCHECK(maybe_temp.IsRegister());
+    DCHECK(maybe_temp.IsCoreRegister());
     base = WRegisterFrom(maybe_temp);
     __ Add(base, obj, offset);
     offset = 0u;
   } else if (offset >= kReferenceLoadMinFarOffset) {
-    DCHECK(maybe_temp.IsRegister());
+    DCHECK(maybe_temp.IsCoreRegister());
     base = WRegisterFrom(maybe_temp);
     static_assert(IsPowerOfTwo(kReferenceLoadMinFarOffset), "Expecting a power of 2.");
     __ Add(base, obj, Operand(offset & ~(kReferenceLoadMinFarOffset - 1u)));

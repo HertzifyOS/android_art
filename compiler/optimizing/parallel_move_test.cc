@@ -42,7 +42,7 @@ static void DumpLocationForTest(std::ostream& os, Location location) {
     DumpRegisterForTest(os, location.low());
     os << ",";
     DumpRegisterForTest(os, location.high());
-  } else if (location.IsRegister()) {
+  } else if (location.IsCoreRegister()) {
     DumpRegisterForTest(os, location.reg());
   } else if (location.IsStackSlot()) {
     os << location.GetStackIndex() << "(sp)";

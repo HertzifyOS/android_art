@@ -74,10 +74,10 @@ static bool CheckType(DataType::Type type, Location location) {
   if (location.IsFpuRegister()
       || (location.IsUnallocated() && (location.GetPolicy() == Location::kRequiresFpuRegister))) {
     return (type == DataType::Type::kFloat32) || (type == DataType::Type::kFloat64);
-  } else if (location.IsRegister() ||
+  } else if (location.IsCoreRegister() ||
              (location.IsUnallocated() && (location.GetPolicy() == Location::kRequiresRegister))) {
     return DataType::IsIntegralType(type) || (type == DataType::Type::kReference);
-  } else if (location.IsRegisterPair()) {
+  } else if (location.IsCoreRegisterPair()) {
     return type == DataType::Type::kInt64;
   } else if (location.IsFpuRegisterPair()) {
     return type == DataType::Type::kFloat64;

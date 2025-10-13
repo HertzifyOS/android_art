@@ -117,7 +117,7 @@ void Location::DCheckInstructionIsConstant(HInstruction* instruction) {
 
 std::ostream& operator<<(std::ostream& os, const Location& location) {
   os << location.DebugString();
-  if (location.IsRegister() || location.IsFpuRegister() || location.IsVecRegister()) {
+  if (location.IsCoreRegister() || location.IsFpuRegister() || location.IsVecRegister()) {
     os << location.reg();
   } else if (location.IsPair()) {
     os << location.low() << ":" << location.high();

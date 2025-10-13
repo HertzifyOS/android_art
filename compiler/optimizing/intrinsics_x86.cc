@@ -524,7 +524,7 @@ static void GenLowestOneBit(X86Assembler* assembler,
   }
   // Handle non constant case
   if (is_long) {
-    DCHECK(src.IsRegisterPair());
+    DCHECK(src.IsCoreRegisterPair());
     Register src_lo = src.AsRegisterPairLow<Register>();
     Register src_hi = src.AsRegisterPairHigh<Register>();
 
@@ -541,13 +541,13 @@ static void GenLowestOneBit(X86Assembler* assembler,
     __ andl(out_lo, src_lo);
     __ andl(out_hi, src_hi);
   } else {
-    if (codegen->GetInstructionSetFeatures().HasAVX2() && src.IsRegister()) {
+    if (codegen->GetInstructionSetFeatures().HasAVX2() && src.IsCoreRegister()) {
       Register out = out_loc.AsRegister<Register>();
       __ blsi(out, src.AsRegister<Register>());
     } else {
       Register out = out_loc.AsRegister<Register>();
       // Do tmp & -tmp
-      if (src.IsRegister()) {
+      if (src.IsCoreRegister()) {
         __ movl(out, src.AsRegister<Register>());
       } else {
         DCHECK(src.IsStackSlot());
@@ -555,7 +555,7 @@ static void GenLowestOneBit(X86Assembler* assembler,
       }
       __ negl(out);
 
-      if (src.IsRegister()) {
+      if (src.IsCoreRegister()) {
         __ andl(out, src.AsRegister<Register>());
       } else {
         __ andl(out, Address(ESP, src.GetStackIndex()));
@@ -1437,7 +1437,7 @@ void IntrinsicCodeGeneratorX86::VisitStringGetCharsNoCheck(HInvoke* invoke) {
   if (srcBegin.IsConstant()) {
     __ subl(ECX, Immediate(srcBegin_value));
   } else {
-    DCHECK(srcBegin.IsRegister());
+    DCHECK(srcBegin.IsCoreRegister());
     __ subl(ECX, srcBegin.AsRegister<Register>());
   }
 
@@ -2103,7 +2103,7 @@ static void GenUnsafePut(LocationSummary* locations,
     __ movl(Address(base, offset, ScaleFactor::TIMES_1, 0), value_loc.AsRegister<Register>());
   } else {
     CHECK_EQ(type, DataType::Type::kInt8) << "Unimplemented GenUnsafePut data type";
-    if (value_loc.IsRegister()) {
+    if (value_loc.IsCoreRegister()) {
       __ movb(Address(base, offset, ScaleFactor::TIMES_1, 0), value_loc.AsRegister<ByteRegister>());
     } else {
       __ movb(Address(base, offset, ScaleFactor::TIMES_1, 0),
@@ -2154,7 +2154,7 @@ static void GenUnsafePutAbsolute(LocationSummary* locations,
     __ movl(address_offset, value_loc.AsRegister<Register>());
   } else {
     CHECK_EQ(type, DataType::Type::kInt8) << "Unimplemented GenUnsafePut data type";
-    if (value_loc.IsRegister()) {
+    if (value_loc.IsCoreRegister()) {
       __ movb(address_offset, value_loc.AsRegister<ByteRegister>());
     } else {
       __ movb(address_offset,
@@ -2947,7 +2947,7 @@ static void GenBitCount(X86Assembler* assembler,
 
   // Handle the non-constant cases.
   if (!is_long) {
-    if (src.IsRegister()) {
+    if (src.IsCoreRegister()) {
       __ popcntl(out, src.AsRegister<Register>());
     } else {
       DCHECK(src.IsStackSlot());
@@ -2956,7 +2956,7 @@ static void GenBitCount(X86Assembler* assembler,
   } else {
     // The 64-bit case needs to worry about two parts.
     Register temp = locations->GetTemp(0).AsRegister<Register>();
-    if (src.IsRegisterPair()) {
+    if (src.IsCoreRegisterPair()) {
       __ popcntl(temp, src.AsRegisterPairLow<Register>());
       __ popcntl(out, src.AsRegisterPairHigh<Register>());
     } else {
@@ -3015,7 +3015,7 @@ static void GenLeadingZeros(X86Assembler* assembler,
 
   // Handle the non-constant cases.
   if (!is_long) {
-    if (src.IsRegister()) {
+    if (src.IsCoreRegister()) {
       __ bsrl(out, src.AsRegister<Register>());
     } else {
       DCHECK(src.IsStackSlot());
@@ -3039,7 +3039,7 @@ static void GenLeadingZeros(X86Assembler* assembler,
   }
 
   // 64 bit case needs to worry about both parts of the register.
-  DCHECK(src.IsRegisterPair());
+  DCHECK(src.IsCoreRegisterPair());
   Register src_lo = src.AsRegisterPairLow<Register>();
   Register src_hi = src.AsRegisterPairHigh<Register>();
   NearLabel handle_low, done, all_zeroes;
@@ -3118,7 +3118,7 @@ static void GenTrailingZeros(X86Assembler* assembler,
 
   // Handle the non-constant cases.
   if (!is_long) {
-    if (src.IsRegister()) {
+    if (src.IsCoreRegister()) {
       __ bsfl(out, src.AsRegister<Register>());
     } else {
       DCHECK(src.IsStackSlot());
@@ -3137,7 +3137,7 @@ static void GenTrailingZeros(X86Assembler* assembler,
   }
 
   // 64 bit case needs to worry about both parts of the register.
-  DCHECK(src.IsRegisterPair());
+  DCHECK(src.IsCoreRegisterPair());
   Register src_lo = src.AsRegisterPairLow<Register>();
   Register src_hi = src.AsRegisterPairHigh<Register>();
   NearLabel done, all_zeroes;
@@ -4119,8 +4119,9 @@ static void GenerateVarHandleGet(HInvoke* invoke, CodeGeneratorX86* codegen) {
 
   Location out = locations->Out();
   // Use 'out' as a temporary register if it's a core register
-  Register offset =
-      out.IsRegister() ? out.AsRegister<Register>() : locations->GetTemp(1).AsRegister<Register>();
+  Register offset = out.IsCoreRegister()
+      ? out.AsRegister<Register>()
+      : locations->GetTemp(1).AsRegister<Register>();
 
   // Get the field referred by the VarHandle. The returned register contains the object reference
   // or the declaring class. The field offset will be placed in 'offset'. For static fields, the

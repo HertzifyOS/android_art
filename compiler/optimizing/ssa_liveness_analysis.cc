@@ -698,9 +698,9 @@ bool LiveInterval::SameRegisterKind(Location other) const {
     }
   } else {
     if (IsPair()) {
-      return other.IsRegisterPair();
+      return other.IsCoreRegisterPair();
     } else {
-      return other.IsRegister();
+      return other.IsCoreRegister();
     }
   }
 }

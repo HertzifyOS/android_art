@@ -3444,7 +3444,7 @@ void IntrinsicCodeGeneratorARM64::VisitSystemArrayCopy(HInvoke* invoke) {
     // Null constant length: not need to emit the loop code at all.
   } else {
     vixl::aarch64::Label skip_copy_and_write_barrier;
-    if (length.IsRegister()) {
+    if (length.IsCoreRegister()) {
       // Don't enter the copy loop if the length is null.
       __ Cbz(WRegisterFrom(length), &skip_copy_and_write_barrier);
     }
@@ -5955,7 +5955,7 @@ void IntrinsicLocationsBuilderARM64::VisitMethodHandleInvokeExact(HInvoke* invok
   locations->AddTemp(calling_convention.GetMethodLocation());
   locations->AddRegisterTemps(4);
 
-  if (!receiver_mh_loc.IsRegister()) {
+  if (!receiver_mh_loc.IsCoreRegister()) {
     locations->AddTemp(Location::RequiresRegister());
   }
 }
@@ -5965,11 +5965,11 @@ void IntrinsicCodeGeneratorARM64::VisitMethodHandleInvokeExact(HInvoke* invoke) 
   MacroAssembler* masm = codegen_->GetVIXLAssembler();
 
   Location receiver_mh_loc = locations->InAt(0);
-  Register method_handle = receiver_mh_loc.IsRegister()
+  Register method_handle = receiver_mh_loc.IsCoreRegister()
       ? InputRegisterAt(invoke, 0)
       : WRegisterFrom(locations->GetTemp(5));
 
-  if (!receiver_mh_loc.IsRegister()) {
+  if (!receiver_mh_loc.IsCoreRegister()) {
     DCHECK(receiver_mh_loc.IsStackSlot());
     __ Ldr(method_handle.W(), MemOperand(sp, receiver_mh_loc.GetStackIndex()));
   }

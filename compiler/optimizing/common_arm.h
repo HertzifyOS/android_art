@@ -40,7 +40,7 @@ namespace helpers {
 static_assert(vixl::aarch32::kSpCode == SP, "vixl::aarch32::kSpCode must equal ART's SP");
 
 inline vixl::aarch32::Register HighRegisterFrom(Location location) {
-  DCHECK(location.IsRegisterPair()) << location;
+  DCHECK(location.IsCoreRegisterPair()) << location;
   return vixl::aarch32::Register(location.AsRegisterPairHigh<vixl::aarch32::Register>());
 }
 
@@ -50,7 +50,7 @@ inline vixl::aarch32::DRegister HighDRegisterFrom(Location location) {
 }
 
 inline vixl::aarch32::Register LowRegisterFrom(Location location) {
-  DCHECK(location.IsRegisterPair()) << location;
+  DCHECK(location.IsCoreRegisterPair()) << location;
   return vixl::aarch32::Register(location.AsRegisterPairLow<vixl::aarch32::Register>());
 }
 
@@ -65,7 +65,7 @@ inline vixl::aarch32::SRegister HighSRegisterFrom(Location location) {
 }
 
 inline vixl::aarch32::Register RegisterFrom(Location location) {
-  DCHECK(location.IsRegister()) << location;
+  DCHECK(location.IsCoreRegister()) << location;
   return vixl::aarch32::Register(location.reg());
 }
 
@@ -190,7 +190,7 @@ inline uint64_t Uint64ConstantFrom(HInstruction* instr) {
 }
 
 inline vixl::aarch32::Operand OperandFrom(Location location, DataType::Type type) {
-  if (location.IsRegister()) {
+  if (location.IsCoreRegister()) {
     return vixl::aarch32::Operand(RegisterFrom(location, type));
   } else {
     return vixl::aarch32::Operand(Int32ConstantFrom(location));
