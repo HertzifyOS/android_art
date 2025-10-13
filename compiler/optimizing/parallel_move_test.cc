@@ -108,18 +108,18 @@ class TestParallelMoveResolverNoSwap : public ParallelMoveResolverNoSwap {
 
   Location AllocateScratchLocationFor(Location::Kind kind) override {
     if (kind == Location::kStackSlot || kind == Location::kFpuRegister ||
-        kind == Location::kRegister) {
-      kind = Location::kRegister;
+        kind == Location::kCoreRegister) {
+      kind = Location::kCoreRegister;
     } else {
       // Allocate register pair for double stack slot which simulates 32-bit backend's behavior.
-      kind = Location::kRegisterPair;
+      kind = Location::kCoreRegisterPair;
     }
     Location scratch = GetScratchLocation(kind);
     if (scratch.Equals(Location::NoLocation())) {
       AddScratchLocation(Location::RegisterLocation(scratch_index_));
       AddScratchLocation(Location::RegisterLocation(scratch_index_ + 1));
       AddScratchLocation(Location::RegisterPairLocation(scratch_index_, scratch_index_ + 1));
-      scratch = (kind == Location::kRegister) ? Location::RegisterLocation(scratch_index_)
+      scratch = (kind == Location::kCoreRegister) ? Location::RegisterLocation(scratch_index_)
           : Location::RegisterPairLocation(scratch_index_, scratch_index_ + 1);
       scratch_index_ += 2;
     }

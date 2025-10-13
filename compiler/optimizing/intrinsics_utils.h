@@ -87,13 +87,13 @@ class IntrinsicSlowPath : public TSlowPathCode {
       if (kIsDebugBuild) {
         const RegisterSet* live_registers = invoke_->GetLocations()->GetLiveRegisters();
         switch (out.GetKind()) {
-          case Location::Kind::kRegister:
+          case Location::Kind::kCoreRegister:
             CHECK(!live_registers->ContainsCoreRegister(out.reg()));
             break;
           case Location::Kind::kFpuRegister:
             CHECK(!live_registers->ContainsFpuRegister(out.reg()));
             break;
-          case Location::Kind::kRegisterPair:
+          case Location::Kind::kCoreRegisterPair:
             CHECK(!live_registers->ContainsCoreRegister(out.low()));
             CHECK(!live_registers->ContainsCoreRegister(out.high()));
             break;

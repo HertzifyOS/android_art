@@ -372,7 +372,7 @@ void RegisterAllocationResolver::ConnectSiblings(LiveInterval* interval,
             if (current->GetParent()->HasSpillSlot()) {
               locations->SetStackBit(current->GetParent()->GetSpillSlot() / kVRegSize);
             }
-            if (source.GetKind() == Location::kRegister) {
+            if (source.GetKind() == Location::kCoreRegister) {
               locations->SetRegisterBit(source.reg());
             }
             return true;

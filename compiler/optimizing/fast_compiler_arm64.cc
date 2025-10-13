@@ -1214,7 +1214,7 @@ void FastCompilerARM64::RecordPcInfo(uint32_t dex_pc) {
           break;
         }
 
-        case Location::kRegister: {
+        case Location::kCoreRegister: {
           stack_map_stream->AddDexRegisterEntry(Kind::kInRegister, location.reg());
           // Note: if we were using the fast compiler for debuggable, we would
           // need to emit a `kInRegisterHi` here for long values. This would

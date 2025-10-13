@@ -1220,18 +1220,18 @@ void ParallelMoveResolverARM64::FinishEmitNativeCode() {
 }
 
 Location ParallelMoveResolverARM64::AllocateScratchLocationFor(Location::Kind kind) {
-  DCHECK(kind == Location::kRegister || kind == Location::kFpuRegister
+  DCHECK(kind == Location::kCoreRegister || kind == Location::kFpuRegister
          || kind == Location::kStackSlot || kind == Location::kDoubleStackSlot
          || kind == Location::kSIMDStackSlot);
   kind = (kind == Location::kFpuRegister || kind == Location::kSIMDStackSlot)
       ? Location::kFpuRegister
-      : Location::kRegister;
+      : Location::kCoreRegister;
   Location scratch = GetScratchLocation(kind);
   if (!scratch.Equals(Location::NoLocation())) {
     return scratch;
   }
   // Allocate from VIXL temp registers.
-  if (kind == Location::kRegister) {
+  if (kind == Location::kCoreRegister) {
     scratch = LocationFrom(vixl_temps_.AcquireX());
   } else {
     DCHECK_EQ(kind, Location::kFpuRegister);

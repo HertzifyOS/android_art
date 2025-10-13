@@ -1333,7 +1333,7 @@ void CodeGenerator::EmitVRegInfo(HEnvironment* environment,
         break;
       }
 
-      case Location::kRegister : {
+      case Location::kCoreRegister : {
         DCHECK(!is_for_catch_handler);
         int id = location.reg();
         if (slow_path != nullptr && slow_path->IsCoreRegisterSaved(id)) {
@@ -1399,7 +1399,7 @@ void CodeGenerator::EmitVRegInfo(HEnvironment* environment,
         break;
       }
 
-      case Location::kRegisterPair : {
+      case Location::kCoreRegisterPair : {
         DCHECK(!is_for_catch_handler);
         int low = location.low();
         int high = location.high();
