@@ -1996,6 +1996,10 @@ void InstructionSimplifierVisitor::VisitCompare(HCompare* compare) {
     compare_left->GetBlock()->RemoveInstruction(compare_left);
   }
 
+  if (compare_left == compare_right) {
+    return;
+  }
+
   if (compare_right->GetUses().empty()) {
     compare_right->RemoveEnvironmentUsers();
     compare_right->GetBlock()->RemoveInstruction(compare_right);
