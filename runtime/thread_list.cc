@@ -23,15 +23,19 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <cstdint>
+#include <cstring>
 #include <map>
 #include <sstream>
 #include <tuple>
 #include <vector>
 
+#include "android-base/macros.h"
 #include "android-base/properties.h"
 #include "android-base/stringprintf.h"
 #include "art_field-inl.h"
 #include "base/aborting.h"
+#include "base/allocator.h"
 #include "base/histogram-inl.h"
 #include "base/mutex-inl.h"
 #include "base/systrace.h"
@@ -1734,11 +1738,10 @@ void ThreadList::ClearInterpreterCaches() const {
 
 uint32_t ThreadList::AllocThreadId(Thread* self) {
   MutexLock mu(self, *Locks::allocated_thread_ids_lock_);
-  for (size_t i = 0; i < allocated_ids_.size(); ++i) {
-    if (!allocated_ids_[i]) {
-      allocated_ids_.set(i);
-      return i + 1;  // Zero is reserved to mean "invalid".
-    }
+  int32_t thread_id = allocated_ids_.GetLowestBitCleared();
+  if (LIKELY(thread_id != -1)) {
+    allocated_ids_.SetBit(thread_id);
+    return thread_id;
   }
   LOG(FATAL) << "Out of internal thread ids";
   UNREACHABLE();
@@ -1746,9 +1749,16 @@ uint32_t ThreadList::AllocThreadId(Thread* self) {
 
 void ThreadList::ReleaseThreadId(Thread* self, uint32_t id) {
   MutexLock mu(self, *Locks::allocated_thread_ids_lock_);
-  --id;  // Zero is reserved to mean "invalid".
-  DCHECK(allocated_ids_[id]) << id;
-  allocated_ids_.reset(id);
+  DCHECK(id != kInvalidThreadId && id <= kMaxThreadId) << id;
+  DCHECK(allocated_ids_.IsBitSet(id)) << id;
+  allocated_ids_.ClearBit(id);
+}
+
+ThreadList::ThreadIdBitVector::ThreadIdBitVector()
+    : BitVector(/*expandable=*/false, Allocator::GetNoopAllocator(), kSizeInWords, word_storage_) {
+  memset(word_storage_, 0, kSizeInBytes);
+  // Zero is reserved to mean "invalid"
+  SetBit(kInvalidThreadId);
 }
 
 ScopedSuspendAll::ScopedSuspendAll(const char* cause, bool long_suspend) {
