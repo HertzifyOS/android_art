@@ -957,20 +957,37 @@ void InstructionWithAbsorbingInputSimplifier::VisitAnd(HAnd* instruction) {
 }
 
 void InstructionWithAbsorbingInputSimplifier::VisitCompare(HCompare* instruction) {
-  HConstant* input_cst = instruction->GetConstantRight();
-  if (input_cst != nullptr) {
-    HInstruction* input_value = instruction->GetLeastConstantLeft();
-    if (DataType::IsFloatingPointType(input_value->GetType()) &&
-        ((input_cst->IsFloatConstant() && input_cst->AsFloatConstant()->IsNaN()) ||
-         (input_cst->IsDoubleConstant() && input_cst->AsDoubleConstant()->IsNaN()))) {
+  HInstruction* left = instruction->GetLeft();
+  HInstruction* right = instruction->GetRight();
+  DataType::Type type = left->GetType();
+
+  if (DataType::IsFloatingPointType(type)) {
+    // FP comparisons
+    HConstant* input_cst = instruction->GetConstantRight();
+    if (input_cst != nullptr) {
+      if ((input_cst->IsFloatConstant() && input_cst->AsFloatConstant()->IsNaN()) ||
+          (input_cst->IsDoubleConstant() && input_cst->AsDoubleConstant()->IsNaN())) {
+        // Replace code looking like
+        //    CMP{G,L}-{FLOAT,DOUBLE} dst, src, NaN
+        // with
+        //    CONSTANT +1 (gt bias)
+        // or
+        //    CONSTANT -1 (lt bias)
+        SetReplacement(GetGraph()->GetIntConstant(instruction->IsGtBias() ? 1 : -1));
+        return;
+      }
+    }
+    // For left == right on FP, we cannot simplify to 0 because NaN != NaN.
+    // The result of cmpg(NaN, NaN) is 1, and cmpl(NaN, NaN) is -1.
+  } else {
+    // Integral comparisons
+    if (left == right) {
       // Replace code looking like
-      //    CMP{G,L}-{FLOAT,DOUBLE} dst, src, NaN
+      //    COMPARE lhs, lhs
       // with
-      //    CONSTANT +1 (gt bias)
-      // or
-      //    CONSTANT -1 (lt bias)
-      SetReplacement(GetGraph()->GetConstant(DataType::Type::kInt32,
-                                             (instruction->IsGtBias() ? 1 : -1)));
+      //    CONSTANT 0
+      SetReplacement(GetGraph()->GetIntConstant(0));
+      return;
     }
   }
 }
