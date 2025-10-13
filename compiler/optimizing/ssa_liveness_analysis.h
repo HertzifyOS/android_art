@@ -695,24 +695,12 @@ class LiveInterval : public ArenaObject<kArenaAllocSsaLiveness> {
     // This interval is the first interval of the instruction. If the output
     // of the instruction requires a register, we return the position of that instruction
     // as the first register use.
-    if (location.IsUnallocated()) {
-      if ((location.GetPolicy() == Location::kRequiresRegister)
-           || (location.GetPolicy() == Location::kSameAsFirstInput
-               && (locations->InAt(0).IsRegister()
-                   || locations->InAt(0).IsRegisterPair()
-                   || locations->InAt(0).GetPolicy() == Location::kRequiresRegister))) {
-        return true;
-      } else if ((location.GetPolicy() == Location::kRequiresFpuRegister)
-                 || (location.GetPolicy() == Location::kSameAsFirstInput
-                     && (locations->InAt(0).IsFpuRegister()
-                         || locations->InAt(0).IsFpuRegisterPair()
-                         || locations->InAt(0).GetPolicy() == Location::kRequiresFpuRegister))) {
-        return true;
-      }
-    } else if (location.IsRegister() || location.IsRegisterPair()) {
-      return true;
+    if (location.Equals(Location::SameAsFirstInput())) {
+      location = locations->InAt(0);
+      DCHECK(!location.Equals(Location::SameAsFirstInput()));
     }
-    return false;
+    return location.IsRegisterKind() ||
+           (location.IsUnallocated() && location.RequiresRegisterKind());
   }
 
   void SetHintPhiInterval(LiveInterval* hint_phi_interval) {

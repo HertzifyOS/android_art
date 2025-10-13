@@ -87,13 +87,14 @@ class RegisterAllocatorTest : public CommonCompilerTest, public OptimizingUnitTe
   void BlockCoreRegistersExcept(CodeGenerator* codegen, std::initializer_list<RegType> allowed) {
     size_t number_of_core_registers = codegen->GetNumberOfCoreRegisters();
     uint32_t blocked_core_registers = MaxInt<uint32_t>(number_of_core_registers);
-    for (x86::Register reg : allowed) {
+    for (RegType reg : allowed) {
       CHECK_LT(reg, number_of_core_registers);
       blocked_core_registers &= ~(1u << reg);
     }
     RegisterSet blocked_registers = RegisterSet::Empty();
     blocked_registers.AddCoreRegisterSet(blocked_core_registers);
     blocked_registers.AddFpuRegisterSet(codegen->blocked_registers_.GetFpuRegisterSet());
+    blocked_registers.AddVecRegisterSet(codegen->blocked_registers_.GetVecRegisterSet());
     codegen->blocked_registers_ = blocked_registers;
   }
 
@@ -405,6 +406,23 @@ TEST_F(RegisterAllocatorTest, FirstRegisterUse) {
   ASSERT_EQ(interval->FirstRegisterUse(), kNoLifetime);
   // And the new interval has it for the last add.
   ASSERT_EQ(new_interval->FirstRegisterUse(), last_xor->GetLifetimePosition());
+}
+
+TEST_F(RegisterAllocatorTest, FpuSameAsFirstInput) {
+  HBasicBlock* block = InitEntryMainExitGraphWithReturnVoid();
+  HInstruction* param1 = MakeParam(DataType::Type::kFloat32);
+  HNeg* neg = MakeUnOp<HNeg>(block, DataType::Type::kFloat32, param1);
+  LocationSummary* locations = LocationSummary::CreateNoCall(GetAllocator(), neg);
+  locations->SetInAt(0, Location::FpuRegisterLocation(0));
+  locations->SetOut(Location::SameAsFirstInput());
+  static constexpr size_t kLifetimePosition = 32u;
+  neg->SetLifetimePosition(kLifetimePosition);
+  LiveInterval* live_interval = LiveInterval::MakeInterval(
+      GetScopedAllocator(), DataType::Type::kFloat32, /*is_pair=*/ false, neg);
+  live_interval->AddRange(kLifetimePosition, kLifetimePosition + 1);
+  // This used to fail a `DCHECK()`.
+  bool requires_reg = live_interval->RequiresRegisterForDefinitionAt(kLifetimePosition);
+  EXPECT_TRUE(requires_reg);
 }
 
 TEST_F(RegisterAllocatorTest, DeadPhi) {
