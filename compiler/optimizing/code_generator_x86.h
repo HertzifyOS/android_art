@@ -175,27 +175,27 @@ class FieldAccessCallingConventionX86 : public FieldAccessCallingConvention {
   FieldAccessCallingConventionX86() {}
 
   Location GetObjectLocation() const override {
-    return Location::RegisterLocation(ECX);
+    return Location::CoreRegister(ECX);
   }
   Location GetFieldIndexLocation() const override {
-    return Location::RegisterLocation(EAX);
+    return Location::CoreRegister(EAX);
   }
   Location GetReturnLocation(DataType::Type type) const override {
     return DataType::Is64BitType(type)
-        ? Location::RegisterPairLocation(EAX, EDX)
-        : Location::RegisterLocation(EAX);
+        ? Location::CoreRegisterPair(EAX, EDX)
+        : Location::CoreRegister(EAX);
   }
   Location GetSetValueLocation(DataType::Type type, bool is_instance) const override {
     return DataType::Is64BitType(type)
         ? (is_instance
-            ? Location::RegisterPairLocation(EDX, EBX)
-            : Location::RegisterPairLocation(ECX, EDX))
+            ? Location::CoreRegisterPair(EDX, EBX)
+            : Location::CoreRegisterPair(ECX, EDX))
         : (is_instance
-            ? Location::RegisterLocation(EDX)
-            : Location::RegisterLocation(ECX));
+            ? Location::CoreRegister(EDX)
+            : Location::CoreRegister(ECX));
   }
   Location GetFpuLocation([[maybe_unused]] DataType::Type type) const override {
-    return Location::FpuRegisterLocation(XMM0);
+    return Location::FpuRegister(XMM0);
   }
 
  private:

@@ -1353,7 +1353,7 @@ void LocationsBuilderARM64Sve::VisitVecPredWhile(HVecPredWhile* instruction) {
   //
   // Semantically, the out location of this instruction and predicate inputs locations of
   // its users should be a fixed predicate register (similar to
-  // Location::RegisterLocation(int reg)). But the register allocator (RA) doesn't support
+  // Location::CoreRegister(int reg)). But the register allocator (RA) doesn't support
   // SIMD regs (e.g. predicate), so fixed registers are used explicitly without exposing it
   // to the RA (through GetVecPredSetFixedOutPReg()).
   //

@@ -413,7 +413,7 @@ TEST_F(RegisterAllocatorTest, FpuSameAsFirstInput) {
   HInstruction* param1 = MakeParam(DataType::Type::kFloat32);
   HNeg* neg = MakeUnOp<HNeg>(block, DataType::Type::kFloat32, param1);
   LocationSummary* locations = LocationSummary::CreateNoCall(GetAllocator(), neg);
-  locations->SetInAt(0, Location::FpuRegisterLocation(0));
+  locations->SetInAt(0, Location::FpuRegister(0));
   locations->SetOut(Location::SameAsFirstInput());
   static constexpr size_t kLifetimePosition = 32u;
   neg->SetLifetimePosition(kLifetimePosition);
@@ -588,7 +588,7 @@ TEST_F(RegisterAllocatorTest, PhiHint) {
 
     // Set the phi to a specific register, and check that the inputs get allocated
     // the same register.
-    phi->GetLocations()->UpdateOut(Location::RegisterLocation(2));
+    phi->GetLocations()->UpdateOut(Location::CoreRegister(2));
     std::unique_ptr<RegisterAllocator> register_allocator =
         RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
     register_allocator->AllocateRegisters();
@@ -607,7 +607,7 @@ TEST_F(RegisterAllocatorTest, PhiHint) {
 
     // Set input1 to a specific register, and check that the phi and other input get allocated
     // the same register.
-    input1->GetLocations()->UpdateOut(Location::RegisterLocation(2));
+    input1->GetLocations()->UpdateOut(Location::CoreRegister(2));
     std::unique_ptr<RegisterAllocator> register_allocator =
         RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
     register_allocator->AllocateRegisters();
@@ -626,7 +626,7 @@ TEST_F(RegisterAllocatorTest, PhiHint) {
 
     // Set input2 to a specific register, and check that the phi and other input get allocated
     // the same register.
-    input2->GetLocations()->UpdateOut(Location::RegisterLocation(2));
+    input2->GetLocations()->UpdateOut(Location::CoreRegister(2));
     std::unique_ptr<RegisterAllocator> register_allocator =
         RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
     register_allocator->AllocateRegisters();
@@ -676,7 +676,7 @@ TEST_F(RegisterAllocatorTest, ExpectedInRegisterHint) {
 
     // Check that the field gets put in the register expected by its use.
     // Don't use SetInAt because we are overriding an already allocated location.
-    ret->GetLocations()->Inputs()[0] = Location::RegisterLocation(2);
+    ret->GetLocations()->Inputs()[0] = Location::CoreRegister(2);
 
     std::unique_ptr<RegisterAllocator> register_allocator =
         RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
@@ -731,7 +731,7 @@ TEST_F(RegisterAllocatorTest, SameAsFirstInputHint) {
 
     // check that both adds get the same register.
     // Don't use UpdateOutput because output is already allocated.
-    OverrideOutput(first_sub->InputAt(0)->GetLocations(), Location::RegisterLocation(2));
+    OverrideOutput(first_sub->InputAt(0)->GetLocations(), Location::CoreRegister(2));
     ASSERT_EQ(first_sub->GetLocations()->Out().GetPolicy(), Location::kSameAsFirstInput);
     ASSERT_EQ(second_sub->GetLocations()->Out().GetPolicy(), Location::kSameAsFirstInput);
 
@@ -921,7 +921,7 @@ TEST_F(RegisterAllocatorTest, ReuseSpillSlots) {
   BlockCoreRegistersExcept(codegen.get(), {x86::EAX, x86::EDX});
 
   // Change the `obj` parameter to come in EDX.
-  OverrideOutput(obj->GetLocations(), Location::RegisterLocation(x86::EDX));
+  OverrideOutput(obj->GetLocations(), Location::CoreRegister(x86::EDX));
 
   std::unique_ptr<RegisterAllocator> register_allocator =
       RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
@@ -997,8 +997,8 @@ TEST_F(RegisterAllocatorTest, ReuseSpillSlotGaps) {
   BlockCoreRegistersExcept(codegen.get(), {x86::EAX});
   // Rewrite condition locations to work with the single register EAX.
   for (HCondition* c : {cond, deopt_cond}) {
-    ASSERT_TRUE(c->GetLocations()->Out().Equals(Location::RegisterLocation(x86::ECX)));
-    OverrideOutput(c->GetLocations(), Location::RegisterLocation(x86::EAX));
+    ASSERT_TRUE(c->GetLocations()->Out().Equals(Location::CoreRegister(x86::ECX)));
+    OverrideOutput(c->GetLocations(), Location::CoreRegister(x86::EAX));
     c->GetLocations()->SetInAt(0, Location::Any());
     ASSERT_TRUE(c->GetLocations()->InAt(1).Equals(Location::Any()));
   }
@@ -1086,7 +1086,7 @@ TEST_F(RegisterAllocatorTest, ReuseSpillSlotsUnavailableWithSplitPhiInterval) {
   // Set just one register available to make all intervals compete for the same.
   BlockCoreRegistersExcept(codegen.get(), {x86::EAX});
   // Change the `obj` parameter to come in EAX.
-  OverrideOutput(obj->GetLocations(), Location::RegisterLocation(x86::EAX));
+  OverrideOutput(obj->GetLocations(), Location::CoreRegister(x86::EAX));
 
   std::unique_ptr<RegisterAllocator> register_allocator =
       RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);

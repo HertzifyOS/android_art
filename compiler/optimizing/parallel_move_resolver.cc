@@ -79,9 +79,9 @@ void ParallelMoveResolverWithSwap::EmitNativeCode(HParallelMove* parallel_move) 
 
 Location LowOf(Location location) {
   if (location.IsRegisterPair()) {
-    return Location::RegisterLocation(location.low());
+    return Location::CoreRegister(location.low());
   } else if (location.IsFpuRegisterPair()) {
-    return Location::FpuRegisterLocation(location.low());
+    return Location::FpuRegister(location.low());
   } else if (location.IsDoubleStackSlot()) {
     return Location::StackSlot(location.GetStackIndex());
   } else {
@@ -91,9 +91,9 @@ Location LowOf(Location location) {
 
 Location HighOf(Location location) {
   if (location.IsRegisterPair()) {
-    return Location::RegisterLocation(location.high());
+    return Location::CoreRegister(location.high());
   } else if (location.IsFpuRegisterPair()) {
-    return Location::FpuRegisterLocation(location.high());
+    return Location::FpuRegister(location.high());
   } else if (location.IsDoubleStackSlot()) {
     return Location::StackSlot(location.GetHighStackIndex(4));
   } else {
@@ -263,7 +263,7 @@ int ParallelMoveResolverWithSwap::AllocateScratchRegister(int blocked,
   DCHECK_NE(blocked, if_scratch);
   int scratch = -1;
   for (int reg = 0; reg < register_count; ++reg) {
-    if ((blocked != reg) && IsScratchLocation(Location::RegisterLocation(reg))) {
+    if ((blocked != reg) && IsScratchLocation(Location::CoreRegister(reg))) {
       scratch = reg;
       break;
     }

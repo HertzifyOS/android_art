@@ -203,15 +203,15 @@ void RegisterAllocationResolver::Resolve(ArrayRef<HInstruction* const> safepoint
     LocationSummary* locations = at->GetLocations();
     switch (temp->GetType()) {
       case DataType::Type::kInt32:
-        locations->SetTempAt(temp_index, Location::RegisterLocation(reg));
+        locations->SetTempAt(temp_index, Location::CoreRegister(reg));
         break;
 
       case DataType::Type::kFloat64:
         if (codegen_->NeedsTwoRegisters(DataType::Type::kFloat64)) {
-          Location location = Location::FpuRegisterPairLocation(reg, temp->GetHighRegister());
+          Location location = Location::FpuRegisterPair(reg, temp->GetHighRegister());
           locations->SetTempAt(temp_index, location);
         } else {
-          locations->SetTempAt(temp_index, Location::FpuRegisterLocation(reg));
+          locations->SetTempAt(temp_index, Location::FpuRegister(reg));
         }
         break;
 
@@ -686,15 +686,15 @@ Location RegisterAllocationResolver::GetLocation(LiveInterval* interval) {
     uint32_t reg = interval->GetRegisterOrLowRegister();
     if (interval->IsFloatingPoint()) {
       if (interval->IsPair()) {
-        return Location::FpuRegisterPairLocation(reg, interval->GetHighRegister());
+        return Location::FpuRegisterPair(reg, interval->GetHighRegister());
       } else {
-        return Location::FpuRegisterLocation(reg);
+        return Location::FpuRegister(reg);
       }
     } else {
       if (interval->IsPair()) {
-        return Location::RegisterPairLocation(reg, interval->GetHighRegister());
+        return Location::CoreRegisterPair(reg, interval->GetHighRegister());
       } else {
-        return Location::RegisterLocation(reg);
+        return Location::CoreRegister(reg);
       }
     }
   } else {

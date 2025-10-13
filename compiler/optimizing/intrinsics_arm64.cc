@@ -1492,19 +1492,19 @@ class ReadBarrierCasSlowPathARM64 : public SlowPathCodeARM64 {
       // We need to add the slow path now, it is too late when emitting slow path code.
       mark_old_value_slow_path_ = arm64_codegen->AddReadBarrierSlowPath(
           invoke,
-          Location::RegisterLocation(old_value_temp.GetCode()),
-          Location::RegisterLocation(old_value.GetCode()),
-          Location::RegisterLocation(base.GetCode()),
+          Location::CoreRegister(old_value_temp.GetCode()),
+          Location::CoreRegister(old_value.GetCode()),
+          Location::CoreRegister(base.GetCode()),
           /*offset=*/ 0u,
-          /*index=*/ Location::RegisterLocation(offset.GetCode()));
+          /*index=*/ Location::CoreRegister(offset.GetCode()));
       if (update_old_value_) {
         update_old_value_slow_path_ = arm64_codegen->AddReadBarrierSlowPath(
             invoke,
-            Location::RegisterLocation(old_value.GetCode()),
-            Location::RegisterLocation(old_value_temp.GetCode()),
-            Location::RegisterLocation(base.GetCode()),
+            Location::CoreRegister(old_value.GetCode()),
+            Location::CoreRegister(old_value_temp.GetCode()),
+            Location::CoreRegister(base.GetCode()),
             /*offset=*/ 0u,
-            /*index=*/ Location::RegisterLocation(offset.GetCode()));
+            /*index=*/ Location::CoreRegister(offset.GetCode()));
       }
     }
   }
@@ -1716,11 +1716,11 @@ void IntrinsicLocationsBuilderARM64::VisitJdkUnsafeCompareAndSetReference(HInvok
       // To preserve the old value across the non-Baker read barrier
       // slow path, use a fixed callee-save register.
       constexpr int first_callee_save = CTZ(kArm64CalleeSaveRefSpills);
-      locations->AddTemp(Location::RegisterLocation(first_callee_save));
+      locations->AddTemp(Location::CoreRegister(first_callee_save));
       // To reduce the number of moves, request x0 as the second temporary.
       DCHECK(InvokeRuntimeCallingConvention().GetReturnLocation(DataType::Type::kReference).Equals(
-                 Location::RegisterLocation(x0.GetCode())));
-      locations->AddTemp(Location::RegisterLocation(x0.GetCode()));
+                 Location::CoreRegister(x0.GetCode())));
+      locations->AddTemp(Location::CoreRegister(x0.GetCode()));
     }
   }
 }
@@ -1924,11 +1924,11 @@ static void GenUnsafeGetAndUpdate(HInvoke* invoke,
       codegen->GenerateIntrinsicMoveWithBakerReadBarrier(out_or_temp.W(), out_or_temp.W());
     } else {
       codegen->GenerateReadBarrierSlow(invoke,
-                                       Location::RegisterLocation(out_or_temp.GetCode()),
-                                       Location::RegisterLocation(out_or_temp.GetCode()),
-                                       Location::RegisterLocation(base.GetCode()),
+                                       Location::CoreRegister(out_or_temp.GetCode()),
+                                       Location::CoreRegister(out_or_temp.GetCode()),
+                                       Location::CoreRegister(base.GetCode()),
                                        /*offset=*/ 0u,
-                                       /*index=*/ Location::RegisterLocation(offset.GetCode()));
+                                       /*index=*/ Location::CoreRegister(offset.GetCode()));
     }
   }
 }
@@ -3615,7 +3615,7 @@ void IntrinsicCodeGeneratorARM64::VisitDoubleIsInfinite(HInvoke* invoke) {
         low,                                                                             \
         (high) - (low) + 1,                                                              \
         calling_convention.GetReturnLocation(DataType::Type::kReference),                \
-        Location::RegisterLocation(calling_convention.GetRegisterAt(0).GetCode()));      \
+        Location::CoreRegister(calling_convention.GetRegisterAt(0).GetCode()));      \
   }                                                                                      \
   void IntrinsicCodeGeneratorARM64::Visit##name##ValueOf(HInvoke* invoke) {              \
     IntrinsicVisitor::ValueOfInfo info =                                                 \
@@ -4915,7 +4915,7 @@ static LocationSummary* CreateVarHandleCommonLocations(HInvoke* invoke,
     // To preserve the offset value across the non-Baker read barrier slow path
     // for loading the declaring class, use a fixed callee-save register.
     constexpr int first_callee_save = CTZ(kArm64CalleeSaveRefSpills);
-    locations->AddTemp(Location::RegisterLocation(first_callee_save));
+    locations->AddTemp(Location::CoreRegister(first_callee_save));
   } else {
     locations->AddTemp(Location::RequiresRegister());
   }
@@ -5198,12 +5198,12 @@ static void CreateVarHandleCompareAndSetOrExchangeLocations(HInvoke* invoke,
     if (GetExpectedVarHandleCoordinatesCount(invoke) == 0u) {  // For static fields.
       DCHECK_EQ(locations->GetTempCount(), 2u);
       DCHECK(locations->GetTemp(0u).Equals(Location::RequiresRegister()));
-      DCHECK(locations->GetTemp(1u).Equals(Location::RegisterLocation(first_callee_save)));
-      locations->SetTempAt(0u, Location::RegisterLocation(second_callee_save));
+      DCHECK(locations->GetTemp(1u).Equals(Location::CoreRegister(first_callee_save)));
+      locations->SetTempAt(0u, Location::CoreRegister(second_callee_save));
     } else {
       DCHECK_EQ(locations->GetTempCount(), 1u);
       DCHECK(locations->GetTemp(0u).Equals(Location::RequiresRegister()));
-      locations->SetTempAt(0u, Location::RegisterLocation(first_callee_save));
+      locations->SetTempAt(0u, Location::CoreRegister(first_callee_save));
     }
   }
   size_t old_temp_count = locations->GetTempCount();
@@ -5708,11 +5708,11 @@ static void GenerateVarHandleGetAndUpdate(HInvoke* invoke,
       } else {
         codegen->GenerateReadBarrierSlow(
             invoke,
-            Location::RegisterLocation(out_or_temp.GetCode()),
-            Location::RegisterLocation(old_value.GetCode()),
-            Location::RegisterLocation(target.object.GetCode()),
+            Location::CoreRegister(out_or_temp.GetCode()),
+            Location::CoreRegister(old_value.GetCode()),
+            Location::CoreRegister(target.object.GetCode()),
             /*offset=*/0u,
-            /*index=*/Location::RegisterLocation(target.offset.GetCode()));
+            /*index=*/Location::CoreRegister(target.offset.GetCode()));
       }
     }
   }

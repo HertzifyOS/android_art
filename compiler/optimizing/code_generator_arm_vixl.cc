@@ -2706,7 +2706,7 @@ Location CriticalNativeCallingConventionVisitorARMVIXL::GetReturnLocation(DataTy
 
 Location CriticalNativeCallingConventionVisitorARMVIXL::GetMethodLocation() const {
   // Pass the method in the hidden argument R4.
-  return Location::RegisterLocation(R4);
+  return Location::CoreRegister(R4);
 }
 
 void CodeGeneratorARMVIXL::Move32(Location destination, Location source) {
@@ -3754,7 +3754,7 @@ void InstructionCodeGeneratorARMVIXL::VisitInvokeInterface(HInvokeInterface* inv
   {
     // Set the hidden (in r12) argument. It is done here, right before a BLX to prevent other
     // instruction from clobbering it as they might use r12 as a scratch register.
-    Location hidden_reg = Location::RegisterLocation(r12.GetCode());
+    Location hidden_reg = Location::CoreRegister(r12.GetCode());
     // The VIXL macro assembler may clobber any of the scratch registers that are available to it,
     // so it checks if the application is using them (by passing them to the macro assembler
     // methods). The following application of UseScratchRegisterScope corrects VIXL's notion of
@@ -9581,7 +9581,7 @@ void CodeGeneratorARMVIXL::GenerateStaticOrDirectCall(
         DCHECK_EQ(invoke->GetCodePtrLocation(), CodePtrLocation::kCallCriticalNative);
         // Use LR for both the target method and then the code pointer. The code shall be two
         // bytes longer because we'll have to use 32-bit instead of 16-bit encoding for one LDR.
-        callee_method = Location::RegisterLocation(lr.GetCode());
+        callee_method = Location::CoreRegister(lr.GetCode());
       }
       LoadMethod(invoke->GetMethodLoadKind(), callee_method, invoke);
       break;

@@ -813,12 +813,12 @@ TEST_F(CodegenTest, ARM64ParallelMoveResolverSIMD) {
                   Location::SIMDStackSlot(0),
                   DataType::Type::kFloat64,
                   nullptr);
-    move->AddMove(Location::FpuRegisterLocation(0),
-                  Location::FpuRegisterLocation(1),
+    move->AddMove(Location::FpuRegister(0),
+                  Location::FpuRegister(1),
                   DataType::Type::kFloat64,
                   nullptr);
-    move->AddMove(Location::FpuRegisterLocation(1),
-                  Location::FpuRegisterLocation(0),
+    move->AddMove(Location::FpuRegister(1),
+                  Location::FpuRegister(0),
                   DataType::Type::kFloat64,
                   nullptr);
     codegen.GetMoveResolver()->EmitNativeCode(move);

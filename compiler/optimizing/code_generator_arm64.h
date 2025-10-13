@@ -114,7 +114,7 @@ const vixl::aarch64::CPURegList runtime_reserved_core_registers =
 // thunks we generate. For these and similar cases, we want to reserve a specific
 // register that's neither callee-save nor an argument register. We choose x15.
 inline Location FixedTempLocation() {
-  return Location::RegisterLocation(vixl::aarch64::x15.GetCode());
+  return Location::CoreRegister(vixl::aarch64::x15.GetCode());
 }
 
 // Callee-save registers AAPCS64, without x19 (Thread Register) (nor

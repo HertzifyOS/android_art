@@ -1017,7 +1017,7 @@ Location CriticalNativeCallingConventionVisitorARM64::GetReturnLocation(DataType
 
 Location CriticalNativeCallingConventionVisitorARM64::GetMethodLocation() const {
   // Pass the method in the hidden argument x15.
-  return Location::RegisterLocation(x15.GetCode());
+  return Location::CoreRegister(x15.GetCode());
 }
 
 namespace detail {
@@ -4937,7 +4937,7 @@ void InstructionCodeGeneratorARM64::VisitInvokeInterface(HInvokeInterface* invok
   // conflict.
   } else if (invoke->GetHiddenArgumentLoadKind() != MethodLoadKind::kRuntimeCall) {
     codegen_->LoadMethod(
-        invoke->GetHiddenArgumentLoadKind(), Location::RegisterLocation(ip1.GetCode()), invoke);
+        invoke->GetHiddenArgumentLoadKind(), Location::CoreRegister(ip1.GetCode()), invoke);
   }
 
   __ Ldr(temp,
@@ -5111,7 +5111,7 @@ void CodeGeneratorARM64::GenerateStaticOrDirectCall(
       if (invoke->GetCodePtrLocation() == CodePtrLocation::kCallCriticalNative) {
         // Use LR for both the target method and then the code pointer.
         DCHECK(callee_method.IsInvalid());
-        callee_method = Location::RegisterLocation(lr.GetCode());
+        callee_method = Location::CoreRegister(lr.GetCode());
       }
       LoadMethod(invoke->GetMethodLoadKind(), callee_method, invoke);
       break;

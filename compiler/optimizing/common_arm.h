@@ -203,21 +203,21 @@ inline vixl::aarch32::Operand InputOperandAt(HInstruction* instr, int input_inde
 }
 
 inline Location LocationFrom(const vixl::aarch32::Register& reg) {
-  return Location::RegisterLocation(reg.GetCode());
+  return Location::CoreRegister(reg.GetCode());
 }
 
 inline Location LocationFrom(const vixl::aarch32::SRegister& reg) {
-  return Location::FpuRegisterLocation(reg.GetCode());
+  return Location::FpuRegister(reg.GetCode());
 }
 
 inline Location LocationFrom(const vixl::aarch32::Register& low,
                              const vixl::aarch32::Register& high) {
-  return Location::RegisterPairLocation(low.GetCode(), high.GetCode());
+  return Location::CoreRegisterPair(low.GetCode(), high.GetCode());
 }
 
 inline Location LocationFrom(const vixl::aarch32::SRegister& low,
                              const vixl::aarch32::SRegister& high) {
-  return Location::FpuRegisterPairLocation(low.GetCode(), high.GetCode());
+  return Location::FpuRegisterPair(low.GetCode(), high.GetCode());
 }
 
 }  // namespace helpers

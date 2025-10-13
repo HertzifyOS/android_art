@@ -214,15 +214,15 @@ inline vixl::aarch64::MemOperand HeapOperandFrom(Location location, Offset offse
 }
 
 inline Location LocationFrom(const vixl::aarch64::Register& reg) {
-  return Location::RegisterLocation(ARTRegCodeFromVIXL(reg.GetCode()));
+  return Location::CoreRegister(ARTRegCodeFromVIXL(reg.GetCode()));
 }
 
 inline Location LocationFrom(const vixl::aarch64::VRegister& fpreg) {
-  return Location::FpuRegisterLocation(fpreg.GetCode());
+  return Location::FpuRegister(fpreg.GetCode());
 }
 
 inline Location LocationFrom(const vixl::aarch64::ZRegister& zreg) {
-  return Location::FpuRegisterLocation(zreg.GetCode());
+  return Location::FpuRegister(zreg.GetCode());
 }
 
 inline vixl::aarch64::Operand OperandFromMemOperand(

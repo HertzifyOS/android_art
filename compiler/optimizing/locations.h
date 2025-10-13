@@ -136,23 +136,23 @@ class Location : public ValueObject {
   }
 
   // Register locations.
-  static constexpr Location RegisterLocation(int reg) {
+  static constexpr Location CoreRegister(int reg) {
     return Location(kCoreRegister, reg);
   }
 
-  static constexpr Location FpuRegisterLocation(int reg) {
+  static constexpr Location FpuRegister(int reg) {
     return Location(kFpuRegister, reg);
   }
 
-  static constexpr Location VecRegisterLocation(int reg) {
+  static constexpr Location VecRegister(int reg) {
     return Location(kVecRegister, reg);
   }
 
-  static constexpr Location RegisterPairLocation(int low, int high) {
+  static constexpr Location CoreRegisterPair(int low, int high) {
     return Location(kCoreRegisterPair, low << 16 | high);
   }
 
-  static constexpr Location FpuRegisterPairLocation(int low, int high) {
+  static constexpr Location FpuRegisterPair(int low, int high) {
     return Location(kFpuRegisterPair, low << 16 | high);
   }
 
@@ -247,23 +247,23 @@ class Location : public ValueObject {
 
   Location ToLow() const {
     if (IsRegisterPair()) {
-      return Location::RegisterLocation(low());
+      return CoreRegister(low());
     } else if (IsFpuRegisterPair()) {
-      return Location::FpuRegisterLocation(low());
+      return FpuRegister(low());
     } else {
       DCHECK(IsDoubleStackSlot());
-      return Location::StackSlot(GetStackIndex());
+      return StackSlot(GetStackIndex());
     }
   }
 
   Location ToHigh() const {
     if (IsRegisterPair()) {
-      return Location::RegisterLocation(high());
+      return CoreRegister(high());
     } else if (IsFpuRegisterPair()) {
-      return Location::FpuRegisterLocation(high());
+      return FpuRegister(high());
     } else {
       DCHECK(IsDoubleStackSlot());
-      return Location::StackSlot(GetHighStackIndex(4));
+      return StackSlot(GetHighStackIndex(4));
     }
   }
 
@@ -313,12 +313,12 @@ class Location : public ValueObject {
     DCHECK_NE(num_of_slots, 0u);
     switch (num_of_slots) {
       case 1u:
-        return Location::StackSlot(spill_slot);
+        return StackSlot(spill_slot);
       case 2u:
-        return Location::DoubleStackSlot(spill_slot);
+        return DoubleStackSlot(spill_slot);
       default:
         // Assume all other stack slot sizes correspond to SIMD slot size.
-        return Location::SIMDStackSlot(spill_slot);
+        return SIMDStackSlot(spill_slot);
     }
   }
 

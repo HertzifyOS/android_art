@@ -99,7 +99,7 @@ Location Location::FpuRegisterOrInt32Constant(HInstruction* instruction) {
 Location Location::ByteRegisterOrConstant(int reg, HInstruction* instruction) {
   return instruction->IsConstant()
       ? Location::ConstantLocation(instruction)
-      : Location::RegisterLocation(reg);
+      : Location::CoreRegister(reg);
 }
 
 Location Location::FpuRegisterOrConstant(HInstruction* instruction) {
