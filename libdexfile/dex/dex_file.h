@@ -128,7 +128,8 @@ class DexFile {
   using Magic = std::array<uint8_t, 8>;
 
   struct Sha1 : public std::array<uint8_t, kSha1DigestSize> {
-    std::string ToString() const;
+    std::array<char, kSha1DigestSize * 2 + 1> ToHex() const;
+    std::string ToString() const { return std::string(DexFile::Sha1::ToHex().data()); }
   };
 
   static_assert(std::is_standard_layout_v<Sha1>);
