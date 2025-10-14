@@ -2308,12 +2308,14 @@ bool FastCompilerARM64::BuildMove(uint32_t dest_reg,
               /* is_wide= */ DataType::Is64BitType(type),
               CanBeNull(src_reg));
 
+  // Fetch the source before creating a new register for the destination, in
+  // case they overlap.
+  Location source = vreg_locations_[src_reg];
+
   // Translate a move into an actual move instruction. We could just update
   // `vreg_locations_`, but that would require tracking aliases, which may be
   // costly in compile time.
-  if (!MoveLocation(CreateNewRegisterLocation(dest_reg, type, next),
-                    vreg_locations_[src_reg],
-                    type)) {
+  if (!MoveLocation(CreateNewRegisterLocation(dest_reg, type, next), source, type)) {
     return false;
   }
   return true;
