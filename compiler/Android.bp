@@ -307,6 +307,7 @@ gensrcs {
         "optimizing/locations.h",
         "optimizing/nodes.h",
         "optimizing/optimizing_compiler_stats.h",
+        "optimizing/physical_register_type.h",
 
         "utils/arm/constants_arm.h",
     ],

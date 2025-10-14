@@ -17,6 +17,8 @@
 #ifndef ART_COMPILER_OPTIMIZING_PHYSICAL_REGISTER_TYPE_H_
 #define ART_COMPILER_OPTIMIZING_PHYSICAL_REGISTER_TYPE_H_
 
+#include <iosfwd>
+
 #include "base/macros.h"
 
 namespace art HIDDEN {
@@ -26,6 +28,7 @@ enum class PhysicalRegisterType : uint8_t {
   kFpuRegister,
   kVectorRegister
 };
+std::ostream& operator<<(std::ostream& os, PhysicalRegisterType);
 
 }  // namespace art
 
