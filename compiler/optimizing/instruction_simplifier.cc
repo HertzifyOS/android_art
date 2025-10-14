@@ -1181,9 +1181,14 @@ void InstructionSimplifierVisitor::VisitArrayLength(HArrayLength* instruction) {
   HInstruction* input = instruction->InputAt(0);
   // If the array is a NewArray with constant size, replace the array length
   // with the constant instruction. This helps the bounds check elimination phase.
+  // If the compiler is not in be_loop_friendly mode, the array length can be
+  // replaced with the input that was given to NewArray even if the input is
+  // not an IntConstant. This avoids any conflicts with the bounds check
+  // elimination phase, which assumes the array length input of a BoundsCheck
+  // instruction is an ArrayLength or IntConstant.
   if (input->IsNewArray()) {
     input = input->AsNewArray()->GetLength();
-    if (input->IsIntConstant()) {
+    if (input->IsIntConstant() || !be_loop_friendly_) {
       instruction->ReplaceWith(input);
     }
   }

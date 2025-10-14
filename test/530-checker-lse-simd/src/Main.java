@@ -83,7 +83,6 @@ public class Main {
   /// CHECK-NEXT: Mul
   /// CHECK-NEXT: ArraySet
   /// CHECK-NEXT: ArrayGet
-  /// CHECK-NEXT: ArrayLength
   /// CHECK-NEXT: BelowOrEqual
   //
   /// CHECK:      ArrayGet loop:none
@@ -99,7 +98,6 @@ public class Main {
   ///     CHECK-NEXT: ArrayGet
   //
   /// CHECK-FI:
-  /// CHECK-NEXT: ArrayLength
   /// CHECK-NEXT: BelowOrEqual
   //
   /// CHECK:      Return
