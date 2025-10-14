@@ -129,11 +129,8 @@ func (s *artHostTestDataSingleton) GenerateBuildActions(ctx android.SingletonCon
 	})
 
 	for _, info := range collectedFiles {
-		// For each file, specify its base directory (-C) and the file path relative to that base (-f).
-		// The -P flag sets the prefix for the file inside the zip.
-		cmd.FlagWithArg("-C ", filepath.Dir(info.SrcPath.String()))
+		cmd.FlagWithArg("-e ", info.DestPath)
 		cmd.FlagWithInput("-f ", info.SrcPath)
-		cmd.FlagWithArg("-P ", filepath.Dir(info.DestPath))
 	}
 
 	rule.Build(
