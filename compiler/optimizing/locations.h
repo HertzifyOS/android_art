@@ -176,26 +176,30 @@ class Location : public ValueObject {
     return GetKind() == kFpuRegisterPair;
   }
 
+  bool IsRegister() const {
+    return IsCoreRegister() || IsFpuRegister() || IsVecRegister();
+  }
+
+  bool IsRegisterPair() const {
+    return IsCoreRegisterPair() || IsFpuRegisterPair();
+  }
+
   bool IsRegisterKind() const {
-    return IsCoreRegister() ||
-           IsFpuRegister() ||
-           IsVecRegister() ||
-           IsCoreRegisterPair() ||
-           IsFpuRegisterPair();
+    return IsRegister() || IsRegisterPair();
   }
 
   int reg() const {
-    DCHECK(IsCoreRegister() || IsFpuRegister() || IsVecRegister());
+    DCHECK(IsRegister());
     return GetPayload();
   }
 
   int low() const {
-    DCHECK(IsPair());
+    DCHECK(IsRegisterPair());
     return GetPayload() >> 16;
   }
 
   int high() const {
-    DCHECK(IsPair());
+    DCHECK(IsRegisterPair());
     return GetPayload() & 0xFFFF;
   }
 
@@ -239,10 +243,6 @@ class Location : public ValueObject {
   T AsFpuRegisterPairHigh() const {
     DCHECK(IsFpuRegisterPair());
     return static_cast<T>(high());
-  }
-
-  bool IsPair() const {
-    return IsCoreRegisterPair() || IsFpuRegisterPair();
   }
 
   Location ToLow() const {
@@ -345,7 +345,7 @@ class Location : public ValueObject {
   bool Contains(Location other) const {
     if (Equals(other)) {
       return true;
-    } else if (IsPair() || IsDoubleStackSlot()) {
+    } else if (IsRegisterPair() || IsDoubleStackSlot()) {
       return ToLow().Equals(other) || ToHigh().Equals(other);
     }
     return false;
@@ -357,7 +357,8 @@ class Location : public ValueObject {
     if (kIsDebugBuild && !overlap) {
       // Note: These are also overlapping cases. But we are not able to handle them in
       // ParallelMoveResolverWithSwap. Make sure that we do not meet such case with our compiler.
-      if ((IsPair() && other.IsPair()) || (IsDoubleStackSlot() && other.IsDoubleStackSlot())) {
+      if ((IsRegisterPair() && other.IsRegisterPair()) ||
+          (IsDoubleStackSlot() && other.IsDoubleStackSlot())) {
         DCHECK(!Contains(other.ToLow()));
         DCHECK(!Contains(other.ToHigh()));
       }
@@ -686,7 +687,7 @@ class LocationSummary : public ArenaObject<kArenaAllocLocationSummary> {
     Location input = Inputs()[input_index];
     return input.IsCoreRegister()
         || input.IsFpuRegister()
-        || input.IsPair()
+        || input.IsRegisterPair()
         || input.IsStackSlot()
         || input.IsDoubleStackSlot();
   }

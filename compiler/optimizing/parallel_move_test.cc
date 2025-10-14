@@ -38,7 +38,7 @@ static void DumpRegisterForTest(std::ostream& os, int reg) {
 static void DumpLocationForTest(std::ostream& os, Location location) {
   if (location.IsConstant()) {
     os << "C";
-  } else if (location.IsPair()) {
+  } else if (location.IsRegisterPair()) {
     DumpRegisterForTest(os, location.low());
     os << ",";
     DumpRegisterForTest(os, location.high());

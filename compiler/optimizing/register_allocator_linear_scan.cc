@@ -676,7 +676,7 @@ void RegisterAllocatorLinearScan::CheckForFixedInputs(HInstruction* instruction,
     Location input = locations->InAt(i);
     if (input.IsCoreRegister() || input.IsFpuRegister() || input.IsVecRegister()) {
       BlockRegister(input, position, will_call);
-    } else if (input.IsPair()) {
+    } else if (input.IsRegisterPair()) {
       BlockRegister(input.ToLow(), position, will_call);
       BlockRegister(input.ToHigh(), position, will_call);
     }
@@ -702,7 +702,7 @@ void RegisterAllocatorLinearScan::CheckForFixedOutput(HInstruction* instruction,
       if (first.IsCoreRegister() || first.IsFpuRegister() || first.IsVecRegister()) {
         current->SetFrom(position + kLivenessPositionOfFixedOutput);
         current->SetRegisters(1u << first.reg());
-      } else if (first.IsPair()) {
+      } else if (first.IsRegisterPair()) {
         current->SetFrom(position + kLivenessPositionOfFixedOutput);
         current->SetRegisters((1u << first.low()) | (1u << first.high()));
       }
@@ -715,7 +715,7 @@ void RegisterAllocatorLinearScan::CheckForFixedOutput(HInstruction* instruction,
     current->SetFrom(position + kLivenessPositionOfFixedOutput);
     current->SetRegisters(1u << output.reg());
     BlockRegister(output, position, will_call);
-  } else if (output.IsPair()) {
+  } else if (output.IsRegisterPair()) {
     current->SetFrom(position + kLivenessPositionOfFixedOutput);
     current->SetRegisters((1u << output.low()) | (1u << output.high()));
     BlockRegister(output.ToLow(), position, will_call);
@@ -1091,7 +1091,7 @@ bool RegisterAllocatorLinearScan::LinearScan::TryUsingSpillSlotHint(LiveInterval
 }
 
 static int RegisterOrLowRegister(Location location) {
-  return location.IsPair() ? location.low() : location.reg();
+  return location.IsRegisterPair() ? location.low() : location.reg();
 }
 
 int RegisterAllocatorLinearScan::LinearScan::FindFirstRegisterHint(

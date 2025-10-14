@@ -119,7 +119,7 @@ std::ostream& operator<<(std::ostream& os, const Location& location) {
   os << location.DebugString();
   if (location.IsCoreRegister() || location.IsFpuRegister() || location.IsVecRegister()) {
     os << location.reg();
-  } else if (location.IsPair()) {
+  } else if (location.IsRegisterPair()) {
     os << location.low() << ":" << location.high();
   } else if (location.IsStackSlot() || location.IsDoubleStackSlot() || location.IsSIMDStackSlot()) {
     os << location.GetStackIndex();
