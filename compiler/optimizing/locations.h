@@ -24,8 +24,10 @@
 #include "base/bit_field.h"
 #include "base/bit_utils.h"
 #include "base/bit_vector.h"
+#include "base/casts.h"
 #include "base/macros.h"
 #include "base/value_object.h"
+#include "physical_register_type.h"
 #include "register_set.h"
 
 namespace art HIDDEN {
@@ -82,6 +84,13 @@ class Location : public ValueObject {
     // We do not use the value 13 because it conflicts with kLocationConstantMask.
     kDoNotUse13 = 13,
   };
+
+  static constexpr PhysicalRegisterType RegisterTypeForKind(Kind kind) {
+    // The values in the `Kind` enumeration were selected in a way that makes
+    // conversions between the `Kind` and `PhysicalRegisterType` simple.
+    // The correctness is ensured by `static_assert()`s in `GetRegisterType()`.
+    return enum_cast<PhysicalRegisterType>((kind - kCoreRegister) & 3u);
+  }
 
   constexpr Location() : ValueObject(), value_(kInvalid) {
     // Verify that non-constant location kinds do not interfere with kConstant.
@@ -265,6 +274,25 @@ class Location : public ValueObject {
       DCHECK(IsDoubleStackSlot());
       return StackSlot(GetHighStackIndex(4));
     }
+  }
+
+  uint32_t GetRegisterSet() const {
+    if (IsRegister()) {
+      return 1u << reg();
+    } else {
+      DCHECK(IsRegisterPair());
+      return (1u << low()) | (1u << high());
+    }
+  }
+
+  PhysicalRegisterType GetRegisterType() const {
+    DCHECK(IsRegisterKind());
+    static_assert(RegisterTypeForKind(kCoreRegister) == PhysicalRegisterType::kCoreRegister);
+    static_assert(RegisterTypeForKind(kFpuRegister) == PhysicalRegisterType::kFpuRegister);
+    static_assert(RegisterTypeForKind(kVecRegister) == PhysicalRegisterType::kVectorRegister);
+    static_assert(RegisterTypeForKind(kCoreRegisterPair) == PhysicalRegisterType::kCoreRegister);
+    static_assert(RegisterTypeForKind(kFpuRegisterPair) == PhysicalRegisterType::kFpuRegister);
+    return RegisterTypeForKind(GetKind());
   }
 
   static uintptr_t EncodeStackIndex(intptr_t stack_index) {

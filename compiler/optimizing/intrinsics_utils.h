@@ -79,31 +79,16 @@ class IntrinsicSlowPath : public TSlowPathCode {
     Location out = invoke_->GetLocations()->Out();
     if (out.IsValid()) {
       DCHECK(out.IsRegisterKind());  // TODO: Replace this when we support output in memory.
+      DCHECK(!out.IsVecRegister());  // We have no ABI that returns values in vector registers.
       // We want to double-check that we don't overwrite a live register with the return
       // value.
       // Note: For the possible kNoOutputOverlap case we can't simply remove the OUT register
       // from the GetLiveRegisters() - theoretically it might be needed after the return from
       // the slow path.
       if (kIsDebugBuild) {
-        const RegisterSet* live_registers = invoke_->GetLocations()->GetLiveRegisters();
-        switch (out.GetKind()) {
-          case Location::Kind::kCoreRegister:
-            CHECK(!live_registers->ContainsCoreRegister(out.reg()));
-            break;
-          case Location::Kind::kFpuRegister:
-            CHECK(!live_registers->ContainsFpuRegister(out.reg()));
-            break;
-          case Location::Kind::kCoreRegisterPair:
-            CHECK(!live_registers->ContainsCoreRegister(out.low()));
-            CHECK(!live_registers->ContainsCoreRegister(out.high()));
-            break;
-          case Location::Kind::kFpuRegisterPair:
-            CHECK(!live_registers->ContainsFpuRegister(out.low()));
-            CHECK(!live_registers->ContainsFpuRegister(out.high()));
-            break;
-          default:
-            break;
-        }
+        uint32_t live_registers =
+            invoke_->GetLocations()->GetLiveRegisters()->GetRegisterSet(out.GetRegisterType());
+        CHECK_EQ(live_registers & out.GetRegisterSet(), 0u);
       }
       codegen->MoveFromReturnRegister(out, invoke_->GetType());
     }
