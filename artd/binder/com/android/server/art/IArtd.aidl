@@ -22,6 +22,15 @@ interface IArtd {
     boolean isAlive();
 
     /**
+     * Stops the artd service process immediately. This will not stop subprocesses of the artd
+     * service process.
+     *
+     * Note that this will fail any ongoing call to the artd service. Therefore, it should only be
+     * called when there is no ongoing call.
+     */
+    oneway void stop();
+
+    /**
      * Deletes dexopt artifacts and returns the released space, in bytes.
      *
      * Note that this method doesn't delete runtime artifacts. To delete them, call

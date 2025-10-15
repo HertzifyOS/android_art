@@ -680,6 +680,11 @@ ScopedAStatus Artd::isAlive(bool* _aidl_return) {
   return ScopedAStatus::ok();
 }
 
+ScopedAStatus Artd::stop() {
+  LOG(INFO) << "Stopping artd";
+  exit(0);
+}
+
 ScopedAStatus Artd::deleteArtifacts(const ArtifactsPath& in_artifactsPath, int64_t* _aidl_return) {
   RETURN_FATAL_IF_PRE_REBOOT(options_);
   RETURN_FATAL_IF_ARG_IS_PRE_REBOOT(in_artifactsPath, "artifactsPath");

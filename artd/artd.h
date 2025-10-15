@@ -171,6 +171,8 @@ class Artd : public aidl::com::android::server::art::BnArtd {
 
   ndk::ScopedAStatus isAlive(bool* _aidl_return) override;
 
+  ndk::ScopedAStatus stop() override;
+
   ndk::ScopedAStatus deleteArtifacts(
       const aidl::com::android::server::art::ArtifactsPath& in_artifactsPath,
       int64_t* _aidl_return) override;

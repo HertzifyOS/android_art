@@ -139,6 +139,8 @@ public class PreRebootManager implements PreRebootManagerInterface {
                     Map.of(ArtFlags.PASS_MAIN, progressCallback), params);
         } finally {
             ArtdRefCache.getInstance().reset();
+            // Stop the `artd` service proactively, to ensure a successful and fast teardown.
+            PreRebootGlobalInjector.getInstance().stopArtd();
             callbackExecutor.shutdown();
             try {
                 // Make sure we have no running threads when we tear down.
