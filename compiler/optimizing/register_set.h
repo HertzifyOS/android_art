@@ -42,6 +42,10 @@ class RegisterSet : public ValueObject {
     vec_register_set_ |= registers;
   }
 
+  void AddRegisterSet(PhysicalRegisterType register_type, uint32_t registers) {
+    (this->*GetRegisterSetAccessor(register_type)) |= registers;
+  }
+
   void AddCoreRegister(uint32_t reg) {
     DCHECK_LT(reg, BitSizeOf<uint32_t>());
     core_register_set_ |= 1u << reg;
@@ -55,6 +59,10 @@ class RegisterSet : public ValueObject {
   void AddVecRegister(uint32_t reg) {
     DCHECK_LT(reg, BitSizeOf<uint32_t>());
     vec_register_set_ |= 1u << reg;
+  }
+
+  void AddRegister(PhysicalRegisterType register_type, uint32_t reg) {
+    (this->*GetRegisterSetAccessor(register_type)) |= 1u << reg;
   }
 
   bool ContainsCoreRegister(uint32_t id) const {
@@ -91,15 +99,8 @@ class RegisterSet : public ValueObject {
     return vec_register_set_;
   }
 
-  uint32_t GetRegisterSet(PhysicalRegisterType type) const {
-    switch (type) {
-      case PhysicalRegisterType::kCoreRegister:
-        return GetCoreRegisterSet();
-      case PhysicalRegisterType::kFpuRegister:
-        return GetFpuRegisterSet();
-      case PhysicalRegisterType::kVectorRegister:
-        return GetVecRegisterSet();
-    }
+  uint32_t GetRegisterSet(PhysicalRegisterType register_type) const {
+    return this->*GetRegisterSetAccessor(register_type);
   }
 
   static uint32_t RegisterSet::* GetCoreRegisterSetAccessor() {
@@ -114,8 +115,11 @@ class RegisterSet : public ValueObject {
     return &RegisterSet::vec_register_set_;
   }
 
-  static uint32_t RegisterSet::* GetRegisterSetAccessor(PhysicalRegisterType type) {
-    switch (type) {
+  static uint32_t RegisterSet::* GetRegisterSetAccessor(PhysicalRegisterType register_type) {
+    // Note: clang++ can optimize this to a linear expression before inlining this to other
+    // functions. Other similar `switch` expressions may not be optimized that well, so it's
+    // preferable to use this function in implementing `PhysicalRegisterType`-base operations.
+    switch (register_type) {
       case PhysicalRegisterType::kCoreRegister:
         return GetCoreRegisterSetAccessor();
       case PhysicalRegisterType::kFpuRegister:

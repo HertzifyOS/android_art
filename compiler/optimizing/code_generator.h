@@ -549,6 +549,10 @@ class CodeGenerator : public DeletableArenaObject<kArenaAllocCodeGenerator> {
     allocated_registers_.AddVecRegisterSet(registers);
   }
 
+  void AddAllocatedRegisterSet(PhysicalRegisterType register_type, uint32_t registers) {
+    allocated_registers_.AddRegisterSet(register_type, registers);
+  }
+
   void AddAllocatedCoreRegister(uint32_t reg) {
     allocated_registers_.AddCoreRegister(reg);
   }
@@ -559,6 +563,10 @@ class CodeGenerator : public DeletableArenaObject<kArenaAllocCodeGenerator> {
 
   void AddAllocatedVectorRegister(uint32_t reg) {
     allocated_registers_.AddVecRegister(reg);
+  }
+
+  void AddAllocatedRegister(PhysicalRegisterType register_type, uint32_t reg) {
+    allocated_registers_.AddRegister(register_type, reg);
   }
 
   RegisterSet GetAllocatedRegisters() const {

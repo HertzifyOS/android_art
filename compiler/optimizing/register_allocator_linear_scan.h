@@ -57,7 +57,11 @@ class RegisterAllocatorLinearScan : public RegisterAllocator {
   static void AddSorted(ScopedArenaVector<LiveInterval*>* array, LiveInterval* interval);
 
   // Update the interval for the register in `location` to cover [start, end).
-  void BlockRegister(Location location, size_t position, bool will_call);
+  void BlockRegister(PhysicalRegisterType register_type, int reg, size_t position, bool will_call);
+  void BlockRegisters(Location location, size_t position, bool will_call);
+
+  ScopedArenaVector<LiveInterval*>* GetPhysicalRegisterIntervals(
+      PhysicalRegisterType register_type);
 
   // Allocate a spill slot for the given catch phi. Will allocate the same slot
   // for phis which share the same vreg. Must be called in reverse linear order
