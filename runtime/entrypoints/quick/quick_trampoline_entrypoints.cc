@@ -2507,27 +2507,26 @@ extern "C" uint64_t artInvokePolymorphic(mirror::Object* raw_receiver, Thread* s
     if (UNLIKELY(method_type.IsNull())) {
       // This implies we couldn't resolve one or more types in this method handle.
       CHECK(self->IsExceptionPending());
-      return 0UL;
-    }
-
-    Handle<mirror::MethodHandle> method_handle(hs.NewHandle(
-        ObjPtr<mirror::MethodHandle>::DownCast(receiver_handle.Get())));
-    if (intrinsic == Intrinsics::kMethodHandleInvokeExact) {
-      success = MethodHandleInvokeExact(self,
-                                        *shadow_frame,
-                                        method_handle,
-                                        method_type,
-                                        &operands,
-                                        &result);
     } else {
-      DCHECK_EQ(static_cast<uint32_t>(intrinsic),
-                static_cast<uint32_t>(Intrinsics::kMethodHandleInvoke));
-      success = MethodHandleInvoke(self,
-                                   *shadow_frame,
-                                   method_handle,
-                                   method_type,
-                                   &operands,
-                                   &result);
+      Handle<mirror::MethodHandle> method_handle(hs.NewHandle(
+          ObjPtr<mirror::MethodHandle>::DownCast(receiver_handle.Get())));
+      if (intrinsic == Intrinsics::kMethodHandleInvokeExact) {
+        success = MethodHandleInvokeExact(self,
+                                          *shadow_frame,
+                                          method_handle,
+                                          method_type,
+                                          &operands,
+                                          &result);
+      } else {
+        DCHECK_EQ(static_cast<uint32_t>(intrinsic),
+                  static_cast<uint32_t>(Intrinsics::kMethodHandleInvoke));
+        success = MethodHandleInvoke(self,
+                                     *shadow_frame,
+                                     method_handle,
+                                     method_type,
+                                     &operands,
+                                     &result);
+      }
     }
   } else {
     DCHECK_EQ(GetClassRoot<mirror::VarHandle>(linker), resolved_method->GetDeclaringClass());
