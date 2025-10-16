@@ -71,7 +71,7 @@ LocationSummary* LocationSummary::CreateImpl(ArenaAllocator* allocator,
 Location Location::RegisterOrConstant(HInstruction* instruction) {
   return instruction->IsConstant()
       ? Location::ConstantLocation(instruction)
-      : Location::RequiresRegister();
+      : Location::RequiresCoreRegister();
 }
 
 Location Location::RegisterOrInt32Constant(HInstruction* instruction) {
@@ -82,7 +82,7 @@ Location Location::RegisterOrInt32Constant(HInstruction* instruction) {
       return Location::ConstantLocation(constant);
     }
   }
-  return Location::RequiresRegister();
+  return Location::RequiresCoreRegister();
 }
 
 Location Location::FpuRegisterOrInt32Constant(HInstruction* instruction) {

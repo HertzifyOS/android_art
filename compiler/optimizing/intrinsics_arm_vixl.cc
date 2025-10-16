@@ -165,12 +165,12 @@ bool IntrinsicLocationsBuilderARMVIXL::TryDispatch(HInvoke* invoke) {
 static void CreateFPToIntLocations(ArenaAllocator* allocator, HInvoke* invoke) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
   locations->SetInAt(0, Location::RequiresFpuRegister());
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 }
 
 static void CreateIntToFPLocations(ArenaAllocator* allocator, HInvoke* invoke) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetOut(Location::RequiresFpuRegister());
 }
 
@@ -224,23 +224,23 @@ void IntrinsicCodeGeneratorARMVIXL::VisitFloatIntBitsToFloat(HInvoke* invoke) {
 
 static void CreateIntToIntLocations(ArenaAllocator* allocator, HInvoke* invoke) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 static void CreateIntIntToIntSlowPathCallLocations(ArenaAllocator* allocator, HInvoke* invoke) {
   LocationSummary* locations =
       LocationSummary::Create(allocator, invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetInAt(1, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
   // Force kOutputOverlap; see comments in IntrinsicSlowPath::EmitNativeCode.
-  locations->SetOut(Location::RequiresRegister(), Location::kOutputOverlap);
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kOutputOverlap);
 }
 
 static void CreateLongToLongLocationsWithOverlap(ArenaAllocator* allocator, HInvoke* invoke) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kOutputOverlap);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kOutputOverlap);
 }
 
 static void CreateFPToFPLocations(ArenaAllocator* allocator, HInvoke* invoke) {
@@ -363,7 +363,7 @@ void IntrinsicLocationsBuilderARMVIXL::VisitMathRoundFloat(HInvoke* invoke) {
   if (features_.HasARMv8AInstructions()) {
     LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, invoke, kIntrinsified);
     locations->SetInAt(0, Location::RequiresFpuRegister());
-    locations->SetOut(Location::RequiresRegister());
+    locations->SetOut(Location::RequiresCoreRegister());
     locations->AddTemp(Location::RequiresFpuRegister());
   }
 }
@@ -462,8 +462,8 @@ void IntrinsicCodeGeneratorARMVIXL::VisitMemoryPeekShortNative(HInvoke* invoke) 
 
 static void CreateIntIntToVoidLocations(ArenaAllocator* allocator, HInvoke* invoke) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetInAt(1, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
 }
 
 void IntrinsicLocationsBuilderARMVIXL::VisitMemoryPokeByte(HInvoke* invoke) {
@@ -510,7 +510,7 @@ void IntrinsicCodeGeneratorARMVIXL::VisitMemoryPokeShortNative(HInvoke* invoke) 
 void IntrinsicLocationsBuilderARMVIXL::VisitThreadCurrentThread(HInvoke* invoke) {
   LocationSummary* locations =
       LocationSummary::CreateNoCall(allocator_, invoke, kIntrinsified);
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 }
 
 void IntrinsicCodeGeneratorARMVIXL::VisitThreadCurrentThread(HInvoke* invoke) {
@@ -527,14 +527,14 @@ void IntrinsicLocationsBuilderARMVIXL::VisitStringCompareTo(HInvoke* invoke) {
       invoke->InputAt(1)->CanBeNull() ? LocationSummary::kCallOnSlowPath
                                       : LocationSummary::kNoCall,
       kIntrinsified);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetInAt(1, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
   locations->AddRegisterTemps(3);
   // Need temporary registers for String compression's feature.
   if (mirror::kUseStringCompression) {
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddTemp(Location::RequiresCoreRegister());
   }
-  locations->SetOut(Location::RequiresRegister(), Location::kOutputOverlap);
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kOutputOverlap);
 }
 
 // Forward declaration.
@@ -838,8 +838,8 @@ static const char* GetConstString(HInstruction* candidate, uint32_t* utf16_lengt
 void IntrinsicLocationsBuilderARMVIXL::VisitStringEquals(HInvoke* invoke) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, invoke, kIntrinsified);
   InvokeRuntimeCallingConventionARMVIXL calling_convention;
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetInAt(1, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
 
   // Temporary registers to store lengths of strings and for calculations.
   // Using instruction cbz requires a low register, so explicitly set a temp to be R0.
@@ -857,13 +857,13 @@ void IntrinsicLocationsBuilderARMVIXL::VisitStringEquals(HInvoke* invoke) {
       const_string != nullptr &&
       mirror::String::DexFileStringAllASCII(const_string, const_string_length);
   if (const_string == nullptr || const_string_length > (is_compressed ? 4u : 2u)) {
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddTemp(Location::RequiresCoreRegister());
   }
 
   // TODO: If the String.equals() is used only for an immediately following HIf, we can
   // mark it as emitted-at-use-site and emit branches directly to the appropriate blocks.
   // Then we shall need an extra temporary register instead of the output register.
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 }
 
 void IntrinsicCodeGeneratorARMVIXL::VisitStringEquals(HInvoke* invoke) {
@@ -1207,7 +1207,7 @@ static Location LocationForSystemArrayCopyInput(ArmVIXLAssembler* assembler, HIn
   if (const_input != nullptr && assembler->ShifterOperandCanAlwaysHold(const_input->GetValue())) {
     return Location::ConstantLocation(const_input);
   } else {
-    return Location::RequiresRegister();
+    return Location::RequiresCoreRegister();
   }
 }
 
@@ -1233,7 +1233,7 @@ void IntrinsicLocationsBuilderARMVIXL::VisitSystemArrayCopy(HInvoke* invoke) {
       // ReadBarrierSystemArrayCopySlowPathARM (because that register
       // is clobbered by ReadBarrierMarkRegX entry points). Get an extra
       // temporary register from the register allocator.
-      locations->AddTemp(Location::RequiresRegister());
+      locations->AddTemp(Location::RequiresCoreRegister());
     }
   }
 }
@@ -2103,11 +2103,11 @@ void IntrinsicCodeGeneratorARMVIXL::VisitLongLowestOneBit(HInvoke* invoke) {
 
 void IntrinsicLocationsBuilderARMVIXL::VisitStringGetCharsNoCheck(HInvoke* invoke) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, invoke, kIntrinsified);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetInAt(1, Location::RequiresRegister());
-  locations->SetInAt(2, Location::RequiresRegister());
-  locations->SetInAt(3, Location::RequiresRegister());
-  locations->SetInAt(4, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
+  locations->SetInAt(2, Location::RequiresCoreRegister());
+  locations->SetInAt(3, Location::RequiresCoreRegister());
+  locations->SetInAt(4, Location::RequiresCoreRegister());
 
   // Temporary registers to store lengths of strings and for calculations.
   locations->AddRegisterTemps(3);
@@ -2499,7 +2499,7 @@ void IntrinsicCodeGeneratorARMVIXL::VisitReferenceRefersTo(HInvoke* invoke) {
 
 void IntrinsicLocationsBuilderARMVIXL::VisitThreadInterrupted(HInvoke* invoke) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, invoke, kIntrinsified);
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 }
 
 void IntrinsicCodeGeneratorARMVIXL::VisitThreadInterrupted(HInvoke* invoke) {
@@ -2689,16 +2689,16 @@ static void CreateUnsafeGetLocations(HInvoke* invoke,
     locations->SetCustomSlowPathCallerSaves(RegisterSet::Empty());  // No caller-save registers.
   }
   locations->SetInAt(0, Location::NoLocation());        // Unused receiver.
-  locations->SetInAt(1, Location::RequiresRegister());
-  locations->SetInAt(2, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(),
+  locations->SetInAt(1, Location::RequiresCoreRegister());
+  locations->SetInAt(2, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(),
                     (can_call ? Location::kOutputOverlap : Location::kNoOutputOverlap));
   if ((type == DataType::Type::kReference && codegen->EmitBakerReadBarrier()) ||
       (type == DataType::Type::kInt64 && Use64BitExclusiveLoadStore(atomic, codegen))) {
     // We need a temporary register for the read barrier marking slow
     // path in CodeGeneratorARMVIXL::GenerateReferenceLoadWithBakerReadBarrier,
     // or the STREXD result for LDREXD/STREXD sequence when LDRD is non-atomic.
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddTemp(Location::RequiresCoreRegister());
   }
 }
 
@@ -2706,8 +2706,8 @@ static void CreateUnsafeGetAbsoluteLocations(HInvoke* invoke) {
   ArenaAllocator* allocator = invoke->GetBlock()->GetGraph()->GetAllocator();
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
   locations->SetInAt(0, Location::NoLocation());        // Unused receiver.
-  locations->SetInAt(1, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(1, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 static void GenUnsafeGet(HInvoke* invoke,
@@ -3073,12 +3073,12 @@ static void CreateUnsafePutTempLocations(CodeGeneratorARMVIXL* codegen,
   if (type == DataType::Type::kInt64) {
     // Potentially need temps for ldrexd-strexd loop.
     if (Use64BitExclusiveLoadStore(atomic, codegen)) {
-      locations->AddTemp(Location::RequiresRegister());  // Temp_lo.
-      locations->AddTemp(Location::RequiresRegister());  // Temp_hi.
+      locations->AddTemp(Location::RequiresCoreRegister());  // Temp_lo.
+      locations->AddTemp(Location::RequiresCoreRegister());  // Temp_hi.
     }
   } else if (type == DataType::Type::kReference) {
     // Temp for card-marking.
-    locations->AddTemp(Location::RequiresRegister());  // Temp.
+    locations->AddTemp(Location::RequiresCoreRegister());  // Temp.
   }
 }
 
@@ -3089,9 +3089,9 @@ static void CreateUnsafePutLocations(HInvoke* invoke,
   ArenaAllocator* allocator = codegen->GetGraph()->GetAllocator();
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
   locations->SetInAt(0, Location::NoLocation());        // Unused receiver.
-  locations->SetInAt(1, Location::RequiresRegister());
-  locations->SetInAt(2, Location::RequiresRegister());
-  locations->SetInAt(3, Location::RequiresRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
+  locations->SetInAt(2, Location::RequiresCoreRegister());
+  locations->SetInAt(3, Location::RequiresCoreRegister());
   CreateUnsafePutTempLocations(codegen, type, atomic, locations);
 }
 
@@ -3102,8 +3102,8 @@ static void CreateUnsafePutAbsoluteLocations(HInvoke* invoke,
   ArenaAllocator* allocator = codegen->GetGraph()->GetAllocator();
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
   locations->SetInAt(0, Location::NoLocation());        // Unused receiver.
-  locations->SetInAt(1, Location::RequiresRegister());
-  locations->SetInAt(2, Location::RequiresRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
+  locations->SetInAt(2, Location::RequiresCoreRegister());
   CreateUnsafePutTempLocations(codegen, type, atomic, locations);
 }
 
@@ -3723,16 +3723,16 @@ static void CreateUnsafeCASLocations(HInvoke* invoke, CodeGeneratorARMVIXL* code
     locations->SetCustomSlowPathCallerSaves(RegisterSet::Empty());  // No caller-save registers.
   }
   locations->SetInAt(0, Location::NoLocation());        // Unused receiver.
-  locations->SetInAt(1, Location::RequiresRegister());
-  locations->SetInAt(2, Location::RequiresRegister());
-  locations->SetInAt(3, Location::RequiresRegister());
-  locations->SetInAt(4, Location::RequiresRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
+  locations->SetInAt(2, Location::RequiresCoreRegister());
+  locations->SetInAt(3, Location::RequiresCoreRegister());
+  locations->SetInAt(4, Location::RequiresCoreRegister());
 
-  locations->SetOut(Location::RequiresRegister(), Location::kOutputOverlap);
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kOutputOverlap);
 
   // Temporary register used in CAS. In the object case (UnsafeCASObject intrinsic),
   // this is also used for card-marking, and possibly for read barrier.
-  locations->AddTemp(Location::RequiresRegister());
+  locations->AddTemp(Location::RequiresCoreRegister());
 }
 
 static void GenUnsafeCas(HInvoke* invoke, DataType::Type type, CodeGeneratorARMVIXL* codegen) {
@@ -4016,9 +4016,9 @@ static void CreateUnsafeGetAndUpdateLocations(HInvoke* invoke,
     locations->SetCustomSlowPathCallerSaves(RegisterSet::Empty());  // No caller-save registers.
   }
   locations->SetInAt(0, Location::NoLocation());        // Unused receiver.
-  locations->SetInAt(1, Location::RequiresRegister());
-  locations->SetInAt(2, Location::RequiresRegister());
-  locations->SetInAt(3, Location::RequiresRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
+  locations->SetInAt(2, Location::RequiresCoreRegister());
+  locations->SetInAt(3, Location::RequiresCoreRegister());
 
   // Request another temporary register for methods that don't return a value.
   size_t num_temps = 1u;  // We always need `tmp_ptr`.
@@ -4026,7 +4026,7 @@ static void CreateUnsafeGetAndUpdateLocations(HInvoke* invoke,
   if (is_void) {
     num_temps++;
   } else {
-    locations->SetOut(Location::RequiresRegister(), Location::kOutputOverlap);
+    locations->SetOut(Location::RequiresCoreRegister(), Location::kOutputOverlap);
   }
 
   if (get_and_update_op == GetAndUpdateOp::kAdd) {
@@ -4615,17 +4615,17 @@ static LocationSummary* CreateVarHandleCommonLocations(HInvoke* invoke,
   ArenaAllocator* allocator = codegen->GetGraph()->GetAllocator();
   LocationSummary* locations =
       LocationSummary::Create(allocator, invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   // Require coordinates in registers. These are the object holding the value
   // to operate on (except for static fields) and index (for arrays and views).
   for (size_t i = 0; i != expected_coordinates_count; ++i) {
-    locations->SetInAt(/* VarHandle object */ 1u + i, Location::RequiresRegister());
+    locations->SetInAt(/* VarHandle object */ 1u + i, Location::RequiresCoreRegister());
   }
   if (return_type != DataType::Type::kVoid) {
     if (DataType::IsFloatingPointType(return_type)) {
       locations->SetOut(Location::RequiresFpuRegister());
     } else {
-      locations->SetOut(Location::RequiresRegister());
+      locations->SetOut(Location::RequiresCoreRegister());
     }
   }
   uint32_t arguments_start = /* VarHandle object */ 1u + expected_coordinates_count;
@@ -4635,7 +4635,7 @@ static LocationSummary* CreateVarHandleCommonLocations(HInvoke* invoke,
     if (DataType::IsFloatingPointType(arg->GetType())) {
       locations->SetInAt(arg_index, Location::RequiresFpuRegister());
     } else {
-      locations->SetInAt(arg_index, Location::RequiresRegister());
+      locations->SetInAt(arg_index, Location::RequiresCoreRegister());
     }
   }
 
@@ -4647,11 +4647,11 @@ static LocationSummary* CreateVarHandleCommonLocations(HInvoke* invoke,
     constexpr int first_callee_save = CTZ(kArmCalleeSaveRefSpills);
     locations->AddTemp(Location::CoreRegister(first_callee_save));
   } else {
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddTemp(Location::RequiresCoreRegister());
   }
   if (expected_coordinates_count == 0u) {
     // Add a temporary to hold the declaring class.
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddTemp(Location::RequiresCoreRegister());
   }
 
   return locations;
@@ -4841,7 +4841,7 @@ static void CreateVarHandleSetLocations(HInvoke* invoke,
       // We need 2 temps for the value with reversed bytes in the byte array view slow path.
       // We can reuse the offset temporary.
       DCHECK_EQ(locations->GetTempCount(), 1u);
-      locations->AddTemp(Location::RequiresRegister());
+      locations->AddTemp(Location::RequiresCoreRegister());
     }
   }
 }
@@ -5010,12 +5010,12 @@ static void CreateVarHandleCompareAndSetOrExchangeLocations(HInvoke* invoke,
     constexpr int second_callee_save = CTZ(kArmCalleeSaveRefSpills ^ (1u << first_callee_save));
     if (GetExpectedVarHandleCoordinatesCount(invoke) == 0u) {  // For static fields.
       DCHECK_EQ(locations->GetTempCount(), 2u);
-      DCHECK(locations->GetTemp(0u).Equals(Location::RequiresRegister()));
+      DCHECK(locations->GetTemp(0u).Equals(Location::RequiresCoreRegister()));
       DCHECK(locations->GetTemp(1u).Equals(Location::CoreRegister(first_callee_save)));
       locations->SetTempAt(0u, Location::CoreRegister(second_callee_save));
     } else {
       DCHECK_EQ(locations->GetTempCount(), 1u);
-      DCHECK(locations->GetTemp(0u).Equals(Location::RequiresRegister()));
+      DCHECK(locations->GetTemp(0u).Equals(Location::RequiresCoreRegister()));
       locations->SetTempAt(0u, Location::CoreRegister(first_callee_save));
     }
   }
@@ -5040,7 +5040,7 @@ static void CreateVarHandleCompareAndSetOrExchangeLocations(HInvoke* invoke,
   }
   if (value_type == DataType::Type::kReference && codegen->EmitReadBarrier()) {
     // Add a temporary for store result, also used for the `old_value_temp` in slow path.
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddTemp(Location::RequiresCoreRegister());
   }
 }
 
@@ -5352,7 +5352,7 @@ static void CreateVarHandleGetAndUpdateLocations(HInvoke* invoke,
     } else if (value_type == DataType::Type::kReference && codegen->EmitNonBakerReadBarrier()) {
       // We need to preserve the declaring class (if present) and offset for read barrier
       // slow paths, so we must use a separate temporary for the exclusive store result.
-      locations->AddTemp(Location::RequiresRegister());
+      locations->AddTemp(Location::RequiresCoreRegister());
     } else if (GetExpectedVarHandleCoordinatesCount(invoke) == 2u) {
       // Add temps for the byte-reversed `arg` in the byte array view slow path.
       DCHECK_EQ(locations->GetTempCount(), 1u);
@@ -5388,10 +5388,10 @@ static void CreateVarHandleGetAndUpdateLocations(HInvoke* invoke,
       locations->AddTemp(Location::RequiresFpuRegister());
     } else if (DataType::Is64BitType(value_type)) {
       // We need two for non-fpu 64 bit types.
-      locations->AddTemp(Location::RequiresRegister());
-      locations->AddTemp(Location::RequiresRegister());
+      locations->AddTemp(Location::RequiresCoreRegister());
+      locations->AddTemp(Location::RequiresCoreRegister());
     } else {
-      locations->AddTemp(Location::RequiresRegister());
+      locations->AddTemp(Location::RequiresCoreRegister());
     }
   }
 }

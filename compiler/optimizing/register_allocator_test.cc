@@ -792,7 +792,7 @@ void RegisterAllocatorTest::TestSpillInactive() {
   user->SetBlock(block);
   user->AddInput(one);
   LocationSummary* locations = LocationSummary::CreateNoCall(GetAllocator(), user);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   static constexpr size_t phi_ranges[][2] = {{10 * kLppi, 15 * kLppi}};
   BuildInterval(phi_ranges, arraysize(phi_ranges), GetScopedAllocator(), kNoRegisters, user);
 
@@ -806,7 +806,7 @@ void RegisterAllocatorTest::TestSpillInactive() {
   first->uses_.push_front(*new (GetScopedAllocator()) UsePosition(user, 0u, 5u * kLppi));
 
   locations = LocationSummary::CreateNoCall(GetAllocator(), first->GetDefinedBy());
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
   first = first->SplitAt(1u * kLppi);
 
   // Create an interval that conflicts with the next interval, to force the next
@@ -815,7 +815,7 @@ void RegisterAllocatorTest::TestSpillInactive() {
   LiveInterval* second =
       BuildInterval(ranges2, arraysize(ranges2), GetScopedAllocator(), kNoRegisters, two);
   locations = LocationSummary::CreateNoCall(GetAllocator(), second->GetDefinedBy());
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 
   // Create an interval that will lead to splitting the first interval. The bug occured
   // by splitting at a wrong position, in this case at the next intersection between
@@ -829,7 +829,7 @@ void RegisterAllocatorTest::TestSpillInactive() {
   third->uses_.push_front(*new (GetScopedAllocator()) UsePosition(user, 0u, 4u * kLppi));
   third->uses_.push_front(*new (GetScopedAllocator()) UsePosition(user, 0u, 3u * kLppi));
   locations = LocationSummary::CreateNoCall(GetAllocator(), third->GetDefinedBy());
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
   third = third->SplitAt(3u * kLppi);
 
   // Because the first part of the split interval was considered handled, this interval
@@ -838,7 +838,7 @@ void RegisterAllocatorTest::TestSpillInactive() {
   LiveInterval* fourth =
       BuildInterval(ranges4, arraysize(ranges4), GetScopedAllocator(), kNoRegisters, four);
   locations = LocationSummary::CreateNoCall(GetAllocator(), fourth->GetDefinedBy());
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 
   std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
   if (codegen == nullptr) {
@@ -1318,7 +1318,7 @@ void RegisterAllocatorTest::TestNoOutputOverlapAndTemp() {
   // Add a temp for `add`. We want to test that the temp interval shall not be split.
   // Trying to split it would trigger a `DCHECK(!IsTemp())`.
   ASSERT_EQ(0, add->GetLocations()->GetTempCount());
-  add->GetLocations()->AddTemp(Location::RequiresRegister());
+  add->GetLocations()->AddTemp(Location::RequiresCoreRegister());
 
   // Set just two registers available to avoid adding more instructions
   // to reproduce the situation where we could try to split the temp.
@@ -1389,9 +1389,9 @@ TEST_F(RegisterAllocatorTest, NoOutputOverlapImmediateSpill) {
   // doable as long as the `CodeGeneratorX86` is not `final`.
   LocationSummary* get1_locs = get1->GetLocations();
   ASSERT_TRUE(get1_locs->OutputCanOverlapWithInputs());
-  ASSERT_TRUE(get1_locs->Out().Equals(Location::RequiresRegister()));
+  ASSERT_TRUE(get1_locs->Out().Equals(Location::RequiresCoreRegister()));
   get1_locs->UpdateOut(Location());  // Invalidate output to work around `DCHECK()` in `SetOut()`.
-  get1_locs->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  get1_locs->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 
   // Make three registers available.
   BlockCoreRegistersExcept(codegen.get(), {x86::EAX, x86::ECX, x86::EDX});

@@ -72,7 +72,7 @@ Location RegisterOrZeroBitPatternLocation(HInstruction* instruction) {
   DCHECK(!DataType::IsFloatingPointType(instruction->GetType()));
   return IsZeroBitPattern(instruction)
       ? Location::ConstantLocation(instruction)
-      : Location::RequiresRegister();
+      : Location::RequiresCoreRegister();
 }
 
 Location FpuRegisterOrZeroBitPatternLocation(HInstruction* instruction) {
@@ -97,7 +97,7 @@ Location ValueLocationForStore(HInstruction* value) {
   } else if (DataType::IsFloatingPointType(value->GetType())) {
     return Location::RequiresFpuRegister();
   } else {
-    return Location::RequiresRegister();
+    return Location::RequiresCoreRegister();
   }
 }
 
@@ -2109,7 +2109,7 @@ void LocationsBuilderRISCV64::HandleBinaryOp(HBinaryOperation* instruction) {
   switch (type) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64: {
-      locations->SetInAt(0, Location::RequiresRegister());
+      locations->SetInAt(0, Location::RequiresCoreRegister());
       HInstruction* right = instruction->InputAt(1);
       bool can_use_imm = false;
       if (instruction->IsMin() || instruction->IsMax()) {
@@ -2121,9 +2121,9 @@ void LocationsBuilderRISCV64::HandleBinaryOp(HBinaryOperation* instruction) {
       if (can_use_imm) {
         locations->SetInAt(1, Location::ConstantLocation(right));
       } else {
-        locations->SetInAt(1, Location::RequiresRegister());
+        locations->SetInAt(1, Location::RequiresCoreRegister());
       }
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
     }
 
@@ -2261,7 +2261,7 @@ void LocationsBuilderRISCV64::HandleCondition(HCondition* instruction) {
       break;
 
     default: {
-      locations->SetInAt(0, Location::RequiresRegister());
+      locations->SetInAt(0, Location::RequiresCoreRegister());
       HInstruction* rhs = instruction->InputAt(1);
       bool use_imm = false;
       if (rhs->IsConstant()) {
@@ -2296,13 +2296,13 @@ void LocationsBuilderRISCV64::HandleCondition(HCondition* instruction) {
       if (use_imm) {
         locations->SetInAt(1, Location::ConstantLocation(rhs));
       } else {
-        locations->SetInAt(1, Location::RequiresRegister());
+        locations->SetInAt(1, Location::RequiresCoreRegister());
       }
       break;
     }
   }
   if (!instruction->IsEmittedAtUseSite()) {
-    locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+    locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
   }
 }
 
@@ -2337,9 +2337,9 @@ void LocationsBuilderRISCV64::HandleShift(HBinaryOperation* instruction) {
   switch (type) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64: {
-      locations->SetInAt(0, Location::RequiresRegister());
+      locations->SetInAt(0, Location::RequiresCoreRegister());
       locations->SetInAt(1, Location::RegisterOrConstant(instruction->InputAt(1)));
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
     }
     default:
@@ -2501,7 +2501,7 @@ void CodeGeneratorRISCV64::CheckGCCardIsValid(XRegister object) {
 
 void LocationsBuilderRISCV64::HandleFieldSet(HInstruction* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetInAt(1, ValueLocationForStore(instruction->InputAt(1)));
 }
 
@@ -2553,7 +2553,7 @@ void LocationsBuilderRISCV64::HandleFieldGet(HInstruction* instruction) {
                                          : LocationSummary::kNoCall);
 
   // Input for object receiver.
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
 
   if (DataType::IsFloatingPointType(instruction->GetType())) {
     locations->SetOut(Location::RequiresFpuRegister());
@@ -2562,7 +2562,7 @@ void LocationsBuilderRISCV64::HandleFieldGet(HInstruction* instruction) {
     // are enabled: we do not want the load to overwrite the object's
     // location, as we need it to emit the read barrier.
     locations->SetOut(
-        Location::RequiresRegister(),
+        Location::RequiresCoreRegister(),
         object_field_get_with_read_barrier ? Location::kOutputOverlap : Location::kNoOutputOverlap);
   }
 
@@ -2570,7 +2570,7 @@ void LocationsBuilderRISCV64::HandleFieldGet(HInstruction* instruction) {
     locations->SetCustomSlowPathCallerSaves(AllVectorRegisters());  // Only vector registers.
     // We need a temporary register for the read barrier marking slow
     // path in CodeGeneratorRISCV64::GenerateFieldLoadWithBakerReadBarrier.
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddTemp(Location::RequiresCoreRegister());
   }
 }
 
@@ -2710,8 +2710,8 @@ void LocationsBuilderRISCV64::VisitAbs(HAbs* abs) {
   switch (abs->GetResultType()) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64:
-      locations->SetInAt(0, Location::RequiresRegister());
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetInAt(0, Location::RequiresCoreRegister());
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
     case DataType::Type::kFloat32:
     case DataType::Type::kFloat64:
@@ -2782,7 +2782,7 @@ void LocationsBuilderRISCV64::VisitArrayGet(HArrayGet* instruction) {
      instruction,
      object_array_get_with_read_barrier ? LocationSummary::kCallOnSlowPath
                                         : LocationSummary::kNoCall);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetInAt(1, Location::RegisterOrConstant(instruction->InputAt(1)));
   if (DataType::IsFloatingPointType(type)) {
     locations->SetOut(Location::RequiresFpuRegister(), Location::kNoOutputOverlap);
@@ -2791,14 +2791,14 @@ void LocationsBuilderRISCV64::VisitArrayGet(HArrayGet* instruction) {
     // read barriers enabled: we do not want the move to overwrite the
     // array's location, as we need it to emit the read barrier.
     locations->SetOut(
-        Location::RequiresRegister(),
+        Location::RequiresCoreRegister(),
         object_array_get_with_read_barrier ? Location::kOutputOverlap : Location::kNoOutputOverlap);
   }
   if (object_array_get_with_read_barrier && kUseBakerReadBarrier) {
     locations->SetCustomSlowPathCallerSaves(AllVectorRegisters());  // Only vector registers.
     // We need a temporary register for the read barrier marking slow
     // path in CodeGeneratorRISCV64::GenerateArrayLoadWithBakerReadBarrier.
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddTemp(Location::RequiresCoreRegister());
   }
 }
 
@@ -2907,8 +2907,8 @@ void InstructionCodeGeneratorRISCV64::VisitArrayGet(HArrayGet* instruction) {
 
 void LocationsBuilderRISCV64::VisitArrayLength(HArrayLength* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorRISCV64::VisitArrayLength(HArrayLength* instruction) {
@@ -2930,14 +2930,14 @@ void LocationsBuilderRISCV64::VisitArraySet(HArraySet* instruction) {
       allocator_,
       instruction,
       needs_type_check ? LocationSummary::kCallOnSlowPath : LocationSummary::kNoCall);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetInAt(1, Location::RegisterOrConstant(instruction->InputAt(1)));
   locations->SetInAt(2, ValueLocationForStore(instruction->GetValue()));
   if (kPoisonHeapReferences &&
       instruction->GetComponentType() == DataType::Type::kReference &&
       !locations->InAt(1).IsConstant() &&
       !locations->InAt(2).IsConstant()) {
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddTemp(Location::RequiresCoreRegister());
   }
 }
 
@@ -3088,8 +3088,8 @@ void InstructionCodeGeneratorRISCV64::VisitBelowOrEqual(HBelowOrEqual* instructi
 
 void LocationsBuilderRISCV64::VisitBooleanNot(HBooleanNot* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorRISCV64::VisitBooleanNot(HBooleanNot* instruction) {
@@ -3129,10 +3129,10 @@ void LocationsBuilderRISCV64::VisitBoundsCheck(HBoundsCheck* instruction) {
 
   locations->SetInAt(
       0,
-      const_index ? Location::ConstantLocation(index) : Location::RequiresRegister());
+      const_index ? Location::ConstantLocation(index) : Location::RequiresCoreRegister());
   locations->SetInAt(
       1,
-      const_length ? Location::ConstantLocation(length) : Location::RequiresRegister());
+      const_length ? Location::ConstantLocation(length) : Location::RequiresCoreRegister());
 }
 
 void InstructionCodeGeneratorRISCV64::VisitBoundsCheck(HBoundsCheck* instruction) {
@@ -3221,13 +3221,13 @@ void LocationsBuilderRISCV64::VisitCheckCast(HCheckCast* instruction) {
   TypeCheckKind type_check_kind = instruction->GetTypeCheckKind();
   LocationSummary::CallKind call_kind = codegen_->GetCheckCastCallKind(instruction);
   LocationSummary* locations = LocationSummary::Create(allocator_, instruction, call_kind);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   if (type_check_kind == TypeCheckKind::kBitstringCheck) {
     locations->SetInAt(1, Location::ConstantLocation(instruction->InputAt(1)));
     locations->SetInAt(2, Location::ConstantLocation(instruction->InputAt(2)));
     locations->SetInAt(3, Location::ConstantLocation(instruction->InputAt(3)));
   } else {
-    locations->SetInAt(1, Location::RequiresRegister());
+    locations->SetInAt(1, Location::RequiresCoreRegister());
   }
   locations->AddRegisterTemps(NumberOfCheckCastTemps(codegen_->EmitReadBarrier(), type_check_kind));
 }
@@ -3429,8 +3429,8 @@ TypeCheckKind type_check_kind = instruction->GetTypeCheckKind();
 
 void LocationsBuilderRISCV64::VisitClassTableGet(HClassTableGet* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorRISCV64::VisitClassTableGet(HClassTableGet* instruction) {
@@ -3465,7 +3465,7 @@ void InstructionCodeGeneratorRISCV64::VisitClearException(
 void LocationsBuilderRISCV64::VisitClinitCheck(HClinitCheck* instruction) {
   LocationSummary* locations =
       LocationSummary::Create(allocator_, instruction, LocationSummary::kCallOnSlowPath);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   if (instruction->HasUses()) {
     locations->SetOut(Location::SameAsFirstInput());
   }
@@ -3497,16 +3497,16 @@ void LocationsBuilderRISCV64::VisitCompare(HCompare* instruction) {
     case DataType::Type::kUint32:
     case DataType::Type::kInt64:
     case DataType::Type::kUint64:
-      locations->SetInAt(0, Location::RequiresRegister());
+      locations->SetInAt(0, Location::RequiresCoreRegister());
       locations->SetInAt(1, RegisterOrZeroBitPatternLocation(instruction->InputAt(1)));
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
 
     case DataType::Type::kFloat32:
     case DataType::Type::kFloat64:
       locations->SetInAt(0, Location::RequiresFpuRegister());
       locations->SetInAt(1, Location::RequiresFpuRegister());
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
 
     default:
@@ -3602,7 +3602,7 @@ void InstructionCodeGeneratorRISCV64::VisitCurrentMethod(
 
 void LocationsBuilderRISCV64::VisitShouldDeoptimizeFlag(HShouldDeoptimizeFlag* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 }
 
 void InstructionCodeGeneratorRISCV64::VisitShouldDeoptimizeFlag(
@@ -3620,7 +3620,7 @@ void LocationsBuilderRISCV64::VisitDeoptimize(HDeoptimize* instruction) {
   caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(0));
   locations->SetCustomSlowPathCallerSaves(caller_saves);
   if (IsBooleanValueOrMaterializedCondition(instruction->InputAt(0))) {
-    locations->SetInAt(0, Location::RequiresRegister());
+    locations->SetInAt(0, Location::RequiresCoreRegister());
   }
 }
 
@@ -3638,9 +3638,9 @@ void LocationsBuilderRISCV64::VisitDiv(HDiv* instruction) {
   switch (instruction->GetResultType()) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64:
-      locations->SetInAt(0, Location::RequiresRegister());
+      locations->SetInAt(0, Location::RequiresCoreRegister());
       locations->SetInAt(1, Location::RegisterOrConstant(instruction->InputAt(1)));
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
 
     case DataType::Type::kFloat32:
@@ -3771,7 +3771,7 @@ void InstructionCodeGeneratorRISCV64::VisitGreaterThanOrEqual(HGreaterThanOrEqua
 void LocationsBuilderRISCV64::VisitIf(HIf* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
   if (IsBooleanValueOrMaterializedCondition(instruction->InputAt(0))) {
-    locations->SetInAt(0, Location::RequiresRegister());
+    locations->SetInAt(0, Location::RequiresCoreRegister());
     if (GetGraph()->IsCompilingBaseline() &&
         codegen_->GetCompilerOptions().ProfileBranches() &&
         !Runtime::Current()->IsAotCompiler()) {
@@ -3780,7 +3780,7 @@ void LocationsBuilderRISCV64::VisitIf(HIf* instruction) {
       DCHECK(info != nullptr);
       BranchCache* cache = info->GetBranchCache(instruction->GetDexPc());
       if (cache != nullptr) {
-        locations->AddTemp(Location::RequiresRegister());
+        locations->AddTemp(Location::RequiresCoreRegister());
       }
     }
   }
@@ -3880,17 +3880,17 @@ void LocationsBuilderRISCV64::VisitInstanceOf(HInstanceOf* instruction) {
   if (baker_read_barrier_slow_path) {
     locations->SetCustomSlowPathCallerSaves(AllVectorRegisters());  // Only vector registers.
   }
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   if (type_check_kind == TypeCheckKind::kBitstringCheck) {
     locations->SetInAt(1, Location::ConstantLocation(instruction->InputAt(1)));
     locations->SetInAt(2, Location::ConstantLocation(instruction->InputAt(2)));
     locations->SetInAt(3, Location::ConstantLocation(instruction->InputAt(3)));
   } else {
-    locations->SetInAt(1, Location::RequiresRegister());
+    locations->SetInAt(1, Location::RequiresCoreRegister());
   }
   // The output does overlap inputs.
   // Note that TypeCheckSlowPathRISCV64 uses this register too.
-  locations->SetOut(Location::RequiresRegister(), Location::kOutputOverlap);
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kOutputOverlap);
   locations->AddRegisterTemps(
       NumberOfInstanceOfTemps(codegen_->EmitReadBarrier(), type_check_kind));
 }
@@ -4332,9 +4332,9 @@ void LocationsBuilderRISCV64::VisitLoadClass(HLoadClass* instruction) {
     locations->SetCustomSlowPathCallerSaves(AllVectorRegisters());  // Only vector registers.
   }
   if (load_kind == HLoadClass::LoadKind::kReferrersClass) {
-    locations->SetInAt(0, Location::RequiresRegister());
+    locations->SetInAt(0, Location::RequiresCoreRegister());
   }
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
   if (load_kind == HLoadClass::LoadKind::kBssEntry ||
       load_kind == HLoadClass::LoadKind::kBssEntryPublic ||
       load_kind == HLoadClass::LoadKind::kBssEntryPackage) {
@@ -4465,7 +4465,7 @@ void InstructionCodeGeneratorRISCV64::VisitLoadClass(HLoadClass* instruction)
 
 void LocationsBuilderRISCV64::VisitLoadException(HLoadException* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 }
 
 void InstructionCodeGeneratorRISCV64::VisitLoadException(HLoadException* instruction) {
@@ -4502,7 +4502,7 @@ void LocationsBuilderRISCV64::VisitLoadString(HLoadString* instruction) {
     DCHECK_EQ(DataType::Type::kReference, instruction->GetType());
     locations->SetOut(calling_convention.GetReturnLocation(DataType::Type::kReference));
   } else {
-    locations->SetOut(Location::RequiresRegister());
+    locations->SetOut(Location::RequiresCoreRegister());
     if (load_kind == HLoadString::LoadKind::kBssEntry) {
       if (codegen_->EmitNonBakerReadBarrier()) {
         // For non-Baker read barriers we have a temp-clobbering call.
@@ -4665,9 +4665,9 @@ void LocationsBuilderRISCV64::VisitMul(HMul* instruction) {
   switch (instruction->GetResultType()) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64:
-      locations->SetInAt(0, Location::RequiresRegister());
-      locations->SetInAt(1, Location::RequiresRegister());
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetInAt(0, Location::RequiresCoreRegister());
+      locations->SetInAt(1, Location::RequiresCoreRegister());
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
 
     case DataType::Type::kFloat32:
@@ -4715,8 +4715,8 @@ void LocationsBuilderRISCV64::VisitNeg(HNeg* instruction) {
   switch (instruction->GetResultType()) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64:
-      locations->SetInAt(0, Location::RequiresRegister());
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetInAt(0, Location::RequiresCoreRegister());
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
 
     case DataType::Type::kFloat32:
@@ -4794,8 +4794,8 @@ void InstructionCodeGeneratorRISCV64::VisitNop([[maybe_unused]] HNop* instructio
 
 void LocationsBuilderRISCV64::VisitNot(HNot* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorRISCV64::VisitNot(HNot* instruction) {
@@ -4832,7 +4832,7 @@ void InstructionCodeGeneratorRISCV64::VisitNullConstant(
 
 void LocationsBuilderRISCV64::VisitNullCheck(HNullCheck* instruction) {
   LocationSummary* locations = codegen_->CreateThrowingSlowPathLocations(instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
 }
 
 void InstructionCodeGeneratorRISCV64::VisitNullCheck(HNullCheck* instruction) {
@@ -4849,7 +4849,7 @@ void InstructionCodeGeneratorRISCV64::VisitOr(HOr* instruction) {
 
 void LocationsBuilderRISCV64::VisitPackedSwitch(HPackedSwitch* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
 }
 
 void InstructionCodeGeneratorRISCV64::VisitPackedSwitch(HPackedSwitch* instruction) {
@@ -4940,9 +4940,9 @@ void LocationsBuilderRISCV64::VisitRem(HRem* instruction) {
   switch (type) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64:
-      locations->SetInAt(0, Location::RequiresRegister());
+      locations->SetInAt(0, Location::RequiresCoreRegister());
       locations->SetInAt(1, Location::RegisterOrConstant(instruction->InputAt(1)));
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
 
     case DataType::Type::kFloat32:
@@ -5145,16 +5145,16 @@ void LocationsBuilderRISCV64::VisitSelect(HSelect* instruction) {
     locations->SetInAt(1, FpuRegisterOrZeroBitPatternLocation(instruction->GetTrueValue()));
     locations->SetOut(Location::RequiresFpuRegister(), Location::kNoOutputOverlap);
     if (!locations->InAt(0).IsConstant() && !locations->InAt(1).IsConstant()) {
-      locations->AddTemp(Location::RequiresRegister());
+      locations->AddTemp(Location::RequiresCoreRegister());
     }
   }  else {
     locations->SetInAt(0, RegisterOrZeroBitPatternLocation(instruction->GetFalseValue()));
     locations->SetInAt(1, RegisterOrZeroBitPatternLocation(instruction->GetTrueValue()));
-    locations->SetOut(Location::RequiresRegister(), Location::kOutputOverlap);
+    locations->SetOut(Location::RequiresCoreRegister(), Location::kOutputOverlap);
   }
 
   if (IsBooleanValueOrMaterializedCondition(instruction->GetCondition())) {
-    locations->SetInAt(2, Location::RequiresRegister());
+    locations->SetInAt(2, Location::RequiresCoreRegister());
   }
 }
 
@@ -5304,13 +5304,13 @@ void LocationsBuilderRISCV64::VisitTypeConversion(HTypeConversion* instruction) 
   if (DataType::IsFloatingPointType(input_type)) {
     locations->SetInAt(0, Location::RequiresFpuRegister());
   } else {
-    locations->SetInAt(0, Location::RequiresRegister());
+    locations->SetInAt(0, Location::RequiresCoreRegister());
   }
 
   if (DataType::IsFloatingPointType(result_type)) {
     locations->SetOut(Location::RequiresFpuRegister(), Location::kNoOutputOverlap);
   } else {
-    locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+    locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
   }
 }
 
@@ -5431,9 +5431,9 @@ void LocationsBuilderRISCV64::VisitRiscv64ShiftAdd(HRiscv64ShiftAdd* instruction
       << "Unexpected ShiftAdd type: " << instruction->GetType();
 
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetInAt(1, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorRISCV64::VisitRiscv64ShiftAdd(HRiscv64ShiftAdd* instruction) {
@@ -5466,9 +5466,9 @@ void LocationsBuilderRISCV64::HandleBitManipulations(HBinaryOperation* instructi
   DCHECK(instruction->GetResultType() == DataType::Type::kInt64);
 
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetInAt(1, Location::RegisterOrConstant(instruction->InputAt(1)));
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorRISCV64::HandleBitManipulations(HBinaryOperation* instruction) {
@@ -5544,9 +5544,9 @@ void LocationsBuilderRISCV64::VisitBitwiseNegatedRight(HBitwiseNegatedRight* ins
   DCHECK(DataType::IsIntegralType(instruction->GetType())) << instruction->GetType();
 
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetInAt(1, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorRISCV64::VisitBitwiseNegatedRight(HBitwiseNegatedRight* instruction) {

@@ -157,7 +157,7 @@ class UsePosition : public ArenaObject<kArenaAllocSsaLiveness>,
     return user_->GetBlock()->GetLoopInformation();
   }
 
-  bool RequiresRegister() const {
+  bool RequiresCoreRegister() const {
     if (IsSynthesized()) return false;
     Location location = GetUser()->GetLocations()->InAt(GetInputIndex());
     return location.IsUnallocated() && location.RequiresRegisterKind();
@@ -505,7 +505,7 @@ class LiveInterval : public ArenaObject<kArenaAllocSsaLiveness> {
         break;
       }
       if (use_position > position) {
-        if (use.RequiresRegister()) {
+        if (use.RequiresCoreRegister()) {
           return use_position;
         }
       }

@@ -418,7 +418,7 @@ class Location : public ValueObject {
   // Unallocated locations.
   enum Policy {
     kAny,
-    kRequiresRegister,
+    kRequiresCoreRegister,
     kRequiresFpuRegister,
     kRequiresVecRegister,
     kSameAsFirstInput,
@@ -437,8 +437,8 @@ class Location : public ValueObject {
     return UnallocatedLocation(kAny);
   }
 
-  static Location RequiresRegister() {
-    return UnallocatedLocation(kRequiresRegister);
+  static Location RequiresCoreRegister() {
+    return UnallocatedLocation(kRequiresCoreRegister);
   }
 
   static Location RequiresFpuRegister() {
@@ -467,7 +467,7 @@ class Location : public ValueObject {
   }
 
   bool RequiresRegisterKind() const {
-    return GetPolicy() == kRequiresRegister ||
+    return GetPolicy() == kRequiresCoreRegister ||
            GetPolicy() == kRequiresFpuRegister ||
            GetPolicy() == kRequiresVecRegister;
   }
@@ -596,7 +596,7 @@ class LocationSummary : public ArenaObject<kArenaAllocLocationSummary> {
 
   void AddRegisterTemps(size_t count) {
     for (size_t i = 0; i < count; ++i) {
-      AddTemp(Location::RequiresRegister());
+      AddTemp(Location::RequiresCoreRegister());
     }
   }
 

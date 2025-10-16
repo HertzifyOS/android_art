@@ -151,7 +151,7 @@ class ReadBarrierSystemArrayCopySlowPathX86 : public SlowPathCode {
 static void CreateFPToIntLocations(ArenaAllocator* allocator, HInvoke* invoke, bool is64bit) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
   locations->SetInAt(0, Location::RequiresFpuRegister());
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
   if (is64bit) {
     locations->AddTemp(Location::RequiresFpuRegister());
   }
@@ -159,7 +159,7 @@ static void CreateFPToIntLocations(ArenaAllocator* allocator, HInvoke* invoke, b
 
 static void CreateIntToFPLocations(ArenaAllocator* allocator, HInvoke* invoke, bool is64bit) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetOut(Location::RequiresFpuRegister());
   if (is64bit) {
     locations->AddTemp(Location::RequiresFpuRegister());
@@ -228,20 +228,20 @@ void IntrinsicCodeGeneratorX86::VisitFloatIntBitsToFloat(HInvoke* invoke) {
 
 static void CreateIntToIntLocations(ArenaAllocator* allocator, HInvoke* invoke) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetOut(Location::SameAsFirstInput());
 }
 
 static void CreateLongToIntLocations(ArenaAllocator* allocator, HInvoke* invoke) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 }
 
 static void CreateLongToLongLocations(ArenaAllocator* allocator, HInvoke* invoke) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kOutputOverlap);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kOutputOverlap);
 }
 
 static void GenReverseBytes(LocationSummary* locations,
@@ -374,9 +374,9 @@ void IntrinsicLocationsBuilderX86::VisitMathRoundFloat(HInvoke* invoke) {
   if (static_or_direct->HasSpecialInput() &&
       invoke->InputAt(
           static_or_direct->GetSpecialInputIndex())->IsX86ComputeBaseMethodAddress()) {
-    locations->SetInAt(1, Location::RequiresRegister());
+    locations->SetInAt(1, Location::RequiresCoreRegister());
   }
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
   locations->AddTemp(Location::RequiresFpuRegister());
   locations->AddTemp(Location::RequiresFpuRegister());
 }
@@ -478,11 +478,11 @@ static void GenFPToFPCall(HInvoke* invoke, CodeGeneratorX86* codegen, QuickEntry
 static void CreateLowestOneBitLocations(ArenaAllocator* allocator, bool is_long, HInvoke* invoke) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
   if (is_long) {
-    locations->SetInAt(0, Location::RequiresRegister());
+    locations->SetInAt(0, Location::RequiresCoreRegister());
   } else {
     locations->SetInAt(0, Location::Any());
   }
-  locations->SetOut(Location::RequiresRegister(), Location::kOutputOverlap);
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kOutputOverlap);
 }
 
 static void GenLowestOneBit(X86Assembler* assembler,
@@ -781,9 +781,9 @@ static void CreateSystemArrayCopyLocations(HInvoke* invoke) {
   LocationSummary* locations =
       LocationSummary::Create(allocator, invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
   // arraycopy(Object src, int srcPos, Object dest, int destPos, int length).
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetInAt(1, Location::RegisterOrConstant(invoke->InputAt(1)));
-  locations->SetInAt(2, Location::RequiresRegister());
+  locations->SetInAt(2, Location::RequiresCoreRegister());
   locations->SetInAt(3, Location::RegisterOrConstant(invoke->InputAt(3)));
   locations->SetInAt(4, Location::RegisterOrConstant(invoke->InputAt(4)));
 
@@ -1009,8 +1009,8 @@ void IntrinsicCodeGeneratorX86::VisitStringCompareTo(HInvoke* invoke) {
 
 void IntrinsicLocationsBuilderX86::VisitStringEquals(HInvoke* invoke) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, invoke, kIntrinsified);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetInAt(1, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
 
   // Request temporary registers, ECX and EDI needed for repe_cmpsl instruction.
   locations->AddTemp(Location::CoreRegister(ECX));
@@ -1136,7 +1136,7 @@ static void CreateStringIndexOfLocations(HInvoke* invoke,
   // Note: This works as we don't clobber EAX anywhere.
   locations->SetInAt(1, Location::CoreRegister(EAX));
   if (!start_at_zero) {
-    locations->SetInAt(2, Location::RequiresRegister());          // The starting index.
+    locations->SetInAt(2, Location::RequiresCoreRegister());          // The starting index.
   }
   // As we clobber EDI during execution anyways, also use it as the output.
   locations->SetOut(Location::SameAsFirstInput());
@@ -1144,10 +1144,10 @@ static void CreateStringIndexOfLocations(HInvoke* invoke,
   // repne scasw uses ECX as the counter.
   locations->AddTemp(Location::CoreRegister(ECX));
   // Need another temporary to be able to compute the result.
-  locations->AddTemp(Location::RequiresRegister());
+  locations->AddTemp(Location::RequiresCoreRegister());
   if (mirror::kUseStringCompression) {
     // Need another temporary to be able to save unflagged string length.
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddTemp(Location::RequiresCoreRegister());
   }
 }
 
@@ -1392,12 +1392,12 @@ void IntrinsicCodeGeneratorX86::VisitStringNewStringFromString(HInvoke* invoke) 
 void IntrinsicLocationsBuilderX86::VisitStringGetCharsNoCheck(HInvoke* invoke) {
   // public void getChars(int srcBegin, int srcEnd, char[] dst, int dstBegin);
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, invoke, kIntrinsified);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetInAt(1, Location::RegisterOrConstant(invoke->InputAt(1)));
   // Place srcEnd in ECX to save a move below.
   locations->SetInAt(2, Location::CoreRegister(ECX));
-  locations->SetInAt(3, Location::RequiresRegister());
-  locations->SetInAt(4, Location::RequiresRegister());
+  locations->SetInAt(3, Location::RequiresCoreRegister());
+  locations->SetInAt(4, Location::RequiresCoreRegister());
 
   // And we need some temporaries.  We will use REP MOVSW, so we need fixed registers.
   // We don't have enough registers to also grab ECX, so handle below.
@@ -1553,7 +1553,7 @@ static void CreateLongIntToVoidLocations(ArenaAllocator* allocator,
                                          DataType::Type size,
                                          HInvoke* invoke) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   HInstruction* value = invoke->InputAt(1);
   if (size == DataType::Type::kInt8) {
     locations->SetInAt(1, Location::ByteRegisterOrConstant(EDX, value));
@@ -1642,7 +1642,7 @@ void IntrinsicCodeGeneratorX86::VisitMemoryPokeShortNative(HInvoke* invoke) {
 
 void IntrinsicLocationsBuilderX86::VisitThreadCurrentThread(HInvoke* invoke) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, invoke, kIntrinsified);
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 }
 
 void IntrinsicCodeGeneratorX86::VisitThreadCurrentThread(HInvoke* invoke) {
@@ -1770,17 +1770,17 @@ static void CreateIntIntToIntLocations(ArenaAllocator* allocator,
                                        bool is_volatile) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
   locations->SetInAt(0, Location::NoLocation());        // Unused receiver.
-  locations->SetInAt(1, Location::RequiresRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
   if (type == DataType::Type::kInt64) {
     if (is_volatile) {
       // Need to use XMM to read volatile.
       locations->AddTemp(Location::RequiresFpuRegister());
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
     } else {
-      locations->SetOut(Location::RequiresRegister(), Location::kOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kOutputOverlap);
     }
   } else {
-    locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+    locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
   }
 }
 
@@ -1799,18 +1799,18 @@ static void CreateIntIntIntToIntLocations(ArenaAllocator* allocator,
     locations->SetCustomSlowPathCallerSaves(RegisterSet::Empty());  // No caller-save registers.
   }
   locations->SetInAt(0, Location::NoLocation());        // Unused receiver.
-  locations->SetInAt(1, Location::RequiresRegister());
-  locations->SetInAt(2, Location::RequiresRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
+  locations->SetInAt(2, Location::RequiresCoreRegister());
   if (type == DataType::Type::kInt64) {
     if (is_volatile) {
       // Need to use XMM to read volatile.
       locations->AddTemp(Location::RequiresFpuRegister());
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
     } else {
-      locations->SetOut(Location::RequiresRegister(), Location::kOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kOutputOverlap);
     }
   } else {
-    locations->SetOut(Location::RequiresRegister(),
+    locations->SetOut(Location::RequiresCoreRegister(),
                       (can_call ? Location::kOutputOverlap : Location::kNoOutputOverlap));
   }
 }
@@ -1949,12 +1949,12 @@ static void CreateIntIntIntToVoidPlusTempsLocations(ArenaAllocator* allocator,
                                                     bool is_volatile) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
   locations->SetInAt(0, Location::NoLocation());        // Unused receiver.
-  locations->SetInAt(1, Location::RequiresRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
   if (type == DataType::Type::kInt8 || type == DataType::Type::kUint8) {
     // Ensure the value is in a byte register
     locations->SetInAt(2, Location::ByteRegisterOrConstant(EAX, invoke->InputAt(3)));
   } else {
-    locations->SetInAt(2, Location::RequiresRegister());
+    locations->SetInAt(2, Location::RequiresCoreRegister());
   }
   if (type == DataType::Type::kInt64 && is_volatile) {
     locations->AddTemp(Location::RequiresFpuRegister());
@@ -1968,17 +1968,17 @@ static void CreateIntIntIntIntToVoidPlusTempsLocations(ArenaAllocator* allocator
                                                        bool is_volatile) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
   locations->SetInAt(0, Location::NoLocation());        // Unused receiver.
-  locations->SetInAt(1, Location::RequiresRegister());
-  locations->SetInAt(2, Location::RequiresRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
+  locations->SetInAt(2, Location::RequiresCoreRegister());
   if (type == DataType::Type::kInt8 || type == DataType::Type::kUint8) {
     // Ensure the value is in a byte register
     locations->SetInAt(3, Location::ByteRegisterOrConstant(EAX, invoke->InputAt(3)));
   } else {
-    locations->SetInAt(3, Location::RequiresRegister());
+    locations->SetInAt(3, Location::RequiresCoreRegister());
   }
   if (type == DataType::Type::kReference) {
-    // Need temp registers for card-marking.
-    locations->AddTemp(Location::RequiresRegister());  // Possibly used for reference poisoning too.
+    // Need two temp registers for card-marking. One is also used for reference poisoning.
+    locations->AddTemp(Location::RequiresCoreRegister());
     // Ensure the value is in a byte register.
     locations->AddTemp(Location::CoreRegister(ECX));
   } else if (type == DataType::Type::kInt64 && is_volatile) {
@@ -2251,10 +2251,10 @@ static void CreateIntIntIntIntIntToInt(ArenaAllocator* allocator,
       can_call ? LocationSummary::kCallOnSlowPath : LocationSummary::kNoCall,
       kIntrinsified);
   locations->SetInAt(0, Location::NoLocation());        // Unused receiver.
-  locations->SetInAt(1, Location::RequiresRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
   // Offset is a long, but in 32 bit mode, we only need the low word.
   // Can we update the invoke here to remove a TypeConvert to Long?
-  locations->SetInAt(2, Location::RequiresRegister());
+  locations->SetInAt(2, Location::RequiresCoreRegister());
   // Expected value must be in EAX or EDX:EAX.
   // For long, new value must be in ECX:EBX.
   if (type == DataType::Type::kInt64) {
@@ -2262,15 +2262,15 @@ static void CreateIntIntIntIntIntToInt(ArenaAllocator* allocator,
     locations->SetInAt(4, Location::CoreRegisterPair(EBX, ECX));
   } else {
     locations->SetInAt(3, Location::CoreRegister(EAX));
-    locations->SetInAt(4, Location::RequiresRegister());
+    locations->SetInAt(4, Location::RequiresCoreRegister());
   }
 
   // Force a byte register for the output.
   locations->SetOut(Location::CoreRegister(EAX));
   if (type == DataType::Type::kReference) {
-    // Need temporary registers for card-marking, and possibly for
-    // (Baker) read barrier.
-    locations->AddTemp(Location::RequiresRegister());  // Possibly used for reference poisoning too.
+    // Need two temporary registers for card-marking, and possibly for
+    // (Baker) read barrier. One is also used for reference poisoning.
+    locations->AddTemp(Location::RequiresCoreRegister());
     // Need a byte register for marking.
     locations->AddTemp(Location::CoreRegister(ECX));
   }
@@ -2629,8 +2629,8 @@ void CreateUnsafeGetAndUpdateLocations(ArenaAllocator* allocator,
       locations->SetOut(Location::CoreRegisterPair(EAX, EDX), Location::kOutputOverlap);
     }
   } else {
-    locations->SetInAt(1, Location::RequiresRegister());
-    locations->SetInAt(2, Location::RequiresRegister());
+    locations->SetInAt(1, Location::RequiresCoreRegister());
+    locations->SetInAt(2, Location::RequiresCoreRegister());
     // Use the same register for both the output and the new value or addend
     // to take advantage of XCHG or XADD. Arbitrarily pick EAX.
     locations->SetInAt(3, Location::CoreRegister(EAX));
@@ -2693,7 +2693,7 @@ void IntrinsicLocationsBuilderX86::VisitJdkUnsafeGetAndSetReference(HInvoke* inv
   CreateUnsafeGetAndUpdateLocations(
       allocator_, invoke, codegen_, DataType::Type::kReference, GetAndUpdateOp::kSet);
   LocationSummary* locations = invoke->GetLocations();
-  locations->AddTemp(Location::RequiresRegister());
+  locations->AddTemp(Location::RequiresCoreRegister());
   locations->AddTemp(Location::CoreRegister(ECX));  // Byte register for `MarkGCCard()`.
 }
 
@@ -2839,9 +2839,9 @@ void IntrinsicCodeGeneratorX86::VisitJdkUnsafeGetAndSetReference(HInvoke* invoke
 
 void IntrinsicLocationsBuilderX86::VisitIntegerReverse(HInvoke* invoke) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, invoke, kIntrinsified);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetOut(Location::SameAsFirstInput());
-  locations->AddTemp(Location::RequiresRegister());
+  locations->AddTemp(Location::RequiresCoreRegister());
 }
 
 static void SwapBits(Register reg, Register temp, int32_t shift, int32_t mask,
@@ -2880,9 +2880,9 @@ void IntrinsicCodeGeneratorX86::VisitIntegerReverse(HInvoke* invoke) {
 
 void IntrinsicLocationsBuilderX86::VisitLongReverse(HInvoke* invoke) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, invoke, kIntrinsified);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetOut(Location::SameAsFirstInput());
-  locations->AddTemp(Location::RequiresRegister());
+  locations->AddTemp(Location::RequiresCoreRegister());
 }
 
 void IntrinsicCodeGeneratorX86::VisitLongReverse(HInvoke* invoke) {
@@ -2922,10 +2922,10 @@ static void CreateBitCountLocations(
   }
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
   if (is_long) {
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddTemp(Location::RequiresCoreRegister());
   }
   locations->SetInAt(0, Location::Any());
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 }
 
 static void GenBitCount(X86Assembler* assembler,
@@ -2987,11 +2987,11 @@ void IntrinsicCodeGeneratorX86::VisitLongBitCount(HInvoke* invoke) {
 static void CreateLeadingZeroLocations(ArenaAllocator* allocator, HInvoke* invoke, bool is_long) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
   if (is_long) {
-    locations->SetInAt(0, Location::RequiresRegister());
+    locations->SetInAt(0, Location::RequiresCoreRegister());
   } else {
     locations->SetInAt(0, Location::Any());
   }
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 }
 
 static void GenLeadingZeros(X86Assembler* assembler,
@@ -3090,11 +3090,11 @@ void IntrinsicCodeGeneratorX86::VisitLongNumberOfLeadingZeros(HInvoke* invoke) {
 static void CreateTrailingZeroLocations(ArenaAllocator* allocator, HInvoke* invoke, bool is_long) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator, invoke, kIntrinsified);
   if (is_long) {
-    locations->SetInAt(0, Location::RequiresRegister());
+    locations->SetInAt(0, Location::RequiresCoreRegister());
   } else {
     locations->SetInAt(0, Location::Any());
   }
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 }
 
 static void GenTrailingZeros(X86Assembler* assembler,
@@ -3218,7 +3218,7 @@ void IntrinsicLocationsBuilderX86::VisitSystemArrayCopy(HInvoke* invoke) {
           IsSameInput(invoke, kSrc, kDest) ||
           IsSameInput(invoke, kSrcPos, kDestPos)) {
         // We can allocate another temp register.
-        locations->AddTemp(Location::RequiresRegister());
+        locations->AddTemp(Location::RequiresCoreRegister());
       } else {
         // Use the same fixed register for the non-const `src_pos` and the additional temp.
         // The `src_pos` is no longer needed when we reach the slow path.
@@ -3522,7 +3522,7 @@ static void RequestBaseMethodAddressInRegister(HInvoke* invoke) {
       DCHECK(invoke_static_or_direct->InputAt(invoke_static_or_direct->GetSpecialInputIndex())
                  ->IsX86ComputeBaseMethodAddress());
       locations->SetInAt(invoke_static_or_direct->GetSpecialInputIndex(),
-                         Location::RequiresRegister());
+                         Location::RequiresCoreRegister());
     }
   }
 }
@@ -3753,7 +3753,7 @@ void IntrinsicCodeGeneratorX86::VisitReferenceRefersTo(HInvoke* invoke) {
 
 void IntrinsicLocationsBuilderX86::VisitThreadInterrupted(HInvoke* invoke) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, invoke, kIntrinsified);
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 }
 
 void IntrinsicCodeGeneratorX86::VisitThreadInterrupted(HInvoke* invoke) {
@@ -3780,7 +3780,7 @@ void IntrinsicLocationsBuilderX86::VisitIntegerDivideUnsigned(HInvoke* invoke) {
   LocationSummary* locations =
       LocationSummary::Create(allocator_, invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
   locations->SetInAt(0, Location::CoreRegister(EAX));
-  locations->SetInAt(1, Location::RequiresRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
   locations->SetOut(Location::SameAsFirstInput());
   // Intel uses edx:eax as the dividend.
   locations->AddTemp(Location::CoreRegister(EDX));
@@ -4074,18 +4074,18 @@ static void CreateVarHandleGetLocations(HInvoke* invoke, CodeGeneratorX86* codeg
   ArenaAllocator* allocator = codegen->GetGraph()->GetAllocator();
   LocationSummary* locations =
       LocationSummary::Create(allocator, invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   size_t expected_coordinates_count = GetExpectedVarHandleCoordinatesCount(invoke);
   if (expected_coordinates_count == 1u) {
     // For instance fields, this is the source object.
-    locations->SetInAt(1, Location::RequiresRegister());
+    locations->SetInAt(1, Location::RequiresCoreRegister());
   }
-  locations->AddTemp(Location::RequiresRegister());
+  locations->AddTemp(Location::RequiresCoreRegister());
 
   DataType::Type type = invoke->GetType();
   switch (DataType::Kind(type)) {
     case DataType::Type::kInt64:
-      locations->AddTemp(Location::RequiresRegister());
+      locations->AddTemp(Location::RequiresCoreRegister());
       if (invoke->GetIntrinsic() != Intrinsics::kVarHandleGet) {
         // We need an XmmRegister for Int64 to ensure an atomic load
         locations->AddTemp(Location::RequiresFpuRegister());
@@ -4093,11 +4093,11 @@ static void CreateVarHandleGetLocations(HInvoke* invoke, CodeGeneratorX86* codeg
       FALLTHROUGH_INTENDED;
     case DataType::Type::kInt32:
     case DataType::Type::kReference:
-      locations->SetOut(Location::RequiresRegister());
+      locations->SetOut(Location::RequiresCoreRegister());
       break;
     default:
       DCHECK(DataType::IsFloatingPointType(type));
-      locations->AddTemp(Location::RequiresRegister());
+      locations->AddTemp(Location::RequiresCoreRegister());
       locations->SetOut(Location::RequiresFpuRegister());
   }
 }
@@ -4211,11 +4211,11 @@ static void CreateVarHandleSetLocations(HInvoke* invoke, CodeGeneratorX86* codeg
   ArenaAllocator* allocator = codegen->GetGraph()->GetAllocator();
   LocationSummary* locations =
       LocationSummary::Create(allocator, invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   size_t expected_coordinates_count = GetExpectedVarHandleCoordinatesCount(invoke);
   if (expected_coordinates_count == 1u) {
     // For instance fields, this is the source object
-    locations->SetInAt(1, Location::RequiresRegister());
+    locations->SetInAt(1, Location::RequiresCoreRegister());
   }
 
   switch (value_type) {
@@ -4236,7 +4236,7 @@ static void CreateVarHandleSetLocations(HInvoke* invoke, CodeGeneratorX86* codeg
       locations->SetInAt(value_index, Location::ConstantLocation(value));
       break;
     case DataType::Type::kReference:
-      locations->SetInAt(value_index, Location::RequiresRegister());
+      locations->SetInAt(value_index, Location::RequiresCoreRegister());
       break;
     default:
       DCHECK(DataType::IsFloatingPointType(value_type));
@@ -4247,13 +4247,13 @@ static void CreateVarHandleSetLocations(HInvoke* invoke, CodeGeneratorX86* codeg
       }
   }
 
-  locations->AddTemp(Location::RequiresRegister());
+  locations->AddTemp(Location::RequiresCoreRegister());
   // This temporary register is also used for card for MarkGCCard. Make sure it's a byte register
   locations->AddTemp(Location::CoreRegister(EAX));
   if (expected_coordinates_count == 0 && value_type == DataType::Type::kReference) {
     // For static reference fields, we need another temporary for the declaring class. We set it
     // last because we want to make sure that the first 2 temps are reserved for HandleFieldSet.
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddTemp(Location::RequiresCoreRegister());
   }
 }
 
@@ -4391,13 +4391,13 @@ static void CreateVarHandleGetAndSetLocations(HInvoke* invoke, CodeGeneratorX86*
   locations->AddRegisterTemps(2);
   // We use this temporary for the card, so we need a byte register
   locations->AddTemp(Location::CoreRegister(EBX));
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   if (GetExpectedVarHandleCoordinatesCount(invoke) == 1u) {
     // For instance fields, this is the source object
-    locations->SetInAt(1, Location::RequiresRegister());
+    locations->SetInAt(1, Location::RequiresCoreRegister());
   } else {
     // For static fields, we need another temp because one will be busy with the declaring class.
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddTemp(Location::RequiresCoreRegister());
   }
   if (value_type == DataType::Type::kFloat32) {
     locations->AddTemp(Location::CoreRegister(EAX));
@@ -4591,13 +4591,13 @@ static void CreateVarHandleCompareAndSetOrExchangeLocations(HInvoke* invoke,
   locations->AddRegisterTemps(2);
   // We use this temporary for the card, so we need a byte register
   locations->AddTemp(Location::CoreRegister(EBX));
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   if (GetExpectedVarHandleCoordinatesCount(invoke) == 1u) {
     // For instance fields, this is the source object
-    locations->SetInAt(1, Location::RequiresRegister());
+    locations->SetInAt(1, Location::RequiresCoreRegister());
   } else {
     // For static fields, we need another temp because one will be busy with the declaring class.
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddTemp(Location::RequiresCoreRegister());
   }
   if (DataType::IsFloatingPointType(value_type)) {
     // We need EAX for placing the expected value
@@ -4769,14 +4769,14 @@ static void CreateVarHandleGetAndAddLocations(HInvoke* invoke, CodeGeneratorX86*
   LocationSummary* locations =
       LocationSummary::Create(allocator, invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
   locations->AddRegisterTemps(2);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   size_t expected_coordinates_count = GetExpectedVarHandleCoordinatesCount(invoke);
   if (expected_coordinates_count == 1u) {
     // For instance fields, this is the source object
-    locations->SetInAt(1, Location::RequiresRegister());
+    locations->SetInAt(1, Location::RequiresCoreRegister());
   } else {
     // For static fields, we need another temp because one will be busy with the declaring class.
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddTemp(Location::RequiresCoreRegister());
   }
 
   DataType::Type return_type = invoke->GetType();
@@ -4945,15 +4945,15 @@ static void CreateVarHandleGetAndBitwiseOpLocations(HInvoke* invoke, CodeGenerat
       LocationSummary::Create(allocator, invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
   // We need a byte register temp to store the result of the bitwise operation
   locations->AddTemp(Location::CoreRegister(EBX));
-  locations->AddTemp(Location::RequiresRegister());
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->AddTemp(Location::RequiresCoreRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   size_t expected_coordinates_count = GetExpectedVarHandleCoordinatesCount(invoke);
   if (expected_coordinates_count == 1u) {
     // For instance fields, this is the source object
-    locations->SetInAt(1, Location::RequiresRegister());
+    locations->SetInAt(1, Location::RequiresCoreRegister());
   } else {
     // For static fields, we need another temp because one will be busy with the declaring class.
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddTemp(Location::RequiresCoreRegister());
   }
 
   locations->SetInAt(value_index, Location::RegisterOrConstant(invoke->InputAt(value_index)));

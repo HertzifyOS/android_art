@@ -71,11 +71,9 @@ namespace art HIDDEN {
 
 // Return whether a location is consistent with a type.
 static bool CheckType(DataType::Type type, Location location) {
-  if (location.IsFpuRegister()
-      || (location.IsUnallocated() && (location.GetPolicy() == Location::kRequiresFpuRegister))) {
+  if (location.IsFpuRegister() || (location.Equals(Location::RequiresFpuRegister()))) {
     return (type == DataType::Type::kFloat32) || (type == DataType::Type::kFloat64);
-  } else if (location.IsCoreRegister() ||
-             (location.IsUnallocated() && (location.GetPolicy() == Location::kRequiresRegister))) {
+  } else if (location.IsCoreRegister() || (location.Equals(Location::RequiresCoreRegister()))) {
     return DataType::IsIntegralType(type) || (type == DataType::Type::kReference);
   } else if (location.IsCoreRegisterPair()) {
     return type == DataType::Type::kInt64;
@@ -473,7 +471,7 @@ void CodeGenerator::CreateCommonInvokeLocationSummary(
     } else {
       locations->AddTemp(visitor->GetMethodLocation());
       if (method_load_kind == MethodLoadKind::kRuntimeCall) {
-        locations->SetInAt(call->GetCurrentMethodIndex(), Location::RequiresRegister());
+        locations->SetInAt(call->GetCurrentMethodIndex(), Location::RequiresCoreRegister());
       }
     }
   } else if (!invoke->IsInvokePolymorphic()) {
@@ -1763,9 +1761,9 @@ LocationSummary* CodeGenerator::CreateSystemArrayCopyLocationSummary(
   LocationSummary* locations =
       LocationSummary::Create(allocator, invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
   // arraycopy(Object src, int src_pos, Object dest, int dest_pos, int length).
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetInAt(1, Location::RegisterOrConstant(invoke->InputAt(1)));
-  locations->SetInAt(2, Location::RequiresRegister());
+  locations->SetInAt(2, Location::RequiresCoreRegister());
   locations->SetInAt(3, Location::RegisterOrConstant(invoke->InputAt(3)));
   locations->SetInAt(4, Location::RegisterOrConstant(invoke->InputAt(4)));
 

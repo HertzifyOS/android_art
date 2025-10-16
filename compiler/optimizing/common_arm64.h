@@ -317,7 +317,7 @@ inline Location ARM64EncodableConstantOrRegister(HInstruction* constant, HInstru
     return Location::ConstantLocation(constant);
   }
 
-  return Location::RequiresRegister();
+  return Location::RequiresCoreRegister();
 }
 
 // Check if registers in art register set have the same register code in vixl. If the register

@@ -643,7 +643,7 @@ void RegisterAllocatorLinearScan::CheckForTempLiveIntervals(HInstruction* instru
     } else {
       DCHECK(temp.IsUnallocated());
       switch (temp.GetPolicy()) {
-        case Location::kRequiresRegister: {
+        case Location::kRequiresCoreRegister: {
           LiveInterval* interval = LiveInterval::MakeTempInterval(
               allocator_, DataType::Type::kInt32, /*is_pair=*/ false, i, position);
           temp_intervals_.push_back(interval);
