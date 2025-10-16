@@ -2102,7 +2102,7 @@ bool MemorySegmentVarHandle::Access(AccessMode access_mode,
   if (((native_address + byte_offset) & (byte_alignment - 1)) != 0) {
     ThrowIllegalArgumentException(
         std::format(
-            "Target offset {} is incompatible with alignment constraint {} for segment {}",
+            "Target offset {} is incompatible with alignment constraint {} for segment 0x{:x}",
             byte_offset,
             byte_alignment,
             native_address)
