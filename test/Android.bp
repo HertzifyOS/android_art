@@ -2104,13 +2104,9 @@ test_suite_package {
 genrule {
     name: "art_test_common_host_jars_zip",
     device_first_srcs: [
-        ":core-oj",
-        ":core-libart",
-        ":okhttp",
-        ":bouncycastle",
-        ":apache-xml",
-        ":com.android.conscrypt", //conscrypt.jar
-        ":com.android.i18n", //core-icu4j.jar
+        ":art-bootclasspath-fragment{.encoded_jars_zip}",
+        ":conscrypt-host", //conscrypt.jar
+        ":core-icu4j-host", //core-icu4j.jar
     ],
     tools: ["soong_zip"],
     out: ["art_test_common_host_jars_zip.zip"],
@@ -2121,13 +2117,9 @@ genrule {
         "mkdir -p $$LIB_DIR && " +
         "mkdir -p $$CONSCRYPT_DIR && " +
         "mkdir -p $$CORE_ICU4J_DIR && " +
-        "cp $(location :core-oj) $$LIB_DIR/core-oj.jar && " +
-        "cp $(location :core-libart) $$LIB_DIR/core-libart.jar && " +
-        "cp $(location :okhttp) $$LIB_DIR/okhttp.jar && " +
-        "cp $(location :bouncycastle) $$LIB_DIR/bouncycastle.jar && " +
-        "cp $(location :apache-xml) $$LIB_DIR/apache-xml.jar && " +
-        "cp $(location :com.android.conscrypt) $$CONSCRYPT_DIR/conscrypt.jar && " +
-        "cp $(location :com.android.i18n) $$CORE_ICU4J_DIR/core-icu4j.jar && " +
+        "unzip $(location :art-bootclasspath-fragment{.encoded_jars_zip}) -d $$LIB_DIR/ && " +
+        "cp $(location :conscrypt-host) $$CONSCRYPT_DIR/conscrypt.jar && " +
+        "cp $(location :core-icu4j-host) $$CORE_ICU4J_DIR/core-icu4j.jar && " +
         "$(location soong_zip) -o $(out) -C $$TEMP_DIR -D $$TEMP_DIR/host",
 }
 
