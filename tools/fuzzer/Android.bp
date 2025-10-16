@@ -211,7 +211,7 @@ cc_fuzz {
     // Can not be in defaults due to soong limitations.
     device_common_corpus: [
         ":art_runtest_corpus",
-        "class-verifier-corpus/*",
+        "optimized-compiler-corpus/*",
     ],
 }
 
@@ -225,7 +225,7 @@ cc_fuzz {
     // Can not be in defaults due to soong limitations.
     device_common_corpus: [
         ":art_runtest_corpus",
-        "class-verifier-corpus/*",
+        "optimized-compiler-corpus/*",
     ],
 }
 
@@ -240,7 +240,7 @@ cc_fuzz {
     // Can not be in defaults due to soong limitations.
     device_common_corpus: [
         ":art_runtest_corpus",
-        "class-verifier-corpus/*",
+        "baseline-compiler-corpus/*",
     ],
 }
 
@@ -254,7 +254,7 @@ cc_fuzz {
     // Can not be in defaults due to soong limitations.
     device_common_corpus: [
         ":art_runtest_corpus",
-        "class-verifier-corpus/*",
+        "baseline-compiler-corpus/*",
     ],
 }
 
