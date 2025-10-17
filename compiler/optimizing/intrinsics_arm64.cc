@@ -2933,6 +2933,13 @@ static void CreateSystemArrayCopyLocations(HInvoke* invoke, DataType::Type type)
     }
   }
 
+  // If source and destination are the same, take the slow path. Overlapping copy regions must be
+  // copied in reverse and we can't know in all cases if it's needed.
+  SystemArrayCopyOptimizations optimizations(invoke);
+  if (optimizations.GetDestinationIsSource()) {
+    return;
+  }
+
   ArenaAllocator* allocator = invoke->GetBlock()->GetGraph()->GetAllocator();
   LocationSummary* locations =
       LocationSummary::Create(allocator, invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
@@ -3069,16 +3076,23 @@ static void SystemArrayCopyPrimitive(HInvoke* invoke,
       new (codegen->GetScopedAllocator()) IntrinsicSlowPathARM64(invoke);
   codegen->AddSlowPath(slow_path);
 
+  SystemArrayCopyOptimizations optimizations(invoke);
+
   // If source and destination are the same, take the slow path. Overlapping copy regions must be
   // copied in reverse and we can't know in all cases if it's needed.
+  DCHECK(!optimizations.GetDestinationIsSource());  // already handled in location builder
   __ Cmp(src, dst);
   __ B(slow_path->GetEntryLabel(), eq);
 
-  // Bail out if the source is null.
-  __ Cbz(src, slow_path->GetEntryLabel());
+  if (!optimizations.GetSourceIsNotNull()) {
+    // Bail out if the source is null.
+    __ Cbz(src, slow_path->GetEntryLabel());
+  }
 
-  // Bail out if the destination is null.
-  __ Cbz(dst, slow_path->GetEntryLabel());
+  if (!optimizations.GetDestinationIsNotNull()) {
+    // Bail out if the destination is null.
+    __ Cbz(dst, slow_path->GetEntryLabel());
+  }
 
   int32_t copy_threshold = kSystemArrayCopyPrimThreshold / DataType::Size(type);
   if (!length.IsConstant()) {
