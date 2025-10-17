@@ -913,6 +913,11 @@ class MethodVerifierImpl : public ::art::verifier::MethodVerifier {
         << ", target index " << target_index;
   }
 
+  NO_INLINE void FailForVoidOrPrimitiveType(Instruction::Code opcode, dex::TypeIndex type_idx) {
+    Fail(VERIFY_ERROR_BAD_CLASS_HARD) << opcode << " on unexpected class "
+        << dex_file_->PrettyType(type_idx);
+  }
+
   NO_INLINE void FailPrimitivePut(uint32_t vregA, RegType::Kind target_kind)
       REQUIRES_SHARED(Locks::mutator_lock_) {
     bool wide = (target_kind == RegType::Kind::kLongLo || target_kind == RegType::Kind::kDoubleLo);
@@ -3189,31 +3194,16 @@ bool MethodVerifier<kVerifierDebug>::CodeFlowVerifyInstruction(uint32_t* start_g
       const bool is_checkcast = (inst->Opcode() == Instruction::CHECK_CAST);
       const dex::TypeIndex type_idx((is_checkcast) ? inst->VRegB_21c() : inst->VRegC_22c());
       const RegType& res_type = ResolveClass<CheckAccess::kYes>(type_idx);
-      if (res_type.IsConflict()) {
-        // If this is a primitive type, fail HARD.
-        ObjPtr<mirror::Class> klass = GetClassLinker()->LookupResolvedType(
-            type_idx, dex_cache_.Get(), class_loader_.Get());
-        if (klass != nullptr && klass->IsPrimitive()) {
-          Fail(VERIFY_ERROR_BAD_CLASS_HARD) << "using primitive type "
-              << dex_file_->GetTypeDescriptorView(type_idx) << " in instanceof in "
-              << GetDeclaringClass();
-          return false;
-        }
-
-        DCHECK_NE(failures_.size(), 0U);
-        if (!is_checkcast) {
-          work_line_->SetRegisterType(inst->VRegA_22c(inst_data), kBoolean);
-        }
-        break;  // bad class
+      if (!res_type.IsNonZeroReferenceTypes()) {
+        // `void` (reported as conflict), or primitive type.
+        FailForVoidOrPrimitiveType(opcode, type_idx);
+        return false;
       }
       // TODO: check Compiler::CanAccessTypeWithoutChecks returns false when res_type is unresolved
       uint32_t orig_type_reg =
           (is_checkcast) ? inst->VRegA_21c(inst_data) : inst->VRegB_22c(inst_data);
       const RegType& orig_type = work_line_->GetRegisterType(this, orig_type_reg);
-      if (!res_type.IsNonZeroReferenceTypes()) {
-        Fail(VERIFY_ERROR_BAD_CLASS_HARD) << opcode << " on unexpected class " << res_type;
-        return false;
-      } else if (!orig_type.IsReferenceTypes()) {
+      if (!orig_type.IsReferenceTypes()) {
         Fail(VERIFY_ERROR_BAD_CLASS_HARD) << opcode << " on non-reference in v" << orig_type_reg;
         return false;
       } else if (orig_type.IsUninitializedTypes()) {
