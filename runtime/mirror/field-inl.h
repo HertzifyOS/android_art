@@ -73,15 +73,17 @@ inline bool Field::IsMonotonic() REQUIRES_SHARED(Locks::mutator_lock_) {
 
   // Certain instance final fields will also be treated as monotonic. That's not applicable to
   // app classes, so bailing out early if so.
-  if (!GetDeclaringClass()->IsBootStrapClassLoaded()) {
+  if (!declaring_class->IsBootStrapClassLoaded()) {
     return false;
   }
 
-  // Treat final fields in java.lang.invoke and java.util.concurrent.atomic as truly final.
-  return GetDeclaringClass()->IsInSamePackage(
-              WellKnownClasses::java_lang_invoke_MethodHandle.Get())
-         || GetDeclaringClass()->IsInSamePackage(
-              WellKnownClasses::ToClass(WellKnownClasses::java_util_concurrent_atomic_ARFU));
+  // Treat instance final fields in java.lang, java.lang.invoke and java.util.concurrent.atomic as
+  // truly final. Write-protected fields (j.l.System.(in, out, err)) are handled early in this
+  // method, so this is safe.
+  return declaring_class->IsInSamePackage(WellKnownClasses::java_lang_invoke_MethodHandle.Get())
+         || declaring_class->IsInSamePackage(
+              WellKnownClasses::ToClass(WellKnownClasses::java_util_concurrent_atomic_ARFU))
+         || declaring_class->IsInSamePackage(WellKnownClasses::java_lang_Boolean.Get());
 }
 
 inline bool Field::IsWriteProtected() {

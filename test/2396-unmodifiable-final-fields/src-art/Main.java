@@ -60,6 +60,8 @@ public class Main {
         test(attemptToModifyShouldFail, () -> vhVarTypeField.set(FIELD, null));
         Field cclassField = getAccessible(FIELD_UPDATER.getClass(), "cclass");
         test(attemptToModifyShouldFail, () -> cclassField.set(FIELD_UPDATER, null));
+        Field booleanValue = getAccessible(Boolean.class, "value");
+        test(attemptToModifyShouldFail, () -> booleanValue.set(Boolean.TRUE, false));
     }
 
     private interface ThrowingRunnable {
