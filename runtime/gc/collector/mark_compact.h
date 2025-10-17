@@ -210,6 +210,22 @@ class MarkCompact final : public GarbageCollector {
   // zygote-space.
   void ResetGenerationalState();
 
+  // See comment for the following Getters and Setters below at the declaration
+  // of 'moving_space_pages_info_'.
+  uint32_t GetPreCompactMovingSpaceOffsets(size_t idx) const {
+    return moving_space_pages_info_[idx];
+  }
+  void SetPreCompactMovingSpaceOffsets(size_t idx, uint32_t val) {
+    moving_space_pages_info_[idx] = val;
+  }
+  uint32_t GetBlackAllocPagesFirstChunkSize(size_t idx) const {
+    return moving_space_pages_info_[idx];
+  }
+  void SetBlackAllocPagesFirstChunkSize(size_t idx, uint32_t val) {
+    moving_space_pages_info_[idx] = val;
+  }
+  uint32_t* GetMovingSpacePagesLiveBytesArr() { return moving_space_pages_info_; }
+
   // In copy-mode of userfaultfd, we don't need to reach a 'processed' state as
   // it's given that processing thread also copies the page, thereby mapping it.
   // The order is important as we may treat them as integers. Also
@@ -920,15 +936,16 @@ class MarkCompact final : public GarbageCollector {
   // offset of the page which contains the compacted contents of the ith
   // to-space page.
   Atomic<uint32_t>* moving_pages_status_;
-  // For pages before black allocations, pre_compact_offset_moving_space_[i]
-  // holds offset within the space from where the objects need to be copied in
-  // the ith post-compact page.
-  // Otherwise, black_alloc_pages_first_chunk_size_[i] holds the size of first
-  // non-empty chunk in the ith black-allocations page.
-  union {
-    uint32_t* pre_compact_offset_moving_space_;
-    uint32_t* black_alloc_pages_first_chunk_size_;
-  };
+  // For pages before black allocations, moving_space_pages_info_[i] holds
+  // offset within the space from where the objects need to be copied in the ith
+  // post-compact page.
+  // Otherwise, moving_space_pages_info_[i] holds the size of first non-empty
+  // chunk in the ith black-allocations page.
+  // This array is live during compaction and gets initialized in
+  // PrepareFroCompaction(). Prior to that we may use the array in the full-heap
+  // GC case in PrepareForCompaction() for temporarily storing live-bytes of
+  // every moving space page.
+  uint32_t* moving_space_pages_info_;
   // first_objs_moving_space_[i] is the pre-compact address of the object which
   // would overlap with the starting boundary of the ith post-compact page.
   ObjReference* first_objs_moving_space_;
