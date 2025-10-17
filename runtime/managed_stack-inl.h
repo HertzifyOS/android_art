@@ -50,6 +50,15 @@ inline ScopedManagedStackFragment::~ScopedManagedStackFragment() {
   self_->PopManagedStackFragment(*fragment_);
 }
 
+inline ScopedShadowFrame::ScopedShadowFrame(Thread* self, ShadowFrame* sf)
+    : self_(self), sf_(sf) {
+  self_->PushShadowFrame(sf_);
+}
+
+inline ScopedShadowFrame::~ScopedShadowFrame() {
+  self_->PopShadowFrame();
+}
+
 }  // namespace art
 
 #endif  // ART_RUNTIME_MANAGED_STACK_INL_H_

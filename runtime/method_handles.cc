@@ -933,7 +933,7 @@ void MethodHandleInvokeExactWithFrame(Thread* self,
 
   ManagedStack fragment;
   ScopedManagedStackFragment smsf(self, &fragment);
-  self->PushShadowFrame(shadow_frame.get());
+  ScopedShadowFrame pusher(self, shadow_frame.get());
 
   JValue result;
   RangeInstructionOperands operands(0, num_vregs);
@@ -947,8 +947,6 @@ void MethodHandleInvokeExactWithFrame(Thread* self,
   if (success) {
     emulated_frame->SetReturnValue(self, result);
   }
-
-  self->PopShadowFrame();
 }
 
 }  // namespace art

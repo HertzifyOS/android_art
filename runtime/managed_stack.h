@@ -207,6 +207,24 @@ class ScopedManagedStackFragment {
   ManagedStack* fragment_;
 };
 
+// Scoped class to manage pushing and popping ShadowFrame on the stack that ensures that a pushed
+// shadow frame is always popped when the scope is exited.
+//
+// Example usage:
+//   ShadowFrame* shadow_frame = ...;
+//   ScopedShadowFrame ssf(self, shadow_frame);
+//   // ... code that uses the shadow frame ...
+//   // shadow_frame is automatically popped when ssf goes out of scope.
+class ScopedShadowFrame {
+ public:
+  ScopedShadowFrame(Thread* self, ShadowFrame* sf);
+  ~ScopedShadowFrame();
+
+ private:
+  Thread* self_;
+  ShadowFrame* sf_;
+};
+
 }  // namespace art
 
 #endif  // ART_RUNTIME_MANAGED_STACK_H_

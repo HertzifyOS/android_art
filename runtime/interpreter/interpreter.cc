@@ -433,7 +433,7 @@ void EnterInterpreterFromInvoke(Thread* self,
   if (!EnsureInitialized(self, shadow_frame)) {
     return;
   }
-  self->PushShadowFrame(shadow_frame);
+  ScopedShadowFrame pusher(self, shadow_frame);
   if (LIKELY(!method->IsNative())) {
     JValue r = Execute(self, accessor, *shadow_frame, JValue(), stay_in_interpreter);
     if (result != nullptr) {
@@ -451,7 +451,6 @@ void EnterInterpreterFromInvoke(Thread* self,
       InterpreterJni(self, method, shorty, receiver, args, result);
     }
   }
-  self->PopShadowFrame();
 }
 
 static int16_t GetReceiverRegisterForStringInit(const Instruction* instr) {
@@ -604,7 +603,7 @@ void ArtInterpreterToInterpreterBridge(Thread* self,
     return;
   }
 
-  self->PushShadowFrame(shadow_frame);
+  ScopedShadowFrame pusher(self, shadow_frame);
 
   if (LIKELY(!shadow_frame->GetMethod()->IsNative())) {
     result->SetJ(Execute(self, accessor, *shadow_frame, JValue()).GetJ());
@@ -617,8 +616,6 @@ void ArtInterpreterToInterpreterBridge(Thread* self,
     uint32_t* args = shadow_frame->GetVRegArgs(is_static ? 0 : 1);
     UnstartedRuntime::Jni(self, shadow_frame->GetMethod(), receiver.Ptr(), args, result);
   }
-
-  self->PopShadowFrame();
 }
 
 void CheckInterpreterAsmConstants() {

@@ -1313,6 +1313,7 @@ class EXPORT Thread {
     tlsPtr_.managed_stack.PopManagedStackFragment(fragment);
   }
 
+  // Consider using ScopedShadowFrame instead of these methods directly.
   ALWAYS_INLINE ShadowFrame* PushShadowFrame(ShadowFrame* new_top_frame);
   ALWAYS_INLINE ShadowFrame* PopShadowFrame();
 
