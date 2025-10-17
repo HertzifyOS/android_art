@@ -1307,6 +1307,7 @@ class EXPORT Thread {
   }
 
   // Linked list recording fragments of managed stack.
+  // Consider using ScopedManagedStackFragment instead of these methods directly.
   void PushManagedStackFragment(ManagedStack* fragment) {
     tlsPtr_.managed_stack.PushManagedStackFragment(fragment);
   }

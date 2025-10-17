@@ -932,7 +932,7 @@ void MethodHandleInvokeExactWithFrame(Thread* self,
   self->EndAssertNoThreadSuspension(old_cause);
 
   ManagedStack fragment;
-  self->PushManagedStackFragment(&fragment);
+  ScopedManagedStackFragment smsf(self, &fragment);
   self->PushShadowFrame(shadow_frame.get());
 
   JValue result;
@@ -949,7 +949,6 @@ void MethodHandleInvokeExactWithFrame(Thread* self,
   }
 
   self->PopShadowFrame();
-  self->PopManagedStackFragment(fragment);
 }
 
 }  // namespace art

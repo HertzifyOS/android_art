@@ -380,7 +380,7 @@ void ArtMethod::Invoke(Thread* self, uint32_t* args, uint32_t args_size, JValue*
 
   // Push a transition back into managed code onto the linked list in thread.
   ManagedStack fragment;
-  self->PushManagedStackFragment(&fragment);
+  ScopedManagedStackFragment smsf(self, &fragment);
 
   Runtime* runtime = Runtime::Current();
   // Call the invoke stub, passing everything as arguments.
@@ -443,9 +443,6 @@ void ArtMethod::Invoke(Thread* self, uint32_t* args, uint32_t args_size, JValue*
       }
     }
   }
-
-  // Pop transition.
-  self->PopManagedStackFragment(fragment);
 }
 
 bool ArtMethod::IsSignaturePolymorphic() {
