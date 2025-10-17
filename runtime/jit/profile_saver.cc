@@ -24,8 +24,12 @@
 
 #include <algorithm>
 #include <atomic>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include "android-base/file.h"
 #include "android-base/strings.h"
@@ -40,16 +44,23 @@
 #include "base/systrace.h"
 #include "base/time_utils.h"
 #include "base/unix_file/fd_file.h"
+#include "class_linker.h"
+#include "class_loader_utils.h"
 #include "class_table-inl.h"
+#include "dex/dex_file.h"
 #include "dex/dex_file_loader.h"
 #include "dex_reference_collection.h"
 #include "gc/collector_type.h"
 #include "gc/gc_cause.h"
+#include "handle.h"
 #include "jit/jit.h"
 #include "jit/profiling_info.h"
+#include "mirror/class_loader.h"
+#include "mirror/object.h"
 #include "oat/oat_file_manager.h"
 #include "profile/profile_compilation_info.h"
 #include "scoped_thread_state_change-inl.h"
+#include "thread.h"
 
 namespace art HIDDEN {
 
@@ -354,14 +365,17 @@ class ProfileSaver::ScopedDefaultPriority {
 
 class ProfileSaver::GetClassesAndMethodsHelper {
  public:
-  GetClassesAndMethodsHelper(bool startup,
-                             const ProfileSaverOptions& options,
-                             const ProfileCompilationInfo::ProfileSampleAnnotation& annotation)
+  GetClassesAndMethodsHelper(
+      bool startup,
+      const ProfileSaverOptions& options,
+      const ProfileCompilationInfo::ProfileSampleAnnotation& annotation,
+      const std::unordered_set<std::string_view>& tracked_dex_base_location_set)
       REQUIRES_SHARED(Locks::mutator_lock_)
       : startup_(startup),
         profile_boot_class_path_(options.GetProfileBootClassPath()),
         extra_flags_(GetExtraMethodHotnessFlags(options)),
         annotation_(annotation),
+        tracked_dex_base_location_set_(tracked_dex_base_location_set),
         arena_stack_(Runtime::Current()->GetArenaPool()),
         allocator_(&arena_stack_),
         class_loaders_(std::nullopt),
@@ -391,22 +405,6 @@ class ProfileSaver::GetClassesAndMethodsHelper {
   }
 
  private:
-  class CollectInternalVisitor {
-   public:
-    explicit CollectInternalVisitor(GetClassesAndMethodsHelper* helper)
-        : helper_(helper) {}
-
-    void VisitRootIfNonNull(StackReference<mirror::Object>* ref)
-        REQUIRES_SHARED(Locks::mutator_lock_) {
-      if (!ref->IsNull()) {
-        helper_->CollectInternal</*kBootClassLoader=*/ false>(ref->AsMirrorPtr()->AsClassLoader());
-      }
-    }
-
-   private:
-    GetClassesAndMethodsHelper* helper_;
-  };
-
   struct ClassRecord {
     dex::TypeIndex type_index;
     uint16_t array_dimension;
@@ -435,13 +433,18 @@ class ProfileSaver::GetClassesAndMethodsHelper {
 
   // Collect classes and methods from one class loader.
   template <bool kBootClassLoader>
-  void CollectInternal(ObjPtr<mirror::ClassLoader> class_loader) NO_INLINE
+  void CollectInternal(Handle<mirror::ClassLoader> class_loader) NO_INLINE
+      REQUIRES_SHARED(Locks::mutator_lock_);
+
+  template <bool kBootClassLoader>
+  bool IsClassLoaderRelevant(Handle<mirror::ClassLoader> class_loader)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   const bool startup_;
   const bool profile_boot_class_path_;
   const uint32_t extra_flags_;
   const ProfileCompilationInfo::ProfileSampleAnnotation annotation_;
+  const std::unordered_set<std::string_view>& tracked_dex_base_location_set_;
   ArenaStack arena_stack_;
   ScopedArenaAllocator allocator_;
   std::optional<VariableSizedHandleScope> class_loaders_;
@@ -455,28 +458,76 @@ class ProfileSaver::GetClassesAndMethodsHelper {
 };
 
 template <bool kBootClassLoader>
+bool ProfileSaver::GetClassesAndMethodsHelper::IsClassLoaderRelevant(
+    Handle<mirror::ClassLoader> class_loader) {
+  if constexpr (kBootClassLoader) {
+    return ClassLinker::IsBootClassLoader(class_loader.Get());
+  }
+
+  if (!IsInstanceOfBaseDexClassLoader(class_loader)) {
+    // Not a regular class loader. Not much we can do in AOT.
+    return false;
+  }
+
+  bool is_relevant = false;
+  VisitClassLoaderDexFiles(Thread::Current(), class_loader, [&](const DexFile* dex_file) {
+    if (tracked_dex_base_location_set_.contains(dex_file->GetLocation())) {
+      is_relevant = true;
+      return false;
+    }
+    return true;
+  });
+  return is_relevant;
+}
+
+template <bool kBootClassLoader>
 void ProfileSaver::GetClassesAndMethodsHelper::CollectInternal(
-    ObjPtr<mirror::ClassLoader> class_loader) {
+    Handle<mirror::ClassLoader> class_loader) {
+  Thread::Current()->AllowThreadSuspension();
+
   ScopedTrace trace(__PRETTY_FUNCTION__);
   DCHECK_EQ(kBootClassLoader, class_loader == nullptr);
+
+  if (!IsClassLoaderRelevant<kBootClassLoader>(class_loader)) {
+    return;
+  }
 
   // If the class loader has not loaded any classes, it may have a null table.
   ClassLinker* const class_linker = Runtime::Current()->GetClassLinker();
   ClassTable* const table =
-      class_linker->ClassTableForClassLoader(kBootClassLoader ? nullptr : class_loader);
+      class_linker->ClassTableForClassLoader(kBootClassLoader ? nullptr : class_loader.Get());
   if (table == nullptr) {
     return;
   }
 
+  // Gather classes for further processing.
+  VariableSizedHandleScope hs(Thread::Current());
+  {
+    std::vector<ObjPtr<mirror::Class>> classes;
+    classes.reserve(table->NumReferencedZygoteClasses() + table->NumReferencedNonZygoteClasses());
+    table->Visit([&](ObjPtr<mirror::Class> klass) REQUIRES_SHARED(Locks::mutator_lock_) {
+      classes.push_back(klass);
+      return true;
+    });
+
+    for (ObjPtr<mirror::Class> klass : classes) {
+      hs.NewHandle(klass);
+    }
+  }
+
   // Move members to local variables to allow the compiler to optimize this properly.
   const bool startup = startup_;
-  table->Visit([&](ObjPtr<mirror::Class> klass) REQUIRES_SHARED(Locks::mutator_lock_) {
+
+  hs.VisitHandles([&](Handle<mirror::Object> handle) REQUIRES_SHARED(Locks::mutator_lock_) {
+    Thread::Current()->AllowThreadSuspension();
+
+    ObjPtr<mirror::Class> klass = handle->AsClass();
     if (kBootClassLoader ? (!klass->IsBootStrapClassLoaded())
-                         : (klass->GetClassLoader() != class_loader)) {
+                         : (klass->GetClassLoader() != class_loader.Get())) {
       // To avoid processing a class more than once, we process each class only
       // when we encounter it in the defining class loader's class table.
       // This class has a different defining class loader, skip it.
-      return true;
+      return;
     }
 
     uint16_t dim = 0u;
@@ -484,7 +535,7 @@ void ProfileSaver::GetClassesAndMethodsHelper::CollectInternal(
     if (klass->IsArrayClass()) {
       DCHECK_EQ(klass->NumMethods(), 0u);  // No methods to collect.
       if (!ShouldCollectClasses(startup)) {
-        return true;
+        return;
       }
       do {
         DCHECK(k->IsResolved());  // Array classes are always resolved.
@@ -507,7 +558,7 @@ void ProfileSaver::GetClassesAndMethodsHelper::CollectInternal(
           max_primitive_array_dimensions_[index] =
               std::min<size_t>(dim, std::numeric_limits<uint8_t>::max());
         }
-        return true;
+        return;
       }
 
       DCHECK_EQ(klass->NumMethods(), 0u);
@@ -517,12 +568,12 @@ void ProfileSaver::GetClassesAndMethodsHelper::CollectInternal(
       if (kBootClassLoader && UNLIKELY(klass->IsPrimitive())) {
         DCHECK(profile_boot_class_path_);
         DCHECK_EQ(klass->NumMethods(), 0u);  // No methods to collect.
-        return true;
+        return;
       }
     }
 
     if (!k->IsResolved() || k->IsProxyClass()) {
-      return true;
+      return;
     }
 
     const DexFile& dex_file = k->GetDexFile();
@@ -537,7 +588,6 @@ void ProfileSaver::GetClassesAndMethodsHelper::CollectInternal(
       dex_file_records_map_.insert(std::make_pair(&dex_file, dex_file_records));
     }
     dex_file_records->class_records.push_back(ClassRecord{type_index, dim, methods});
-    return true;
   });
 }
 
@@ -554,12 +604,14 @@ void ProfileSaver::GetClassesAndMethodsHelper::CollectClasses(Thread* self) {
   // Collect classes and their method array pointers.
   if (profile_boot_class_path_) {
     // Collect classes from the boot class loader since visit classloaders doesn't visit it.
-    CollectInternal</*kBootClassLoader=*/ true>(/*class_loader=*/ nullptr);
+    CollectInternal</*kBootClassLoader=*/true>(
+        /*class_loader=*/ScopedNullHandle<mirror::ClassLoader>());
   }
-  {
-    CollectInternalVisitor visitor(this);
-    class_loaders_->VisitRoots(visitor);
-  }
+  class_loaders_->VisitHandles(
+      [this](Handle<mirror::Object> handle) REQUIRES_SHARED(Locks::mutator_lock_) {
+        CollectInternal</*kBootClassLoader=*/false>(
+            MutableHandle<mirror::ClassLoader>(handle.GetReference()));
+      });
 
   // Attribute copied methods to defining dex files while holding the mutator lock.
   for (const auto& entry : dex_file_records_map_) {
@@ -743,9 +795,13 @@ void ProfileSaver::FetchAndCacheResolvedClassesAndMethods(bool startup) {
 
   Thread* const self = Thread::Current();
   pthread_t profiler_pthread;
+  std::unordered_set<std::string_view> tracked_dex_base_location_set;
   {
     MutexLock mu(self, *Locks::profiler_lock_);
     profiler_pthread = profiler_pthread_;
+    for (const auto& [profile, locations] : tracked_dex_base_locations_) {
+      tracked_dex_base_location_set.insert(locations.begin(), locations.end());
+    }
   }
 
   size_t number_of_hot_methods = 0u;
@@ -761,7 +817,8 @@ void ProfileSaver::FetchAndCacheResolvedClassesAndMethods(bool startup) {
     }
 
     ScopedObjectAccess soa(self);
-    GetClassesAndMethodsHelper helper(startup, options_, GetProfileSampleAnnotation());
+    GetClassesAndMethodsHelper helper(
+        startup, options_, GetProfileSampleAnnotation(), tracked_dex_base_location_set);
     helper.CollectClasses(self);
 
     // Release the mutator lock. We shall need to re-acquire the lock for a moment to
