@@ -913,6 +913,12 @@ class MethodVerifierImpl : public ::art::verifier::MethodVerifier {
         << ", target index " << target_index;
   }
 
+  NO_INLINE void FailIncompatibleArrayType(Instruction::Code opcode, const RegType& array_type)
+      REQUIRES_SHARED(Locks::mutator_lock_) {
+    Fail(VERIFY_ERROR_BAD_CLASS_HARD) << "array type " << array_type
+        << " incompatible with " << opcode;
+  }
+
   NO_INLINE void FailForVoidOrPrimitiveType(Instruction::Code opcode, dex::TypeIndex type_idx) {
     Fail(VERIFY_ERROR_BAD_CLASS_HARD) << opcode << " on unexpected class "
         << dex_file_->PrettyType(type_idx);
@@ -5180,8 +5186,7 @@ void MethodVerifierImpl::VerifyAGet(const Instruction* inst,
     } else if (array_type.IsUnresolvedMergedReference()) {
       // Unresolved array types must be reference array types.
       if (is_primitive) {
-        Fail(VERIFY_ERROR_BAD_CLASS_HARD) << "reference array type " << array_type
-                    << " source for category 1 aget";
+        FailIncompatibleArrayType(inst->Opcode(), array_type);
       } else {
         Fail(VERIFY_ERROR_NO_CLASS) << "cannot verify aget for " << array_type
             << " because of missing class";
@@ -5192,16 +5197,11 @@ void MethodVerifierImpl::VerifyAGet(const Instruction* inst,
       /* verify the class */
       const RegType& component_type = reg_types_.GetComponentType(array_type);
       if (!component_type.IsReferenceTypes() && !is_primitive) {
-        Fail(VERIFY_ERROR_BAD_CLASS_HARD) << "primitive array type " << array_type
-            << " source for aget-object";
-      } else if (component_type.IsNonZeroReferenceTypes() && is_primitive) {
-        Fail(VERIFY_ERROR_BAD_CLASS_HARD) << "reference array type " << array_type
-            << " source for category 1 aget";
+        FailIncompatibleArrayType(inst->Opcode(), array_type);
       } else if (is_primitive && !insn_type.Equals(component_type) &&
                  !((insn_type.IsInteger() && component_type.IsFloat()) ||
                  (insn_type.IsLongLo() && component_type.IsDoubleLo()))) {
-        Fail(VERIFY_ERROR_BAD_CLASS_HARD) << "array type " << array_type
-            << " incompatible with aget of type " << insn_type;
+        FailIncompatibleArrayType(inst->Opcode(), array_type);
       } else {
         // Use knowledge of the field type which is stronger than the type inferred from the
         // instruction, which can't differentiate object types and ints from floats, longs from
@@ -5287,8 +5287,7 @@ void MethodVerifierImpl::VerifyAPut(const Instruction* inst,
     } else if (array_type.IsUnresolvedMergedReference()) {
       // Unresolved array types must be reference array types.
       if (is_primitive) {
-        Fail(VERIFY_ERROR_BAD_CLASS_HARD) << "aput insn has type '" << insn_type
-                                          << "' but unresolved type '" << array_type << "'";
+        FailIncompatibleArrayType(inst->Opcode(), array_type);
       } else {
         Fail(VERIFY_ERROR_NO_CLASS) << "cannot verify aput for " << array_type
                                     << " because of missing class";
@@ -5313,15 +5312,13 @@ void MethodVerifierImpl::VerifyAPut(const Instruction* inst,
           // This is a global failure rather than a class change failure as the instructions and
           // the descriptors for the type should have been consistent within the same file at
           // compile time.
-          Fail(VERIFY_ERROR_BAD_CLASS_HARD) << "aput insn has type '" << insn_type
-              << "' but expected type '" << component_type << "'";
+          FailIncompatibleArrayType(inst->Opcode(), array_type);
           return;
         }
         VerifyPrimitivePut(component_type.GetKind(), vregA);
       } else {
         if (!component_type.IsReferenceTypes()) {
-          Fail(VERIFY_ERROR_BAD_CLASS_HARD) << "primitive array type " << array_type
-              << " source for aput-object";
+          FailIncompatibleArrayType(inst->Opcode(), array_type);
         } else {
           // The instruction agrees with the type of array, confirm the value to be stored does too
           // Note: we use the instruction type (rather than the component type) for aput-object as
