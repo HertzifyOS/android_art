@@ -138,6 +138,10 @@ class FastCompilerARM64 : public FastCompiler {
         compiler_options_(compiler_options),
         dex_compilation_unit_(dex_compilation_unit),
         code_generation_data_(CodeGenerationData::Create(arena_stack, InstructionSet::kArm64)),
+        processed_(ArenaBitVector::CreateFixedSize(
+                       allocator_,
+                       GetCodeItemAccessor().InsnsSizeInCodeUnits())),
+        work_queue_(allocator->Adapter()),
         vreg_locations_(dex_compilation_unit.GetCodeItemAccessor().RegistersSize(),
                         allocator->Adapter()),
         branch_targets_(dex_compilation_unit.GetCodeItemAccessor().InsnsSizeInCodeUnits(),
@@ -258,6 +262,7 @@ class FastCompilerARM64 : public FastCompiler {
  private:
   // Go over each instruction of the method, and generate code for them.
   bool ProcessInstructions();
+  bool ProcessBlock(uint32_t dex_pc);
 
   // Initialize the locations of parameters for this method.
   bool InitializeParameters();
@@ -406,12 +411,19 @@ class FastCompilerARM64 : public FastCompiler {
             DataType::Type type);
   bool BuildSwitch(const Instruction& instruction, uint32_t dex_pc);
 
+  void AddToWorkQueue(uint32_t dex_pc) {
+    if (!processed_.IsBitSet(dex_pc)) {
+      work_queue_.push(dex_pc);
+    }
+  }
+
   // Update registers and masks for the merge point.
   void PrepareToBranch(uint32_t dex_pc) {
     // We are going to branch, move all constants to registers to make the merge
     // point use the same locations.
     MoveConstantsAndFpusToRegisters();
     UpdateMasks(dex_pc);
+    AddToWorkQueue(dex_pc);
   }
 
   // Mark whether dex register `vreg_index` is an object.
@@ -560,7 +572,12 @@ class FastCompilerARM64 : public FastCompiler {
     // No need to check if the non-null masks match, as we disable the
     // optimization at loop header.
 
-    DCHECK_NE(object_register_masks_[dex_pc], std::numeric_limits<uint64_t>::max()) << dex_pc;
+    if (object_register_masks_[dex_pc] == std::numeric_limits<uint64_t>::max()) {
+      // If the "loop" header isn't initialized, this means this is just a
+      // backwards branch to a dex pc that hasn't been visited yet.
+      return true;
+    }
+
     if (object_register_masks_[dex_pc] !=
             (object_register_masks_[dex_pc] & object_register_mask_)) {
       unimplemented_reason_ = "Different register mask for loop";
@@ -589,6 +606,12 @@ class FastCompilerARM64 : public FastCompiler {
   const CompilerOptions& compiler_options_;
   const DexCompilationUnit& dex_compilation_unit_;
   std::unique_ptr<CodeGenerationData> code_generation_data_;
+
+  // A bit vector marking which instructions have already been processed.
+  BitVectorView<size_t> processed_;
+
+  // Work queue for the compiler, containing dex_pc to start the compilation.
+  ArenaPriorityQueue<uint32_t, std::greater<uint32_t>> work_queue_;
 
   // The current location of each dex register.
   ArenaVector<Location> vreg_locations_;
@@ -747,6 +770,7 @@ bool FastCompilerARM64::InitializeParameters() {
       CatchHandlerIterator iterator(handlers_ptr);
       for (; iterator.HasNext(); iterator.Next()) {
         catch_pcs_.SetBit(iterator.GetHandlerAddress());
+        AddToWorkQueue(iterator.GetHandlerAddress());
       }
       handlers_ptr = iterator.EndDataPointer();
     }
@@ -825,15 +849,16 @@ void FastCompilerARM64::StartBranchTarget(bool flow_continues, uint32_t dex_pc) 
   object_stack_mask_.Copy(object_stack_masks_[dex_pc]);
 }
 
-bool FastCompilerARM64::ProcessInstructions() {
-  DCHECK(GetCodeItemAccessor().HasCodeItem());
-
-  DexInstructionIterator it = GetCodeItemAccessor().begin();
-  DexInstructionIterator end = GetCodeItemAccessor().end();
-  DCHECK(it != end);
+bool FastCompilerARM64::ProcessBlock(uint32_t dex_pc) {
   bool flow_continues = false;
+  DexInstructionIterator it = GetCodeItemAccessor().InstructionsFrom(dex_pc).begin();
+  DexInstructionIterator end = GetCodeItemAccessor().end();
   do {
     DexInstructionPcPair pair = *it;
+    if (processed_.IsBitSet(pair.DexPc())) {
+      break;
+    }
+    processed_.SetBit(pair.DexPc());
     ++it;
 
     // Fetch the next instruction as a micro-optimization currently only used
@@ -919,7 +944,24 @@ bool FastCompilerARM64::ProcessInstructions() {
     // For the next instruction, let it know if the previous instruction was
     // flowing through.
     flow_continues = pair.Inst().CanFlowThrough();
+    if (!flow_continues) {
+      break;
+    }
   } while (it != end);
+  return true;
+}
+
+bool FastCompilerARM64::ProcessInstructions() {
+  DCHECK(GetCodeItemAccessor().HasCodeItem());
+
+  AddToWorkQueue(0);
+  while (!work_queue_.empty()) {
+    uint32_t dex_pc = work_queue_.top();
+    work_queue_.pop();
+    if (!ProcessBlock(dex_pc)) {
+      return false;
+    }
+  }
   return true;
 }
 
@@ -1112,14 +1154,7 @@ Location FastCompilerARM64::CreateNewRegisterLocation(uint32_t reg,
 }
 
 Location FastCompilerARM64::GetExistingRegisterLocation(uint32_t reg, DataType::Type type) {
-  if (vreg_locations_[reg].IsInvalid()) {
-    unimplemented_reason_ = "UnverifiedDeadCode";
-    // Return a phony location.
-    return DataType::IsFloatingPointType(type)
-        ? Location::FpuRegister(1)
-        : Location::CoreRegister(1);
-  }
-
+  DCHECK(!vreg_locations_[reg].IsInvalid());
   if (DataType::IsFloatingPointType(type)) {
     if (vreg_locations_[reg].IsFpuRegister()) {
       return vreg_locations_[reg];
@@ -3018,6 +3053,7 @@ bool FastCompilerARM64::BuildSwitch(const Instruction& instruction, uint32_t dex
     }
     vixl::aarch64::Label* label = GetLabelOf(dex_pc + target_offset);
     UpdateMasks(dex_pc + it.CurrentTargetOffset());
+    AddToWorkQueue(dex_pc + it.CurrentTargetOffset());
     __ Mov(temp, it.CurrentKey());
     __ Cmp(reg, temp);
     __ B(eq, label);
