@@ -355,7 +355,6 @@ Heap::Heap(size_t initial_size,
       process_state_update_lock_("process state update lock", kPostMonitorLock),
       min_foreground_target_footprint_(0),
       min_foreground_concurrent_start_bytes_(0),
-      min_foreground_time_based_gc_threshold_(0),
       concurrent_start_bytes_(std::numeric_limits<size_t>::max()),
       total_bytes_freed_ever_(0),
       total_objects_freed_ever_(0),
@@ -1128,11 +1127,6 @@ void Heap::GrowHeapOnJankPerceptibleSwitch() {
   if (IsGcConcurrent()) {
     if (concurrent_start_bytes_ < min_foreground_concurrent_start_bytes_) {
       concurrent_start_bytes_ = min_foreground_concurrent_start_bytes_;
-    }
-    if (com::android::art::rw::flags::enable_time_based_gc_triggering()) {
-      if (time_based_gc_threshold_ < min_foreground_time_based_gc_threshold_) {
-        time_based_gc_threshold_ = min_foreground_time_based_gc_threshold_;
-      }
     }
   }
 }
@@ -3922,14 +3916,6 @@ void Heap::GrowForUtilization(collector::GarbageCollector* collector_ran,
         uint64_t memory_gc_cost_factor_kb = memory_gc_cost_factor_ / KB;
         time_based_gc_threshold_ = 100 * expected_gc_cost_ms * memory_gc_cost_factor_kb;
         last_gc_start_time_ = current_gc_iteration_.GetStartTime();
-
-        // Apply growth multiplier.
-        // Store time_based_gc_threshold_ (computed with foreground heap
-        // growth multiplier) for update itself when process state switches to
-        // foreground.
-        min_foreground_time_based_gc_threshold_ =
-            (multiplier <= 1.0) ? time_based_gc_threshold_ * foreground_heap_growth_multiplier_ : 0;
-        time_based_gc_threshold_ *= multiplier;
 
         RequestTimeBasedGcThresholdCheck(Thread::Current());
       }
