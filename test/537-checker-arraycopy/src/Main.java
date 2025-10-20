@@ -16,6 +16,10 @@
 
 
 public class Main {
+  private char[] arrChar;
+  private byte[] arrByte;
+  private int[] arrInt;
+
   public static void main(String[] args) {
     arraycopy();
     try {
@@ -96,5 +100,71 @@ public class Main {
     System.out.println(obj1);
     System.out.println(obj2);
     return input1 + input3 + input4;
+  }
+
+  // Test case for Char specialization when destination array is non-null.
+  /// CHECK-START-RISCV64: void Main.arraycopyCharDstNonNull() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
+  /// CHECK-NEXT:     beq <<reg1:t\d+>>, <<reg2:a\d+>>,
+  /// CHECK-NEXT:     beqz <<reg1>>,
+  /// CHECK-NOT:      beqz <<reg2>>,
+  /// CHECK:          ReturnVoid
+  public void arraycopyCharDstNonNull() {
+    char[] arrChar2 = new char[1];
+    System.arraycopy(arrChar, 0, arrChar2, 0, 1);
+  }
+
+  // Test case for Char specialization when source and destination arrays are the same.
+  /// CHECK-START-RISCV64: void Main.arraycopyCharSameSrcDst() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
+  /// CHECK-NEXT:     c.j
+  /// CHECK-NEXT:     beqz
+  /// CHECK:          ReturnVoid
+  public void arraycopyCharSameSrcDst() {
+    System.arraycopy(arrChar, 1, arrChar, 0, 1);
+  }
+
+  // Test case for Byte specialization when destination array is non-null.
+  /// CHECK-START-RISCV64: void Main.arraycopyByteDstNonNull() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
+  /// CHECK-NEXT:     beq <<reg1:t\d+>>, <<reg2:a\d+>>,
+  /// CHECK-NEXT:     beqz <<reg1>>,
+  /// CHECK-NOT:      beqz <<reg2>>,
+  /// CHECK:          ReturnVoid
+  public void arraycopyByteDstNonNull() {
+    byte[] arrByte2 = new byte[1];
+    System.arraycopy(arrByte, 0, arrByte2, 0, 1);
+  }
+
+  // Test case for Byte specialization when source and destination arrays are the same.
+  /// CHECK-START-RISCV64: void Main.arraycopyByteSameSrcDst() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
+  /// CHECK-NEXT:     c.j
+  /// CHECK-NEXT:     beqz
+  /// CHECK:          ReturnVoid
+  public void arraycopyByteSameSrcDst() {
+    System.arraycopy(arrByte, 1, arrByte, 0, 1);
+  }
+
+  // Test case for Int specialization when destination array is non-null.
+  /// CHECK-START-RISCV64: void Main.arraycopyIntDstNonNull() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
+  /// CHECK-NEXT:     beq <<reg1:t\d+>>, <<reg2:a\d+>>,
+  /// CHECK-NEXT:     beqz <<reg1>>,
+  /// CHECK-NOT:      beqz <<reg2>>,
+  /// CHECK:          ReturnVoid
+  public void arraycopyIntDstNonNull() {
+    int[] arrInt2 = new int[1];
+    System.arraycopy(arrInt, 0, arrInt2, 0, 1);
+  }
+
+  // Test case for Int specialization when source and destination arrays are the same.
+  /// CHECK-START-RISCV64: void Main.arraycopyIntSameSrcDst() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
+  /// CHECK-NEXT:     c.j
+  /// CHECK-NEXT:     beqz
+  /// CHECK:          ReturnVoid
+  public void arraycopyIntSameSrcDst() {
+    System.arraycopy(arrInt, 1, arrInt, 0, 1);
   }
 }
