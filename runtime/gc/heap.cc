@@ -393,7 +393,7 @@ Heap::Heap(size_t initial_size,
       max_free_(max_free),
       target_utilization_(target_utilization),
       enable_time_based_gc_trigger_(enable_time_based_gc_trigger),
-      memory_gc_cost_factor_(memory_gc_cost_factor),
+      time_based_gc_threshold_factor_(ComputeTimeBasedGcThresholdFactor(memory_gc_cost_factor)),
       foreground_heap_growth_multiplier_(foreground_heap_growth_multiplier),
       stop_for_native_allocs_(stop_for_native_allocs),
       total_wait_time_(0),
@@ -3913,8 +3913,7 @@ void Heap::GrowForUtilization(collector::GarbageCollector* collector_ran,
         SetIdealFootprint(growth_limit_);
 
         uint64_t expected_gc_cost_ms = NsToMs(current_gc_iteration_.GetThreadCpuTimeNs());
-        uint64_t memory_gc_cost_factor_kb = memory_gc_cost_factor_ / KB;
-        time_based_gc_threshold_ = 100 * expected_gc_cost_ms * memory_gc_cost_factor_kb;
+        time_based_gc_threshold_ = time_based_gc_threshold_factor_ * expected_gc_cost_ms;
         last_gc_start_time_ = current_gc_iteration_.GetStartTime();
 
         RequestTimeBasedGcThresholdCheck(Thread::Current());
@@ -4265,29 +4264,24 @@ void Heap::RevokeAllThreadLocalBuffers() {
   }
 }
 
-size_t Heap::GetDefaultMemoryGcCostFactor() {
-  if (com::android::art::rw::flags::auto_tune_time_based_gc_triggering()) {
-    // For the default value, use the ratio of total memory to compute resources
-    // on device, which should get us in a good ballpark.
-    int64_t num_cpus = sysconf(_SC_NPROCESSORS_CONF);
-    int64_t num_pages = sysconf(_SC_PHYS_PAGES);
-    int64_t page_size = sysconf(_SC_PAGESIZE);
-
-    if (num_cpus > 0 && num_pages > 0 && page_size > 0) {
-      return static_cast<size_t>(page_size * (num_pages / (100 * num_cpus)));
-    }
-  }
-
-  // We don't know how much memory or compute resources the device has. Pick
-  // something suitable for 2025 era phones and hope for the best.
-  // The default value was set to 32MB initially to match how aggressive GC
-  // was without time based GC triggering in lab tests. In a field study we
-  // saw GC was 44% more aggressive than before, so we increased the default
-  // value to compensate. In theory GC effort is inversely proportional to the
-  // square root of this tuning knob. The 2.25x increase in the tuning knob
-  // value from 32MB to 72MB should result in √(2.25) = 1.5x, or 50% less
-  // aggressive GC behavior.
-  return static_cast<size_t>(72 * MB);
+size_t Heap::ComputeTimeBasedGcThresholdFactor(double memory_gc_cost_factor) {
+  // memory_gc_cost_factor = (C/T) / (G/M), by definition
+  //  where C is the cost of a single GC.
+  //        T is the time between GCs.
+  //        C / T is fraction of a CPU spent doing GC.
+  //        G is memory saved by doing the GC.
+  //        M is total memory on device
+  //        G / M is fraction of device memory saved doing GC.
+  // time_based_gc_threshold = G * T, by definition.
+  // time_based_gc_threshold_factor = G * T / C, by definition.
+  //
+  // Solving for time_based_gc_threshold_factor in terms of
+  // memory_gc_cost_factor gives:
+  //   G * T / C = M / memory_gc_cost_factor
+  double num_pages = static_cast<double>(sysconf(_SC_PHYS_PAGES));
+  double page_size = static_cast<double>(sysconf(_SC_PAGESIZE));
+  double total_memory_kb = num_pages * page_size / KB;
+  return static_cast<size_t>(total_memory_kb / memory_gc_cost_factor);
 }
 
 class Heap::TimeBasedGcThresholdCheckTask : public HeapTask {
