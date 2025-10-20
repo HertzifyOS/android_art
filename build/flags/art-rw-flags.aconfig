@@ -50,6 +50,15 @@ flag {
 }
 
 flag {
+  name: "auto_tune_time_based_gc_triggering"
+  namespace: "system_performance"
+  description: "Tune time based gc triggering based on device specs"
+  bug: "425665469"
+  is_fixed_read_only: false
+  is_exported: false
+}
+
+flag {
   name: "post_ur_job"
   namespace: "art_cloud"
   description: "Flag to enable post unattended reboot job."
@@ -75,3 +84,40 @@ flag {
   is_fixed_read_only: false
   is_exported: false
 }
+
+flag {
+  name: "madvise_type_lookup_table"
+  namespace: "system_performance"
+  description: "Flag to enable explicit madvise of the vdex type lookup table"
+  bug: "428102886"
+  is_fixed_read_only: false
+  is_exported: false
+}
+
+flag {
+  name: "pm_compile_verbose_logging"
+  namespace: "art_cloud"
+  description: "Flag to enable more verbose logging for the \"pm compile\" command"
+  bug: "441818922"
+  is_fixed_read_only: false
+  is_exported: false
+}
+
+flag {
+    namespace: "core_libraries"
+    name: "read_only_dynamic_code_load_ww_log"
+    is_exported: false
+    description: "This flag controls if the system logs to WW when loading native code and read only is not enforced"
+    bug: "408070506"
+    is_fixed_read_only: false
+}
+
+flag {
+    namespace: "core_libraries"
+    name: "read_only_dynamic_code_load_throw_exception"
+    is_exported: false
+    description: "This flag controls if the system throws an exception when loading native code and read only is not enforced"
+    bug: "408070506"
+    is_fixed_read_only: false
+}
+

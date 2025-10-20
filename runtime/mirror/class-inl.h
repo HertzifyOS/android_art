@@ -846,6 +846,14 @@ inline std::string_view Class::GetDescriptorView() {
   return GetDexFile().GetTypeDescriptorView(GetDexTypeIndex());
 }
 
+inline std::string_view Class::GetPrimitiveDescriptorView() {
+    DCHECK(IsPrimitive());
+    const char* raw_descriptor = Primitive::Descriptor(GetPrimitiveType());
+    DCHECK_NE(raw_descriptor[0], '\0');
+    DCHECK_EQ(raw_descriptor[1], '\0');
+    return std::string_view(raw_descriptor, 1u);
+  }
+
 inline bool Class::DescriptorEquals(std::string_view match) {
   ObjPtr<mirror::Class> klass = this;
   while (klass->IsArrayClass()) {
@@ -1014,6 +1022,17 @@ inline void Class::CheckPointerSize(PointerSize pointer_size) {
 template<VerifyObjectFlags kVerifyFlags, ReadBarrierOption kReadBarrierOption>
 inline ObjPtr<Class> Class::GetComponentType() {
   return GetFieldObject<Class, kVerifyFlags, kReadBarrierOption>(ComponentTypeOffset());
+}
+
+template<VerifyObjectFlags kVerifyFlags, ReadBarrierOption kReadBarrierOption>
+inline std::pair<ObjPtr<Class>, size_t> Class::GetInnermostComponentTypeAndArrayDim() {
+  ObjPtr<mirror::Class> component_type = this;
+  size_t array_dim = 0u;
+  while (component_type->IsArrayClass<kVerifyFlags>()) {
+    component_type = component_type->GetComponentType<kVerifyFlags, kReadBarrierOption>();
+    ++array_dim;
+  }
+  return {component_type, array_dim};
 }
 
 inline void Class::SetComponentType(ObjPtr<Class> new_component_type) {

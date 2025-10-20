@@ -301,7 +301,6 @@ cc_defaults {
         "handle.cc",
         "hidden_api.cc",
         "hprof/hprof.cc",
-        "indirect_reference_table.cc",
         "instrumentation.cc",
         "intern_table.cc",
         "interpreter/interpreter.cc",
@@ -322,11 +321,13 @@ cc_defaults {
         "jit/profiling_info.cc",
         "jit/small_pattern_matcher.cc",
         "jni/check_jni.cc",
+        "jni/indirect_reference_table.cc",
         "jni/java_vm_ext.cc",
         "jni/jni_env_ext.cc",
         "jni/jni_id_manager.cc",
         "jni/jni_internal.cc",
         "jni/local_reference_table.cc",
+        "jni/reference_table.cc",
         "method_handles.cc",
         "metrics/reporter.cc",
         "mirror/array.cc",
@@ -404,7 +405,6 @@ cc_defaults {
         "plugin.cc",
         "quick_exception_handler.cc",
         "read_barrier.cc",
-        "reference_table.cc",
         "reflection.cc",
         "reflective_handle_scope.cc",
         "reflective_value_visitor.cc",
@@ -561,8 +561,8 @@ cc_defaults {
                 true: [
                     "arch/arm64/context_arm64.cc",
                     "arch/arm64/entrypoints_init_arm64.cc",
-                    "arch/arm64/jni_entrypoints_arm64.S",
-                    "arch/arm64/quick_entrypoints_arm64.S",
+                    ":jni_entrypoints_arm64_to_x86_64",
+                    ":quick_entrypoints_arm64_to_x86_64",
                 ],
                 default: [
                     "arch/x86_64/context_x86_64.cc",
@@ -614,13 +614,11 @@ cc_defaults {
     ],
     cflags: [
         "-DBUILDING_LIBART",
-    ] + select(release_flag("RELEASE_BUILD_CLANG_VERSION"), {
         // Clang removed a null check and causes test failure. Turn off
         // the optimization as a temporary workaround.
         // http://b/411361340
-        "clang-r563880": ["-fno-delete-null-pointer-checks"],
-        default: [],
-    }),
+        "-fno-delete-null-pointer-checks",
+    ],
 }
 
 cc_defaults {
@@ -657,6 +655,97 @@ cc_defaults {
         "libartd-runtime_deps",
         "libartd-compiler_deps",
     ],
+}
+
+//
+// Compile the following entrypoint files as normal but don't link them yet. These are always
+// compiled as Arm64 even during host builds as they will later be transformed into x86_64 format
+// ELF files. See *_arm64_to_x86_64 rules for reference.
+//
+
+cc_defaults {
+    name: "cc_object_simulator_defaults",
+    host_supported: false,
+    defaults: [
+        "art_debug_defaults",
+        "libart_common_defaults",
+        "libartd-runtime_deps",
+    ],
+    // Disable this module if not building for the simulator. This module requires the use of the
+    // cc_device_for_host module which is only allowed to be used when building for the simulator.
+    enabled: select(soong_config_variable("art_module", "art_use_simulator"), {
+        true: true,
+        default: false,
+    }),
+}
+
+cc_object {
+    name: "cc_object_jni_entrypoints_arm64.S",
+    defaults: ["cc_object_simulator_defaults"],
+    srcs: ["arch/arm64/jni_entrypoints_arm64.S"],
+}
+
+cc_object {
+    name: "cc_object_quick_entrypoints_arm64.S",
+    defaults: ["cc_object_simulator_defaults"],
+    srcs: ["arch/arm64/quick_entrypoints_arm64.S"],
+}
+
+// Expose the device only entrypoints to the host build so they can be transformed into x86_64.
+cc_device_for_host {
+    name: "device_jni_entrypoints_arm64.S",
+    srcs: ["cc_object_jni_entrypoints_arm64.S"],
+    // Disable this module if not building for the simulator. This module is only allowed to be
+    // used when building for the simulator.
+    enabled: select(soong_config_variable("art_module", "art_use_simulator"), {
+        true: true,
+        default: false,
+    }),
+}
+
+cc_device_for_host {
+    name: "device_quick_entrypoints_arm64.S",
+    srcs: ["cc_object_quick_entrypoints_arm64.S"],
+    // Disable this module if not building for the simulator. This module is only allowed to be
+    // used when building for the simulator.
+    enabled: select(soong_config_variable("art_module", "art_use_simulator"), {
+        true: true,
+        default: false,
+    }),
+}
+
+//
+// If ART_USE_SIMULATOR is defined then the compiled Arm64 entrypoint file is transformed into an
+// x86_64 format ELF file that still contains Arm64 code. This allows it to be linked to the x86_64
+// libart and its Arm64 code later simulated using the ART simulator.
+//
+
+genrule_defaults {
+    name: "arm64_to_x86_64_defaults",
+    host_supported: true,
+    device_supported: false,
+    defaults: ["cc_object_simulator_defaults"],
+    tools: [
+        "transform_arm64_to_x86_64",
+        "llvm-objcopy",
+    ],
+    cmd: "$(location transform_arm64_to_x86_64) " +
+        "--objcopy $(location llvm-objcopy) " +
+        "$(in) $(out)",
+}
+
+cc_genrule {
+    name: "jni_entrypoints_arm64_to_x86_64",
+    defaults: ["arm64_to_x86_64_defaults"],
+    srcs: [":device_jni_entrypoints_arm64.S"],
+    out: ["jni_entrypoints_x86_64.o"],
+}
+
+cc_genrule {
+    name: "quick_entrypoints_arm64_to_x86_64",
+    defaults: ["arm64_to_x86_64_defaults"],
+    srcs: [":device_quick_entrypoints_arm64.S"],
+    out: ["quick_entrypoints_x86_64.o"],
 }
 
 // A defaults to link libunwindstack statically with necessary dependencies,
@@ -826,9 +915,9 @@ gensrcs {
         "gc/space/space.h",
         "gc/weak_root_state.h",
         "gc_root.h",
-        "indirect_reference_table.h",
         "instrumentation.h",
         "jdwp_provider.h",
+        "jni/indirect_reference_table.h",
         "jni_id_type.h",
         "linear_alloc.h",
         "lock_word.h",
@@ -1064,6 +1153,8 @@ art_cc_defaults {
         ":art-gtest-jars-AllFields",
         ":art-gtest-jars-DexVerificationFuzzerFolder",
         ":art-gtest-jars-ClassVerificationFuzzerFolder",
+        ":art-gtest-jars-OptimizedCompilerFuzzerFolder",
+        ":art-gtest-jars-BaselineCompilerFuzzerFolder",
         ":art-gtest-jars-ErroneousA",
         ":art-gtest-jars-ErroneousB",
         ":art-gtest-jars-ErroneousInit",
@@ -1163,7 +1254,6 @@ art_cc_defaults {
         "handle_scope_test.cc",
         "hidden_api_test.cc",
         "imtable_test.cc",
-        "indirect_reference_table_test.cc",
         "instrumentation_test.cc",
         "intern_table_test.cc",
         "interpreter/safe_math_test.cc",
@@ -1171,9 +1261,11 @@ art_cc_defaults {
         "jit/jit_memory_region_test.cc",
         "jit/profile_saver_test.cc",
         "jit/profiling_info_test.cc",
+        "jni/indirect_reference_table_test.cc",
         "jni/java_vm_ext_test.cc",
         "jni/jni_internal_test.cc",
         "jni/local_reference_table_test.cc",
+        "jni/reference_table_test.cc",
         "method_handles_test.cc",
         "metrics/reporter_test.cc",
         "mirror/dex_cache_test.cc",
@@ -1189,7 +1281,6 @@ art_cc_defaults {
         "parsed_options_test.cc",
         "prebuilt_tools_test.cc",
         "proxy_test.cc",
-        "reference_table_test.cc",
         "reflection_test.cc",
         "runtime_callbacks_test.cc",
         "runtime_test.cc",

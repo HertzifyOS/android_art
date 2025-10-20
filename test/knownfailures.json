@@ -999,6 +999,8 @@
           "864-catch",
           "864-move-object",
           "865-fallthrough",
+          "866-fast",
+          "867-backwards-catch",
           "900-hello-plugin",
           "901-hello-ti-agent",
           "903-hello-tagging",
@@ -1069,7 +1071,11 @@
           "2276-const-method-type-gc-cleanup",
           "2281-method-handle-invoke-static-class-unload",
           "2286-invokevirtual-invokeexact",
-          "2287-no-temp-component-class"
+          "2287-no-temp-component-class",
+          "2288-checker-smali-string-builder-wrong-init",
+          "2289-smali-invalid-rti",
+          "2292-checker-smali-peek-poke-truncation",
+          "2396-verifier-null-vs-nonzero"
         ],
         "variant": "jvm",
         "bug": "b/73888836",
@@ -1149,6 +1155,7 @@
                   "734-duplicate-fields",
                   "735-interface-clone",
                   "736-interface-super-Object",
+                  "738-jit-const-string",
                   "808-checker-invoke-super",
                   "809-checker-invoke-super-bss",
                   "810-checker-invoke-super-default",
@@ -1235,7 +1242,8 @@
                   "2270-mh-internal-hiddenapi-use",
                   "2271-profile-inline-cache",
                   "2279-aconfig-flags",
-                  "2286-method-tracing-aot-code"],
+                  "2286-method-tracing-aot-code",
+                  "2396-unmodifiable-final-fields"],
         "variant": "jvm",
         "description": ["Doesn't run on RI."]
     },
@@ -1252,9 +1260,14 @@
         "description": ["Trace prevents class unloading."]
     },
     {
-        "tests": "677-fsi",
+        "tests": ["677-fsi"],
         "variant": "no-image | no-prebuild | jvm",
         "description": ["Test requires a successful dex2oat invocation"]
+    },
+    {
+        "tests": ["184-dex2oat-dlc"],
+        "variant": "no-image | no-prebuild | debuggable | jvm",
+        "description": ["Test requires successful dex2oat invocations and image loading"]
     },
     {
         "tests": ["990-field-trace",
@@ -1365,6 +1378,11 @@
         "variant": "interpreter | interp-ac | trace | no-image | debuggable | prebuild",
         "bug": "b/174470490",
         "description": "Interpreting BigInteger.add() is too slow (timeouts)"
+    },
+    {
+        "tests": ["656-checker-simd-opt-no-interp-ac"],
+        "variant": "interp-ac | gcstress | trace | debuggable | stream",
+        "description": ["Slow test. Prone to timeouts."]
     },
     {
         "tests": ["2029-contended-monitors", "2043-reference-pauses"],
@@ -1622,7 +1640,8 @@
       "env_vars": {"ART_TEST_ON_VM": "true"}
     },
     {
-      "tests": ["2042-reference-processing"],
+      "tests": ["2042-reference-processing",
+                "656-checker-simd-opt-no-interp-ac"],
       "description": ["Timeout on QEMU"],
       "env_vars": {"ART_TEST_ON_VM": "true"}
     },

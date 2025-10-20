@@ -153,6 +153,7 @@ public class ArtFileManager {
         var options = ArtFileManager.Options.builder()
                               .setForPrimaryDex(true)
                               .setForSecondaryDex(true)
+                              .setExcludeObsoleteClcs(true)
                               .setExcludeForObsoleteDexesAndLoaders(true)
                               .build();
         for (Pair<DetailedDexInfo, Abi> pair : getDexAndAbis(snapshot, pkgState, pkg, options)) {
@@ -249,9 +250,10 @@ public class ArtFileManager {
     @NonNull
     private List<? extends SecondaryDexInfo> getSecondaryDexInfo(
             @NonNull PackageState pkgState, @NonNull Options options) {
-        return options.excludeForObsoleteDexesAndLoaders()
-                ? mInjector.getDexUseManager().getCheckedSecondaryDexInfo(
-                          pkgState.getPackageName(), true /* excludeObsoleteDexesAndLoaders */)
+        return options.excludeForObsoleteDexesAndLoaders() || options.excludeObsoleteClcs()
+                ? mInjector.getDexUseManager().getCheckedSecondaryDexInfo(pkgState.getPackageName(),
+                          options.excludeForObsoleteDexesAndLoaders(),
+                          options.excludeObsoleteClcs())
                 : mInjector.getDexUseManager().getSecondaryDexInfo(pkgState.getPackageName());
     }
 
@@ -281,6 +283,9 @@ public class ArtFileManager {
         public abstract boolean forPrimaryDex();
         // Whether to return files for secondary dex files.
         public abstract boolean forSecondaryDex();
+        // If true, excludes CLCs of the secondary dex files based on file existence. See details in
+        // {@link DexUseManagerLocal#getCheckedSecondaryDexInfo}.
+        public abstract boolean excludeObsoleteClcs();
         // If true, excludes files for secondary dex files and loaders based on file visibility. See
         // details in {@link DexUseManagerLocal#getCheckedSecondaryDexInfo}.
         public abstract boolean excludeForObsoleteDexesAndLoaders();
@@ -289,6 +294,7 @@ public class ArtFileManager {
             return new AutoValue_ArtFileManager_Options.Builder()
                     .setForPrimaryDex(false)
                     .setForSecondaryDex(false)
+                    .setExcludeObsoleteClcs(false)
                     .setExcludeForObsoleteDexesAndLoaders(false);
         }
 
@@ -296,6 +302,7 @@ public class ArtFileManager {
         public abstract static class Builder {
             public abstract @NonNull Builder setForPrimaryDex(boolean value);
             public abstract @NonNull Builder setForSecondaryDex(boolean value);
+            public abstract @NonNull Builder setExcludeObsoleteClcs(boolean value);
             public abstract @NonNull Builder setExcludeForObsoleteDexesAndLoaders(boolean value);
             public abstract @NonNull Options build();
         }

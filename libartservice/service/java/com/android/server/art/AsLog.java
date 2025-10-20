@@ -19,10 +19,17 @@ package com.android.server.art;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.Build;
+import android.os.ParcelFileDescriptor;
+import android.system.ErrnoException;
+import android.system.Os;
 import android.util.Log;
 import android.util.Slog;
 
 import androidx.annotation.RequiresApi;
+
+import java.io.InterruptedIOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 
 /**
  * A log wrapper that logs messages with the appropriate tag.
@@ -85,5 +92,115 @@ public class AsLog {
 
     public static void wtf(@NonNull String msg, @Nullable Throwable tr) {
         Slog.wtf(getTag(), msg, tr);
+    }
+
+    /**
+     * A logger that redirects the logs to the given FD. If the FD is not set, it logs to logcat.
+     */
+    public static class Logger {
+        private final @Nullable ParcelFileDescriptor mFd;
+
+        public Logger(@Nullable ParcelFileDescriptor fd) {
+            mFd = fd;
+        }
+
+        public void v(@NonNull String msg) {
+            if (mFd != null) {
+                write(msg, null /* tr */);
+            } else {
+                Log.v(getTag(), msg);
+            }
+        }
+
+        public void v(@NonNull String msg, @Nullable Throwable tr) {
+            if (mFd != null) {
+                write(msg, tr);
+            } else {
+                Log.v(getTag(), msg, tr);
+            }
+        }
+
+        public void d(@NonNull String msg) {
+            if (mFd != null) {
+                write(msg, null /* tr */);
+            } else {
+                Log.d(getTag(), msg);
+            }
+        }
+
+        public void d(@NonNull String msg, @Nullable Throwable tr) {
+            if (mFd != null) {
+                write(msg, tr);
+            } else {
+                Log.d(getTag(), msg, tr);
+            }
+        }
+
+        public void i(@NonNull String msg) {
+            if (mFd != null) {
+                write(msg, null /* tr */);
+            } else {
+                Log.i(getTag(), msg);
+            }
+        }
+
+        public void i(@NonNull String msg, @Nullable Throwable tr) {
+            if (mFd != null) {
+                write(msg, tr);
+            } else {
+                Log.i(getTag(), msg, tr);
+            }
+        }
+
+        public void w(@NonNull String msg) {
+            if (mFd != null) {
+                write(msg, null /* tr */);
+            } else {
+                Log.w(getTag(), msg);
+            }
+        }
+
+        public void w(@NonNull String msg, @Nullable Throwable tr) {
+            if (mFd != null) {
+                write(msg, tr);
+            } else {
+                Log.w(getTag(), msg, tr);
+            }
+        }
+
+        public void e(@NonNull String msg) {
+            if (mFd != null) {
+                write(msg, null /* tr */);
+            } else {
+                Log.e(getTag(), msg);
+            }
+        }
+
+        public void e(@NonNull String msg, @Nullable Throwable tr) {
+            if (mFd != null) {
+                write(msg, tr);
+            } else {
+                Log.e(getTag(), msg, tr);
+            }
+        }
+
+        // Intentionally omit `wtf` because wtf logs should go to `Slog.wtf` in order to be surfaced
+        // on APC.
+
+        private void write(@NonNull String msg, @Nullable Throwable tr) {
+            try {
+                Os.write(mFd.getFileDescriptor(),
+                        ByteBuffer.wrap((msg + "\n").getBytes(StandardCharsets.UTF_8)));
+                if (tr != null) {
+                    String stackTrace = Log.getStackTraceString(tr);
+                    Os.write(mFd.getFileDescriptor(),
+                            ByteBuffer.wrap(stackTrace.getBytes(StandardCharsets.UTF_8)));
+                }
+            } catch (ErrnoException | InterruptedIOException e) {
+                Log.e(getTag(),
+                        "Failed to write log to %d: %s".formatted(mFd.getFd(), e.getMessage()));
+                Log.e(getTag(), msg, tr);
+            }
+        }
     }
 }

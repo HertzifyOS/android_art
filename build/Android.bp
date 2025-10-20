@@ -20,12 +20,14 @@ bootstrap_go_package {
         "soong-android",
         "soong-apex",
         "soong-cc",
+        "soong-cc-config",
     ],
     srcs: [
         "art.go",
-        "art_gob_enc.go",
+        "art_enc.go",
         "codegen.go",
         "makevars.go",
+        "test_suite_data.go",
     ],
     pluginFor: ["soong_build"],
 }

@@ -37,6 +37,7 @@
 #include "instrumentation.h"
 #include "runtime_globals.h"
 #include "thread_pool.h"
+#include "trace_profile.h"
 
 namespace art HIDDEN {
 
@@ -151,7 +152,7 @@ static inline void Append2LE(uint8_t* buf, uint16_t val) {
 }
 
 // TODO: put this somewhere with the big-endian equivalent used by JDWP.
-static inline void Append3LE(uint8_t* buf, uint16_t val) {
+static inline void Append3LE(uint8_t* buf, uint32_t val) {
   *buf++ = static_cast<uint8_t>(val);
   *buf++ = static_cast<uint8_t>(val >> 8);
   *buf++ = static_cast<uint8_t>(val >> 16);
@@ -300,7 +301,12 @@ class TraceWriter {
       REQUIRES_SHARED(Locks::mutator_lock_) REQUIRES(!trace_writer_lock_);
 
   // Writes buffer contents to the file.
-  void WriteToFile(uint8_t* buffer, size_t offset);
+  bool WriteToFile(uint8_t* buffer, size_t bufer_len) REQUIRES(!trace_writer_lock_);
+  bool WriteToFileLocked(const void* buffer, size_t buffer_len) REQUIRES(trace_writer_lock_);
+  bool WriteToFileLocked(const void* header,
+                         size_t header_len,
+                         const void* buffer,
+                         size_t buffer_len) REQUIRES(trace_writer_lock_);
 
  private:
   void ReadValuesFromRecord(uintptr_t* method_trace_entries,
@@ -349,18 +355,8 @@ class TraceWriter {
   void EncodeEventBlockHeader(uint8_t* ptr, uint32_t thread_id, uint32_t num_records, uint32_t size)
       REQUIRES(trace_writer_lock_);
 
-  // Ensures there is sufficient space in the buffer to record the requested_size. If there is not
-  // enough sufficient space the current contents of the buffer are written to the file and
-  // current_index is reset to 0. This doesn't check if buffer_size is big enough to hold the
-  // requested size.
-  void EnsureSpace(uint8_t* buffer,
-                   size_t* current_index,
-                   size_t buffer_size,
-                   size_t required_size);
-
   // Flush tracing buffers from all the threads.
   void FlushAllThreadBuffers() REQUIRES(!Locks::thread_list_lock_) REQUIRES(!trace_writer_lock_);
-
 
   // Methods to output traced methods and threads.
   void DumpMethodList(std::ostream& os) REQUIRES_SHARED(Locks::mutator_lock_)
@@ -442,6 +438,8 @@ class Trace final : public instrumentation::InstrumentationListener, public Clas
  public:
   enum TraceFlag {
     kTraceCountAllocs = 0x001,
+    // 2nd and 3rd bits are used for specifying format version
+    kTraceLowOverhead = 0x008,
     kTraceClockSourceWallClock = 0x010,
     kTraceClockSourceThreadCpu = 0x100,
   };
@@ -511,6 +509,8 @@ class Trace final : public instrumentation::InstrumentationListener, public Clas
   // allocated while the thread is terminating. See ThreadList::Unregister for more details.
   static void ReleaseThreadBuffer(Thread* thread)
       REQUIRES(!Locks::trace_lock_) NO_THREAD_SAFETY_ANALYSIS;
+  static void AllocateThreadBuffer(Thread* thread)
+      REQUIRES(!Locks::trace_lock_) NO_THREAD_SAFETY_ANALYSIS;
 
   // Removes any listeners installed for method tracing. This is used in non-streaming case
   // when we no longer record any events once the buffer is full. In other cases listeners are
@@ -573,7 +573,10 @@ class Trace final : public instrumentation::InstrumentationListener, public Clas
   static TraceMode GetMode() REQUIRES(!Locks::trace_lock_);
   static size_t GetBufferSize() REQUIRES(!Locks::trace_lock_);
   static int GetFlags() REQUIRES(!Locks::trace_lock_);
+  static LowOverheadTraceType GetTraceType() REQUIRES(Locks::trace_lock_);
   static int GetIntervalInMillis() REQUIRES(!Locks::trace_lock_);
+  static void LogMethodTraceEvent(Thread* self, ArtMethod* method, bool is_entry)
+      REQUIRES_SHARED(Locks::mutator_lock_);
 
   // Used by class linker to prevent class unloading.
   static bool IsTracingEnabled() REQUIRES(!Locks::trace_lock_);
@@ -641,6 +644,19 @@ class Trace final : public instrumentation::InstrumentationListener, public Clas
   std::unique_ptr<TraceWriter> trace_writer_;
 
   DISALLOW_COPY_AND_ASSIGN(Trace);
+};
+
+class TraceLowOverhead {
+ public:
+  static void Start(Trace* trace) { low_overhead_trace_ = trace; }
+
+  static void Stop() { low_overhead_trace_ = nullptr; }
+
+  static void HandleBufferOverflow(Thread* self, ArtMethod* method, bool is_entry)
+      REQUIRES_SHARED(Locks::mutator_lock_);
+
+ private:
+  static Trace* low_overhead_trace_;
 };
 
 }  // namespace art

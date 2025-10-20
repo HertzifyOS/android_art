@@ -77,6 +77,9 @@ extern "C" mirror::Object* art_quick_read_barrier_mark_introspection_gc_roots(mi
 extern "C" void art_quick_record_entry_trace_event();
 extern "C" void art_quick_record_exit_trace_event();
 
+extern "C" void art_quick_record_entry_trace_event_with_flush();
+extern "C" void art_quick_record_exit_trace_event_with_flush();
+
 extern "C" void art_quick_record_long_running_entry_trace_event();
 extern "C" void art_quick_record_long_running_exit_trace_event();
 
@@ -229,6 +232,10 @@ void UpdateLowOverheadTraceEntrypoints(QuickEntryPoints* qpoints, LowOverheadTra
     case LowOverheadTraceType::kAllMethods:
       qpoints->SetRecordEntryTraceEvent(art_quick_record_entry_trace_event);
       qpoints->SetRecordExitTraceEvent(art_quick_record_exit_trace_event);
+      break;
+    case LowOverheadTraceType::kAllMethodsWithFlush:
+      qpoints->SetRecordEntryTraceEvent(art_quick_record_entry_trace_event_with_flush);
+      qpoints->SetRecordExitTraceEvent(art_quick_record_exit_trace_event_with_flush);
       break;
     case LowOverheadTraceType::kLongRunningMethods:
       qpoints->SetRecordEntryTraceEvent(art_quick_record_long_running_entry_trace_event);

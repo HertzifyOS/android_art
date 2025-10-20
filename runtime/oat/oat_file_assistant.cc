@@ -120,7 +120,8 @@ OatFileAssistant::OatFileAssistant(const char* dex_location,
       isa_(isa),
       load_executable_(load_executable),
       only_load_trusted_executable_(only_load_trusted_executable),
-      zip_fd_(zip_fd) {
+      zip_fd_(zip_fd),
+      logger_(ArtLogger::Default()) {
   CHECK(dex_location != nullptr) << "OatFileAssistant: null dex location";
   CHECK_IMPLIES(load_executable, context != nullptr) << "Loading executable without a context";
 
@@ -874,7 +875,7 @@ OatFileAssistant::OatFileInfo& OatFileAssistant::GetBestInfo() {
       if (!info->IsUseable()) {
         message += ": " + error_msg;
       }
-      VLOG(oat) << message;
+      VLOG_TO(logger_, oat) << message;
     }
 
     if (info->IsUseable()) {
@@ -883,7 +884,7 @@ OatFileAssistant::OatFileInfo& OatFileAssistant::GetBestInfo() {
   }
 
   // No usable artifact. Pick the oat or odex if they exist, or empty info if not.
-  VLOG(oat) << ART_FORMAT("GetBestInfo: {} has no usable artifacts", dex_location_);
+  VLOG_TO(logger_, oat) << ART_FORMAT("GetBestInfo: {} has no usable artifacts", dex_location_);
   for (const std::unique_ptr<OatFileInfo>& info : info_list_) {
     if (info->GetType() == OatFileType::kOat && info->Status() != kOatCannotOpen) {
       return *info;
@@ -1127,29 +1128,34 @@ bool OatFileAssistant::OatFileInfo::ShouldRecompileForFilter(CompilerFilter::Fil
   const OatFile* file = GetFile();
   DCHECK(file != nullptr);
 
+  const ArtLogger& logger = oat_file_assistant_->logger_;
+
   CompilerFilter::Filter current = file->GetCompilerFilter();
   if (dexopt_trigger.targetFilterIsBetter && CompilerFilter::IsBetter(target, current)) {
-    VLOG(oat) << ART_FORMAT("Should recompile: targetFilterIsBetter (current: {}, target: {})",
-                            CompilerFilter::NameOfFilter(current),
-                            CompilerFilter::NameOfFilter(target));
+    VLOG_TO(logger, oat) << ART_FORMAT(
+        "Should recompile: targetFilterIsBetter (current: {}, target: {})",
+        CompilerFilter::NameOfFilter(current),
+        CompilerFilter::NameOfFilter(target));
     return true;
   }
   if (dexopt_trigger.targetFilterIsSame && current == target) {
-    VLOG(oat) << ART_FORMAT("Should recompile: targetFilterIsSame (current: {}, target: {})",
-                            CompilerFilter::NameOfFilter(current),
-                            CompilerFilter::NameOfFilter(target));
+    VLOG_TO(logger, oat) << ART_FORMAT(
+        "Should recompile: targetFilterIsSame (current: {}, target: {})",
+        CompilerFilter::NameOfFilter(current),
+        CompilerFilter::NameOfFilter(target));
     return true;
   }
   if (dexopt_trigger.targetFilterIsWorse && CompilerFilter::IsBetter(current, target)) {
-    VLOG(oat) << ART_FORMAT("Should recompile: targetFilterIsWorse (current: {}, target: {})",
-                            CompilerFilter::NameOfFilter(current),
-                            CompilerFilter::NameOfFilter(target));
+    VLOG_TO(logger, oat) << ART_FORMAT(
+        "Should recompile: targetFilterIsWorse (current: {}, target: {})",
+        CompilerFilter::NameOfFilter(current),
+        CompilerFilter::NameOfFilter(target));
     return true;
   }
 
   // Don't regress the compiler filter for the triggers handled below.
   if (CompilerFilter::IsBetter(current, target)) {
-    VLOG(oat) << "Should not recompile: current filter is better";
+    VLOG_TO(logger, oat) << "Should not recompile: current filter is better";
     return false;
   }
 
@@ -1168,18 +1174,18 @@ bool OatFileAssistant::OatFileInfo::ShouldRecompileForFilter(CompilerFilter::Fil
         oat_boot_class_path_checksums[0] != 'i' &&
         oat_file_assistant_->IsPrimaryBootImageUsable()) {
       DCHECK(!file->GetOatHeader().RequiresImage());
-      VLOG(oat) << "Should recompile: primaryBootImageBecomesUsable";
+      VLOG_TO(logger, oat) << "Should recompile: primaryBootImageBecomesUsable";
       return true;
     }
   }
 
   if (dexopt_trigger.needExtraction && !file->ContainsDexCode() &&
       !oat_file_assistant_->ZipFileOnlyContainsUncompressedDex()) {
-    VLOG(oat) << "Should recompile: needExtraction";
+    VLOG_TO(logger, oat) << "Should recompile: needExtraction";
     return true;
   }
 
-  VLOG(oat) << "Should not recompile";
+  VLOG_TO(logger, oat) << "Should not recompile";
   return false;
 }
 

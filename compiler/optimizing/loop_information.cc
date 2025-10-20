@@ -212,14 +212,6 @@ bool HLoopInformation::IsDefinedOutOfTheLoop(HInstruction* instruction) const {
   return !block_mask_.IsBitSet(instruction->GetBlock()->GetBlockId());
 }
 
-size_t HLoopInformation::GetLifetimeEnd() const {
-  size_t last_position = 0;
-  for (HBasicBlock* back_edge : GetBackEdges()) {
-    last_position = std::max(back_edge->GetLifetimeEnd(), last_position);
-  }
-  return last_position;
-}
-
 bool HLoopInformation::HasBackEdgeNotDominatedByHeader() const {
   for (HBasicBlock* back_edge : GetBackEdges()) {
     DCHECK(back_edge->GetDominator() != nullptr);

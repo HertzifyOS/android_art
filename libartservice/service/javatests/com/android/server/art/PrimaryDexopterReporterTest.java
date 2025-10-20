@@ -101,7 +101,7 @@ public final class PrimaryDexopterReporterTest extends PrimaryDexopterTestBase {
         // Dexopt is by default needed and successful.
         lenient()
                 .when(mArtd.getDexoptNeeded(
-                        anyString(), anyString(), anyString(), anyString(), anyInt()))
+                        anyString(), anyString(), anyString(), anyString(), anyInt(), any()))
                 .thenReturn(dexoptIsNeeded());
 
         mockPrimaryDexopter(DEXOPT_PARAMS_SPEED_PROFILE);
@@ -274,7 +274,7 @@ public final class PrimaryDexopterReporterTest extends PrimaryDexopterTestBase {
             Supplier<String> isaMatcher, ArtdDexoptResult artdDexoptResult) throws RemoteException {
         lenient()
                 .when(mArtd.dexopt(any(), anyString(), isaMatcher.get(), anyString(), anyString(),
-                        any(), any(), any(), anyInt(), any(), any()))
+                        any(), any(), any(), anyInt(), any(), any(), any()))
                 .thenReturn(artdDexoptResult);
     }
 
@@ -291,7 +291,7 @@ public final class PrimaryDexopterReporterTest extends PrimaryDexopterTestBase {
             throws RemoteException {
         lenient()
                 .when(mArtd.dexopt(any(), anyString(), isaMatcher.get(), anyString(), anyString(),
-                        any(), any(), any(), anyInt(), any(), any()))
+                        any(), any(), any(), anyInt(), any(), any(), any()))
                 .thenThrow(exception);
     }
 

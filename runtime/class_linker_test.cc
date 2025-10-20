@@ -852,6 +852,16 @@ struct ByteBufferViewVarHandleOffsets : public CheckOffsets<mirror::ByteBufferVi
   }
 };
 
+struct MemorySegmentVarHandleOffsets : public CheckOffsets<mirror::MemorySegmentVarHandle> {
+  MemorySegmentVarHandleOffsets()
+      : CheckOffsets<mirror::MemorySegmentVarHandle>(false,
+                                                     "Ljava/lang/invoke/MemorySegmentVarHandle;") {
+    addOffset(OFFSETOF_MEMBER(mirror::MemorySegmentVarHandle, byte_alignment_), "byteAlignment");
+    addOffset(OFFSETOF_MEMBER(mirror::MemorySegmentVarHandle, native_byte_order_),
+              "nativeByteOrder");
+  }
+};
+
 // C++ fields must exactly match the fields in the Java classes. If this fails,
 // reorder the fields in the C++ class. Managed class fields are ordered by
 // ClassLinker::LinkFieldsHelper::LinkFields.
@@ -883,6 +893,7 @@ TEST_F(ClassLinkerTest, ValidateFieldOrderOfJavaCppUnionClasses) {
   EXPECT_TRUE(ByteArrayViewVarHandleOffsets().Check());
   EXPECT_TRUE(ByteBufferViewVarHandleOffsets().Check());
   EXPECT_TRUE(StackFrameInfoOffsets().Check());
+  EXPECT_TRUE(MemorySegmentVarHandleOffsets().Check());
 }
 
 TEST_F(ClassLinkerTest, FindClassNonexistent) {

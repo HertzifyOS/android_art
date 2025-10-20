@@ -85,8 +85,7 @@ bootclasspath_fragment {
         },
     },
     visibility: [
-        "//art/build/apex",
-        "//art/build/sdk",
+        "//art:__subpackages__",
     ],
     apex_available: [
         "com.android.art",

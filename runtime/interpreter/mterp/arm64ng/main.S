@@ -67,6 +67,8 @@
  *   x23  xINST     first 16-bit code unit of current instruction
  *   x24  xIBASE    interpreted instruction base pointer, used for computed goto
  *   x25  xREFS     base of object references of dex registers.
+ *   x26  xCACHE    pointer to the interpreter cache.
+ *   x28  xCSTMP    callee-save scratch register (with 32-bit version wCSTMP).
  *   x16  ip        scratch reg
  *   x17  ip2       scratch reg (used by macros)
  *
@@ -83,6 +85,9 @@
 #define xIBASE   x24
 #define xREFS    x25
 #define CFI_REFS 25
+#define xCACHE   x26
+#define xCSTMP   x28
+#define wCSTMP   w28
 #define ip       x16
 #define ip2      x17
 #define wip      w16
@@ -94,10 +99,10 @@
 #define wMR w20
 #endif
 
-// Temporary registers while setting up a frame.
-#define xNEW_FP   x26
-#define xNEW_REFS x27
-#define CFI_NEW_REFS 27
+// Temporary registers while setting up a frame for nterp-to-nterp calls.
+#define xNEW_FP   x12
+#define xNEW_REFS x13
+#define CFI_NEW_REFS 13
 
 // +8 for the ArtMethod of the caller.
 #define OFFSET_TO_FIRST_ARGUMENT_IN_STACK (CALLEE_SAVES_SIZE + 8)
@@ -303,35 +308,10 @@ END \name
     add     xPC, xPC, wINST, sxtw #1    // update xPC
     // Update method counter and do a suspend check if the branch is negative or zero.
     cmp wINST, #0
-    b.le 2f
-1:
+    b.le NterpHotnessCheck
     FETCH wINST, 0                      // load wINST
     GET_INST_OPCODE ip                  // extract opcode from wINST
     GOTO_OPCODE ip                      // jump to next instruction
-2:
-    ldr x0, [sp]
-    ldrh w2, [x0, #ART_METHOD_HOTNESS_COUNT_OFFSET]
-#if (NTERP_HOTNESS_VALUE != 0)
-#error Expected 0 for hotness value
-#endif
-    // If the counter is at zero, handle this in the runtime.
-    cbz w2, NterpHandleHotnessOverflow
-    add x2, x2, #-1
-    strh w2, [x0, #ART_METHOD_HOTNESS_COUNT_OFFSET]
-    DO_SUSPEND_CHECK continue_label=1b
-    b 1b
-.endm
-
-// Uses x12, x13, and x14 as temporaries.
-.macro FETCH_CODE_ITEM_INFO code_item, registers, outs, ins, load_ins
-    // Fetch dex register size.
-    ldrh \registers, [\code_item, #CODE_ITEM_REGISTERS_SIZE_OFFSET]
-    // Fetch outs size.
-    ldrh \outs, [\code_item, #CODE_ITEM_OUTS_SIZE_OFFSET]
-    .if \load_ins
-    ldrh \ins, [\code_item, #CODE_ITEM_INS_SIZE_OFFSET]
-    .endif
-    add \code_item, \code_item, #CODE_ITEM_INSNS_OFFSET
 .endm
 
 .macro TEST_IF_MARKING label
@@ -343,13 +323,19 @@ END \name
 //
 // Outputs
 // - ip contains the dex registers size
-// - x28 contains the old stack pointer.
-// - \code_item is replaced with a pointer to the instructions
-// - if load_ins is 1, w15 contains the ins
+// - \old_sp contains the old stack pointer.
+// - if \ins is not "none", \ins contains the ins size
 //
-// Uses ip, ip2, x12, x13, x14 as temporaries.
-.macro SETUP_STACK_FRAME code_item, refs, fp, cfi_refs, load_ins
-    FETCH_CODE_ITEM_INFO \code_item, wip, wip2, w15, \load_ins
+// Uses ip, ip2 and x14 as temporaries.
+.macro SETUP_STACK_FRAME code_item, refs, fp, cfi_refs, old_sp, ins=none
+    // Fetch dex register size.
+    ldrh wip, [\code_item, #CODE_ITEM_REGISTERS_SIZE_OFFSET]
+    // Fetch outs size.
+    ldrh wip2, [\code_item, #CODE_ITEM_OUTS_SIZE_OFFSET]
+    // Fetch ins size if requested.
+    .ifnc \ins, none
+    ldrh \ins, [\code_item, #CODE_ITEM_INS_SIZE_OFFSET]
+    .endif
 
     // Compute required frame size: ((2 * ip) + ip2) * 4 + 24
     // 24 is for saving the previous frame, pc, and method being executed.
@@ -370,10 +356,10 @@ END \name
     add \fp, \refs, ip, lsl #2
 
     // Now setup the stack pointer.
-    mov x28, sp
-    .cfi_def_cfa_register x28
+    mov \old_sp, sp
+    .cfi_def_cfa_register \old_sp
     mov sp, x14
-    str x28, [\refs, #-8]
+    str \old_sp, [\refs, #-8]
     CFI_DEF_CFA_BREG_PLUS_UCONST \cfi_refs, -8, CALLEE_SAVES_SIZE
 
     // Put nulls in reference frame.
@@ -503,8 +489,8 @@ END \name
    // are called by compiled code or nterp.
    SPILL_ALL_CALLEE_SAVES
 
-   // Setup the frame.
-   SETUP_STACK_FRAME x8, xNEW_REFS, xNEW_FP, CFI_NEW_REFS, load_ins=0
+   // Setup the frame. Use x2 for `old_sp` as the old SP is not needed after the setup.
+   SETUP_STACK_FRAME x8, xNEW_REFS, xNEW_FP, CFI_NEW_REFS, x2
    // Make x4 point to the top of the dex register array.
    add x4, xNEW_FP, ip, uxtx #2
 
@@ -514,8 +500,8 @@ END \name
    // TODO: we could avoid this as instance invokes already fetch it.
    FETCH w3, 2
 
-   // Set the dex pc pointer.
-   mov xPC, x8
+   // Set the dex pc pointer to point to instructions.
+   add xPC, x8, #CODE_ITEM_INSNS_OFFSET
    CFI_DEFINE_DEX_PC_WITH_OFFSET(CFI_TMP, CFI_DEX, 0)
 .endm
 
@@ -906,7 +892,7 @@ END \name
 .Linvoke_fast_path_\suffix:
      .if \is_interface
      // Setup hidden argument.
-     mov ip2, x26
+     mov ip2, xCSTMP
      .endif
      ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
@@ -948,7 +934,7 @@ END \name
      b.eq .Lget_shorty_and_invoke_\suffix
      .if \is_interface
      // Setup hidden argument.
-     mov ip2, x26
+     mov ip2, xCSTMP
      .endif
      ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
@@ -968,7 +954,7 @@ END \name
    // - xINST contains shorty (in callee-save to switch over return value after call).
    // - x0 contains method
    // - x1 contains 'this' pointer for instance method.
-   // - for interface calls, x26 contains the interface method.
+   // - for interface calls, xCSTMP contains the interface method.
    add x9, xINST, #1  // shorty + 1  ; ie skip return arg character
    FETCH w11, 2 // arguments
    .if \is_string_init
@@ -1011,7 +997,7 @@ END \name
    .else
       .if \is_interface
       // Setup hidden argument.
-      mov ip2, x26
+      mov ip2, xCSTMP
       .endif
       ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
       blr lr
@@ -1256,7 +1242,7 @@ END \name
 .Linvoke_fast_path_range_\suffix:
      .if \is_interface
      // Setup hidden argument.
-     mov ip2, x26
+     mov ip2, xCSTMP
      .endif
      ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
@@ -1293,7 +1279,7 @@ END \name
      b.eq .Lget_shorty_and_invoke_range_\suffix
      .if \is_interface
      // Setup hidden argument.
-     mov ip2, x26
+     mov ip2, xCSTMP
      .endif
      ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
@@ -1312,7 +1298,7 @@ END \name
    // - xINST contains shorty (in callee-save to switch over return value after call).
    // - x0 contains method
    // - x1 contains 'this' pointer for instance method.
-   // - for interface calls, x26 contains the interface method.
+   // - for interface calls, xCSTMP contains the interface method.
    add x9, xINST, #1  // shorty + 1  ; ie skip return arg character
    FETCH w10, 2 // arguments
    .if \is_string_init
@@ -1366,7 +1352,7 @@ END \name
    .else
       .if \is_interface
       // Setup hidden argument.
-      mov ip2, x26
+      mov ip2, xCSTMP
       .endif
       ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
       blr lr
@@ -1622,36 +1608,38 @@ OAT_ENTRY ExecuteNterpImpl
     SPILL_ALL_CALLEE_SAVES
 
     ldr xPC, [x0, #ART_METHOD_DATA_OFFSET_64]
-    // Setup the stack for executing the method.
-    SETUP_STACK_FRAME xPC, xREFS, xFP, CFI_REFS, load_ins=1
+    // Setup the stack for executing the method. Use xINST as a callee-save temporary.
+    SETUP_STACK_FRAME xPC, xREFS, xFP, CFI_REFS, xINST, w15
+    // Update xPC to point to instructions.
+    add xPC, xPC, #CODE_ITEM_INSNS_OFFSET
 
     // Setup the parameters
     cbz w15, .Lxmm_setup_finished
 
     sub ip2, ip, x15
-    ldr w26, [x0, #ART_METHOD_ACCESS_FLAGS_OFFSET]
+    ldr wCSTMP, [x0, #ART_METHOD_ACCESS_FLAGS_OFFSET]
     lsl x27, ip2, #2 // x27 is now the offset for inputs into the registers array.
 
-    tbz w26, #ART_METHOD_NTERP_ENTRY_POINT_FAST_PATH_FLAG_BIT, .Lsetup_slow_path
+    tbz wCSTMP, #ART_METHOD_NTERP_ENTRY_POINT_FAST_PATH_FLAG_BIT, .Lsetup_slow_path
     // Setup pointer to inputs in FP and pointer to inputs in REFS
     add x10, xFP, x27
     add x11, xREFS, x27
-    mov x12, #0
-    SETUP_REFERENCE_PARAMETER_IN_GPR w1, x10, x11, w15, x12, .Lxmm_setup_finished
-    SETUP_REFERENCE_PARAMETER_IN_GPR w2, x10, x11, w15, x12, .Lxmm_setup_finished
-    SETUP_REFERENCE_PARAMETER_IN_GPR w3, x10, x11, w15, x12, .Lxmm_setup_finished
-    SETUP_REFERENCE_PARAMETER_IN_GPR w4, x10, x11, w15, x12, .Lxmm_setup_finished
-    SETUP_REFERENCE_PARAMETER_IN_GPR w5, x10, x11, w15, x12, .Lxmm_setup_finished
-    SETUP_REFERENCE_PARAMETER_IN_GPR w6, x10, x11, w15, x12, .Lxmm_setup_finished
-    SETUP_REFERENCE_PARAMETER_IN_GPR w7, x10, x11, w15, x12, .Lxmm_setup_finished
-    add x28, x28, #OFFSET_TO_FIRST_ARGUMENT_IN_STACK
-    SETUP_REFERENCE_PARAMETERS_IN_STACK x10, x11, w15, x28, x12
+    mov x14, #0
+    SETUP_REFERENCE_PARAMETER_IN_GPR w1, x10, x11, w15, x14, .Lxmm_setup_finished
+    SETUP_REFERENCE_PARAMETER_IN_GPR w2, x10, x11, w15, x14, .Lxmm_setup_finished
+    SETUP_REFERENCE_PARAMETER_IN_GPR w3, x10, x11, w15, x14, .Lxmm_setup_finished
+    SETUP_REFERENCE_PARAMETER_IN_GPR w4, x10, x11, w15, x14, .Lxmm_setup_finished
+    SETUP_REFERENCE_PARAMETER_IN_GPR w5, x10, x11, w15, x14, .Lxmm_setup_finished
+    SETUP_REFERENCE_PARAMETER_IN_GPR w6, x10, x11, w15, x14, .Lxmm_setup_finished
+    SETUP_REFERENCE_PARAMETER_IN_GPR w7, x10, x11, w15, x14, .Lxmm_setup_finished
+    add xINST, xINST, #OFFSET_TO_FIRST_ARGUMENT_IN_STACK
+    SETUP_REFERENCE_PARAMETERS_IN_STACK x10, x11, w15, xINST, x14
     b .Lxmm_setup_finished
 
 .Lsetup_slow_path:
     // If the method is not static and there is one argument ('this'), we don't need to fetch the
     // shorty.
-    tbnz w26, #ART_METHOD_IS_STATIC_FLAG_BIT, .Lsetup_with_shorty
+    tbnz wCSTMP, #ART_METHOD_IS_STATIC_FLAG_BIT, .Lsetup_with_shorty
     str w1, [xFP, x27]
     str w1, [xREFS, x27]
     cmp w15, #1
@@ -1668,40 +1656,42 @@ OAT_ENTRY ExecuteNterpImpl
     // Setup pointer to inputs in FP and pointer to inputs in REFS
     add x10, xFP, x27
     add x11, xREFS, x27
-    mov x12, #0
+    mov x14, #0
 
     add x9, xIBASE, #1  // shorty + 1  ; ie skip return arg character
-    tbnz w26, #ART_METHOD_IS_STATIC_FLAG_BIT, .Lhandle_static_method
+    tbnz wCSTMP, #ART_METHOD_IS_STATIC_FLAG_BIT, .Lhandle_static_method
     add x10, x10, #4
     add x11, x11, #4
-    add x28, x28, #4
+    add xINST, xINST, #4
     b .Lcontinue_setup_gprs
 .Lhandle_static_method:
-    LOOP_OVER_SHORTY_STORING_GPRS x1, w1, x9, x12, x10, x11, .Lgpr_setup_finished
+    LOOP_OVER_SHORTY_STORING_GPRS x1, w1, x9, x14, x10, x11, .Lgpr_setup_finished
 .Lcontinue_setup_gprs:
-    LOOP_OVER_SHORTY_STORING_GPRS x2, w2, x9, x12, x10, x11, .Lgpr_setup_finished
-    LOOP_OVER_SHORTY_STORING_GPRS x3, w3, x9, x12, x10, x11, .Lgpr_setup_finished
-    LOOP_OVER_SHORTY_STORING_GPRS x4, w4, x9, x12, x10, x11, .Lgpr_setup_finished
-    LOOP_OVER_SHORTY_STORING_GPRS x5, w5, x9, x12, x10, x11, .Lgpr_setup_finished
-    LOOP_OVER_SHORTY_STORING_GPRS x6, w6, x9, x12, x10, x11, .Lgpr_setup_finished
-    LOOP_OVER_SHORTY_STORING_GPRS x7, w7, x9, x12, x10, x11, .Lgpr_setup_finished
-    LOOP_OVER_INTs x9, x12, x10, x11, x28, .Lgpr_setup_finished
+    LOOP_OVER_SHORTY_STORING_GPRS x2, w2, x9, x14, x10, x11, .Lgpr_setup_finished
+    LOOP_OVER_SHORTY_STORING_GPRS x3, w3, x9, x14, x10, x11, .Lgpr_setup_finished
+    LOOP_OVER_SHORTY_STORING_GPRS x4, w4, x9, x14, x10, x11, .Lgpr_setup_finished
+    LOOP_OVER_SHORTY_STORING_GPRS x5, w5, x9, x14, x10, x11, .Lgpr_setup_finished
+    LOOP_OVER_SHORTY_STORING_GPRS x6, w6, x9, x14, x10, x11, .Lgpr_setup_finished
+    LOOP_OVER_SHORTY_STORING_GPRS x7, w7, x9, x14, x10, x11, .Lgpr_setup_finished
+    LOOP_OVER_INTs x9, x14, x10, x11, xINST, .Lgpr_setup_finished
 .Lgpr_setup_finished:
     add x9, xIBASE, #1  // shorty + 1  ; ie skip return arg character
-    mov x12, #0  // reset counter
-    LOOP_OVER_SHORTY_STORING_FPS d0, s0, x9, x12, x10, .Lxmm_setup_finished
-    LOOP_OVER_SHORTY_STORING_FPS d1, s1, x9, x12, x10, .Lxmm_setup_finished
-    LOOP_OVER_SHORTY_STORING_FPS d2, s2, x9, x12, x10, .Lxmm_setup_finished
-    LOOP_OVER_SHORTY_STORING_FPS d3, s3, x9, x12, x10, .Lxmm_setup_finished
-    LOOP_OVER_SHORTY_STORING_FPS d4, s4, x9, x12, x10, .Lxmm_setup_finished
-    LOOP_OVER_SHORTY_STORING_FPS d5, s5, x9, x12, x10, .Lxmm_setup_finished
-    LOOP_OVER_SHORTY_STORING_FPS d6, s6, x9, x12, x10, .Lxmm_setup_finished
-    LOOP_OVER_SHORTY_STORING_FPS d7, s7, x9, x12, x10, .Lxmm_setup_finished
-    LOOP_OVER_FPs x9, x12, x10, x28, .Lxmm_setup_finished
+    mov x14, #0  // reset counter
+    LOOP_OVER_SHORTY_STORING_FPS d0, s0, x9, x14, x10, .Lxmm_setup_finished
+    LOOP_OVER_SHORTY_STORING_FPS d1, s1, x9, x14, x10, .Lxmm_setup_finished
+    LOOP_OVER_SHORTY_STORING_FPS d2, s2, x9, x14, x10, .Lxmm_setup_finished
+    LOOP_OVER_SHORTY_STORING_FPS d3, s3, x9, x14, x10, .Lxmm_setup_finished
+    LOOP_OVER_SHORTY_STORING_FPS d4, s4, x9, x14, x10, .Lxmm_setup_finished
+    LOOP_OVER_SHORTY_STORING_FPS d5, s5, x9, x14, x10, .Lxmm_setup_finished
+    LOOP_OVER_SHORTY_STORING_FPS d6, s6, x9, x14, x10, .Lxmm_setup_finished
+    LOOP_OVER_SHORTY_STORING_FPS d7, s7, x9, x14, x10, .Lxmm_setup_finished
+    LOOP_OVER_FPs x9, x14, x10, xINST, .Lxmm_setup_finished
 .Lxmm_setup_finished:
     CFI_DEFINE_DEX_PC_WITH_OFFSET(CFI_TMP, CFI_DEX, 0)
 
-    // Set rIBASE
+    // Set xCACHE
+    add xCACHE, xSELF, #THREAD_INTERPRETER_CACHE_OFFSET
+    // Set xIBASE
     adr xIBASE, artNterpAsmInstructionStart
     /* start executing the instruction at xPC */
     START_EXECUTING_INSTRUCTIONS
@@ -1714,9 +1704,9 @@ OAT_ENTRY ExecuteNterpImpl
 %def fetch_from_thread_cache(dest_reg, miss_label):
    // Fetch some information from the thread cache.
    // Uses ip and ip2 as temporaries.
-   add      ip, xSELF, #THREAD_INTERPRETER_CACHE_OFFSET       // cache address
-   ubfx     ip2, xPC, #2, #THREAD_INTERPRETER_CACHE_SIZE_LOG2  // entry index
-   add      ip, ip, ip2, lsl #4            // entry address within the cache
+   ubfx     ip2, xPC, #THREAD_INTERPRETER_CACHE_KEY_LOW_BIT, #THREAD_INTERPRETER_CACHE_SIZE_LOG2
+                                           // entry index
+   add      ip, xCACHE, ip2, lsl #4        // entry address within the cache
    ldp      ip, ${dest_reg}, [ip]          // entry key (pc) and value (offset)
    cmp      ip, xPC
    b.ne     ${miss_label}
@@ -1787,18 +1777,31 @@ NterpHandleStringInit:
 NterpHandleStringInitRange:
    COMMON_INVOKE_RANGE is_string_init=1, suffix="stringInit"
 
-NterpHandleHotnessOverflow:
-    CHECK_AND_UPDATE_SHARED_MEMORY_METHOD if_hot=1f, if_not_hot=5f
+NterpHotnessCheck:
+    ldr x0, [sp]
+    ldrh w2, [x0, #ART_METHOD_HOTNESS_COUNT_OFFSET]
+#if (NTERP_HOTNESS_VALUE != 0)
+#error Expected 0 for hotness value
+#endif
+    // If the counter is at zero, handle this in the runtime.
+    cbz w2, 3f
+    add x2, x2, #-1
+    strh w2, [x0, #ART_METHOD_HOTNESS_COUNT_OFFSET]
 1:
-    mov x1, xPC
-    mov x2, xFP
-    bl nterp_hot_method
-    cbnz x0, 3f
+    DO_SUSPEND_CHECK continue_label=2f
 2:
     FETCH wINST, 0                      // load wINST
     GET_INST_OPCODE ip                  // extract opcode from wINST
     GOTO_OPCODE ip                      // jump to next instruction
+
 3:
+    CHECK_AND_UPDATE_SHARED_MEMORY_METHOD if_hot=4f, if_not_hot=1b
+4:
+    mov x1, xPC
+    mov x2, xFP
+    bl nterp_hot_method
+    cbz x0, 2b
+
     // Drop the current frame.
     ldr ip, [xREFS, #-8]
     mov sp, ip
@@ -1838,11 +1841,11 @@ NterpHandleHotnessOverflow:
     sub sp, sp, x1
 
     add x2, x0, #OSR_DATA_MEMORY
-4:
+5:
     sub x1, x1, #8
     ldr ip, [x2, x1]
     str ip, [sp, x1]
-    cbnz x1, 4b
+    cbnz x1, 5b
 
     // Fetch the native PC to jump to and save it in a callee-save register.
     ldr xFP, [x0, #OSR_DATA_NATIVE_PC]
@@ -1852,9 +1855,6 @@ NterpHandleHotnessOverflow:
 
     // Jump to the compiled code.
     br xFP
-5:
-    DO_SUSPEND_CHECK continue_label=2b
-    b 2b
 
 // This is the logical end of ExecuteNterpImpl, where the frame info applies.
 // EndExecuteNterpImpl includes the methods below as we want the runtime to

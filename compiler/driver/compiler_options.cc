@@ -30,6 +30,7 @@
 #include "cmdline_parser.h"
 #include "compiler_options_map-inl.h"
 #include "dex/dex_file-inl.h"
+#include "image_class_map-inl.h"
 #include "runtime.h"
 #include "scoped_thread_state_change-inl.h"
 #include "simple_compiler_options_map.h"
@@ -127,11 +128,22 @@ bool CompilerOptions::ParseCompilerOptions(const std::vector<std::string>& optio
   return ReadCompilerOptions(args, this, error_msg);
 }
 
-bool CompilerOptions::IsImageClass(const char* descriptor) const {
-  // Historical note: We used to hold the set indirectly and there was a distinction between an
-  // empty set and a null, null meaning to include all classes. However, the distinction has been
-  // removed; if we don't have a profile, we treat it as an empty set of classes. b/77340429
-  return image_classes_.find(std::string_view(descriptor)) != image_classes_.end();
+bool CompilerOptions::IsImageClass(TypeReference type_ref, size_t array_dim) const {
+  DCHECK(type_ref.dex_file != nullptr);
+  DCHECK_LT(type_ref.index, type_ref.dex_file->NumTypeIds());
+  if (array_dim == kInferArrayDim) {
+    std::string_view descriptor = type_ref.dex_file->GetTypeDescriptorView(type_ref.TypeIndex());
+    array_dim = descriptor.find_first_not_of('[');
+    DCHECK_NE(array_dim, std::string_view::npos);
+    if (array_dim != 0u) {
+      descriptor.remove_prefix(array_dim);
+      // Use descriptor-based lookup without searching for the `TypeId` in the dex file.
+      return image_classes_.Contains(type_ref.dex_file, descriptor, array_dim);
+    }
+  } else {
+    DCHECK(!type_ref.dex_file->GetTypeDescriptorView(type_ref.TypeIndex()).starts_with('['));
+  }
+  return image_classes_.Contains(type_ref, array_dim);
 }
 
 bool CompilerOptions::IsPreloadedClass(std::string_view pretty_descriptor) const {

@@ -1,0 +1,1 @@
+Certain final instance fields should be unmodifiable starting from certain Android versions.

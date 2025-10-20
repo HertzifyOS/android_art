@@ -156,22 +156,22 @@ class FieldAccessCallingConventionX86_64 : public FieldAccessCallingConvention {
   FieldAccessCallingConventionX86_64() {}
 
   Location GetObjectLocation() const override {
-    return Location::RegisterLocation(RSI);
+    return Location::CoreRegister(RSI);
   }
   Location GetFieldIndexLocation() const override {
-    return Location::RegisterLocation(RDI);
+    return Location::CoreRegister(RDI);
   }
   Location GetReturnLocation([[maybe_unused]] DataType::Type type) const override {
-    return Location::RegisterLocation(RAX);
+    return Location::CoreRegister(RAX);
   }
   Location GetSetValueLocation([[maybe_unused]] DataType::Type type,
                                bool is_instance) const override {
     return is_instance
-        ? Location::RegisterLocation(RDX)
-        : Location::RegisterLocation(RSI);
+        ? Location::CoreRegister(RDX)
+        : Location::CoreRegister(RSI);
   }
   Location GetFpuLocation([[maybe_unused]] DataType::Type type) const override {
-    return Location::FpuRegisterLocation(XMM0);
+    return Location::FpuRegister(XMM0);
   }
 
  private:
@@ -468,7 +468,6 @@ class CodeGeneratorX86_64 : public CodeGenerator {
     return GetLabelOf(block)->Position();
   }
 
-  void SetupBlockedRegisters();
   void DumpCoreRegister(std::ostream& stream, int reg) const override;
   void DumpFloatingPointRegister(std::ostream& stream, int reg) const override;
   void Finalize() override;
@@ -514,8 +513,6 @@ class CodeGeneratorX86_64 : public CodeGenerator {
   void Initialize() override {
     block_labels_ = CommonInitializeLabels<Label>();
   }
-
-  bool NeedsTwoRegisters([[maybe_unused]] DataType::Type type) const override { return false; }
 
   // Check if the desired_string_load_kind is supported. If it is, return it,
   // otherwise return a fall-back kind that should be used instead.
@@ -735,6 +732,9 @@ class CodeGeneratorX86_64 : public CodeGenerator {
   static constexpr int32_t kPlaceholder32BitOffset = 256;
 
  private:
+  static RegisterSet ComputeCalleeSaves();
+  static RegisterSet ComputeBlockedRegisters();
+
   template <linker::LinkerPatch (*Factory)(size_t, const DexFile*, uint32_t, uint32_t)>
   static void EmitPcRelativeLinkerPatches(const ArenaDeque<PatchInfo<Label>>& infos,
                                           ArenaVector<linker::LinkerPatch>* linker_patches);

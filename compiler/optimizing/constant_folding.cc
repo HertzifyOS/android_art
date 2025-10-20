@@ -208,47 +208,85 @@ void HConstantFoldingVisitor::VisitUnaryOperation(HUnaryOperation* inst) {
   }
 }
 
+namespace {
+
+// Similar to HasOnlyOneNonEnvironmentUse but allows several uses iff they are equal. Since this
+// will be used only for binops, it will be relatively fast. Relevant for
+// TryRemoveBinaryOperationViaSelect.
+bool OnlyOneNonEnvironmentUseAllowingDuplicates(HSelect* select) {
+  if (select->HasEnvironmentUses()) {
+    return false;
+  }
+  const HUseList<HInstruction*>& use_list = select->GetUses();
+  DCHECK(!use_list.empty());
+  HInstruction* user = use_list.front().GetUser();
+  for (auto& use : use_list) {
+    if (use.GetUser() != user) {
+      return false;
+    }
+  }
+  return true;
+}
+
+}  // anonymous namespace
+
 bool HConstantFoldingVisitor::TryRemoveBinaryOperationViaSelect(HBinaryOperation* inst) {
   HInstruction* left = inst->GetLeft();
   HInstruction* right = inst->GetRight();
-  if (left->IsSelect() == right->IsSelect()) {
-    // If both of them are constants, HandleBinaryOperation already tried the static evaluation. If
-    // both of them are selects, then we can't simplify.
-    // TODO(solanes): Technically, if both of them are selects we could simplify iff both select's
-    // conditions are equal e.g. Add(Select(1, 2, cond), Select(3, 4, cond)) could be replaced with
-    // Select(4, 6, cond). This seems very unlikely to happen so we don't implement it.
+  const bool left_is_select = left->IsSelect();
+  const bool right_is_select = right->IsSelect();
+
+  if (!left_is_select && !right_is_select) {
+    // If both of them are constants, HandleBinaryOperation already tried the static evaluation and
+    // failed.
     return false;
   }
 
-  const bool left_is_select = left->IsSelect();
-  HSelect* select = left_is_select ? left->AsSelect() : right->AsSelect();
-  HInstruction* maybe_constant = left_is_select ? right : left;
-
-  if (select->HasOnlyOneNonEnvironmentUse()) {
-    // Try to replace the select's inputs in Select+BinaryOperation. We can do this if both
-    // inputs to the select are constants, and this is the only use of the select.
-    HConstant* false_constant =
-        inst->TryStaticEvaluation(left_is_select ? select->GetFalseValue() : maybe_constant,
-                                  left_is_select ? maybe_constant : select->GetFalseValue());
-    if (false_constant == nullptr) {
-      return false;
-    }
-    HConstant* true_constant =
-        inst->TryStaticEvaluation(left_is_select ? select->GetTrueValue() : maybe_constant,
-                                  left_is_select ? maybe_constant : select->GetTrueValue());
-    if (true_constant == nullptr) {
-      return false;
-    }
-    DCHECK_EQ(select->InputAt(0), select->GetFalseValue());
-    DCHECK_EQ(select->InputAt(1), select->GetTrueValue());
-    select->ReplaceInput(false_constant, 0);
-    select->ReplaceInput(true_constant, 1);
-    select->UpdateType();
-    inst->ReplaceWith(select);
-    inst->GetBlock()->RemoveInstruction(inst);
-    return true;
+  if (left_is_select &&
+      right_is_select &&
+      left->AsSelect()->GetCondition() != right->AsSelect()->GetCondition()) {
+    // If both of them are selects, this optimization can only be done when both conditions are the
+    // same.
+    return false;
   }
-  return false;
+
+  HSelect* select_to_update = nullptr;
+  if (left_is_select && OnlyOneNonEnvironmentUseAllowingDuplicates(left->AsSelect())) {
+    select_to_update = left->AsSelect();
+  } else if (right_is_select && OnlyOneNonEnvironmentUseAllowingDuplicates(right->AsSelect())) {
+    select_to_update = right->AsSelect();
+  }
+
+  if (select_to_update == nullptr) {
+    // Can't perform the optimization if there's no select with only one non environment use as the
+    // select's result will be used by other instructions.
+    return false;
+  }
+
+  // Try to replace the select's inputs in Select+BinaryOperation. We can do this if both
+  // inputs to the select are constants i.e. if TryStaticEvaluation returns an HConstant.
+  HInstruction* left_false_value = left_is_select ? left->AsSelect()->GetFalseValue() : left;
+  HInstruction* right_false_value = right_is_select ? right->AsSelect()->GetFalseValue() : right;
+  HConstant* false_constant = inst->TryStaticEvaluation(left_false_value, right_false_value);
+  if (false_constant == nullptr) {
+    return false;
+  }
+
+  HInstruction* left_true_value = left_is_select ? left->AsSelect()->GetTrueValue() : left;
+  HInstruction* right_true_value = right_is_select ? right->AsSelect()->GetTrueValue() : right;
+  HConstant* true_constant = inst->TryStaticEvaluation(left_true_value, right_true_value);
+  if (true_constant == nullptr) {
+    return false;
+  }
+
+  DCHECK_EQ(select_to_update->InputAt(0), select_to_update->GetFalseValue());
+  DCHECK_EQ(select_to_update->InputAt(1), select_to_update->GetTrueValue());
+  select_to_update->ReplaceInput(false_constant, 0);
+  select_to_update->ReplaceInput(true_constant, 1);
+  select_to_update->UpdateType();
+  inst->ReplaceWith(select_to_update);
+  inst->GetBlock()->RemoveInstruction(inst);
+  return true;
 }
 
 template <typename InstructionType>
@@ -919,20 +957,37 @@ void InstructionWithAbsorbingInputSimplifier::VisitAnd(HAnd* instruction) {
 }
 
 void InstructionWithAbsorbingInputSimplifier::VisitCompare(HCompare* instruction) {
-  HConstant* input_cst = instruction->GetConstantRight();
-  if (input_cst != nullptr) {
-    HInstruction* input_value = instruction->GetLeastConstantLeft();
-    if (DataType::IsFloatingPointType(input_value->GetType()) &&
-        ((input_cst->IsFloatConstant() && input_cst->AsFloatConstant()->IsNaN()) ||
-         (input_cst->IsDoubleConstant() && input_cst->AsDoubleConstant()->IsNaN()))) {
+  HInstruction* left = instruction->GetLeft();
+  HInstruction* right = instruction->GetRight();
+  DataType::Type type = left->GetType();
+
+  if (DataType::IsFloatingPointType(type)) {
+    // FP comparisons
+    HConstant* input_cst = instruction->GetConstantRight();
+    if (input_cst != nullptr) {
+      if ((input_cst->IsFloatConstant() && input_cst->AsFloatConstant()->IsNaN()) ||
+          (input_cst->IsDoubleConstant() && input_cst->AsDoubleConstant()->IsNaN())) {
+        // Replace code looking like
+        //    CMP{G,L}-{FLOAT,DOUBLE} dst, src, NaN
+        // with
+        //    CONSTANT +1 (gt bias)
+        // or
+        //    CONSTANT -1 (lt bias)
+        SetReplacement(GetGraph()->GetIntConstant(instruction->IsGtBias() ? 1 : -1));
+        return;
+      }
+    }
+    // For left == right on FP, we cannot simplify to 0 because NaN != NaN.
+    // The result of cmpg(NaN, NaN) is 1, and cmpl(NaN, NaN) is -1.
+  } else {
+    // Integral comparisons
+    if (left == right) {
       // Replace code looking like
-      //    CMP{G,L}-{FLOAT,DOUBLE} dst, src, NaN
+      //    COMPARE lhs, lhs
       // with
-      //    CONSTANT +1 (gt bias)
-      // or
-      //    CONSTANT -1 (lt bias)
-      SetReplacement(GetGraph()->GetConstant(DataType::Type::kInt32,
-                                             (instruction->IsGtBias() ? 1 : -1)));
+      //    CONSTANT 0
+      SetReplacement(GetGraph()->GetIntConstant(0));
+      return;
     }
   }
 }

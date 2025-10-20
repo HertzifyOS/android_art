@@ -590,7 +590,6 @@ class CodeGeneratorARMVIXL : public CodeGenerator {
   }
 
   void FixJumpTables();
-  void SetupBlockedRegisters();
 
   void DumpCoreRegister(std::ostream& stream, int reg) const override;
   void DumpFloatingPointRegister(std::ostream& stream, int reg) const override;
@@ -660,10 +659,6 @@ class CodeGeneratorARMVIXL : public CodeGenerator {
   }
 
   void Finalize() override;
-
-  bool NeedsTwoRegisters(DataType::Type type) const override {
-    return type == DataType::Type::kFloat64 || type == DataType::Type::kInt64;
-  }
 
   void ComputeSpillMask() override;
 
@@ -916,6 +911,9 @@ class CodeGeneratorARMVIXL : public CodeGenerator {
   void MaybeIncrementHotness(HSuspendCheck* suspend_check, bool is_frame_entry);
 
  private:
+  static RegisterSet ComputeCalleeSaves();
+  static RegisterSet ComputeBlockedRegisters(HGraph* graph);
+
   // Encoding of thunk type and data for link-time generated thunks for Baker read barriers.
 
   enum class BakerReadBarrierKind : uint8_t {

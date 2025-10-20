@@ -17,14 +17,14 @@
 #ifndef ART_RUNTIME_THREAD_LIST_H_
 #define ART_RUNTIME_THREAD_LIST_H_
 
-#include <bitset>
+#include <cstdint>
 #include <list>
-#include <vector>
 
 #include "barrier.h"
+#include "base/bit_vector.h"
 #include "base/histogram.h"
-#include "base/mutex.h"
 #include "base/macros.h"
+#include "base/mutex.h"
 #include "base/value_object.h"
 #include "jni.h"
 #include "reflective_handle_scope.h"
@@ -258,7 +258,8 @@ class ThreadList {
   // the diagnostic information. If 0 is passed, we return an empty string on timeout.  Normally
   // the caller does not hold the mutator lock. See the comment at the call in
   // RequestSynchronousCheckpoint for the only exception.
-  std::optional<std::string> WaitForSuspendBarrier(AtomicInteger* barrier,
+  std::optional<std::string> WaitForSuspendBarrier(Thread* self,
+                                                   AtomicInteger* barrier,
                                                    pid_t t = 0,
                                                    int attempt_of_4 = 0)
       REQUIRES(!Locks::thread_list_lock_, !Locks::thread_suspend_count_lock_);
@@ -299,7 +300,21 @@ class ThreadList {
   void AssertOtherThreadsAreSuspended(Thread* self)
       REQUIRES(!Locks::thread_list_lock_, !Locks::thread_suspend_count_lock_);
 
-  std::bitset<kMaxThreadId> allocated_ids_ GUARDED_BY(Locks::allocated_thread_ids_lock_);
+  class ThreadIdBitVector : public BitVector {
+   public:
+    ThreadIdBitVector();
+    ~ThreadIdBitVector() {}
+
+   private:
+    static constexpr uint32_t kSizeInBits = ThreadList::kMaxThreadId + 1;
+    static constexpr uint32_t kSizeInBytes = kSizeInBits / 8;
+    static constexpr uint32_t kSizeInWords = kSizeInBits / kWordBits;
+    static_assert(kSizeInBits % BitVector::kWordBits == 0, "Expected a multiple of kWordBits");
+
+    uint32_t word_storage_[kSizeInWords];
+  };
+
+  ThreadIdBitVector allocated_ids_ GUARDED_BY(Locks::allocated_thread_ids_lock_);
 
   // The actual list of all threads.
   std::list<Thread*> list_ GUARDED_BY(Locks::thread_list_lock_);

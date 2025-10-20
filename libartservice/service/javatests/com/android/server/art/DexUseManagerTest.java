@@ -514,6 +514,7 @@ public class DexUseManagerTest {
         lenient()
                 .when(mArtd.getDexFileVisibility(mCeDir + "/baz.apk"))
                 .thenReturn(FileVisibility.NOT_OTHER_READABLE);
+        lenient().when(mArtd.hasAllClcDexFiles(any(), any())).thenReturn(true);
 
         // These should be ignored.
         mDexUseManager.notifyDexContainersLoaded(
@@ -605,13 +606,16 @@ public class DexUseManagerTest {
         when(mArtd.getDexFileVisibility(mCeDir + "/foo.apk"))
                 .thenReturn(FileVisibility.OTHER_READABLE);
 
+        when(mArtd.hasAllClcDexFiles(mCeDir + "/foo.apk", "CLC")).thenReturn(true);
+
         mDexUseManager.notifyDexContainersLoaded(
                 mSnapshot, OWNING_PKG_NAME, Map.of(mCeDir + "/foo.apk", "CLC"));
         mDexUseManager.notifyDexContainersLoaded(
                 mSnapshot, LOADING_PKG_NAME, Map.of(mCeDir + "/foo.apk", "CLC"));
 
-        assertThat(mDexUseManager.getCheckedSecondaryDexInfo(
-                           OWNING_PKG_NAME, true /* excludeObsoleteDexesAndLoaders */))
+        assertThat(
+                mDexUseManager.getCheckedSecondaryDexInfo(OWNING_PKG_NAME,
+                        true /* excludeObsoleteDexesAndLoaders */, true /* excludeObsoleteClcs */))
                 .containsExactly(CheckedSecondaryDexInfo.create(mCeDir + "/foo.apk", mUserHandle,
                         "CLC", Set.of("arm64-v8a", "armeabi-v7a"),
                         Set.of(DexLoader.create(OWNING_PKG_NAME, false /* isolatedProcess */),
@@ -624,6 +628,8 @@ public class DexUseManagerTest {
         when(mArtd.getDexFileVisibility(mCeDir + "/foo.apk"))
                 .thenReturn(FileVisibility.NOT_OTHER_READABLE);
 
+        when(mArtd.hasAllClcDexFiles(mCeDir + "/foo.apk", "CLC")).thenReturn(true);
+
         mDexUseManager.notifyDexContainersLoaded(
                 mSnapshot, OWNING_PKG_NAME, Map.of(mCeDir + "/foo.apk", "CLC"));
         mDexUseManager.notifyDexContainersLoaded(
@@ -633,15 +639,17 @@ public class DexUseManagerTest {
         mDexUseManager.notifyDexContainersLoaded(
                 mSnapshot, OWNING_PKG_NAME, Map.of(mCeDir + "/foo.apk", "CLC"));
 
-        assertThat(mDexUseManager.getCheckedSecondaryDexInfo(
-                           OWNING_PKG_NAME, true /* excludeObsoleteDexesAndLoaders */))
+        assertThat(
+                mDexUseManager.getCheckedSecondaryDexInfo(OWNING_PKG_NAME,
+                        true /* excludeObsoleteDexesAndLoaders */, true /* excludeObsoleteClcs */))
                 .containsExactly(CheckedSecondaryDexInfo.create(mCeDir + "/foo.apk", mUserHandle,
                         "CLC", Set.of("arm64-v8a"),
                         Set.of(DexLoader.create(OWNING_PKG_NAME, false /* isolatedProcess */)),
                         false /* isUsedByOtherApps */, FileVisibility.NOT_OTHER_READABLE));
 
-        assertThat(mDexUseManager.getCheckedSecondaryDexInfo(
-                           OWNING_PKG_NAME, false /* excludeObsoleteDexesAndLoaders */))
+        assertThat(
+                mDexUseManager.getCheckedSecondaryDexInfo(OWNING_PKG_NAME,
+                        false /* excludeObsoleteDexesAndLoaders */, true /* excludeObsoleteClcs */))
                 .containsExactly(CheckedSecondaryDexInfo.create(mCeDir + "/foo.apk", mUserHandle,
                         "CLC", Set.of("arm64-v8a", "armeabi-v7a"),
                         Set.of(DexLoader.create(OWNING_PKG_NAME, false /* isolatedProcess */),
@@ -655,14 +663,18 @@ public class DexUseManagerTest {
         mDexUseManager.notifyDexContainersLoaded(
                 mSnapshot, OWNING_PKG_NAME, Map.of(mCeDir + "/foo.apk", "CLC"));
 
+        when(mArtd.hasAllClcDexFiles(mCeDir + "/foo.apk", "CLC")).thenReturn(true);
+
         when(mArtd.getDexFileVisibility(mCeDir + "/foo.apk")).thenReturn(FileVisibility.NOT_FOUND);
 
-        assertThat(mDexUseManager.getCheckedSecondaryDexInfo(
-                           OWNING_PKG_NAME, true /* excludeObsoleteDexesAndLoaders */))
+        assertThat(
+                mDexUseManager.getCheckedSecondaryDexInfo(OWNING_PKG_NAME,
+                        true /* excludeObsoleteDexesAndLoaders */, true /* excludeObsoleteClcs */))
                 .isEmpty();
 
-        assertThat(mDexUseManager.getCheckedSecondaryDexInfo(
-                           OWNING_PKG_NAME, false /* excludeObsoleteDexesAndLoaders */))
+        assertThat(
+                mDexUseManager.getCheckedSecondaryDexInfo(OWNING_PKG_NAME,
+                        false /* excludeObsoleteDexesAndLoaders */, true /* excludeObsoleteClcs */))
                 .containsExactly(CheckedSecondaryDexInfo.create(mCeDir + "/foo.apk", mUserHandle,
                         "CLC", Set.of("arm64-v8a"),
                         Set.of(DexLoader.create(OWNING_PKG_NAME, false /* isolatedProcess */)),
@@ -674,6 +686,8 @@ public class DexUseManagerTest {
         when(mArtd.getDexFileVisibility(mCeDir + "/foo.apk"))
                 .thenReturn(FileVisibility.NOT_OTHER_READABLE);
 
+        lenient().when(mArtd.hasAllClcDexFiles(mCeDir + "/foo.apk", "CLC")).thenReturn(true);
+
         mDexUseManager.notifyDexContainersLoaded(
                 mSnapshot, LOADING_PKG_NAME, Map.of(mCeDir + "/foo.apk", "CLC"));
 
@@ -681,9 +695,29 @@ public class DexUseManagerTest {
         mDexUseManager.notifyDexContainersLoaded(
                 mSnapshot, OWNING_PKG_NAME, Map.of(mCeDir + "/foo.apk", "CLC"));
 
-        assertThat(mDexUseManager.getCheckedSecondaryDexInfo(
-                           OWNING_PKG_NAME, true /* excludeObsoleteDexesAndLoaders */))
+        assertThat(
+                mDexUseManager.getCheckedSecondaryDexInfo(OWNING_PKG_NAME,
+                        true /* excludeObsoleteDexesAndLoaders */, true /* excludeObsoleteClcs */))
                 .isEmpty();
+    }
+
+    @Test
+    public void testCheckedSecondaryDexClcNotFound() throws Exception {
+        when(mArtd.getDexFileVisibility(mCeDir + "/foo.apk"))
+                .thenReturn(FileVisibility.NOT_OTHER_READABLE);
+
+        when(mArtd.hasAllClcDexFiles(mCeDir + "/foo.apk", "CLC")).thenReturn(false);
+
+        mDexUseManager.notifyDexContainersLoaded(
+                mSnapshot, OWNING_PKG_NAME, Map.of(mCeDir + "/foo.apk", "CLC"));
+
+        assertThat(
+                mDexUseManager.getCheckedSecondaryDexInfo(OWNING_PKG_NAME,
+                        true /* excludeObsoleteDexesAndLoaders */, true /* excludeObsoleteClcs */))
+                .containsExactly(CheckedSecondaryDexInfo.create(mCeDir + "/foo.apk", mUserHandle,
+                        SecondaryDexInfo.UNSUPPORTED_CLASS_LOADER_CONTEXT, Set.of("arm64-v8a"),
+                        Set.of(DexLoader.create(OWNING_PKG_NAME, false /* isolatedProcess */)),
+                        false /* isUsedByOtherApps */, FileVisibility.NOT_OTHER_READABLE));
     }
 
     @Test
@@ -778,6 +812,8 @@ public class DexUseManagerTest {
     }
 
     private void verifyCleanup() throws Exception {
+        lenient().when(mArtd.hasAllClcDexFiles(any(), any())).thenReturn(true);
+
         // Create an entry that should be kept.
         lenient()
                 .when(mArtd.getDexFileVisibility(mCeDir + "/bar.apk"))
@@ -819,6 +855,42 @@ public class DexUseManagerTest {
                 + "    }\n"
                 + "  }\n"
                 + "}");
+    }
+
+    @Test
+    public void testCleanupClcs() throws Exception {
+        lenient()
+                .when(mArtd.getDexFileVisibility(mCeDir + "/foo.apk"))
+                .thenReturn(FileVisibility.OTHER_READABLE);
+
+        mDexUseManager.notifyDexContainersLoaded(
+                mSnapshot, OWNING_PKG_NAME, Map.of(mCeDir + "/foo.apk", "CLC"));
+        mDexUseManager.notifyDexContainersLoaded(
+                mSnapshot, LOADING_PKG_NAME, Map.of(mCeDir + "/foo.apk", "CLC2"));
+
+        // Initially, there are two distinct CLCs.
+        List<? extends SecondaryDexInfo> dexInfoList =
+                mDexUseManager.getSecondaryDexInfo(OWNING_PKG_NAME);
+        assertThat(dexInfoList.get(0).displayClassLoaderContext())
+                .isEqualTo(SecondaryDexInfo.VARYING_CLASS_LOADER_CONTEXTS);
+
+        // Simulate that "CLC" is obsolete.
+        when(mArtd.hasAllClcDexFiles(mCeDir + "/foo.apk", "CLC")).thenReturn(false);
+        when(mArtd.hasAllClcDexFiles(mCeDir + "/foo.apk", "CLC2")).thenReturn(true);
+        mDexUseManager.cleanup();
+
+        // After cleanup, there should be only one CLC.
+        dexInfoList = mDexUseManager.getSecondaryDexInfo(OWNING_PKG_NAME);
+        assertThat(dexInfoList.get(0).displayClassLoaderContext()).isEqualTo("CLC2");
+
+        // Simulate that "CLC2" is obsolete.
+        when(mArtd.hasAllClcDexFiles(mCeDir + "/foo.apk", "CLC2")).thenReturn(false);
+        mDexUseManager.cleanup();
+
+        // After cleanup, there should be only none CLC.
+        dexInfoList = mDexUseManager.getSecondaryDexInfo(OWNING_PKG_NAME);
+        assertThat(dexInfoList.get(0).displayClassLoaderContext())
+                .isEqualTo(SecondaryDexInfo.UNSUPPORTED_CLASS_LOADER_CONTEXT);
     }
 
     @Test(expected = IllegalArgumentException.class)

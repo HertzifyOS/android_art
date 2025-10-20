@@ -1602,6 +1602,12 @@ bool HInliner::IsInliningEncouraged(const HInvoke* invoke_instruction,
     return false;
   }
 
+  if (invoke_instruction->AlwaysThrows()) {
+    LOG_FAIL(stats_, MethodCompilationStat::kNotInlinedAlwaysThrows)
+        << "Method " << method->PrettyMethod() << " will not be inlined because it always throws";
+    return false;
+  }
+
   return true;
 }
 
@@ -1641,6 +1647,7 @@ bool HInliner::TryBuildAndInline(HInvoke* invoke_instruction,
     if (invoke_instruction->GetType() == DataType::Type::kReference) {
       new_invoke->SetReferenceTypeInfoIfValid(invoke_instruction->GetReferenceTypeInfo());
     }
+    new_invoke->SetAlwaysThrows(invoke_instruction->AlwaysThrows());
     *return_replacement = new_invoke;
     return true;
   }
@@ -2026,8 +2033,8 @@ bool HInliner::CanInlineBody(const HGraph* callee_graph,
       // If the last instruction chain is Return/ReturnVoid -> TryBoundary -> Exit we will have to
       // split a critical edge in InlineInto and might recompute loop information, which is
       // unsupported for irreducible loops.
-      if (!last_instruction->IsThrow() && graph_->HasIrreducibleLoops()) {
-        DCHECK(last_instruction->IsReturn() || last_instruction->IsReturnVoid());
+      if ((last_instruction->IsReturn() || last_instruction->IsReturnVoid()) &&
+          graph_->HasIrreducibleLoops()) {
         // TODO(ngeoffray): Support re-computing loop information to graphs with
         // irreducible loops?
         LOG_FAIL(stats_, MethodCompilationStat::kNotInlinedIrreducibleLoopCaller)
@@ -2038,7 +2045,13 @@ bool HInliner::CanInlineBody(const HGraph* callee_graph,
       }
     }
 
-    if (last_instruction->IsThrow()) {
+    if (last_instruction->IsGoto() && last_instruction->GetPrevious() != nullptr) {
+      last_instruction = last_instruction->GetPrevious();
+      DCHECK(!last_instruction->IsThrow());
+      DCHECK(last_instruction->AlwaysThrows());
+    }
+
+    if (last_instruction->AlwaysThrows()) {
       if (graph_->GetExitBlock() == nullptr) {
         // TODO(ngeoffray): Support adding HExit in the caller graph.
         LOG_FAIL(stats_, MethodCompilationStat::kNotInlinedInfiniteLoop)

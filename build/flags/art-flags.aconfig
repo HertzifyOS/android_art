@@ -71,6 +71,16 @@ flag {
   is_exported: false
 }
 
+# Flag for register allocation improvements in loops.
+flag {
+  name: "reg_alloc_loops"
+  namespace: "art_performance"
+  description: "Flag to control whether register allocation improvements for loops are enabled"
+  bug: "449684446"
+  is_fixed_read_only: true
+  is_exported: false
+}
+
 flag {
   name: "test"
   namespace: "art_mainline"

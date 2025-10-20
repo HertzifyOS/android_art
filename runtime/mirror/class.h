@@ -520,6 +520,11 @@ class EXPORT MANAGED Class final : public Object {
            ReadBarrierOption kReadBarrierOption = kWithReadBarrier>
   ObjPtr<Class> GetComponentType() REQUIRES_SHARED(Locks::mutator_lock_);
 
+  template<VerifyObjectFlags kVerifyFlags = kDefaultVerifyFlags,
+           ReadBarrierOption kReadBarrierOption = kWithReadBarrier>
+  std::pair<ObjPtr<Class>, size_t> GetInnermostComponentTypeAndArrayDim()
+      REQUIRES_SHARED(Locks::mutator_lock_);
+
   void SetComponentType(ObjPtr<Class> new_component_type) REQUIRES_SHARED(Locks::mutator_lock_);
 
   size_t GetComponentSize() REQUIRES_SHARED(Locks::mutator_lock_);
@@ -1259,6 +1264,9 @@ class EXPORT MANAGED Class final : public Object {
   // backed by a `DexFile` - it must not be primitive, array or proxy class.
   std::string_view GetDescriptorView() REQUIRES_SHARED(Locks::mutator_lock_);
 
+  // Get the descriptor of a primitive class as `std::string_view`.
+  std::string_view GetPrimitiveDescriptorView() REQUIRES_SHARED(Locks::mutator_lock_);
+
   // Get the descriptor of the class. In a few cases a std::string is required, rather than
   // always create one the storage argument is populated and its internal c_str() returned. We do
   // this to avoid memory allocation in the common case.
@@ -1458,6 +1466,7 @@ class EXPORT MANAGED Class final : public Object {
   void VisitStaticFieldsReferences(const Visitor& visitor) HOT_ATTR;
 
   template <bool kVisitNativeRoots,
+            bool kVisitInstanceFieldsRefs,
             VerifyObjectFlags kVerifyFlags = kDefaultVerifyFlags,
             ReadBarrierOption kReadBarrierOption = kWithReadBarrier,
             typename Visitor>

@@ -124,7 +124,7 @@ public class PrimaryDexopter extends Dexopter<DetailedPrimaryDexInfo> {
             return mInjector.getArtd().getDexFileVisibility(dexInfo.dexPath())
                     != FileVisibility.NOT_FOUND;
         } catch (ServiceSpecificException | RemoteException e) {
-            AsLog.e("Failed to get visibility of " + dexInfo.dexPath(), e);
+            mLogger.e("Failed to get visibility of " + dexInfo.dexPath(), e);
             return false;
         }
     }
@@ -211,7 +211,7 @@ public class PrimaryDexopter extends Dexopter<DetailedPrimaryDexInfo> {
         try {
             mInjector.getArtd().maybeCreateSdc(outputSdc);
         } catch (ServiceSpecificException e) {
-            AsLog.e("Failed to create sdc for " + AidlUtils.toString(outputSdc.sdcPath), e);
+            mLogger.e("Failed to create sdc for " + AidlUtils.toString(outputSdc.sdcPath), e);
         }
     }
 

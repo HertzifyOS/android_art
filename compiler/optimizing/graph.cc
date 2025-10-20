@@ -48,6 +48,20 @@ size_t HGraph::CountNumberOfInstructions() {
   return number_of_instructions;
 }
 
+bool HGraph::HasMoreInstructionsThan(size_t limit) {
+  size_t number_of_instructions = 0;
+  for (HBasicBlock* block : GetReversePostOrderSkipEntryBlock()) {
+    for (HInstructionIteratorPrefetchNext instr_it(block->GetInstructions()); !instr_it.Done();
+         instr_it.Advance()) {
+      ++number_of_instructions;
+      if (number_of_instructions > limit) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 // Register a back edge; if the block was not a loop header before the call,
 // associate a newly created loop info with it.
 void AddBackEdge(HBasicBlock* block, HBasicBlock* back_edge) {
@@ -853,8 +867,6 @@ HInstruction* HGraph::InlineInto(HGraph* outer_graph, HInvoke* invoke) {
 
   HInstruction* return_value = nullptr;
   if (GetBlocks().size() == 3) {
-    // Inliner already made sure we don't inline methods that always throw.
-    DCHECK(!GetBlocks()[1]->GetLastInstruction()->IsThrow());
     // Simple case of an entry block, a body block, and an exit block.
     // Put the body block's instruction into `invoke`'s block.
     HBasicBlock* body = GetBlocks()[1];
@@ -872,7 +884,8 @@ HInstruction* HGraph::InlineInto(HGraph* outer_graph, HInvoke* invoke) {
     if (last->IsReturn()) {
       return_value = last->InputAt(0);
     } else {
-      DCHECK(last->IsReturnVoid());
+      // Inliner already made sure we don't inline methods that always throw.
+      DCHECK(last->IsReturnVoid()) << *last;
     }
 
     invoke->GetBlock()->RemoveInstruction(last);
@@ -948,10 +961,7 @@ HInstruction* HGraph::InlineInto(HGraph* outer_graph, HInvoke* invoke) {
       HBasicBlock* predecessor = to->GetPredecessors()[pred];
       HInstruction* last = predecessor->GetLastInstruction();
 
-      // At this point we might either have:
-      // A) Return/ReturnVoid/Throw as the last instruction, or
-      // B) `Return/ReturnVoid/Throw->TryBoundary` as the last instruction chain
-
+      // The whole method might end in a TryBoundary.
       const bool saw_try_boundary = last->IsTryBoundary();
       if (saw_try_boundary) {
         DCHECK(predecessor->IsSingleTryBoundary());
@@ -960,7 +970,16 @@ HInstruction* HGraph::InlineInto(HGraph* outer_graph, HInvoke* invoke) {
         last = predecessor->GetLastInstruction();
       }
 
-      if (last->IsThrow()) {
+      // At this point we might either have:
+      // A) Return/ReturnVoid/Throw as the last instruction, or
+      // B) AlwaysThrowingInstruction + Goto
+      if (last->IsGoto() && last->GetPrevious() != nullptr) {
+        last = last->GetPrevious();
+        DCHECK(!last->IsThrow());
+        DCHECK(last->AlwaysThrows());
+      }
+
+      if (last->AlwaysThrows()) {
         if (at->IsTryBlock()) {
           DCHECK(!saw_try_boundary) << "We don't support inlining of try blocks into try blocks.";
           // Create a TryBoundary of kind:exit and point it to the Exit block.
@@ -1003,7 +1022,7 @@ HInstruction* HGraph::InlineInto(HGraph* outer_graph, HInvoke* invoke) {
           DCHECK(return_value == nullptr);
           DCHECK(return_value_phi == nullptr);
         } else {
-          DCHECK(last->IsReturn());
+          DCHECK(last->IsReturn()) << *last;
           if (return_value_phi != nullptr) {
             return_value_phi->AddInput(last->InputAt(0));
           } else if (return_value == nullptr) {

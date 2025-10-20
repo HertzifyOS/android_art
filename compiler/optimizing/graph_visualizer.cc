@@ -314,7 +314,7 @@ class HGraphVisualizerPrinter final : public CRTPGraphVisitor<HGraphVisualizerPr
 
   void DumpLocation(std::ostream& stream, const Location& location) {
     DCHECK(codegen_ != nullptr);
-    if (location.IsRegister()) {
+    if (location.IsCoreRegister()) {
       codegen_->DumpCoreRegister(stream, location.reg());
     } else if (location.IsFpuRegister()) {
       codegen_->DumpFloatingPointRegister(stream, location.reg());
@@ -340,7 +340,7 @@ class HGraphVisualizerPrinter final : public CRTPGraphVisitor<HGraphVisualizerPr
       codegen_->DumpFloatingPointRegister(stream, location.low());
       stream << "|";
       codegen_->DumpFloatingPointRegister(stream, location.high());
-    } else if (location.IsRegisterPair()) {
+    } else if (location.IsCoreRegisterPair()) {
       codegen_->DumpCoreRegister(stream, location.low());
       stream << "|";
       codegen_->DumpCoreRegister(stream, location.high());
@@ -734,8 +734,7 @@ class HGraphVisualizerPrinter final : public CRTPGraphVisitor<HGraphVisualizerPr
         StartAttributeStream("env_uses") << StringList(interval->GetEnvironmentUses());
         StartAttributeStream("is_fixed") << interval->IsFixed();
         StartAttributeStream("is_split") << interval->IsSplit();
-        StartAttributeStream("is_low") << interval->IsLowInterval();
-        StartAttributeStream("is_high") << interval->IsHighInterval();
+        StartAttributeStream("is_pair") << interval->IsPair();
       }
     }
 

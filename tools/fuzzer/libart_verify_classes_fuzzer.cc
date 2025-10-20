@@ -15,14 +15,12 @@
  */
 
 #include <cstdint>
-#include <iostream>
 #include <vector>
 
-#include "base/mem_map.h"
+#include "dex/standard_dex_file.h"
 #include "fuzzer_common.h"
-#include "handle_scope-inl.h"
+#include "gc/heap.h"
 #include "runtime.h"
-#include "scoped_thread_state_change-inl.h"
 
 namespace art {
 namespace fuzzer {
@@ -37,10 +35,11 @@ int skipped_gc_iterations = 0;
 static constexpr int kMaxSkipGCIterations = 3000;
 
 std::vector<std::unique_ptr<uint8_t[]>> data_to_delete;
-std::vector<std::unique_ptr<art::StandardDexFile>> dex_files_to_delete;
+std::vector<std::unique_ptr<StandardDexFile>> dex_files_to_delete;
 
 extern "C" int LLVMFuzzerInitialize([[maybe_unused]] int* argc, [[maybe_unused]] char*** argv) {
-  FuzzerInitialize();
+  static NoopCompilerCallbacks callbacks;
+  FuzzerInitialize(&callbacks);
   return 0;
 }
 
@@ -58,19 +57,20 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   memcpy(new_data, data, size);
 
   dex_files_to_delete.emplace_back(
-      new art::StandardDexFile(new_data,
-                               /*location=*/"fuzz.dex",
-                               /*location_checksum=*/0,
-                               /*oat_dex_file=*/nullptr,
-                               std::make_shared<art::MemoryDexFileContainer>(new_data, size)));
-  art::StandardDexFile* dex_file = dex_files_to_delete.back().get();
+      new StandardDexFile(new_data,
+                          /*location=*/"fuzz.dex",
+                          /*location_checksum=*/0,
+                          /*oat_dex_file=*/nullptr,
+                          std::make_shared<MemoryDexFileContainer>(new_data, size)));
+  StandardDexFile* dex_file = dex_files_to_delete.back().get();
 
-  art::Runtime* runtime = art::Runtime::Current();
+  Runtime* runtime = Runtime::Current();
   CHECK(runtime != nullptr);
 
   jobject class_loader = RegisterDexFileAndGetClassLoader(runtime, dex_file);
 
   VerifyClasses(class_loader, dex_file);
+  IterationCleanup(class_loader, dex_file);
 
   if (skipped_gc_iterations == kMaxSkipGCIterations) {
     runtime->GetHeap()->CollectGarbage(/* clear_soft_references */ true);

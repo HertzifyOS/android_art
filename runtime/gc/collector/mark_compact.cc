@@ -429,7 +429,8 @@ MarkCompact::LiveWordsBitmap<kAlignment>* MarkCompact::LiveWordsBitmap<kAlignmen
 
 size_t MarkCompact::ComputeInfoMapSize() {
   size_t moving_space_size = bump_pointer_space_->Capacity();
-  size_t chunk_info_vec_size = moving_space_size / kOffsetChunkSize;
+  // Extra word to avoid out-of-bound access check in UpdateLivenessInfo().
+  size_t chunk_info_vec_size = moving_space_size / kOffsetChunkSize + 1;
   size_t nr_moving_pages = DivideByPageSize(moving_space_size);
   size_t nr_non_moving_pages = DivideByPageSize(heap_->GetNonMovingSpace()->Capacity());
   return chunk_info_vec_size * sizeof(uint32_t) + nr_non_moving_pages * sizeof(ObjReference) +
@@ -437,14 +438,17 @@ size_t MarkCompact::ComputeInfoMapSize() {
 }
 
 size_t MarkCompact::InitializeInfoMap(uint8_t* p, size_t moving_space_sz) {
+  size_t total;
   size_t nr_moving_pages = DivideByPageSize(moving_space_sz);
 
-  chunk_info_vec_ = reinterpret_cast<uint32_t*>(p);
-  vector_length_ = moving_space_sz / kOffsetChunkSize;
-  size_t total = vector_length_ * sizeof(uint32_t);
-
-  first_objs_moving_space_ = reinterpret_cast<ObjReference*>(p + total);
-  total += nr_moving_pages * sizeof(ObjReference);
+  // Make sure to keep this array first as we retain entries corresponding to
+  // old-gen for next young GCs. By keeping this array first in `info_map_` we
+  // can madvise everything else in a single invocation.
+  // Also, since we are now keeping some pages dirty across GCs in this array,
+  // it's better to keep this array separate to minimize RSS increase. Otherwise,
+  // we could have created one array with three fields for the following three arrays.
+  first_objs_moving_space_ = reinterpret_cast<ObjReference*>(p);
+  total = nr_moving_pages * sizeof(ObjReference);
 
   pre_compact_offset_moving_space_ = reinterpret_cast<uint32_t*>(p + total);
   total += nr_moving_pages * sizeof(uint32_t);
@@ -454,6 +458,12 @@ size_t MarkCompact::InitializeInfoMap(uint8_t* p, size_t moving_space_sz) {
 
   first_objs_non_moving_space_ = reinterpret_cast<ObjReference*>(p + total);
   total += DivideByPageSize(heap_->GetNonMovingSpace()->Capacity()) * sizeof(ObjReference);
+
+  chunk_info_vec_ = reinterpret_cast<uint32_t*>(p + total);
+  vector_length_ = moving_space_sz / kOffsetChunkSize;
+  // Extra word to avoid out-of-bound access check in UpdateLivenessInfo().
+  total += (vector_length_ + 1) * sizeof(uint32_t);
+
   DCHECK_EQ(total, ComputeInfoMapSize());
   return total;
 }
@@ -592,6 +602,9 @@ MarkCompact::MarkCompact(Heap* heap)
 }
 
 void MarkCompact::ResetGenerationalState() {
+  DCHECK(use_generational_);
+  size_t len = DivideByPageSize(old_gen_end_ - moving_space_begin_) * sizeof(ObjReference);
+  ZeroAndReleaseMemory(info_map_.Begin(), RoundUp(len, gPageSize));
   black_dense_end_ = mid_gen_end_ = moving_space_begin_;
   post_compact_end_ = nullptr;
   class_after_obj_map_.clear();
@@ -806,6 +819,10 @@ void MarkCompact::InitializePhase() {
   last_reclaimable_page_.store(moving_space_end_, std::memory_order_relaxed);
   cur_reclaimable_page_.store(moving_space_begin_, std::memory_order_relaxed);
   if (use_generational_ && !young_gen_) {
+    // 'first_objs_moving_space_' entries for old-gen pages are maintained from
+    // last GC. Clear them as this is a full-GC and they are not going to be valid.
+    size_t len = DivideByPageSize(old_gen_end_ - moving_space_begin_) * sizeof(ObjReference);
+    ZeroAndReleaseMemory(info_map_.Begin(), RoundUp(len, gPageSize));
     class_after_obj_map_.clear();
   }
   // TODO: Would it suffice to read it once in the constructor, which is called
@@ -884,14 +901,7 @@ void MarkCompact::RunPhases() {
     // priority threads.
     spc.SetToNormalOrBetter();
   }
-  {
-    // Marking pause
-    ScopedPause pause(this);
-    MarkingPause();
-    if (kIsDebugBuild) {
-      bump_pointer_space_->AssertAllThreadLocalBuffersAreRevoked();
-    }
-  }
+  MarkingPause();
   TraceFaults();
   bool perform_compaction;
   {
@@ -1207,8 +1217,14 @@ bool MarkCompact::PrepareForCompaction() {
   for (size_t i = 0; i < vector_len; i++) {
     DCHECK_LE(chunk_info_vec_[i], kOffsetChunkSize)
         << "i:" << i << " vector_length:" << vector_len << " vector_length_:" << vector_length_;
+    DCHECK_EQ(chunk_info_vec_[i], live_words_bitmap_->LiveBytesInBitmapWord(i))
+        << "i:" << i << " vector_length:" << vector_len << " vector_length_:" << vector_length_;
+  }
+  for (size_t i = vector_len; i < vector_length_; i++) {
+    DCHECK_EQ(chunk_info_vec_[i], 0u);
     DCHECK_EQ(chunk_info_vec_[i], live_words_bitmap_->LiveBytesInBitmapWord(i));
   }
+  DCHECK_EQ(chunk_info_vec_[vector_length_], 0u);
 
   // TODO: We can do a lot of neat tricks with this offset vector to tune the
   // compaction as we wish. Originally, the compaction algorithm slides all
@@ -1246,10 +1262,6 @@ bool MarkCompact::PrepareForCompaction() {
       mid_gen_end_ = black_allocations_begin_;
       return false;
     }
-    InitNonMovingFirstObjects(reinterpret_cast<uintptr_t>(moving_space_begin_),
-                              reinterpret_cast<uintptr_t>(old_gen_end_),
-                              moving_space_bitmap_,
-                              first_objs_moving_space_);
   } else if (gc_cause != kGcCauseExplicit && gc_cause != kGcCauseCollectorTransition &&
              !GetCurrentIteration()->GetClearSoftReferences()) {
     uint64_t live_bytes = 0, total_bytes = 0;
@@ -1319,34 +1331,22 @@ bool MarkCompact::PrepareForCompaction() {
                                 non_moving_space_bitmap_,
                                 first_objs_non_moving_space_);
   // Update the vector one past the heap usage as it is required for black
-  // allocated objects' post-compact address computation.
-  uint32_t total_bytes;
-  if (vector_len < vector_length_) {
-    vector_len++;
-    total_bytes = 0;
-  } else {
-    // Fetch the value stored in the last element before it gets overwritten by
-    // std::exclusive_scan().
-    total_bytes = chunk_info_vec_[vector_len - 1];
-  }
+  // allocated objects' post-compact address computation. We have already
+  // provisioned one extra word in chunk_info_vec_.
   std::exclusive_scan(chunk_info_vec_ + black_dense_idx,
-                      chunk_info_vec_ + vector_len,
+                      chunk_info_vec_ + vector_len + 1,
                       chunk_info_vec_ + black_dense_idx,
                       black_dense_idx * kOffsetChunkSize);
-  total_bytes += chunk_info_vec_[vector_len - 1];
-  post_compact_end_ = AlignUp(moving_space_begin_ + total_bytes, gPageSize);
+  post_compact_end_ = AlignUp(moving_space_begin_ + chunk_info_vec_[vector_len], gPageSize);
   CHECK_EQ(post_compact_end_, moving_space_begin_ + moving_first_objs_count_ * gPageSize)
       << "moving_first_objs_count_:" << moving_first_objs_count_
       << " black_dense_idx:" << black_dense_idx << " vector_len:" << vector_len
-      << " total_bytes:" << total_bytes
+      << " total_bytes:" << chunk_info_vec_[vector_len]
       << " black_dense_end:" << reinterpret_cast<void*>(black_dense_end_)
       << " chunk_info_per_page:" << chunk_info_per_page;
   black_objs_slide_diff_ = black_allocations_begin_ - post_compact_end_;
   // We shouldn't be consuming more space after compaction than pre-compaction.
   CHECK_GE(black_objs_slide_diff_, 0);
-  for (size_t i = vector_len; i < vector_length_; i++) {
-    DCHECK_EQ(chunk_info_vec_[i], 0u);
-  }
   if (black_objs_slide_diff_ == 0) {
     // Regardless of the gc-type, there are no pages to be compacted. Ensure
     // that we don't shrink the mid-gen, which will become old-gen in
@@ -1453,15 +1453,12 @@ class MarkCompact::VisitReferencesVisitor {
  public:
   explicit VisitReferencesVisitor(Visitor visitor) : visitor_(visitor) {}
 
-  ALWAYS_INLINE void operator()(mirror::Object* obj,
-                                MemberOffset offset,
-                                [[maybe_unused]] bool is_static) const
+  void operator()(mirror::Object* obj, MemberOffset offset, [[maybe_unused]] bool is_static) const
       REQUIRES(Locks::heap_bitmap_lock_) REQUIRES_SHARED(Locks::mutator_lock_) {
-    visitor_(obj->GetFieldObject<mirror::Object>(offset));
+    visitor_(obj->GetFieldObject<mirror::Object, kDefaultVerifyFlags, kWithoutReadBarrier>(offset));
   }
 
-  ALWAYS_INLINE void operator()([[maybe_unused]] ObjPtr<mirror::Class> klass,
-                                ObjPtr<mirror::Reference> ref) const
+  void operator()([[maybe_unused]] ObjPtr<mirror::Class> klass, ObjPtr<mirror::Reference> ref) const
       REQUIRES(Locks::heap_bitmap_lock_) REQUIRES_SHARED(Locks::mutator_lock_) {
     visitor_(ref.Ptr());
   }
@@ -1537,14 +1534,15 @@ void MarkCompact::ReMarkRoots(Runtime* runtime) {
 }
 
 void MarkCompact::MarkingPause() {
-  TimingLogger::ScopedTiming t("(Paused)MarkingPause", GetTimings());
+  TimingLogger::ScopedTiming t("MarkingPause", GetTimings());
   Runtime* runtime = Runtime::Current();
-  Locks::mutator_lock_->AssertExclusiveHeld(thread_running_gc_);
+  ScopedPause pause(this);
   {
     // Handle the dirty objects as we are a concurrent GC
     WriterMutexLock mu(thread_running_gc_, *Locks::heap_bitmap_lock_);
     VerifyNoMissingCardMarks();
     {
+      TimingLogger::ScopedTiming t2("(Paused)StackScan", GetTimings());
       MutexLock mu2(thread_running_gc_, *Locks::runtime_shutdown_lock_);
       MutexLock mu3(thread_running_gc_, *Locks::thread_list_lock_);
       std::list<Thread*> thread_list = runtime->GetThreadList()->GetList();
@@ -1575,11 +1573,9 @@ void MarkCompact::MarkingPause() {
     ReMarkRoots(runtime);
     // Scan dirty objects.
     RecursiveMarkDirtyObjects(/*paused*/ true, accounting::CardTable::kCardDirty);
-    {
-      TimingLogger::ScopedTiming t2("SwapStacks", GetTimings());
-      heap_->SwapStacks();
-      live_stack_freeze_size_ = heap_->GetLiveStack()->Size();
-    }
+
+    heap_->SwapStacks();
+    live_stack_freeze_size_ = heap_->GetLiveStack()->Size();
   }
   // TODO: For PreSweepingGcVerification(), find correct strategy to visit/walk
   // objects in bump-pointer space when we have a mark-bitmap to indicate live
@@ -1601,6 +1597,9 @@ void MarkCompact::MarkingPause() {
   // paused since there is no lock in the GetReferent fast path.
   heap_->GetReferenceProcessor()->EnableSlowPath();
   marking_done_ = true;
+  if (kIsDebugBuild) {
+    bump_pointer_space_->AssertAllThreadLocalBuffersAreRevoked();
+  }
 }
 
 void MarkCompact::SweepSystemWeaks(Thread* self, Runtime* runtime, const bool paused) {
@@ -2319,6 +2318,32 @@ size_t MarkCompact::UpdateRefsForCompaction(mirror::Object* obj,
   uint32_t class_flags = from_klass->GetClassFlags<kVerifyNone>();
   if (class_flags == 0) {
     DCHECK(klass != from_klass && reinterpret_cast<uint8_t*>(klass) < black_dense_end_);
+    // We should never see 0 class-flags with copy ioctl
+    // TODO: once the issue is resolved, make the condition be only enabled in
+    // debug builds
+    if (UNLIKELY(!use_move_ioctl_)) {
+      uintptr_t class_flags_addr =
+          reinterpret_cast<uintptr_t>(from_klass) + mirror::Class::ClassFlagsOffset().Int32Value();
+      LOG(FATAL_WITHOUT_ABORT)
+          << "Class-flags found to be 0 in COPY-ioctl mode for obj:" << obj
+          << " from-klass:" << static_cast<void*>(from_klass) << " memory around class-flags:"
+          << heap_->GetVerification()->DumpRAMAroundAddress(class_flags_addr, 8 * kObjectAlignment)
+          << " klass:" << static_cast<void*>(klass) << " cur_reclaimable_page:"
+          << static_cast<void*>(cur_reclaimable_page_ + from_space_slide_diff_)
+          << " last_reclaimable_page:"
+          << static_cast<void*>(last_reclaimable_page_ + from_space_slide_diff_)
+          << " black_dense_end: " << static_cast<void*>(black_dense_end_)
+          << " mid_gen_end: " << static_cast<void*>(mid_gen_end_)
+          << " prev_post_compact_end: " << prev_post_compact_end_
+          << " prev_black_allocations_begin: " << prev_black_allocations_begin_
+          << " prev_black_dense_end: " << prev_black_dense_end_
+          << " prev_moving_space_end_at_compaction: " << prev_moving_space_end_at_compaction_
+          << " prev_gc_young: " << prev_gc_young_
+          << " prev_gc_performed_compaction: " << prev_gc_performed_compaction_;
+      heap_->GetVerification()->LogHeapCorruption(
+          obj, mirror::Object::ClassOffset(), klass, /*fatal=*/true);
+      UNREACHABLE();
+    }
     // The page containing class-flags has been moved to the to-space. Re-read from there.
     class_flags = klass->GetClassFlags<kVerifyNone>();
   }
@@ -3284,8 +3309,8 @@ bool MarkCompact::FreeFromSpacePages(size_t cur_page_idx, int mode, size_t end_i
       // This for the black-allocations pages so that madvise is not missed.
       all_mapped = true;
     }
-    // If not all pages are mapped, then take it as a hint that mmap_lock is
-    // contended and hence don't madvise as that also needs the same lock.
+    // If not all pages are mapped, then we cannot free those pages yet as some
+    // page(s) are not mapped yet and will be needed eventually.
     if (all_mapped) {
       if (!use_move_ioctl_) {
         // Retain a few pages for subsequent compactions.
@@ -3307,12 +3332,29 @@ bool MarkCompact::FreeFromSpacePages(size_t cur_page_idx, int mode, size_t end_i
   if (reclaim_begin < last_reclaimable_page_.load(std::memory_order_relaxed) &&
       (!use_move_ioctl_ || reclaim_begin >= black_dense_end_)) {
     last_reclaimable_page_.store(reclaim_begin, std::memory_order_relaxed);
+    if (use_move_ioctl_) {
+      ptrdiff_t available = cur_reclaimable_page_.load(std::memory_order_relaxed) - reclaim_begin;
+      // We should retain more pages in case of MOVE ioctl (as compared to COPY
+      // ioctl) as mutators also use pages from here.
+      constexpr ssize_t kBufferPages = 2 * MB;
+      static_assert(kBufferPages < kMinFromSpaceMadviseSize);
+      while (available >= kMinFromSpaceMadviseSize) {
+        size = available - kBufferPages;
+        uint8_t* addr = GetRecyclablePages(size, /*atomic=*/true);
+        if (addr != nullptr) {
+          int ret = madvise(addr + from_space_slide_diff_, size, MADV_DONTNEED);
+          CHECK(ret == 0) << "madvise of from-space failed: " << strerror(errno);
+          break;
+        }
+        available = cur_reclaimable_page_.load(std::memory_order_relaxed) - reclaim_begin;
+      }
+    }
   }
   last_checked_reclaim_page_idx_ = idx;
   return all_mapped;
 }
 
-uint8_t* MarkCompact::GetFreePagesForMapping(size_t size, bool atomic) {
+uint8_t* MarkCompact::GetRecyclablePages(size_t size, bool atomic) {
   DCHECK_ALIGNED_PARAM(size, gPageSize);
   uint8_t* expected = cur_reclaimable_page_.load(std::memory_order_relaxed);
   if (atomic) {
@@ -3409,7 +3451,7 @@ void MarkCompact::CompactMovingSpace(uint8_t* page) {
       page = to_space_end;
     } else {
       DCHECK_EQ(kMode, kUffdMode);
-      page = GetFreePagesForMapping(gPageSize, use_move_ioctl_);
+      page = GetRecyclablePages(gPageSize, use_move_ioctl_);
       if (page == nullptr) {
         page = reserve_page;
       } else {
@@ -4570,7 +4612,7 @@ bool MarkCompact::SigbusHandler(siginfo_t* info) {
 
 size_t MarkCompact::ZeroAndMoveFreePage(uint8_t* dst, bool tolerate_einval) {
   DCHECK(use_move_ioctl_);
-  uint8_t* free_page = GetFreePagesForMapping(gPageSize, /*atomic=*/true);
+  uint8_t* free_page = GetRecyclablePages(gPageSize, /*atomic=*/true);
   if (free_page != nullptr) {
     DCHECK_ALIGNED_PARAM(free_page, gPageSize);
     free_page += from_space_slide_diff_;
@@ -4696,7 +4738,7 @@ void MarkCompact::ConcurrentlyProcessMovingPage(uint8_t* fault_page,
 
           if (fault_page < post_compact_end_) {
             if (use_move_ioctl_) {
-              uint8_t* free_page = GetFreePagesForMapping(gPageSize, /*atomic=*/true);
+              uint8_t* free_page = GetRecyclablePages(gPageSize, /*atomic=*/true);
               if (free_page != nullptr) {
                 buf = free_page + from_space_slide_diff_;
               } else {
@@ -5206,6 +5248,69 @@ void MarkCompact::CompactionPhase() {
   }
 }
 
+class MarkCompact::RefFieldsVisitor {
+ public:
+  ALWAYS_INLINE explicit RefFieldsVisitor(MarkCompact* const mark_compact)
+      : mark_compact_(mark_compact),
+        young_gen_begin_(mark_compact->mid_gen_end_),
+        young_gen_end_(mark_compact->moving_space_end_),
+        // Ideally we should only check for objects outside young-gen. However,
+        // the boundary of young-gen can change later in PrepareForCompaction()
+        // as we need the mid-gen-end to be page-aligned. Since most of the
+        // objects don't have native-roots, it's not too costly to check all
+        // objects being visited during marking.
+        check_native_roots_to_young_gen_(mark_compact->use_generational_) {}
+
+  bool ShouldDirtyCard() const { return dirty_card_; }
+  void Reset() const { dirty_card_ = false; }
+
+  ALWAYS_INLINE void operator()(mirror::Object* obj,
+                                MemberOffset offset,
+                                [[maybe_unused]] bool is_static) const
+      REQUIRES(Locks::heap_bitmap_lock_) REQUIRES_SHARED(Locks::mutator_lock_) {
+    if (kCheckLocks) {
+      Locks::mutator_lock_->AssertSharedHeld(Thread::Current());
+      Locks::heap_bitmap_lock_->AssertExclusiveHeld(Thread::Current());
+    }
+    mirror::Object* ref =
+        obj->GetFieldObject<mirror::Object, kVerifyNone, kWithoutReadBarrier>(offset);
+    mark_compact_->MarkObject(ref, obj, offset);
+  }
+
+  ALWAYS_INLINE void operator()(ObjPtr<mirror::Class> klass, ObjPtr<mirror::Reference> ref) const
+      REQUIRES(Locks::heap_bitmap_lock_) REQUIRES_SHARED(Locks::mutator_lock_) {
+    mark_compact_->DelayReferenceReferent(klass, ref);
+  }
+
+  ALWAYS_INLINE void VisitRootIfNonNull(mirror::CompressedReference<mirror::Object>* root) const
+      REQUIRES(Locks::heap_bitmap_lock_) REQUIRES_SHARED(Locks::mutator_lock_) {
+    if (!root->IsNull()) {
+      VisitRoot(root);
+    }
+  }
+
+  ALWAYS_INLINE void VisitRoot(mirror::CompressedReference<mirror::Object>* root) const
+      REQUIRES(Locks::heap_bitmap_lock_) REQUIRES_SHARED(Locks::mutator_lock_) {
+    if (kCheckLocks) {
+      Locks::mutator_lock_->AssertSharedHeld(Thread::Current());
+      Locks::heap_bitmap_lock_->AssertExclusiveHeld(Thread::Current());
+    }
+    mirror::Object* ref = root->AsMirrorPtr();
+    mark_compact_->MarkObject(ref, nullptr, MemberOffset(0));
+    if (check_native_roots_to_young_gen_) {
+      dirty_card_ |= reinterpret_cast<uint8_t*>(ref) >= young_gen_begin_ &&
+                     reinterpret_cast<uint8_t*>(ref) < young_gen_end_;
+    }
+  }
+
+ private:
+  MarkCompact* const mark_compact_;
+  uint8_t* const young_gen_begin_;
+  uint8_t* const young_gen_end_;
+  const bool check_native_roots_to_young_gen_;
+  mutable bool dirty_card_;
+};
+
 template <size_t kBufferSize>
 class MarkCompact::ThreadRootsVisitor : public RootVisitor {
  public:
@@ -5240,9 +5345,9 @@ class MarkCompact::ThreadRootsVisitor : public RootVisitor {
     }
   }
 
-  void VisitRoots(mirror::Object*** roots,
-                  size_t count,
-                  [[maybe_unused]] const RootInfo& info) override
+  ALWAYS_INLINE void VisitRoots(mirror::Object*** roots,
+                                size_t count,
+                                [[maybe_unused]] const RootInfo& info) override
       REQUIRES_SHARED(Locks::mutator_lock_) REQUIRES(Locks::heap_bitmap_lock_) {
     for (size_t i = 0; i < count; i++) {
       mirror::Object* obj = *roots[i];
@@ -5255,9 +5360,9 @@ class MarkCompact::ThreadRootsVisitor : public RootVisitor {
     }
   }
 
-  void VisitRoots(mirror::CompressedReference<mirror::Object>** roots,
-                  size_t count,
-                  [[maybe_unused]] const RootInfo& info) override
+  ALWAYS_INLINE void VisitRoots(mirror::CompressedReference<mirror::Object>** roots,
+                                size_t count,
+                                [[maybe_unused]] const RootInfo& info) override
       REQUIRES_SHARED(Locks::mutator_lock_) REQUIRES(Locks::heap_bitmap_lock_) {
     for (size_t i = 0; i < count; i++) {
       mirror::Object* obj = roots[i]->AsMirrorPtr();
@@ -5294,8 +5399,8 @@ class MarkCompact::ThreadRootsVisitor : public RootVisitor {
     end_ = overflow_arr_start_ + requested_size;
   }
 
-  void Push(mirror::Object* obj) REQUIRES_SHARED(Locks::mutator_lock_)
-                                 REQUIRES(Locks::heap_bitmap_lock_) {
+  ALWAYS_INLINE void Push(mirror::Object* obj) REQUIRES_SHARED(Locks::mutator_lock_)
+      REQUIRES(Locks::heap_bitmap_lock_) {
     if (UNLIKELY(top_ == end_)) {
       FetchBuffer();
       DCHECK_GE(end_ - top_, static_cast<ssize_t>(kBufferSize));
@@ -5344,17 +5449,13 @@ class MarkCompact::CheckpointMarkThreadRoots : public Closure {
   MarkCompact* const mark_compact_;
 };
 
-inline void MarkCompact::ProcessMarkObject(mirror::Object* obj) {
-  DCHECK(obj != nullptr);
-  ScanObject</*kUpdateLiveWords=*/true>(obj);
-}
-
 void MarkCompact::ProcessMarkStackNonNull() {
   TimingLogger::ScopedTiming t(__FUNCTION__, GetTimings());
+  RefFieldsVisitor visitor(this);
   while (!mark_stack_->IsEmpty()) {
     mirror::Object* obj = mark_stack_->PopBack();
     if (obj != nullptr) {
-      ProcessMarkObject(obj);
+      ScanObject</*kUpdateLiveWords=*/true>(obj, visitor);
     }
   }
 }
@@ -5393,9 +5494,11 @@ void MarkCompact::MarkRootsCheckpoint(Thread* self, Runtime* runtime) {
     }
   }
   if (vec != nullptr) {
+    RefFieldsVisitor visitor(this);
     for (auto [arr, size] : *vec) {
       for (size_t i = 0; i < size; i++) {
-        ProcessMarkObject(arr[i].AsMirrorPtr());
+        DCHECK(arr[i].AsMirrorPtr() != nullptr);
+        ColdScanObject(arr[i].AsMirrorPtr(), visitor);
       }
       free(arr);
       ProcessMarkStack();
@@ -5424,17 +5527,19 @@ void MarkCompact::RevokeAllThreadLocalBuffers() {
 class MarkCompact::ScanObjectVisitor {
  public:
   explicit ScanObjectVisitor(MarkCompact* const mark_compact) ALWAYS_INLINE
-      : mark_compact_(mark_compact) {}
+      : mark_compact_(mark_compact),
+        ref_visitor_(mark_compact) {}
 
   void operator()(ObjPtr<mirror::Object> obj) const
       ALWAYS_INLINE
       REQUIRES(Locks::heap_bitmap_lock_)
       REQUIRES_SHARED(Locks::mutator_lock_) {
-    mark_compact_->ScanObject</*kUpdateLiveWords*/ false>(obj.Ptr());
+    mark_compact_->ScanObject</*kUpdateLiveWords=*/false>(obj.Ptr(), ref_visitor_);
   }
 
  private:
   MarkCompact* const mark_compact_;
+  RefFieldsVisitor ref_visitor_;
 };
 
 void MarkCompact::UpdateAndMarkModUnion() {
@@ -5496,7 +5601,7 @@ void MarkCompact::MarkReachableObjects() {
       if (obj != nullptr) {
         size_t obj_size = obj->SizeOf<kDefaultVerifyFlags>();
         if (reinterpret_cast<uintptr_t>(obj) + RoundUp(obj_size, kAlignment) > old_gen_end) {
-          ScanObject</*kUpdateLiveWords=*/true>(obj);
+          ColdScanObject(obj, RefFieldsVisitor(this));
         }
       }
     }
@@ -5611,71 +5716,9 @@ void MarkCompact::MarkingPhase() {
   }
 }
 
-class MarkCompact::RefFieldsVisitor {
- public:
-  ALWAYS_INLINE RefFieldsVisitor(MarkCompact* const mark_compact)
-      : mark_compact_(mark_compact),
-        young_gen_begin_(mark_compact->mid_gen_end_),
-        young_gen_end_(mark_compact->moving_space_end_),
-        dirty_card_(false),
-        // Ideally we should only check for objects outside young-gen. However,
-        // the boundary of young-gen can change later in PrepareForCompaction()
-        // as we need the mid-gen-end to be page-aligned. Since most of the
-        // objects don't have native-roots, it's not too costly to check all
-        // objects being visited during marking.
-        check_native_roots_to_young_gen_(mark_compact->use_generational_) {}
-
-  bool ShouldDirtyCard() const { return dirty_card_; }
-
-  ALWAYS_INLINE void operator()(mirror::Object* obj,
-                                MemberOffset offset,
-                                [[maybe_unused]] bool is_static) const
-      REQUIRES(Locks::heap_bitmap_lock_) REQUIRES_SHARED(Locks::mutator_lock_) {
-    if (kCheckLocks) {
-      Locks::mutator_lock_->AssertSharedHeld(Thread::Current());
-      Locks::heap_bitmap_lock_->AssertExclusiveHeld(Thread::Current());
-    }
-    mirror::Object* ref = obj->GetFieldObject<mirror::Object>(offset);
-    mark_compact_->MarkObject(ref, obj, offset);
-  }
-
-  void operator()(ObjPtr<mirror::Class> klass, ObjPtr<mirror::Reference> ref) const ALWAYS_INLINE
-      REQUIRES(Locks::heap_bitmap_lock_) REQUIRES_SHARED(Locks::mutator_lock_) {
-    mark_compact_->DelayReferenceReferent(klass, ref);
-  }
-
-  void VisitRootIfNonNull(mirror::CompressedReference<mirror::Object>* root) const ALWAYS_INLINE
-      REQUIRES(Locks::heap_bitmap_lock_) REQUIRES_SHARED(Locks::mutator_lock_) {
-    if (!root->IsNull()) {
-      VisitRoot(root);
-    }
-  }
-
-  void VisitRoot(mirror::CompressedReference<mirror::Object>* root) const
-      REQUIRES(Locks::heap_bitmap_lock_)
-      REQUIRES_SHARED(Locks::mutator_lock_) {
-    if (kCheckLocks) {
-      Locks::mutator_lock_->AssertSharedHeld(Thread::Current());
-      Locks::heap_bitmap_lock_->AssertExclusiveHeld(Thread::Current());
-    }
-    mirror::Object* ref = root->AsMirrorPtr();
-    mark_compact_->MarkObject(ref);
-    if (check_native_roots_to_young_gen_) {
-      dirty_card_ |= reinterpret_cast<uint8_t*>(ref) >= young_gen_begin_ &&
-                     reinterpret_cast<uint8_t*>(ref) < young_gen_end_;
-    }
-  }
-
- private:
-  MarkCompact* const mark_compact_;
-  uint8_t* const young_gen_begin_;
-  uint8_t* const young_gen_end_;
-  mutable bool dirty_card_;
-  const bool check_native_roots_to_young_gen_;
-};
-
 template <size_t kAlignment>
 size_t MarkCompact::LiveWordsBitmap<kAlignment>::LiveBytesInBitmapWord(size_t chunk_idx) const {
+  static_assert(kBitmapWordsPerVectorWord == 1);
   const size_t index = chunk_idx * kBitmapWordsPerVectorWord;
   size_t words = 0;
   for (uint32_t i = 0; i < kBitmapWordsPerVectorWord; i++) {
@@ -5687,6 +5730,7 @@ size_t MarkCompact::LiveWordsBitmap<kAlignment>::LiveBytesInBitmapWord(size_t ch
 void MarkCompact::UpdateLivenessInfo(mirror::Object* obj, size_t obj_size) {
   DCHECK(obj != nullptr);
   DCHECK_EQ(obj_size, obj->SizeOf<kDefaultVerifyFlags>());
+  DCHECK_EQ(Thread::Current(), thread_running_gc_);
   uintptr_t obj_begin = reinterpret_cast<uintptr_t>(obj);
   UpdateClassAfterObjectMap(obj);
   size_t size = RoundUp(obj_size, kAlignment);
@@ -5699,64 +5743,95 @@ void MarkCompact::UpdateLivenessInfo(mirror::Object* obj, size_t obj_size) {
   chunk_info_vec_[chunk_idx] += first_chunk_portion;
   DCHECK_LE(chunk_info_vec_[chunk_idx], kOffsetChunkSize)
       << "first_chunk_portion:" << first_chunk_portion
-      << " obj-size:" << RoundUp(obj_size, kAlignment);
+      << " obj-size:" << RoundUp(obj_size, kAlignment) << mirror::Object::PrettyTypeOf(obj);
+  DCHECK_EQ(chunk_info_vec_[chunk_idx], live_words_bitmap_->LiveBytesInBitmapWord(chunk_idx))
+      << "first_chunk_portion:" << first_chunk_portion
+      << " obj-size:" << RoundUp(obj_size, kAlignment) << mirror::Object::PrettyTypeOf(obj)
+      << " bitmap-word:" << std::hex << live_words_bitmap_->GetWord(chunk_idx);
   chunk_idx++;
   DCHECK_LE(first_chunk_portion, size);
   for (size -= first_chunk_portion; size > kOffsetChunkSize; size -= kOffsetChunkSize) {
-    DCHECK_EQ(chunk_info_vec_[chunk_idx], 0u);
-    chunk_info_vec_[chunk_idx++] = kOffsetChunkSize;
+    DCHECK_EQ(chunk_info_vec_[chunk_idx], 0u)
+        << "chunk_idx:" << chunk_idx << "size:" << size
+        << " obj-size:" << RoundUp(obj_size, kAlignment) << mirror::Object::PrettyTypeOf(obj);
+    chunk_info_vec_[chunk_idx] = kOffsetChunkSize;
+    DCHECK_EQ(chunk_info_vec_[chunk_idx], live_words_bitmap_->LiveBytesInBitmapWord(chunk_idx))
+        << "chunk_idx:" << chunk_idx << " size:" << size
+        << " obj-size:" << RoundUp(obj_size, kAlignment) << " " << mirror::Object::PrettyTypeOf(obj)
+        << " bitmap-word:" << std::hex << live_words_bitmap_->GetWord(chunk_idx);
+    chunk_idx++;
   }
+  // It's safe to go past end of array as we allocate extra word in InitializeInfoMap().
   chunk_info_vec_[chunk_idx] += size;
-  DCHECK_LE(chunk_info_vec_[chunk_idx], kOffsetChunkSize)
-      << "size:" << size << " obj-size:" << RoundUp(obj_size, kAlignment);
+  if (chunk_idx < vector_length_) {
+    DCHECK_LE(chunk_info_vec_[chunk_idx], kOffsetChunkSize)
+        << "chunk_idx:" << chunk_idx << " size:" << size
+        << " obj-size:" << RoundUp(obj_size, kAlignment) << mirror::Object::PrettyTypeOf(obj);
+    DCHECK_EQ(chunk_info_vec_[chunk_idx], live_words_bitmap_->LiveBytesInBitmapWord(chunk_idx))
+        << "chunk_idx:" << chunk_idx << "size:" << size
+        << " obj-size:" << RoundUp(obj_size, kAlignment) << mirror::Object::PrettyTypeOf(obj)
+        << " bitmap-word:" << std::hex << live_words_bitmap_->GetWord(chunk_idx);
+  } else {
+    DCHECK_EQ(chunk_idx, vector_length_);
+    DCHECK_EQ(size, 0u) << " chunk_idx:" << chunk_idx;
+  }
+}
+
+mirror::Class* MarkCompact::ReloadScanObjClass(mirror::Object* obj) {
+  // It was seen in ConcurrentCopying GC that after a small wait when we reload
+  // the class pointer, it turns out to be a valid class object. So as a workaround,
+  // we can continue execution and log an error that this happened.
+  mirror::Class* klass;
+  for (size_t i = 0; i < 1000; i++) {
+    // Wait for 1ms at a time. Don't wait for more than 1 second in total.
+    usleep(1000);
+    klass = obj->GetClass<kVerifyNone, kWithoutReadBarrier>();
+    if (klass != nullptr) {
+      // There is no point continuing if an invalid class is found.
+      if (!heap_->GetVerification()->IsValidClass(klass)) {
+        LOG(FATAL_WITHOUT_ABORT) << "Invalid klass got stored (after " << i << " re-loads";
+        break;
+      }
+      return klass;
+    }
+  }
+  // It must be heap corruption.
+  LOG(FATAL_WITHOUT_ABORT) << "klass pointer for obj: " << obj << " found to be " << klass
+                           << " black_dense_end: " << static_cast<void*>(black_dense_end_)
+                           << " mid_gen_end: " << static_cast<void*>(mid_gen_end_)
+                           << " prev_post_compact_end: " << prev_post_compact_end_
+                           << " prev_black_allocations_begin: " << prev_black_allocations_begin_
+                           << " prev_black_dense_end: " << prev_black_dense_end_
+                           << " prev_moving_space_end_at_compaction: "
+                           << prev_moving_space_end_at_compaction_
+                           << " prev_gc_young: " << prev_gc_young_
+                           << " prev_gc_performed_compaction: " << prev_gc_performed_compaction_;
+  heap_->GetVerification()->LogHeapCorruption(
+      obj, mirror::Object::ClassOffset(), klass, /*fatal=*/true);
+  UNREACHABLE();
 }
 
 template <bool kUpdateLiveWords>
-void MarkCompact::ScanObject(mirror::Object* obj) {
+void MarkCompact::ScanObject(mirror::Object* obj, const RefFieldsVisitor& visitor) {
   mirror::Class* klass = obj->GetClass<kVerifyNone, kWithoutReadBarrier>();
   // TODO(lokeshgidra): Remove the following condition once b/373609505 is fixed.
   if (UNLIKELY(klass == nullptr)) {
-    // It was seen in ConcurrentCopying GC that after a small wait when we reload
-    // the class pointer, it turns out to be a valid class object. So as a workaround,
-    // we can continue execution and log an error that this happened.
-    for (size_t i = 0; i < 1000; i++) {
-      // Wait for 1ms at a time. Don't wait for more than 1 second in total.
-      usleep(1000);
-      klass = obj->GetClass<kVerifyNone, kWithoutReadBarrier>();
-      if (klass != nullptr) {
-        break;
-      }
-    }
-    if (klass == nullptr) {
-      // It must be heap corruption.
-      LOG(FATAL_WITHOUT_ABORT) << "klass pointer for obj: " << obj << " found to be null."
-                               << " black_dense_end: " << static_cast<void*>(black_dense_end_)
-                               << " mid_gen_end: " << static_cast<void*>(mid_gen_end_)
-                               << " prev_post_compact_end: " << prev_post_compact_end_
-                               << " prev_black_allocations_begin: " << prev_black_allocations_begin_
-                               << " prev_black_dense_end: " << prev_black_dense_end_
-                               << " prev_moving_space_end_at_compaction: "
-                               << prev_moving_space_end_at_compaction_
-                               << " prev_gc_young: " << prev_gc_young_
-                               << " prev_gc_performed_compaction: "
-                               << prev_gc_performed_compaction_;
-      heap_->GetVerification()->LogHeapCorruption(
-          obj, mirror::Object::ClassOffset(), klass, /*fatal=*/true);
-    }
+    klass = ReloadScanObjClass(obj);
   }
   // The size of `obj` is used both here (to update `bytes_scanned_`) and in
   // `UpdateLivenessInfo`. As fetching this value can be expensive, do it once
   // here and pass that information to `UpdateLivenessInfo`.
-  size_t obj_size = obj->SizeOf<kDefaultVerifyFlags>();
+  size_t obj_size = obj->SizeOf<kDefaultVerifyFlags>(klass);
   bytes_scanned_ += obj_size;
 
-  RefFieldsVisitor visitor(this);
   DCHECK(IsMarked(obj)) << "Scanning marked object " << obj << "\n" << heap_->DumpSpaces();
   if (kUpdateLiveWords && HasAddress(obj)) {
     UpdateLivenessInfo(obj, obj_size);
     freed_objects_--;
   }
-  obj->VisitReferences(visitor, visitor);
+  visitor.Reset();
+  obj->FastVisitReferences</*kVisitNativeRoots=*/true, kVerifyNone, kWithoutReadBarrier>(visitor,
+                                                                                         visitor);
   // old-gen cards for objects containing references to mid-gen needs to be kept
   // dirty for re-scan in the next GC cycle. We take care of that majorly during
   // compaction-phase as that enables us to implicitly take care of
@@ -5775,9 +5850,12 @@ void MarkCompact::ScanObject(mirror::Object* obj) {
 void MarkCompact::ProcessMarkStack() {
   // TODO: eventually get rid of this as we now call this function quite a few times.
   TimingLogger::ScopedTiming t(__FUNCTION__, GetTimings());
+  RefFieldsVisitor visitor(this);
   // TODO: try prefetch like in CMS
   while (!mark_stack_->IsEmpty()) {
-    ProcessMarkObject(mark_stack_->PopBack());
+    mirror::Object* obj = mark_stack_->PopBack();
+    DCHECK(obj != nullptr);
+    ScanObject</*kUpdateLiveWords=*/true>(obj, visitor);
   }
 }
 
@@ -5833,7 +5911,7 @@ inline bool MarkCompact::MarkObjectNonNullNoPush(mirror::Object* obj,
     return false;
   } else {
     // Must be a large-object space, otherwise it's a case of heap corruption.
-    if (!IsAlignedParam(obj, space::LargeObjectSpace::ObjectAlignment())) {
+    if (UNLIKELY(!IsAlignedParam(obj, space::LargeObjectSpace::ObjectAlignment()))) {
       // Objects in large-object space are aligned to the large-object alignment.
       // So if we have an object which doesn't belong to any space and is not
       // page-aligned as well, then it's memory corruption.
@@ -6193,6 +6271,42 @@ void MarkCompact::FinishPhase(bool performed_compaction) {
           card_table->MarkCard(obj);
         }
       }
+      // We can re-create 'first_objs_moving_space_' entries corresponding to
+      // old-gen pages in PrepareForCompaction(). However, that requires
+      // fetching obj-size in InitNonMovingFirstObjects() which means almost
+      // every page in old-gen gets accessed, resulting in quite a few swap-ins.
+      // We can easily avoid that if we retain the entries and keep it updated as
+      // old-gen size increases.
+      if (LIKELY(performed_compaction && old_gen_end_ < mid_gen_end_)) {
+        size_t start_idx = DivideByPageSize(old_gen_end_ - moving_space_begin_);
+        size_t end_idx = DivideByPageSize(mid_gen_end_ - moving_space_begin_);
+        // This is the best and likely case. We already have entries for pages
+        // in [old-gen-end, mid-gen-end) range, but they are with pre-compact
+        // addresses of first-objects. Simply update with post-compact address.
+        for (size_t i = 0; i < start_idx; i++) {
+          mirror::Object* obj = first_objs_moving_space_[i].AsMirrorPtr();
+          if (obj != nullptr) {
+            DCHECK_LT(obj, reinterpret_cast<mirror::Object*>(old_gen_end_));
+            DCHECK(moving_space_bitmap_->Test(obj));
+          }
+        }
+        for (size_t i = start_idx; i < end_idx; i++) {
+          mirror::Object* obj = first_objs_moving_space_[i].AsMirrorPtr();
+          DCHECK(obj != nullptr);
+          mirror::Object* post_compact_obj =
+              PostCompactAddress(obj, old_gen_end_, moving_space_end_);
+          DCHECK_LT(post_compact_obj, reinterpret_cast<mirror::Object*>(mid_gen_end_));
+          first_objs_moving_space_[i].Assign(post_compact_obj);
+        }
+      } else {
+        // We may have not prepared data structures required for computing
+        // post-compact addresses in this case. So populate using obj-size.
+        // Since this is an unlikely case, it doesn't impact performance.
+        InitNonMovingFirstObjects(reinterpret_cast<uintptr_t>(moving_space_begin_),
+                                  reinterpret_cast<uintptr_t>(mid_gen_end_),
+                                  moving_space_bitmap_,
+                                  first_objs_moving_space_);
+      }
     }
     dirty_cards_later_vec_.clear();
 
@@ -6261,7 +6375,15 @@ void MarkCompact::FinishPhase(bool performed_compaction) {
   CHECK(mark_stack_->IsEmpty());  // Ensure that the mark stack is empty.
   mark_stack_->Reset();
   compaction_buffers_map_.MadviseDontNeedAndZero();
-  info_map_.MadviseDontNeedAndZero();
+  if (use_generational_) {
+    // Retain 'first_objs_moving_space_' entries corresponding to old-gen pages
+    // for next young GC.
+    uint8_t* begin = info_map_.Begin() +
+                     DivideByPageSize(old_gen_end_ - moving_space_begin_) * sizeof(ObjReference);
+    ZeroAndReleaseMemory(begin, info_map_.End() - begin);
+  } else {
+    info_map_.MadviseDontNeedAndZero();
+  }
   live_words_bitmap_->ClearBitmap();
   DCHECK_EQ(thread_running_gc_, Thread::Current());
   if (kIsDebugBuild) {

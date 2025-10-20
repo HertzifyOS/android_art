@@ -66,7 +66,7 @@ inline Location NEONEncodableConstantOrRegister(HInstruction* constant, HInstruc
     return Location::ConstantLocation(constant);
   }
 
-  return Location::RequiresRegister();
+  return Location::RequiresCoreRegister();
 }
 
 // Returns whether dot product instructions should be emitted.
@@ -178,7 +178,7 @@ void LocationsBuilderARM64Neon::VisitVecExtractScalar(HVecExtractScalar* instruc
     case DataType::Type::kInt32:
     case DataType::Type::kInt64:
       locations->SetInAt(0, Location::RequiresFpuRegister());
-      locations->SetOut(Location::RequiresRegister());
+      locations->SetOut(Location::RequiresCoreRegister());
       break;
     case DataType::Type::kFloat32:
     case DataType::Type::kFloat64:
@@ -1007,7 +1007,7 @@ void LocationsBuilderARM64Neon::VisitVecSetScalars(HVecSetScalars* instruction) 
     case DataType::Type::kInt32:
     case DataType::Type::kInt64:
       locations->SetInAt(0, is_zero ? Location::ConstantLocation(input)
-                                    : Location::RequiresRegister());
+                                    : Location::RequiresCoreRegister());
       locations->SetOut(Location::RequiresFpuRegister());
       break;
     case DataType::Type::kFloat32:
@@ -1405,7 +1405,7 @@ static void CreateVecMemLocations(ArenaAllocator* allocator,
     case DataType::Type::kInt64:
     case DataType::Type::kFloat32:
     case DataType::Type::kFloat64:
-      locations->SetInAt(0, Location::RequiresRegister());
+      locations->SetInAt(0, Location::RequiresCoreRegister());
       locations->SetInAt(1, Location::RegisterOrConstant(instruction->InputAt(1)));
       if (is_load) {
         locations->SetOut(Location::RequiresFpuRegister());
@@ -1705,17 +1705,16 @@ template <bool is_save>
 void SaveRestoreLiveRegistersHelperNeonImpl(CodeGeneratorARM64* codegen,
                                             LocationSummary* locations,
                                             int64_t spill_offset) {
-  const uint32_t core_spills = codegen->GetSlowPathSpills(locations, /* core_registers= */ true);
-  const uint32_t fp_spills = codegen->GetSlowPathSpills(locations, /* core_registers= */ false);
-  DCHECK(helpers::ArtVixlRegCodeCoherentForRegSet(core_spills,
+  const RegisterSet spills = codegen->GetSlowPathSpills(locations);
+  DCHECK(helpers::ArtVixlRegCodeCoherentForRegSet(spills.GetCoreRegisterSet(),
                                                   codegen->GetNumberOfCoreRegisters(),
-                                                  fp_spills,
+                                                  spills.GetFpuRegisterSet(),
                                                   codegen->GetNumberOfFloatingPointRegisters()));
 
-  CPURegList core_list = CPURegList(CPURegister::kRegister, kXRegSize, core_spills);
+  CPURegList core_list(CPURegister::kRegister, kXRegSize, spills.GetCoreRegisterSet());
   const unsigned v_reg_size_in_bits = codegen->GetSlowPathFPWidth() * 8;
   DCHECK_LE(codegen->GetSIMDRegisterWidth(), kQRegSizeInBytes);
-  CPURegList fp_list = CPURegList(CPURegister::kVRegister, v_reg_size_in_bits, fp_spills);
+  CPURegList fp_list(CPURegister::kVRegister, v_reg_size_in_bits, spills.GetFpuRegisterSet());
 
   MacroAssembler* masm = codegen->GetVIXLAssembler();
   UseScratchRegisterScope temps(masm);

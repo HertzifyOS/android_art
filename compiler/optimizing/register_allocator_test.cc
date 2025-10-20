@@ -21,7 +21,6 @@
 #include "base/macros.h"
 #include "builder.h"
 #include "code_generator.h"
-#include "code_generator_x86.h"
 #include "com_android_art_flags.h"
 #include "dex/dex_file.h"
 #include "dex/dex_file_types.h"
@@ -43,10 +42,20 @@ class RegisterAllocatorTest : public CommonCompilerTest, public OptimizingUnitTe
   // Define a shortcut for the `kLivenessPositionsPerInstruction`.
   static constexpr size_t kLppi = kLivenessPositionsPerInstruction;
 
-  void SetUp() override {
-    CommonCompilerTest::SetUp();
-    // This test is using the x86 ISA.
-    compiler_options_ = CommonCompilerTest::CreateCompilerOptions(InstructionSet::kX86, "default");
+  std::unique_ptr<CodeGenerator> CreateCodeGenerator(
+      HGraph* graph, InstructionSet instruction_set = InstructionSet::kNone) {
+    if (instruction_set == InstructionSet::kNone) {
+      instruction_set = kRuntimeISA;
+    }
+    if (instruction_set == InstructionSet::kArm) {
+      instruction_set = InstructionSet::kThumb2;
+    }
+    compiler_options_ = CommonCompilerTest::CreateCompilerOptions(instruction_set, "default");
+    CHECK(compiler_options_ != nullptr);
+    CHECK_EQ(instruction_set, compiler_options_->GetInstructionSet());
+    std::unique_ptr<CodeGenerator> codegen = CodeGenerator::Create(graph, *compiler_options_);
+    CHECK_IMPLIES(codegen != nullptr, codegen->GetInstructionSet() == instruction_set);
+    return codegen;
   }
 
   // Helper functions that make use of the OptimizingUnitTest's members.
@@ -63,19 +72,30 @@ class RegisterAllocatorTest : public CommonCompilerTest, public OptimizingUnitTe
                                                 /* number_of_out_slots= */ 0u,
                                                 codegen,
                                                 /*liveness=*/ nullptr,
-                                                RegisterAllocator::RegisterType::kCoreRegister,
+                                                PhysicalRegisterType::kCoreRegister,
                                                 /* log_fatal_on_failure= */ false);
+  }
+
+  void OverrideOutput(LocationSummary* locations,
+                      Location out,
+                      Location::OutputOverlap output_overlaps = Location::kOutputOverlap) {
+    locations->output_ = out;
+    locations->output_overlaps_ = output_overlaps;
   }
 
   template <typename RegType>
   void BlockCoreRegistersExcept(CodeGenerator* codegen, std::initializer_list<RegType> allowed) {
     size_t number_of_core_registers = codegen->GetNumberOfCoreRegisters();
     uint32_t blocked_core_registers = MaxInt<uint32_t>(number_of_core_registers);
-    for (x86::Register reg : allowed) {
+    for (RegType reg : allowed) {
       CHECK_LT(reg, number_of_core_registers);
       blocked_core_registers &= ~(1u << reg);
     }
-    codegen->blocked_core_registers_ = blocked_core_registers;
+    RegisterSet blocked_registers = RegisterSet::Empty();
+    blocked_registers.AddCoreRegisterSet(blocked_core_registers);
+    blocked_registers.AddFpuRegisterSet(codegen->blocked_registers_.GetFpuRegisterSet());
+    blocked_registers.AddVecRegisterSet(codegen->blocked_registers_.GetVecRegisterSet());
+    codegen->blocked_registers_ = blocked_registers;
   }
 
   void TestFreeUntil(bool special_first);
@@ -88,11 +108,12 @@ class RegisterAllocatorTest : public CommonCompilerTest, public OptimizingUnitTe
 
 bool RegisterAllocatorTest::Check(const std::vector<uint16_t>& data) {
   HGraph* graph = CreateCFG(data);
-  x86::CodeGeneratorX86 codegen(graph, *compiler_options_);
-  SsaLivenessAnalysis liveness(graph, &codegen, GetScopedAllocator());
+  std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph);
+  CHECK(codegen != nullptr);
+  SsaLivenessAnalysis liveness(graph, codegen.get(), GetScopedAllocator());
   liveness.Analyze();
   std::unique_ptr<RegisterAllocator> register_allocator =
-      RegisterAllocator::Create(GetScopedAllocator(), &codegen, liveness);
+      RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
   register_allocator->AllocateRegisters();
   return register_allocator->Validate(false);
 }
@@ -102,76 +123,79 @@ bool RegisterAllocatorTest::Check(const std::vector<uint16_t>& data) {
  * tests are based on this validation method.
  */
 TEST_F(RegisterAllocatorTest, ValidateIntervals) {
-  HGraph* graph = CreateGraph();
-  x86::CodeGeneratorX86 codegen(graph, *compiler_options_);
+  CreateGraph();
+  std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+  if (codegen == nullptr) {
+    GTEST_SKIP() << "X86 codegen is unavailable.";
+  }
   ScopedArenaVector<LiveInterval*> intervals(GetScopedAllocator()->Adapter());
 
   // Test with two intervals of the same range.
   {
     static constexpr size_t ranges[][2] = {{0, 42}};
-    intervals.push_back(BuildInterval(ranges, arraysize(ranges), GetScopedAllocator(), 0));
-    intervals.push_back(BuildInterval(ranges, arraysize(ranges), GetScopedAllocator(), 1));
-    ASSERT_TRUE(ValidateIntervals(intervals, codegen));
+    intervals.push_back(BuildInterval(ranges, arraysize(ranges), GetScopedAllocator(), 1u << 0));
+    intervals.push_back(BuildInterval(ranges, arraysize(ranges), GetScopedAllocator(), 1u << 1));
+    ASSERT_TRUE(ValidateIntervals(intervals, *codegen));
 
-    intervals[1]->SetRegister(0);
-    ASSERT_FALSE(ValidateIntervals(intervals, codegen));
+    intervals[1]->SetRegisters(1u << 0);
+    ASSERT_FALSE(ValidateIntervals(intervals, *codegen));
     intervals.clear();
   }
 
   // Test with two non-intersecting intervals.
   {
     static constexpr size_t ranges1[][2] = {{0, 42}};
-    intervals.push_back(BuildInterval(ranges1, arraysize(ranges1), GetScopedAllocator(), 0));
+    intervals.push_back(BuildInterval(ranges1, arraysize(ranges1), GetScopedAllocator(), 1u << 0));
     static constexpr size_t ranges2[][2] = {{42, 43}};
-    intervals.push_back(BuildInterval(ranges2, arraysize(ranges2), GetScopedAllocator(), 1));
-    ASSERT_TRUE(ValidateIntervals(intervals, codegen));
+    intervals.push_back(BuildInterval(ranges2, arraysize(ranges2), GetScopedAllocator(), 1u << 1));
+    ASSERT_TRUE(ValidateIntervals(intervals, *codegen));
 
-    intervals[1]->SetRegister(0);
-    ASSERT_TRUE(ValidateIntervals(intervals, codegen));
+    intervals[1]->SetRegisters(1u << 0);
+    ASSERT_TRUE(ValidateIntervals(intervals, *codegen));
     intervals.clear();
   }
 
   // Test with two non-intersecting intervals, with one with a lifetime hole.
   {
     static constexpr size_t ranges1[][2] = {{0, 42}, {45, 48}};
-    intervals.push_back(BuildInterval(ranges1, arraysize(ranges1), GetScopedAllocator(), 0));
+    intervals.push_back(BuildInterval(ranges1, arraysize(ranges1), GetScopedAllocator(), 1u << 0));
     static constexpr size_t ranges2[][2] = {{42, 43}};
-    intervals.push_back(BuildInterval(ranges2, arraysize(ranges2), GetScopedAllocator(), 1));
-    ASSERT_TRUE(ValidateIntervals(intervals, codegen));
+    intervals.push_back(BuildInterval(ranges2, arraysize(ranges2), GetScopedAllocator(), 1u << 1));
+    ASSERT_TRUE(ValidateIntervals(intervals, *codegen));
 
-    intervals[1]->SetRegister(0);
-    ASSERT_TRUE(ValidateIntervals(intervals, codegen));
+    intervals[1]->SetRegisters(1u << 0);
+    ASSERT_TRUE(ValidateIntervals(intervals, *codegen));
     intervals.clear();
   }
 
   // Test with intersecting intervals.
   {
     static constexpr size_t ranges1[][2] = {{0, 42}, {44, 48}};
-    intervals.push_back(BuildInterval(ranges1, arraysize(ranges1), GetScopedAllocator(), 0));
+    intervals.push_back(BuildInterval(ranges1, arraysize(ranges1), GetScopedAllocator(), 1u << 0));
     static constexpr size_t ranges2[][2] = {{42, 47}};
-    intervals.push_back(BuildInterval(ranges2, arraysize(ranges2), GetScopedAllocator(), 1));
-    ASSERT_TRUE(ValidateIntervals(intervals, codegen));
+    intervals.push_back(BuildInterval(ranges2, arraysize(ranges2), GetScopedAllocator(), 1u << 1));
+    ASSERT_TRUE(ValidateIntervals(intervals, *codegen));
 
-    intervals[1]->SetRegister(0);
-    ASSERT_FALSE(ValidateIntervals(intervals, codegen));
+    intervals[1]->SetRegisters(1u << 0);
+    ASSERT_FALSE(ValidateIntervals(intervals, *codegen));
     intervals.clear();
   }
 
   // Test with siblings.
   {
     static constexpr size_t ranges1[][2] = {{0, 42}, {44, 48}};
-    intervals.push_back(BuildInterval(ranges1, arraysize(ranges1), GetScopedAllocator(), 0));
+    intervals.push_back(BuildInterval(ranges1, arraysize(ranges1), GetScopedAllocator(), 1u << 0));
     intervals[0]->SplitAt(43);
     static constexpr size_t ranges2[][2] = {{42, 47}};
-    intervals.push_back(BuildInterval(ranges2, arraysize(ranges2), GetScopedAllocator(), 1));
-    ASSERT_TRUE(ValidateIntervals(intervals, codegen));
+    intervals.push_back(BuildInterval(ranges2, arraysize(ranges2), GetScopedAllocator(), 1u << 1));
+    ASSERT_TRUE(ValidateIntervals(intervals, *codegen));
 
-    intervals[1]->SetRegister(0);
+    intervals[1]->SetRegisters(1u << 0);
     // Sibling of the first interval has no register allocated to it.
-    ASSERT_TRUE(ValidateIntervals(intervals, codegen));
+    ASSERT_TRUE(ValidateIntervals(intervals, *codegen));
 
-    intervals[0]->GetNextSibling()->SetRegister(0);
-    ASSERT_FALSE(ValidateIntervals(intervals, codegen));
+    intervals[0]->GetNextSibling()->SetRegisters(1u << 0);
+    ASSERT_FALSE(ValidateIntervals(intervals, *codegen));
   }
 }
 
@@ -321,11 +345,12 @@ TEST_F(RegisterAllocatorTest, Loop3) {
     Instruction::GOTO | 0xF900);
 
   HGraph* graph = CreateCFG(data);
-  x86::CodeGeneratorX86 codegen(graph, *compiler_options_);
-  SsaLivenessAnalysis liveness(graph, &codegen, GetScopedAllocator());
+  std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_);
+  CHECK(codegen != nullptr);
+  SsaLivenessAnalysis liveness(graph, codegen.get(), GetScopedAllocator());
   liveness.Analyze();
   std::unique_ptr<RegisterAllocator> register_allocator =
-      RegisterAllocator::Create(GetScopedAllocator(), &codegen, liveness);
+      RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
   register_allocator->AllocateRegisters();
   ASSERT_TRUE(register_allocator->Validate(false));
 
@@ -334,13 +359,13 @@ TEST_F(RegisterAllocatorTest, Loop3) {
 
   LiveInterval* phi_interval = phi->GetLiveInterval();
   LiveInterval* loop_update = phi->InputAt(1)->GetLiveInterval();
-  ASSERT_TRUE(phi_interval->HasRegister());
-  ASSERT_TRUE(loop_update->HasRegister());
-  ASSERT_NE(phi_interval->GetRegister(), loop_update->GetRegister());
+  ASSERT_TRUE(phi_interval->HasRegisters());
+  ASSERT_TRUE(loop_update->HasRegisters());
+  ASSERT_NE(phi_interval->GetRegisters(), loop_update->GetRegisters());
 
   HBasicBlock* return_block = graph->GetBlocks()[3];
   HReturn* ret = return_block->GetLastInstruction()->AsReturn();
-  ASSERT_EQ(phi_interval->GetRegister(), ret->InputAt(0)->GetLiveInterval()->GetRegister());
+  ASSERT_EQ(phi_interval->GetRegisters(), ret->InputAt(0)->GetLiveInterval()->GetRegisters());
 }
 
 TEST_F(RegisterAllocatorTest, FirstRegisterUse) {
@@ -352,8 +377,11 @@ TEST_F(RegisterAllocatorTest, FirstRegisterUse) {
     Instruction::RETURN_VOID);
 
   HGraph* graph = CreateCFG(data);
-  x86::CodeGeneratorX86 codegen(graph, *compiler_options_);
-  SsaLivenessAnalysis liveness(graph, &codegen, GetScopedAllocator());
+  std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+  if (codegen == nullptr) {
+    GTEST_SKIP() << "X86 codegen is unavailable.";
+  }
+  SsaLivenessAnalysis liveness(graph, codegen.get(), GetScopedAllocator());
   liveness.Analyze();
 
   HXor* first_xor = graph->GetBlocks()[1]->GetFirstInstruction()->AsXor();
@@ -364,7 +392,8 @@ TEST_F(RegisterAllocatorTest, FirstRegisterUse) {
   ASSERT_TRUE(interval->GetNextSibling() == nullptr);
 
   // We need a register for the output of the instruction.
-  ASSERT_EQ(interval->FirstRegisterUse(), first_xor->GetLifetimePosition());
+  ASSERT_TRUE(interval->RequiresRegisterForDefinitionAt(interval->GetStart()));
+  ASSERT_EQ(interval->FirstRegisterUse(), last_xor->GetLifetimePosition());
 
   // Split at the next instruction.
   interval = interval->SplitAt(first_xor->GetLifetimePosition() + 2);
@@ -377,6 +406,23 @@ TEST_F(RegisterAllocatorTest, FirstRegisterUse) {
   ASSERT_EQ(interval->FirstRegisterUse(), kNoLifetime);
   // And the new interval has it for the last add.
   ASSERT_EQ(new_interval->FirstRegisterUse(), last_xor->GetLifetimePosition());
+}
+
+TEST_F(RegisterAllocatorTest, FpuSameAsFirstInput) {
+  HBasicBlock* block = InitEntryMainExitGraphWithReturnVoid();
+  HInstruction* param1 = MakeParam(DataType::Type::kFloat32);
+  HNeg* neg = MakeUnOp<HNeg>(block, DataType::Type::kFloat32, param1);
+  LocationSummary* locations = LocationSummary::CreateNoCall(GetAllocator(), neg);
+  locations->SetInAt(0, Location::FpuRegister(0));
+  locations->SetOut(Location::SameAsFirstInput());
+  static constexpr size_t kLifetimePosition = 32u;
+  neg->SetLifetimePosition(kLifetimePosition);
+  LiveInterval* live_interval = LiveInterval::MakeInterval(
+      GetScopedAllocator(), DataType::Type::kFloat32, /*is_pair=*/ false, neg);
+  live_interval->AddRange(kLifetimePosition, kLifetimePosition + 1);
+  // This used to fail a `DCHECK()`.
+  bool requires_reg = live_interval->RequiresRegisterForDefinitionAt(kLifetimePosition);
+  EXPECT_TRUE(requires_reg);
 }
 
 TEST_F(RegisterAllocatorTest, DeadPhi) {
@@ -403,11 +449,12 @@ TEST_F(RegisterAllocatorTest, DeadPhi) {
 
   HGraph* graph = CreateCFG(data);
   SsaDeadPhiElimination(graph).Run();
-  x86::CodeGeneratorX86 codegen(graph, *compiler_options_);
-  SsaLivenessAnalysis liveness(graph, &codegen, GetScopedAllocator());
+  std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph);
+  CHECK(codegen != nullptr);
+  SsaLivenessAnalysis liveness(graph, codegen.get(), GetScopedAllocator());
   liveness.Analyze();
   std::unique_ptr<RegisterAllocator> register_allocator =
-      RegisterAllocator::Create(GetScopedAllocator(), &codegen, liveness);
+      RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
   register_allocator->AllocateRegisters();
   ASSERT_TRUE(register_allocator->Validate(false));
 }
@@ -425,11 +472,14 @@ void RegisterAllocatorTest::TestFreeUntil(bool special_first) {
   HAdd* add = MakeBinOp<HAdd>(block, DataType::Type::kInt32, const0, const0);
   HInstruction* placeholder1 = MakeUnOp<HNeg>(block, DataType::Type::kInt32, const0);
   HInstruction* placeholder2 = MakeUnOp<HNeg>(block, DataType::Type::kInt32, const0);
-  HInstruction* ret = MakeReturn(block, add);
+  MakeReturn(block, add);
 
   graph_->ComputeDominanceInformation();
-  x86::CodeGeneratorX86 codegen(graph_, *compiler_options_);
-  SsaLivenessAnalysis liveness(graph_, &codegen, GetScopedAllocator());
+  std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+  if (codegen == nullptr) {
+    GTEST_SKIP() << "X86 codegen is unavailable.";
+  }
+  SsaLivenessAnalysis liveness(graph_, codegen.get(), GetScopedAllocator());
   liveness.Analyze();
 
   // Avoid allocating the register for the `const0` when used by the `add`.
@@ -451,7 +501,10 @@ void RegisterAllocatorTest::TestFreeUntil(bool special_first) {
     placeholder->SetBlock(block);
   }
 
-  RegisterAllocatorLinearScan register_allocator(GetScopedAllocator(), &codegen, liveness);
+  // Set just one register available to make all intervals compete for the same.
+  BlockCoreRegistersExcept(codegen.get(), {x86::EAX});
+
+  RegisterAllocatorLinearScan register_allocator(GetScopedAllocator(), codegen.get(), liveness);
 
   // Test two variants, so that we hit the desired configuration once, no matter the order
   // in which the register allocator inserts the blocking intervals into inactive intervals.
@@ -460,20 +513,17 @@ void RegisterAllocatorTest::TestFreeUntil(bool special_first) {
   register_allocator.block_registers_for_call_interval_->AddRange(call_pos, call_pos + 1);
   register_allocator.block_registers_special_interval_->AddRange(special_pos, special_pos + 1);
 
-  // Set just one register available to make all intervals compete for the same.
-  BlockCoreRegistersExcept(&codegen, {x86::EAX});
-
   register_allocator.AllocateRegistersInternal();
 
-  std::pair<size_t, int> expected_add_start_and_reg[] = {
-    {add->GetLifetimePosition() + kLivenessPositionOfNonOverlappingOutput, 0},
-    {blocking_pos1, -1},
+  std::pair<size_t, int> expected_add_start_and_regs[] = {
+    {add->GetLifetimePosition() + kLivenessPositionOfNonOverlappingOutput, 1u << 0},
+    {blocking_pos1, kNoRegisters},
   };
   LiveInterval* li = add->GetLiveInterval();
-  for (const std::pair<size_t, int>& expected_start_and_reg : expected_add_start_and_reg) {
+  for (const std::pair<size_t, int>& expected_start_and_regs : expected_add_start_and_regs) {
     ASSERT_TRUE(li != nullptr);
-    ASSERT_EQ(expected_start_and_reg.first, li->GetStart());
-    ASSERT_EQ(expected_start_and_reg.second, li->GetRegister());
+    ASSERT_EQ(expected_start_and_regs.first, li->GetStart());
+    ASSERT_EQ(expected_start_and_regs.second, li->GetRegisters());
     li = li->GetNextSibling();
   }
   ASSERT_TRUE(li == nullptr);
@@ -511,72 +561,79 @@ TEST_F(RegisterAllocatorTest, PhiHint) {
 
   {
     BuildIfElseWithPhi(&phi, &input1, &input2);
-    x86::CodeGeneratorX86 codegen(graph_, *compiler_options_);
-    SsaLivenessAnalysis liveness(graph_, &codegen, GetScopedAllocator());
+    std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+    if (codegen == nullptr) {
+      GTEST_SKIP() << "X86 codegen is unavailable.";
+    }
+    CHECK(codegen != nullptr);
+    SsaLivenessAnalysis liveness(graph_, codegen.get(), GetScopedAllocator());
     liveness.Analyze();
 
     // Check that the register allocator is deterministic.
     std::unique_ptr<RegisterAllocator> register_allocator =
-        RegisterAllocator::Create(GetScopedAllocator(), &codegen, liveness);
+        RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
     register_allocator->AllocateRegisters();
 
-    ASSERT_EQ(input1->GetLiveInterval()->GetRegister(), 0);
-    ASSERT_EQ(input2->GetLiveInterval()->GetRegister(), 0);
-    ASSERT_EQ(phi->GetLiveInterval()->GetRegister(), 0);
+    ASSERT_EQ(input1->GetLiveInterval()->GetRegisters(), 1u << 0);
+    ASSERT_EQ(input2->GetLiveInterval()->GetRegisters(), 1u << 0);
+    ASSERT_EQ(phi->GetLiveInterval()->GetRegisters(), 1u << 0);
   }
 
   {
     BuildIfElseWithPhi(&phi, &input1, &input2);
-    x86::CodeGeneratorX86 codegen(graph_, *compiler_options_);
-    SsaLivenessAnalysis liveness(graph_, &codegen, GetScopedAllocator());
+    std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+    CHECK(codegen != nullptr);
+    SsaLivenessAnalysis liveness(graph_, codegen.get(), GetScopedAllocator());
     liveness.Analyze();
 
     // Set the phi to a specific register, and check that the inputs get allocated
     // the same register.
-    phi->GetLocations()->UpdateOut(Location::RegisterLocation(2));
+    phi->GetLocations()->UpdateOut(Location::CoreRegister(2));
     std::unique_ptr<RegisterAllocator> register_allocator =
-        RegisterAllocator::Create(GetScopedAllocator(), &codegen, liveness);
+        RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
     register_allocator->AllocateRegisters();
 
-    ASSERT_EQ(input1->GetLiveInterval()->GetRegister(), 2);
-    ASSERT_EQ(input2->GetLiveInterval()->GetRegister(), 2);
-    ASSERT_EQ(phi->GetLiveInterval()->GetRegister(), 2);
+    ASSERT_EQ(input1->GetLiveInterval()->GetRegisters(), 1u << 2);
+    ASSERT_EQ(input2->GetLiveInterval()->GetRegisters(), 1u << 2);
+    ASSERT_EQ(phi->GetLiveInterval()->GetRegisters(), 1u << 2);
   }
 
   {
     BuildIfElseWithPhi(&phi, &input1, &input2);
-    x86::CodeGeneratorX86 codegen(graph_, *compiler_options_);
-    SsaLivenessAnalysis liveness(graph_, &codegen, GetScopedAllocator());
+    std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+    CHECK(codegen != nullptr);
+    SsaLivenessAnalysis liveness(graph_, codegen.get(), GetScopedAllocator());
     liveness.Analyze();
 
     // Set input1 to a specific register, and check that the phi and other input get allocated
     // the same register.
-    input1->GetLocations()->UpdateOut(Location::RegisterLocation(2));
+    input1->GetLocations()->UpdateOut(Location::CoreRegister(2));
     std::unique_ptr<RegisterAllocator> register_allocator =
-        RegisterAllocator::Create(GetScopedAllocator(), &codegen, liveness);
+        RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
     register_allocator->AllocateRegisters();
 
-    ASSERT_EQ(input1->GetLiveInterval()->GetRegister(), 2);
-    ASSERT_EQ(input2->GetLiveInterval()->GetRegister(), 2);
-    ASSERT_EQ(phi->GetLiveInterval()->GetRegister(), 2);
+    ASSERT_EQ(input1->GetLiveInterval()->GetRegisters(), 1u << 2);
+    ASSERT_EQ(input2->GetLiveInterval()->GetRegisters(), 1u << 2);
+    ASSERT_EQ(phi->GetLiveInterval()->GetRegisters(), 1u << 2);
   }
 
   {
     BuildIfElseWithPhi(&phi, &input1, &input2);
-    x86::CodeGeneratorX86 codegen(graph_, *compiler_options_);
-    SsaLivenessAnalysis liveness(graph_, &codegen, GetScopedAllocator());
+    std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+    CHECK(codegen != nullptr);
+    SsaLivenessAnalysis liveness(graph_, codegen.get(), GetScopedAllocator());
     liveness.Analyze();
 
     // Set input2 to a specific register, and check that the phi and other input get allocated
     // the same register.
-    input2->GetLocations()->UpdateOut(Location::RegisterLocation(2));
+    input2->GetLocations()->UpdateOut(Location::CoreRegister(2));
     std::unique_ptr<RegisterAllocator> register_allocator =
-        RegisterAllocator::Create(GetScopedAllocator(), &codegen, liveness);
+        RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
     register_allocator->AllocateRegisters();
 
-    ASSERT_EQ(input1->GetLiveInterval()->GetRegister(), 2);
-    ASSERT_EQ(input2->GetLiveInterval()->GetRegister(), 2);
-    ASSERT_EQ(phi->GetLiveInterval()->GetRegister(), 2);
+    ASSERT_EQ(input1->GetLiveInterval()->GetRegisters(), 1u << 2);
+    ASSERT_EQ(input2->GetLiveInterval()->GetRegisters(), 1u << 2);
+    ASSERT_EQ(phi->GetLiveInterval()->GetRegisters(), 1u << 2);
   }
 }
 
@@ -595,33 +652,37 @@ TEST_F(RegisterAllocatorTest, ExpectedInRegisterHint) {
 
   {
     BuildFieldReturn(&field, &ret);
-    x86::CodeGeneratorX86 codegen(graph_, *compiler_options_);
-    SsaLivenessAnalysis liveness(graph_, &codegen, GetScopedAllocator());
+    std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+    if (codegen == nullptr) {
+      GTEST_SKIP() << "X86 codegen is unavailable.";
+    }
+    SsaLivenessAnalysis liveness(graph_, codegen.get(), GetScopedAllocator());
     liveness.Analyze();
 
     std::unique_ptr<RegisterAllocator> register_allocator =
-        RegisterAllocator::Create(GetScopedAllocator(), &codegen, liveness);
+        RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
     register_allocator->AllocateRegisters();
 
     // Check the validity that in normal conditions, the register should be hinted to 0 (EAX).
-    ASSERT_EQ(field->GetLiveInterval()->GetRegister(), 0);
+    ASSERT_EQ(field->GetLiveInterval()->GetRegisters(), 1u << 0);
   }
 
   {
     BuildFieldReturn(&field, &ret);
-    x86::CodeGeneratorX86 codegen(graph_, *compiler_options_);
-    SsaLivenessAnalysis liveness(graph_, &codegen, GetScopedAllocator());
+    std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+    CHECK(codegen != nullptr);
+    SsaLivenessAnalysis liveness(graph_, codegen.get(), GetScopedAllocator());
     liveness.Analyze();
 
     // Check that the field gets put in the register expected by its use.
     // Don't use SetInAt because we are overriding an already allocated location.
-    ret->GetLocations()->Inputs()[0] = Location::RegisterLocation(2);
+    ret->GetLocations()->Inputs()[0] = Location::CoreRegister(2);
 
     std::unique_ptr<RegisterAllocator> register_allocator =
-        RegisterAllocator::Create(GetScopedAllocator(), &codegen, liveness);
+        RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
     register_allocator->AllocateRegisters();
 
-    ASSERT_EQ(field->GetLiveInterval()->GetRegister(), 2);
+    ASSERT_EQ(field->GetLiveInterval()->GetRegisters(), 1u << 2);
   }
 }
 
@@ -645,37 +706,41 @@ TEST_F(RegisterAllocatorTest, SameAsFirstInputHint) {
 
   {
     BuildTwoSubs(&first_sub, &second_sub);
-    x86::CodeGeneratorX86 codegen(graph_, *compiler_options_);
-    SsaLivenessAnalysis liveness(graph_, &codegen, GetScopedAllocator());
+    std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+    if (codegen == nullptr) {
+      GTEST_SKIP() << "X86 codegen is unavailable.";
+    }
+    SsaLivenessAnalysis liveness(graph_, codegen.get(), GetScopedAllocator());
     liveness.Analyze();
 
     std::unique_ptr<RegisterAllocator> register_allocator =
-        RegisterAllocator::Create(GetScopedAllocator(), &codegen, liveness);
+        RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
     register_allocator->AllocateRegisters();
 
     // Check the validity that in normal conditions, the registers are the same.
-    ASSERT_EQ(first_sub->GetLiveInterval()->GetRegister(), 1);
-    ASSERT_EQ(second_sub->GetLiveInterval()->GetRegister(), 1);
+    ASSERT_EQ(first_sub->GetLiveInterval()->GetRegisters(), 1u << 1);
+    ASSERT_EQ(second_sub->GetLiveInterval()->GetRegisters(), 1u << 1);
   }
 
   {
     BuildTwoSubs(&first_sub, &second_sub);
-    x86::CodeGeneratorX86 codegen(graph_, *compiler_options_);
-    SsaLivenessAnalysis liveness(graph_, &codegen, GetScopedAllocator());
+    std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+    CHECK(codegen != nullptr);
+    SsaLivenessAnalysis liveness(graph_, codegen.get(), GetScopedAllocator());
     liveness.Analyze();
 
     // check that both adds get the same register.
     // Don't use UpdateOutput because output is already allocated.
-    first_sub->InputAt(0)->GetLocations()->output_ = Location::RegisterLocation(2);
+    OverrideOutput(first_sub->InputAt(0)->GetLocations(), Location::CoreRegister(2));
     ASSERT_EQ(first_sub->GetLocations()->Out().GetPolicy(), Location::kSameAsFirstInput);
     ASSERT_EQ(second_sub->GetLocations()->Out().GetPolicy(), Location::kSameAsFirstInput);
 
     std::unique_ptr<RegisterAllocator> register_allocator =
-        RegisterAllocator::Create(GetScopedAllocator(), &codegen, liveness);
+        RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
     register_allocator->AllocateRegisters();
 
-    ASSERT_EQ(first_sub->GetLiveInterval()->GetRegister(), 2);
-    ASSERT_EQ(second_sub->GetLiveInterval()->GetRegister(), 2);
+    ASSERT_EQ(first_sub->GetLiveInterval()->GetRegisters(), 1u << 2);
+    ASSERT_EQ(second_sub->GetLiveInterval()->GetRegisters(), 1u << 2);
   }
 }
 
@@ -695,16 +760,19 @@ void RegisterAllocatorTest::BuildDiv(HInstruction** div) {
 TEST_F(RegisterAllocatorTest, ExpectedExactInRegisterAndSameOutputHint) {
   HInstruction *div;
   BuildDiv(&div);
-  x86::CodeGeneratorX86 codegen(graph_, *compiler_options_);
-  SsaLivenessAnalysis liveness(graph_, &codegen, GetScopedAllocator());
+  std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+  if (codegen == nullptr) {
+    GTEST_SKIP() << "X86 codegen is unavailable.";
+  }
+  SsaLivenessAnalysis liveness(graph_, codegen.get(), GetScopedAllocator());
   liveness.Analyze();
 
   std::unique_ptr<RegisterAllocator> register_allocator =
-      RegisterAllocator::Create(GetScopedAllocator(), &codegen, liveness);
+      RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
   register_allocator->AllocateRegisters();
 
   // div on x86 requires its first input in eax and the output be the same as the first input.
-  ASSERT_EQ(div->GetLiveInterval()->GetRegister(), 0);
+  ASSERT_EQ(div->GetLiveInterval()->GetRegisters(), 1u << 0);
 }
 
 // Test a bug in the register allocator, where allocating a blocked
@@ -724,28 +792,30 @@ void RegisterAllocatorTest::TestSpillInactive() {
   user->SetBlock(block);
   user->AddInput(one);
   LocationSummary* locations = LocationSummary::CreateNoCall(GetAllocator(), user);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   static constexpr size_t phi_ranges[][2] = {{10 * kLppi, 15 * kLppi}};
-  BuildInterval(phi_ranges, arraysize(phi_ranges), GetScopedAllocator(), -1, user);
+  BuildInterval(phi_ranges, arraysize(phi_ranges), GetScopedAllocator(), kNoRegisters, user);
 
   // Create an interval with lifetime holes.
   static constexpr size_t ranges1[][2] =
       {{0u * kLppi, 2u * kLppi}, {4u * kLppi, 5u * kLppi}, {7u * kLppi, 8u * kLppi}};
-  LiveInterval* first = BuildInterval(ranges1, arraysize(ranges1), GetScopedAllocator(), -1, one);
+  LiveInterval* first =
+      BuildInterval(ranges1, arraysize(ranges1), GetScopedAllocator(), kNoRegisters, one);
   first->uses_.push_front(*new (GetScopedAllocator()) UsePosition(user, 0u, 7u * kLppi));
   first->uses_.push_front(*new (GetScopedAllocator()) UsePosition(user, 0u, 6u * kLppi));
   first->uses_.push_front(*new (GetScopedAllocator()) UsePosition(user, 0u, 5u * kLppi));
 
   locations = LocationSummary::CreateNoCall(GetAllocator(), first->GetDefinedBy());
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
   first = first->SplitAt(1u * kLppi);
 
   // Create an interval that conflicts with the next interval, to force the next
   // interval to call `AllocateBlockedReg`.
   static constexpr size_t ranges2[][2] = {{2u * kLppi, 4u * kLppi}};
-  LiveInterval* second = BuildInterval(ranges2, arraysize(ranges2), GetScopedAllocator(), -1, two);
+  LiveInterval* second =
+      BuildInterval(ranges2, arraysize(ranges2), GetScopedAllocator(), kNoRegisters, two);
   locations = LocationSummary::CreateNoCall(GetAllocator(), second->GetDefinedBy());
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 
   // Create an interval that will lead to splitting the first interval. The bug occured
   // by splitting at a wrong position, in this case at the next intersection between
@@ -753,41 +823,46 @@ void RegisterAllocatorTest::TestSpillInactive() {
   // "[0, 2(, [4, 6(" in the list of handled intervals, even though we haven't processed intervals
   // before lifetime position 6 yet.
   static constexpr size_t ranges3[][2] = {{2u * kLppi, 4u * kLppi}, {7u * kLppi, 8u * kLppi}};
-  LiveInterval* third = BuildInterval(ranges3, arraysize(ranges3), GetScopedAllocator(), -1, three);
+  LiveInterval* third =
+      BuildInterval(ranges3, arraysize(ranges3), GetScopedAllocator(), kNoRegisters, three);
   third->uses_.push_front(*new (GetScopedAllocator()) UsePosition(user, 0u, 7u * kLppi));
   third->uses_.push_front(*new (GetScopedAllocator()) UsePosition(user, 0u, 4u * kLppi));
   third->uses_.push_front(*new (GetScopedAllocator()) UsePosition(user, 0u, 3u * kLppi));
   locations = LocationSummary::CreateNoCall(GetAllocator(), third->GetDefinedBy());
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
   third = third->SplitAt(3u * kLppi);
 
   // Because the first part of the split interval was considered handled, this interval
   // was free to allocate the same register, even though it conflicts with it.
   static constexpr size_t ranges4[][2] = {{4u * kLppi, 5u * kLppi}};
-  LiveInterval* fourth = BuildInterval(ranges4, arraysize(ranges4), GetScopedAllocator(), -1, four);
+  LiveInterval* fourth =
+      BuildInterval(ranges4, arraysize(ranges4), GetScopedAllocator(), kNoRegisters, four);
   locations = LocationSummary::CreateNoCall(GetAllocator(), fourth->GetDefinedBy());
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 
-  x86::CodeGeneratorX86 codegen(graph_, *compiler_options_);
-  SsaLivenessAnalysis liveness(graph_, &codegen, GetScopedAllocator());
+  std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+  if (codegen == nullptr) {
+    GTEST_SKIP() << "X86 codegen is unavailable.";
+  }
+  SsaLivenessAnalysis liveness(graph_, codegen.get(), GetScopedAllocator());
   // Populate the instructions in the liveness object, to please the register allocator.
   liveness.instructions_from_lifetime_position_.assign(16, user);
 
-  RegisterAllocatorLinearScan register_allocator(GetScopedAllocator(), &codegen, liveness);
-  register_allocator.unhandled_core_intervals_.assign({fourth, third, second, first});
-
   // Set just one register available to make all intervals compete for the same.
-  BlockCoreRegistersExcept(&codegen, {x86::EAX});
+  BlockCoreRegistersExcept(codegen.get(), {x86::EAX});
+
+  RegisterAllocatorLinearScan register_allocator(GetScopedAllocator(), codegen.get(), liveness);
+  register_allocator.unhandled_core_intervals_.assign({fourth, third, second, first});
 
   // We have set up all intervals manually and we want `AllocateRegistersInternal()` to run
   // the linear scan without processing instructions - check that the linear order is empty.
-  ASSERT_TRUE(codegen.GetGraph()->GetLinearOrder().empty());
+  ASSERT_TRUE(codegen->GetGraph()->GetLinearOrder().empty());
   register_allocator.AllocateRegistersInternal();
 
   // Test that there is no conflicts between intervals.
   ScopedArenaVector<LiveInterval*> intervals({first, second, third, fourth},
                                              GetScopedAllocator()->Adapter());
-  ASSERT_TRUE(ValidateIntervals(intervals, codegen));
+  ASSERT_TRUE(ValidateIntervals(intervals, *codegen));
 }
 
 TEST_F(RegisterAllocatorTest, SpillInactive) {
@@ -833,18 +908,23 @@ TEST_F(RegisterAllocatorTest, ReuseSpillSlots) {
   MakeReturn(return_block, min2);
 
   graph_->ComputeDominanceInformation();
-  x86::CodeGeneratorX86 codegen(graph_, *compiler_options_);
-  SsaLivenessAnalysis liveness(graph_, &codegen, GetScopedAllocator());
+  std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+  if (codegen == nullptr) {
+    GTEST_SKIP() << "X86 codegen is unavailable.";
+  }
+  SsaLivenessAnalysis liveness(graph_, codegen.get(), GetScopedAllocator());
   liveness.Analyze();
 
   // Set just two registers available to make it easy to force spills.
   // Choose EAX and EDX which are used by type conversion from Int32 to Int64, so that
   // we can use the type conversion to spill all live intervals wherever we want.
-  // Note that the `obj` parameter comes in the blocked ECX which works fine for the test.
-  BlockCoreRegistersExcept(&codegen, {x86::EAX, x86::EDX});
+  BlockCoreRegistersExcept(codegen.get(), {x86::EAX, x86::EDX});
+
+  // Change the `obj` parameter to come in EDX.
+  OverrideOutput(obj->GetLocations(), Location::CoreRegister(x86::EDX));
 
   std::unique_ptr<RegisterAllocator> register_allocator =
-      RegisterAllocator::Create(GetScopedAllocator(), &codegen, liveness);
+      RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
   register_allocator->AllocateRegisters();
 
   // Field loads would be spilled even without using spill slot hints.
@@ -867,9 +947,9 @@ TEST_F(RegisterAllocatorTest, ReuseSpillSlots) {
 
   // Check that `phi1` and `phi2` are split and don't have a register in the first sibling.
   EXPECT_TRUE(phi1->GetLiveInterval()->GetNextSibling() != nullptr);
-  EXPECT_TRUE(!phi1->GetLiveInterval()->HasRegister());
+  EXPECT_TRUE(!phi1->GetLiveInterval()->HasRegisters());
   EXPECT_TRUE(phi2->GetLiveInterval()->GetNextSibling() != nullptr);
-  EXPECT_TRUE(!phi2->GetLiveInterval()->HasRegister());
+  EXPECT_TRUE(!phi2->GetLiveInterval()->HasRegisters());
 }
 
 TEST_F(RegisterAllocatorTest, ReuseSpillSlotGaps) {
@@ -903,18 +983,28 @@ TEST_F(RegisterAllocatorTest, ReuseSpillSlotGaps) {
       GetAllocator(), deopt_cond, DeoptimizationKind::kDebugging, /*dex_pc=*/ 0u);
   AddOrInsertInstruction(return_block, deopt);
   ManuallyBuildEnvFor(deopt, {phi1});
-  HReturn* ret = MakeReturn(return_block, phi2);
+  MakeReturn(return_block, phi2);
 
   graph_->BuildDominatorTree();
-  x86::CodeGeneratorX86 codegen(graph_, *compiler_options_);
-  SsaLivenessAnalysis liveness(graph_, &codegen, GetScopedAllocator());
+  std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+  if (codegen == nullptr) {
+    GTEST_SKIP() << "X86 codegen is unavailable.";
+  }
+  SsaLivenessAnalysis liveness(graph_, codegen.get(), GetScopedAllocator());
   liveness.Analyze();
 
   // Set just one register available to make all intervals compete for the same.
-  BlockCoreRegistersExcept(&codegen, {x86::EAX});
+  BlockCoreRegistersExcept(codegen.get(), {x86::EAX});
+  // Rewrite condition locations to work with the single register EAX.
+  for (HCondition* c : {cond, deopt_cond}) {
+    ASSERT_TRUE(c->GetLocations()->Out().Equals(Location::CoreRegister(x86::ECX)));
+    OverrideOutput(c->GetLocations(), Location::CoreRegister(x86::EAX));
+    c->GetLocations()->SetInAt(0, Location::Any());
+    ASSERT_TRUE(c->GetLocations()->InAt(1).Equals(Location::Any()));
+  }
 
   std::unique_ptr<RegisterAllocator> register_allocator =
-      RegisterAllocator::Create(GetScopedAllocator(), &codegen, liveness);
+      RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
   register_allocator->AllocateRegisters();
 
   ASSERT_TRUE(phi1->GetLiveInterval()->HasSpillSlot());
@@ -931,6 +1021,9 @@ TEST_F(RegisterAllocatorTest, ReuseSpillSlotGaps) {
 TEST_F(RegisterAllocatorTest, ReuseSpillSlotsUnavailableWithSplitPhiInterval) {
   if (!com::android::art::flags::reg_alloc_spill_slot_reuse()) {
     GTEST_SKIP() << "Improved spill slot reuse disabled.";
+  }
+  if (!com::android::art::flags::reg_alloc_no_output_overlap()) {
+    GTEST_SKIP() << "Improved `Location::kNoOutputOverlap` handling disabled.";
   }
   HBasicBlock* return_block = InitEntryMainExitGraph();
   auto [start, left, right] = CreateDiamondPattern(return_block);
@@ -973,7 +1066,7 @@ TEST_F(RegisterAllocatorTest, ReuseSpillSlotsUnavailableWithSplitPhiInterval) {
   // Use `HSub` which can have the second operand on the stack for x86.
   HSub* sub1 = MakeBinOp<HSub>(return_block, DataType::Type::kInt32, get_phi, neg_neg);
   // Add an invoke that forces the `get_phi` interval to be split when initially allocated.
-  HInvoke* invoke = MakeInvokeStatic(return_block, DataType::Type::kVoid, {}, {});
+  MakeInvokeStatic(return_block, DataType::Type::kVoid, {}, {});
   // Add another register use for the `get_phi` after the `invoke`.
   HSub* sub2 = MakeBinOp<HSub>(return_block, DataType::Type::kInt32, get_phi, sub1);
 
@@ -983,16 +1076,20 @@ TEST_F(RegisterAllocatorTest, ReuseSpillSlotsUnavailableWithSplitPhiInterval) {
   MakeReturn(return_block, sub4);
 
   graph_->ComputeDominanceInformation();
-  x86::CodeGeneratorX86 codegen(graph_, *compiler_options_);
-  SsaLivenessAnalysis liveness(graph_, &codegen, GetScopedAllocator());
+  std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+  if (codegen == nullptr) {
+    GTEST_SKIP() << "X86 codegen is unavailable.";
+  }
+  SsaLivenessAnalysis liveness(graph_, codegen.get(), GetScopedAllocator());
   liveness.Analyze();
 
   // Set just one register available to make all intervals compete for the same.
-  // Note that the `obj` parameter comes in the blocked ECX which works fine for the test.
-  BlockCoreRegistersExcept(&codegen, {x86::EAX});
+  BlockCoreRegistersExcept(codegen.get(), {x86::EAX});
+  // Change the `obj` parameter to come in EAX.
+  OverrideOutput(obj->GetLocations(), Location::CoreRegister(x86::EAX));
 
   std::unique_ptr<RegisterAllocator> register_allocator =
-      RegisterAllocator::Create(GetScopedAllocator(), &codegen, liveness);
+      RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
   register_allocator->AllocateRegisters();
 
   ASSERT_TRUE(left_get->GetLiveInterval()->HasSpillSlot());
@@ -1082,22 +1179,25 @@ TEST_F(RegisterAllocatorTest, SplitSpillSlotLiveRangeHint) {
   MakeReturn(return_block, phi);
 
   graph_->ComputeDominanceInformation();
-  x86::CodeGeneratorX86 codegen(graph_, *compiler_options_);
-  SsaLivenessAnalysis liveness(graph_, &codegen, GetScopedAllocator());
+  std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+  if (codegen == nullptr) {
+    GTEST_SKIP() << "X86 codegen is unavailable.";
+  }
+  SsaLivenessAnalysis liveness(graph_, codegen.get(), GetScopedAllocator());
   liveness.Analyze();
 
   ASSERT_LT(right->GetLifetimeStart(), mid->GetLifetimeStart());
   ASSERT_LT(mid->GetLifetimeStart(), left->GetLifetimeStart());
 
   // Set just two register available, including the `obj` input register ECX.
-  BlockCoreRegistersExcept(&codegen, {x86::EAX, x86::ECX});
+  BlockCoreRegistersExcept(codegen.get(), {x86::EAX, x86::ECX});
 
   // Before the bug was fixed, the interval validation at the end of `AllocateRegisters()`
   // would report a spill slot conflict for the `iget_left_right` because it was allocated
   // the same spill slot as `iget_start` despite overlapping lifetime. This would cause
   // clobbering of `iget_start` for its use in the `HDeoptimize` environment.
   std::unique_ptr<RegisterAllocator> register_allocator =
-      RegisterAllocator::Create(GetScopedAllocator(), &codegen, liveness);
+      RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
   register_allocator->AllocateRegisters();
 
   // While `iget_right` and `iget_mid` use the same spill slot as `iget_start` thanks to the
@@ -1128,18 +1228,21 @@ void RegisterAllocatorTest::TestNoOutputOverlap() {
   HReturn* ret = MakeReturn(block, add);
 
   graph_->ComputeDominanceInformation();
-  x86::CodeGeneratorX86 codegen(graph_, *compiler_options_);
-  SsaLivenessAnalysis liveness(graph_, &codegen, GetScopedAllocator());
+  std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+  if (codegen == nullptr) {
+    GTEST_SKIP() << "X86 codegen is unavailable.";
+  }
+  SsaLivenessAnalysis liveness(graph_, codegen.get(), GetScopedAllocator());
   liveness.Analyze();
 
   ASSERT_TRUE(neg->GetLocations()->OutputCanOverlapWithInputs());
   ASSERT_FALSE(add->GetLocations()->OutputCanOverlapWithInputs());
   ASSERT_FALSE(add2->GetLocations()->OutputCanOverlapWithInputs());
 
-  RegisterAllocatorLinearScan register_allocator(GetScopedAllocator(), &codegen, liveness);
-
   // Set just one register available to make all intervals compete for the same.
-  BlockCoreRegistersExcept(&codegen, {x86::EAX});
+  BlockCoreRegistersExcept(codegen.get(), {x86::EAX});
+
+  RegisterAllocatorLinearScan register_allocator(GetScopedAllocator(), codegen.get(), liveness);
 
   register_allocator.AllocateRegistersInternal();
 
@@ -1147,27 +1250,27 @@ void RegisterAllocatorTest::TestNoOutputOverlap() {
   static constexpr int kExpectedRegister = 0;
   LiveInterval* neg_li = neg->GetLiveInterval();
   ASSERT_EQ(neg->GetLifetimePosition(), neg_li->GetStart());
-  ASSERT_EQ(kExpectedRegister, neg_li->GetRegister());
+  ASSERT_EQ(1u << kExpectedRegister, neg_li->GetRegisters());
   LiveInterval* add_li = add->GetLiveInterval();
   ASSERT_EQ(add->GetLifetimePosition() + kLivenessPositionOfNonOverlappingOutput,
             add_li->GetStart());
-  ASSERT_EQ(kExpectedRegister, add_li->GetRegister());
+  ASSERT_EQ(1u << kExpectedRegister, add_li->GetRegisters());
   LiveInterval* add2_li = add2->GetLiveInterval();
   ASSERT_EQ(add2->GetLifetimePosition() + kLivenessPositionOfNonOverlappingOutput,
             add2_li->GetStart());
-  ASSERT_EQ(kExpectedRegister, add2_li->GetRegister());
+  ASSERT_EQ(1u << kExpectedRegister, add2_li->GetRegisters());
 
   // Check the splits of the `neg` interval.
   ASSERT_EQ(add_li->GetStart(), neg_li->GetEnd());
   LiveInterval* neg_li2 = neg_li->GetNextSibling();
   ASSERT_TRUE(neg_li2 != nullptr);
   ASSERT_EQ(add_li->GetStart(), neg_li2->GetStart());
-  ASSERT_EQ(kNoRegister, neg_li2->GetRegister());
+  ASSERT_EQ(kNoRegisters, neg_li2->GetRegisters());
   ASSERT_EQ(add2->GetLifetimePosition(), neg_li2->GetEnd());
   LiveInterval* neg_li3 = neg_li2->GetNextSibling();
   ASSERT_TRUE(neg_li3 != nullptr);
   ASSERT_EQ(add2->GetLifetimePosition(), neg_li3->GetStart());
-  ASSERT_EQ(kExpectedRegister, neg_li3->GetRegister());
+  ASSERT_EQ(1u << kExpectedRegister, neg_li3->GetRegisters());
   ASSERT_EQ(add2->GetLifetimePosition() + kLivenessPositionOfNormalUse, neg_li3->GetEnd());
   ASSERT_TRUE(neg_li3->GetNextSibling() == nullptr);
 
@@ -1176,7 +1279,7 @@ void RegisterAllocatorTest::TestNoOutputOverlap() {
   LiveInterval* add_li2 = add_li->GetNextSibling();
   ASSERT_TRUE(add_li2 != nullptr);
   ASSERT_EQ(add2->GetLifetimePosition(), add_li2->GetStart());
-  ASSERT_EQ(kNoRegister, add_li2->GetRegister());
+  ASSERT_EQ(kNoRegisters, add_li2->GetRegisters());
   ASSERT_EQ(ret->GetLifetimePosition(), add_li2->GetEnd());
   ASSERT_TRUE(add_li2->GetNextSibling() == nullptr);
 
@@ -1200,8 +1303,11 @@ void RegisterAllocatorTest::TestNoOutputOverlapAndTemp() {
   HSub* sub = MakeBinOp<HSub>(block, DataType::Type::kInt32, add, neg);
 
   graph_->ComputeDominanceInformation();
-  x86::CodeGeneratorX86 codegen(graph_, *compiler_options_);
-  SsaLivenessAnalysis liveness(graph_, &codegen, GetScopedAllocator());
+  std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+  if (codegen == nullptr) {
+    GTEST_SKIP() << "X86 codegen is unavailable.";
+  }
+  SsaLivenessAnalysis liveness(graph_, codegen.get(), GetScopedAllocator());
   liveness.Analyze();
 
   ASSERT_TRUE(neg->GetLocations()->OutputCanOverlapWithInputs());
@@ -1212,25 +1318,25 @@ void RegisterAllocatorTest::TestNoOutputOverlapAndTemp() {
   // Add a temp for `add`. We want to test that the temp interval shall not be split.
   // Trying to split it would trigger a `DCHECK(!IsTemp())`.
   ASSERT_EQ(0, add->GetLocations()->GetTempCount());
-  add->GetLocations()->AddTemp(Location::RequiresRegister());
-
-  RegisterAllocatorLinearScan register_allocator(GetScopedAllocator(), &codegen, liveness);
+  add->GetLocations()->AddTemp(Location::RequiresCoreRegister());
 
   // Set just two registers available to avoid adding more instructions
   // to reproduce the situation where we could try to split the temp.
-  BlockCoreRegistersExcept(&codegen, {x86::EAX, x86::ECX});
+  BlockCoreRegistersExcept(codegen.get(), {x86::EAX, x86::ECX});
+
+  RegisterAllocatorLinearScan register_allocator(GetScopedAllocator(), codegen.get(), liveness);
 
   register_allocator.AllocateRegistersInternal();
 
   // Check the splits of the `neg` interval.
   LiveInterval* neg_li = neg->GetLiveInterval();
   ASSERT_EQ(neg->GetLifetimePosition(), neg_li->GetStart());
-  ASSERT_TRUE(neg_li->HasRegister());
+  ASSERT_TRUE(neg_li->HasRegisters());
   ASSERT_EQ(add->GetLifetimePosition() + kLivenessPositionOfNonOverlappingOutput, neg_li->GetEnd());
   LiveInterval* neg_li2 = neg_li->GetNextSibling();
   ASSERT_TRUE(neg_li2 != nullptr);
   ASSERT_EQ(neg_li->GetEnd(), neg_li2->GetStart());
-  ASSERT_EQ(kNoRegister, neg_li2->GetRegister());
+  ASSERT_EQ(kNoRegisters, neg_li2->GetRegisters());
   ASSERT_EQ(sub->GetLifetimePosition() + kLivenessPositionOfNormalUse, neg_li2->GetEnd());
   ASSERT_TRUE(neg_li2->GetNextSibling() == nullptr);
 }
@@ -1267,8 +1373,11 @@ TEST_F(RegisterAllocatorTest, NoOutputOverlapImmediateSpill) {
   MakeReturn(block, add);
 
   graph_->BuildDominatorTree();
-  x86::CodeGeneratorX86 codegen(graph_, *compiler_options_);
-  SsaLivenessAnalysis liveness(graph_, &codegen, GetScopedAllocator());
+  std::unique_ptr<CodeGenerator> codegen = CreateCodeGenerator(graph_, InstructionSet::kX86);
+  if (codegen == nullptr) {
+    GTEST_SKIP() << "X86 codegen is unavailable.";
+  }
+  SsaLivenessAnalysis liveness(graph_, codegen.get(), GetScopedAllocator());
   liveness.Analyze();
 
   // There is no instruction that would get the locations required for this test on x86.
@@ -1280,15 +1389,15 @@ TEST_F(RegisterAllocatorTest, NoOutputOverlapImmediateSpill) {
   // doable as long as the `CodeGeneratorX86` is not `final`.
   LocationSummary* get1_locs = get1->GetLocations();
   ASSERT_TRUE(get1_locs->OutputCanOverlapWithInputs());
-  ASSERT_TRUE(get1_locs->Out().Equals(Location::RequiresRegister()));
+  ASSERT_TRUE(get1_locs->Out().Equals(Location::RequiresCoreRegister()));
   get1_locs->UpdateOut(Location());  // Invalidate output to work around `DCHECK()` in `SetOut()`.
-  get1_locs->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  get1_locs->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 
   // Make three registers available.
-  BlockCoreRegistersExcept(&codegen, {x86::EAX, x86::ECX, x86::EDX});
+  BlockCoreRegistersExcept(codegen.get(), {x86::EAX, x86::ECX, x86::EDX});
 
   std::unique_ptr<RegisterAllocator> register_allocator =
-      RegisterAllocator::Create(GetScopedAllocator(), &codegen, liveness);
+      RegisterAllocator::Create(GetScopedAllocator(), codegen.get(), liveness);
   register_allocator->AllocateRegisters();
 
   // Check the splits of the `param`.
@@ -1297,34 +1406,34 @@ TEST_F(RegisterAllocatorTest, NoOutputOverlapImmediateSpill) {
   ASSERT_TRUE(param_li->HasSpillSlot());
   EXPECT_GT(block->GetLifetimeStart(), param_li->GetStart());
   EXPECT_EQ(block->GetLifetimeStart(), param_li->GetEnd());
-  EXPECT_EQ(1, param_li->GetRegister());  // Initial argument register.
+  EXPECT_EQ(1u << 1, param_li->GetRegisters());  // Initial argument register.
   LiveInterval* param_li2 = param_li->GetNextSibling();
   ASSERT_TRUE(param_li2 != nullptr);
   EXPECT_EQ(block->GetLifetimeStart(), param_li2->GetStart());
   EXPECT_EQ(invoke->GetLifetimePosition(), param_li2->GetEnd());
-  EXPECT_EQ(0, param_li2->GetRegister());  // Moved to register 0.
+  EXPECT_EQ(1u << 0, param_li2->GetRegisters());  // Moved to register 0.
   LiveInterval* param_li3 = param_li2->GetNextSibling();
   ASSERT_TRUE(param_li3 != nullptr);
   EXPECT_EQ(invoke->GetLifetimePosition(), param_li3->GetStart());
   EXPECT_EQ(get1->GetLifetimePosition(), param_li3->GetEnd());
-  EXPECT_FALSE(param_li3->HasRegister());  // No register.
+  EXPECT_FALSE(param_li3->HasRegisters());  // No register.
   LiveInterval* param_li4 = param_li3->GetNextSibling();
   ASSERT_TRUE(param_li4 != nullptr);
   EXPECT_EQ(get1->GetLifetimePosition(), param_li4->GetStart());
   EXPECT_EQ(get1->GetLifetimePosition() + kLivenessPositionOfNonOverlappingOutput,
             param_li4->GetEnd());
-  EXPECT_EQ(0, param_li4->GetRegister());  // Allocated register 0.
+  EXPECT_EQ(1u << 0, param_li4->GetRegisters());  // Allocated register 0.
   LiveInterval* param_li5 = param_li4->GetNextSibling();
   ASSERT_TRUE(param_li5 != nullptr);
   EXPECT_EQ(get1->GetLifetimePosition() + kLivenessPositionOfNonOverlappingOutput,
             param_li5->GetStart());
   EXPECT_EQ(get2->GetLifetimePosition(), param_li5->GetEnd());
-  EXPECT_FALSE(param_li5->HasRegister());  // No register.
+  EXPECT_FALSE(param_li5->HasRegisters());  // No register.
   LiveInterval* param_li6 = param_li5->GetNextSibling();
   ASSERT_TRUE(param_li6 != nullptr);
   EXPECT_EQ(get2->GetLifetimePosition(), param_li6->GetStart());
   EXPECT_EQ(get2->GetLifetimePosition() + kLivenessPositionOfNormalUse, param_li6->GetEnd());
-  EXPECT_EQ(2, param_li6->GetRegister());  // Allocated register 2, avoiding `get1` result in 0-1.
+  EXPECT_EQ(1u << 2, param_li6->GetRegisters());  // Allocated reg 2, avoiding `get1` result in 0-1.
   ASSERT_TRUE(param_li6->GetNextSibling() == nullptr);
 }
 

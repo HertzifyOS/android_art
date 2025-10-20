@@ -114,7 +114,7 @@ const vixl::aarch64::CPURegList runtime_reserved_core_registers =
 // thunks we generate. For these and similar cases, we want to reserve a specific
 // register that's neither callee-save nor an argument register. We choose x15.
 inline Location FixedTempLocation() {
-  return Location::RegisterLocation(vixl::aarch64::x15.GetCode());
+  return Location::CoreRegister(vixl::aarch64::x15.GetCode());
 }
 
 // Callee-save registers AAPCS64, without x19 (Thread Register) (nor
@@ -735,8 +735,6 @@ class CodeGeneratorARM64 : public CodeGenerator {
 
   // Register allocation.
 
-  void SetupBlockedRegisters();
-
   size_t SaveCoreRegister(size_t stack_index, uint32_t reg_id) override;
   size_t RestoreCoreRegister(size_t stack_index, uint32_t reg_id) override;
   size_t SaveFloatingPointRegister(size_t stack_index, uint32_t reg_id) override;
@@ -750,7 +748,6 @@ class CodeGeneratorARM64 : public CodeGenerator {
   // can easily be mapped via to or from their type and index or code.
   static const int kNumberOfAllocatableRegisters = vixl::aarch64::kNumberOfRegisters - 1;
   static const int kNumberOfAllocatableFPRegisters = vixl::aarch64::kNumberOfVRegisters;
-  static constexpr int kNumberOfAllocatableRegisterPairs = 0;
 
   void DumpCoreRegister(std::ostream& stream, int reg) const override;
   void DumpFloatingPointRegister(std::ostream& stream, int reg) const override;
@@ -820,8 +817,6 @@ class CodeGeneratorARM64 : public CodeGenerator {
                                            SlowPathCode* slow_path);
 
   ParallelMoveResolverARM64* GetMoveResolver() override { return &move_resolver_; }
-
-  bool NeedsTwoRegisters([[maybe_unused]] DataType::Type type) const override { return false; }
 
   // Check if the desired_string_load_kind is supported. If it is, return it,
   // otherwise return a fall-back kind that should be used instead.
@@ -1129,6 +1124,9 @@ class CodeGeneratorARM64 : public CodeGenerator {
   bool CanUseImplicitSuspendCheck() const;
 
  private:
+  static RegisterSet ComputeCalleeSaves();
+  static RegisterSet ComputeBlockedRegisters(HGraph* graph);
+
   // Encoding of thunk type and data for link-time generated thunks for Baker read barriers.
 
   enum class BakerReadBarrierKind : uint8_t {

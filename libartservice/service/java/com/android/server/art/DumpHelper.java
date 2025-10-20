@@ -97,8 +97,9 @@ public class DumpHelper {
                         .getDexContainerFileDexoptStatuses();
         Map<String, CheckedSecondaryDexInfo> secondaryDexInfoByDexPath =
                 mInjector.getDexUseManager()
-                        .getCheckedSecondaryDexInfo(
-                                packageName, false /* excludeObsoleteDexesAndLoaders */)
+                        .getCheckedSecondaryDexInfo(packageName,
+                                false /* excludeObsoleteDexesAndLoaders */,
+                                true /* excludeObsoleteClcs */)
                         .stream()
                         .collect(Collectors.toMap(
                                 CheckedSecondaryDexInfo::dexPath, Function.identity()));

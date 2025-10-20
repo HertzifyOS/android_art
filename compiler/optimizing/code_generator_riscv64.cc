@@ -72,7 +72,7 @@ Location RegisterOrZeroBitPatternLocation(HInstruction* instruction) {
   DCHECK(!DataType::IsFloatingPointType(instruction->GetType()));
   return IsZeroBitPattern(instruction)
       ? Location::ConstantLocation(instruction)
-      : Location::RequiresRegister();
+      : Location::RequiresCoreRegister();
 }
 
 Location FpuRegisterOrZeroBitPatternLocation(HInstruction* instruction) {
@@ -97,7 +97,7 @@ Location ValueLocationForStore(HInstruction* value) {
   } else if (DataType::IsFloatingPointType(value->GetType())) {
     return Location::RequiresFpuRegister();
   } else {
-    return Location::RequiresRegister();
+    return Location::RequiresCoreRegister();
   }
 }
 
@@ -113,21 +113,27 @@ Location Riscv64ReturnLocation(DataType::Type return_type) {
     case DataType::Type::kReference:
     case DataType::Type::kUint64:
     case DataType::Type::kInt64:
-      return Location::RegisterLocation(A0);
+      return Location::CoreRegister(A0);
 
     case DataType::Type::kFloat32:
     case DataType::Type::kFloat64:
-      return Location::FpuRegisterLocation(FA0);
+      return Location::FpuRegister(FA0);
 
     case DataType::Type::kVoid:
       return Location::NoLocation();
   }
 }
 
+static RegisterSet AllVectorRegisters() {
+  RegisterSet register_set = RegisterSet::Empty();
+  register_set.AddVecRegisterSet(MaxInt<uint32_t>(kNumberOfVRegisters));
+  return register_set;
+}
+
 static RegisterSet OneRegInReferenceOutSaveEverythingCallerSaves() {
   InvokeRuntimeCallingConvention calling_convention;
-  RegisterSet caller_saves = RegisterSet::Empty();
-  caller_saves.Add(Location::RegisterLocation(calling_convention.GetRegisterAt(0)));
+  RegisterSet caller_saves = AllVectorRegisters();
+  caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(0));
   DCHECK_EQ(
       calling_convention.GetRegisterAt(0),
       calling_convention.GetReturnLocation(DataType::Type::kReference).AsRegister<XRegister>());
@@ -156,7 +162,7 @@ std::pair<uint64_t, int32_t> SplitJitAddress(uint64_t address) {
 }
 
 int32_t ReadBarrierMarkEntrypointOffset(Location ref) {
-  DCHECK(ref.IsRegister());
+  DCHECK(ref.IsCoreRegister());
   int reg = ref.reg();
   DCHECK(T0 <= reg && reg <= T6 && reg != TR) << reg;
   // Note: Entrypoints for registers X30 (T5) and X31 (T6) are stored in entries
@@ -175,7 +181,7 @@ Location InvokeDexCallingConventionVisitorRISCV64::GetReturnLocation(DataType::T
 }
 
 Location InvokeDexCallingConventionVisitorRISCV64::GetMethodLocation() const {
-  return Location::RegisterLocation(kArtMethodRegister);
+  return Location::CoreRegister(kArtMethodRegister);
 }
 
 Location InvokeDexCallingConventionVisitorRISCV64::GetNextLocation(DataType::Type type) {
@@ -189,10 +195,10 @@ Location InvokeDexCallingConventionVisitorRISCV64::GetNextLocation(DataType::Typ
   if (DataType::IsFloatingPointType(type) &&
       float_index_ < calling_convention.GetNumberOfFpuRegisters()) {
     next_location =
-        Location::FpuRegisterLocation(calling_convention.GetFpuRegisterAt(float_index_++));
+        Location::FpuRegister(calling_convention.GetFpuRegisterAt(float_index_++));
   } else if (!DataType::IsFloatingPointType(type) &&
              (gp_index_ < calling_convention.GetNumberOfRegisters())) {
-    next_location = Location::RegisterLocation(calling_convention.GetRegisterAt(gp_index_++));
+    next_location = Location::CoreRegister(calling_convention.GetRegisterAt(gp_index_++));
   } else {
     size_t stack_offset = calling_convention.GetStackOffsetOf(stack_index_);
     next_location = DataType::Is64BitType(type) ? Location::DoubleStackSlot(stack_offset) :
@@ -211,7 +217,7 @@ Location CriticalNativeCallingConventionVisitorRiscv64::GetNextLocation(DataType
   Location location = Location::NoLocation();
   if (DataType::IsFloatingPointType(type)) {
     if (fpr_index_ < kParameterFpuRegistersLength) {
-      location = Location::FpuRegisterLocation(kParameterFpuRegisters[fpr_index_]);
+      location = Location::FpuRegister(kParameterFpuRegisters[fpr_index_]);
       ++fpr_index_;
     } else {
       // Native ABI allows passing excessive FP args in GPRs. This is facilitated by
@@ -223,7 +229,7 @@ Location CriticalNativeCallingConventionVisitorRiscv64::GetNextLocation(DataType
   } else {
     // Native ABI uses the same core registers as a runtime call.
     if (gpr_index_ < kRuntimeParameterCoreRegistersLength) {
-      location = Location::RegisterLocation(kRuntimeParameterCoreRegisters[gpr_index_]);
+      location = Location::CoreRegister(kRuntimeParameterCoreRegisters[gpr_index_]);
       ++gpr_index_;
     }
   }
@@ -253,7 +259,7 @@ Location CriticalNativeCallingConventionVisitorRiscv64::GetReturnLocation(
 
 Location CriticalNativeCallingConventionVisitorRiscv64::GetMethodLocation() const {
   // Pass the method in the hidden argument T0.
-  return Location::RegisterLocation(T0);
+  return Location::CoreRegister(T0);
 }
 
 #define __ down_cast<CodeGeneratorRISCV64*>(codegen)->GetAssembler()->  // NOLINT
@@ -382,10 +388,10 @@ class BoundsCheckSlowPathRISCV64 : public SlowPathCodeRISCV64 {
     // move resolver.
     InvokeRuntimeCallingConvention calling_convention;
     codegen->EmitParallelMoves(locations->InAt(0),
-                               Location::RegisterLocation(calling_convention.GetRegisterAt(0)),
+                               Location::CoreRegister(calling_convention.GetRegisterAt(0)),
                                DataType::Type::kInt32,
                                locations->InAt(1),
-                               Location::RegisterLocation(calling_convention.GetRegisterAt(1)),
+                               Location::CoreRegister(calling_convention.GetRegisterAt(1)),
                                DataType::Type::kInt32);
     QuickEntrypointEnum entrypoint = instruction_->AsBoundsCheck()->IsStringCharAt() ?
                                          kQuickThrowStringBounds :
@@ -440,7 +446,7 @@ class LoadClassSlowPathRISCV64 : public SlowPathCodeRISCV64 {
       DCHECK(must_do_clinit);
       Location source = instruction_->IsLoadClass() ? out : locations->InAt(0);
       riscv64_codegen->MoveLocation(
-          Location::RegisterLocation(calling_convention.GetRegisterAt(0)), source, cls_->GetType());
+          Location::CoreRegister(calling_convention.GetRegisterAt(0)), source, cls_->GetType());
     }
     if (must_do_clinit) {
       riscv64_codegen->InvokeRuntime(kQuickInitializeStaticStorage, instruction_, this);
@@ -449,7 +455,8 @@ class LoadClassSlowPathRISCV64 : public SlowPathCodeRISCV64 {
 
     // Move the class to the desired location.
     if (out.IsValid()) {
-      DCHECK(out.IsRegister() && !locations->GetLiveRegisters()->ContainsCoreRegister(out.reg()));
+      DCHECK(out.IsCoreRegister());
+      DCHECK(!locations->GetLiveRegisters()->ContainsCoreRegister(out.reg()));
       DataType::Type type = DataType::Type::kReference;
       DCHECK_EQ(type, instruction_->GetType());
       riscv64_codegen->MoveLocation(out, calling_convention.GetReturnLocation(type), type);
@@ -516,7 +523,7 @@ class ReadBarrierForRootSlowPathRISCV64 : public SlowPathCodeRISCV64 {
 
     InvokeRuntimeCallingConvention calling_convention;
     CodeGeneratorRISCV64* riscv64_codegen = down_cast<CodeGeneratorRISCV64*>(codegen);
-    riscv64_codegen->MoveLocation(Location::RegisterLocation(calling_convention.GetRegisterAt(0)),
+    riscv64_codegen->MoveLocation(Location::CoreRegister(calling_convention.GetRegisterAt(0)),
                                   root_,
                                   DataType::Type::kReference);
     riscv64_codegen->InvokeRuntime(kQuickReadBarrierForRootSlow, instruction_, this);
@@ -577,17 +584,17 @@ class ArraySetSlowPathRISCV64 : public SlowPathCodeRISCV64 {
     HParallelMove parallel_move(codegen->GetGraph()->GetAllocator());
     parallel_move.AddMove(
         locations->InAt(0),
-        Location::RegisterLocation(calling_convention.GetRegisterAt(0)),
+        Location::CoreRegister(calling_convention.GetRegisterAt(0)),
         DataType::Type::kReference,
         nullptr);
     parallel_move.AddMove(
         locations->InAt(1),
-        Location::RegisterLocation(calling_convention.GetRegisterAt(1)),
+        Location::CoreRegister(calling_convention.GetRegisterAt(1)),
         DataType::Type::kInt32,
         nullptr);
     parallel_move.AddMove(
         locations->InAt(2),
-        Location::RegisterLocation(calling_convention.GetRegisterAt(2)),
+        Location::CoreRegister(calling_convention.GetRegisterAt(2)),
         DataType::Type::kReference,
         nullptr);
     codegen->GetMoveResolver()->EmitNativeCode(&parallel_move);
@@ -626,10 +633,10 @@ class TypeCheckSlowPathRISCV64 : public SlowPathCodeRISCV64 {
     // move resolver.
     InvokeRuntimeCallingConvention calling_convention;
     codegen->EmitParallelMoves(locations->InAt(0),
-                               Location::RegisterLocation(calling_convention.GetRegisterAt(0)),
+                               Location::CoreRegister(calling_convention.GetRegisterAt(0)),
                                DataType::Type::kReference,
                                locations->InAt(1),
-                               Location::RegisterLocation(calling_convention.GetRegisterAt(1)),
+                               Location::CoreRegister(calling_convention.GetRegisterAt(1)),
                                DataType::Type::kReference);
     if (instruction_->IsInstanceOf()) {
       riscv64_codegen->InvokeRuntime(kQuickInstanceofNonTrivial, instruction_, this);
@@ -683,7 +690,7 @@ class ReadBarrierMarkSlowPathRISCV64 : public SlowPathCodeRISCV64 {
  public:
   ReadBarrierMarkSlowPathRISCV64(HInstruction* instruction, Location ref, Location entrypoint)
       : SlowPathCodeRISCV64(instruction), ref_(ref), entrypoint_(entrypoint) {
-    DCHECK(entrypoint.IsRegister());
+    DCHECK(entrypoint.IsCoreRegister());
   }
 
   const char* GetDescription() const override { return "ReadBarrierMarkSlowPathRISCV64"; }
@@ -1083,11 +1090,11 @@ void ParallelMoveResolverRISCV64::Exchange(int index1, int index2, bool double_s
   Location loc1(double_slot ? Location::DoubleStackSlot(index1) : Location::StackSlot(index1));
   Location loc2(double_slot ? Location::DoubleStackSlot(index2) : Location::StackSlot(index2));
   riscv64::ScratchRegisterScope srs(GetAssembler());
-  Location tmp = Location::RegisterLocation(srs.AllocateXRegister());
+  Location tmp = Location::CoreRegister(srs.AllocateXRegister());
   DataType::Type tmp_type = double_slot ? DataType::Type::kInt64 : DataType::Type::kInt32;
   Location tmp2 = use_fp_tmp2
-      ? Location::FpuRegisterLocation(srs.AllocateFRegister())
-      : Location::RegisterLocation(srs.AllocateXRegister());
+      ? Location::FpuRegister(srs.AllocateFRegister())
+      : Location::CoreRegister(srs.AllocateXRegister());
   DataType::Type tmp2_type = use_fp_tmp2
       ? (double_slot ? DataType::Type::kFloat64 : DataType::Type::kFloat32)
       : tmp_type;
@@ -1314,7 +1321,7 @@ void CodeGeneratorRISCV64::GenerateGcRootFieldLoad(HInstruction* instruction,
                     "have different sizes.");
 
       // Use RA as temp. It is clobbered in the slow path anyway.
-      Location temp = Location::RegisterLocation(RA);
+      Location temp = Location::CoreRegister(RA);
       SlowPathCodeRISCV64* slow_path =
           AddGcRootBakerBarrierBarrierSlowPath(instruction, root, temp);
       EmitBakerReadBarierMarkingCheck(slow_path, root, temp);
@@ -1376,7 +1383,7 @@ void InstructionCodeGeneratorRISCV64::GenerateTestAndBranch(HInstruction* instru
   if (IsBooleanValueOrMaterializedCondition(cond)) {
     // The condition instruction has been materialized, compare the output to 0.
     Location cond_val = instruction->GetLocations()->InAt(condition_input_index);
-    DCHECK(cond_val.IsRegister());
+    DCHECK(cond_val.IsCoreRegister());
     if (true_target == nullptr) {
       __ Beqz(cond_val.AsRegister<XRegister>(), false_target);
     } else {
@@ -1893,7 +1900,7 @@ void CodeGeneratorRISCV64::GenerateReferenceLoadWithBakerReadBarrier(HInstructio
   XRegister reg = ref.AsRegister<XRegister>();
   if (index.IsValid()) {
     DCHECK(!needs_null_check);
-    DCHECK(index.IsRegister());
+    DCHECK(index.IsCoreRegister());
     DataType::Type type = DataType::Type::kReference;
     DCHECK_EQ(type, instruction->GetType());
     if (instruction->IsArrayGet()) {
@@ -1918,7 +1925,7 @@ void CodeGeneratorRISCV64::GenerateReferenceLoadWithBakerReadBarrier(HInstructio
   // Slow path marking the reference.
   XRegister tmp = RA;  // Use RA as temp. It is clobbered in the slow path anyway.
   SlowPathCodeRISCV64* slow_path = new (GetScopedAllocator()) ReadBarrierMarkSlowPathRISCV64(
-      instruction, ref, Location::RegisterLocation(tmp));
+      instruction, ref, Location::CoreRegister(tmp));
   AddSlowPath(slow_path);
 
   const int32_t entry_point_offset = ReadBarrierMarkEntrypointOffset(ref);
@@ -2102,7 +2109,7 @@ void LocationsBuilderRISCV64::HandleBinaryOp(HBinaryOperation* instruction) {
   switch (type) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64: {
-      locations->SetInAt(0, Location::RequiresRegister());
+      locations->SetInAt(0, Location::RequiresCoreRegister());
       HInstruction* right = instruction->InputAt(1);
       bool can_use_imm = false;
       if (instruction->IsMin() || instruction->IsMax()) {
@@ -2114,9 +2121,9 @@ void LocationsBuilderRISCV64::HandleBinaryOp(HBinaryOperation* instruction) {
       if (can_use_imm) {
         locations->SetInAt(1, Location::ConstantLocation(right));
       } else {
-        locations->SetInAt(1, Location::RequiresRegister());
+        locations->SetInAt(1, Location::RequiresCoreRegister());
       }
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
     }
 
@@ -2254,7 +2261,7 @@ void LocationsBuilderRISCV64::HandleCondition(HCondition* instruction) {
       break;
 
     default: {
-      locations->SetInAt(0, Location::RequiresRegister());
+      locations->SetInAt(0, Location::RequiresCoreRegister());
       HInstruction* rhs = instruction->InputAt(1);
       bool use_imm = false;
       if (rhs->IsConstant()) {
@@ -2289,13 +2296,13 @@ void LocationsBuilderRISCV64::HandleCondition(HCondition* instruction) {
       if (use_imm) {
         locations->SetInAt(1, Location::ConstantLocation(rhs));
       } else {
-        locations->SetInAt(1, Location::RequiresRegister());
+        locations->SetInAt(1, Location::RequiresCoreRegister());
       }
       break;
     }
   }
   if (!instruction->IsEmittedAtUseSite()) {
-    locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+    locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
   }
 }
 
@@ -2330,9 +2337,9 @@ void LocationsBuilderRISCV64::HandleShift(HBinaryOperation* instruction) {
   switch (type) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64: {
-      locations->SetInAt(0, Location::RequiresRegister());
+      locations->SetInAt(0, Location::RequiresCoreRegister());
       locations->SetInAt(1, Location::RegisterOrConstant(instruction->InputAt(1)));
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
     }
     default:
@@ -2494,7 +2501,7 @@ void CodeGeneratorRISCV64::CheckGCCardIsValid(XRegister object) {
 
 void LocationsBuilderRISCV64::HandleFieldSet(HInstruction* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetInAt(1, ValueLocationForStore(instruction->InputAt(1)));
 }
 
@@ -2546,7 +2553,7 @@ void LocationsBuilderRISCV64::HandleFieldGet(HInstruction* instruction) {
                                          : LocationSummary::kNoCall);
 
   // Input for object receiver.
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
 
   if (DataType::IsFloatingPointType(instruction->GetType())) {
     locations->SetOut(Location::RequiresFpuRegister());
@@ -2555,15 +2562,15 @@ void LocationsBuilderRISCV64::HandleFieldGet(HInstruction* instruction) {
     // are enabled: we do not want the load to overwrite the object's
     // location, as we need it to emit the read barrier.
     locations->SetOut(
-        Location::RequiresRegister(),
+        Location::RequiresCoreRegister(),
         object_field_get_with_read_barrier ? Location::kOutputOverlap : Location::kNoOutputOverlap);
   }
 
   if (object_field_get_with_read_barrier && kUseBakerReadBarrier) {
-    locations->SetCustomSlowPathCallerSaves(RegisterSet::Empty());  // No caller-save registers.
+    locations->SetCustomSlowPathCallerSaves(AllVectorRegisters());  // Only vector registers.
     // We need a temporary register for the read barrier marking slow
     // path in CodeGeneratorRISCV64::GenerateFieldLoadWithBakerReadBarrier.
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddTemp(Location::RequiresCoreRegister());
   }
 }
 
@@ -2703,8 +2710,8 @@ void LocationsBuilderRISCV64::VisitAbs(HAbs* abs) {
   switch (abs->GetResultType()) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64:
-      locations->SetInAt(0, Location::RequiresRegister());
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetInAt(0, Location::RequiresCoreRegister());
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
     case DataType::Type::kFloat32:
     case DataType::Type::kFloat64:
@@ -2775,7 +2782,7 @@ void LocationsBuilderRISCV64::VisitArrayGet(HArrayGet* instruction) {
      instruction,
      object_array_get_with_read_barrier ? LocationSummary::kCallOnSlowPath
                                         : LocationSummary::kNoCall);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetInAt(1, Location::RegisterOrConstant(instruction->InputAt(1)));
   if (DataType::IsFloatingPointType(type)) {
     locations->SetOut(Location::RequiresFpuRegister(), Location::kNoOutputOverlap);
@@ -2784,14 +2791,14 @@ void LocationsBuilderRISCV64::VisitArrayGet(HArrayGet* instruction) {
     // read barriers enabled: we do not want the move to overwrite the
     // array's location, as we need it to emit the read barrier.
     locations->SetOut(
-        Location::RequiresRegister(),
+        Location::RequiresCoreRegister(),
         object_array_get_with_read_barrier ? Location::kOutputOverlap : Location::kNoOutputOverlap);
   }
   if (object_array_get_with_read_barrier && kUseBakerReadBarrier) {
-    locations->SetCustomSlowPathCallerSaves(RegisterSet::Empty());  // No caller-save registers.
+    locations->SetCustomSlowPathCallerSaves(AllVectorRegisters());  // Only vector registers.
     // We need a temporary register for the read barrier marking slow
     // path in CodeGeneratorRISCV64::GenerateArrayLoadWithBakerReadBarrier.
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddTemp(Location::RequiresCoreRegister());
   }
 }
 
@@ -2900,8 +2907,8 @@ void InstructionCodeGeneratorRISCV64::VisitArrayGet(HArrayGet* instruction) {
 
 void LocationsBuilderRISCV64::VisitArrayLength(HArrayLength* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorRISCV64::VisitArrayLength(HArrayLength* instruction) {
@@ -2923,14 +2930,14 @@ void LocationsBuilderRISCV64::VisitArraySet(HArraySet* instruction) {
       allocator_,
       instruction,
       needs_type_check ? LocationSummary::kCallOnSlowPath : LocationSummary::kNoCall);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetInAt(1, Location::RegisterOrConstant(instruction->InputAt(1)));
   locations->SetInAt(2, ValueLocationForStore(instruction->GetValue()));
   if (kPoisonHeapReferences &&
       instruction->GetComponentType() == DataType::Type::kReference &&
       !locations->InAt(1).IsConstant() &&
       !locations->InAt(2).IsConstant()) {
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddTemp(Location::RequiresCoreRegister());
   }
 }
 
@@ -3081,8 +3088,8 @@ void InstructionCodeGeneratorRISCV64::VisitBelowOrEqual(HBelowOrEqual* instructi
 
 void LocationsBuilderRISCV64::VisitBooleanNot(HBooleanNot* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorRISCV64::VisitBooleanNot(HBooleanNot* instruction) {
@@ -3091,10 +3098,10 @@ void InstructionCodeGeneratorRISCV64::VisitBooleanNot(HBooleanNot* instruction) 
 }
 
 void LocationsBuilderRISCV64::VisitBoundsCheck(HBoundsCheck* instruction) {
-  RegisterSet caller_saves = RegisterSet::Empty();
+  RegisterSet caller_saves = AllVectorRegisters();
   InvokeRuntimeCallingConvention calling_convention;
-  caller_saves.Add(Location::RegisterLocation(calling_convention.GetRegisterAt(0)));
-  caller_saves.Add(Location::RegisterLocation(calling_convention.GetRegisterAt(1)));
+  caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(0));
+  caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(1));
   LocationSummary* locations = codegen_->CreateThrowingSlowPathLocations(instruction, caller_saves);
 
   HInstruction* index = instruction->InputAt(0);
@@ -3122,10 +3129,10 @@ void LocationsBuilderRISCV64::VisitBoundsCheck(HBoundsCheck* instruction) {
 
   locations->SetInAt(
       0,
-      const_index ? Location::ConstantLocation(index) : Location::RequiresRegister());
+      const_index ? Location::ConstantLocation(index) : Location::RequiresCoreRegister());
   locations->SetInAt(
       1,
-      const_length ? Location::ConstantLocation(length) : Location::RequiresRegister());
+      const_length ? Location::ConstantLocation(length) : Location::RequiresCoreRegister());
 }
 
 void InstructionCodeGeneratorRISCV64::VisitBoundsCheck(HBoundsCheck* instruction) {
@@ -3214,13 +3221,13 @@ void LocationsBuilderRISCV64::VisitCheckCast(HCheckCast* instruction) {
   TypeCheckKind type_check_kind = instruction->GetTypeCheckKind();
   LocationSummary::CallKind call_kind = codegen_->GetCheckCastCallKind(instruction);
   LocationSummary* locations = LocationSummary::Create(allocator_, instruction, call_kind);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   if (type_check_kind == TypeCheckKind::kBitstringCheck) {
     locations->SetInAt(1, Location::ConstantLocation(instruction->InputAt(1)));
     locations->SetInAt(2, Location::ConstantLocation(instruction->InputAt(2)));
     locations->SetInAt(3, Location::ConstantLocation(instruction->InputAt(3)));
   } else {
-    locations->SetInAt(1, Location::RequiresRegister());
+    locations->SetInAt(1, Location::RequiresCoreRegister());
   }
   locations->AddRegisterTemps(NumberOfCheckCastTemps(codegen_->EmitReadBarrier(), type_check_kind));
 }
@@ -3422,8 +3429,8 @@ TypeCheckKind type_check_kind = instruction->GetTypeCheckKind();
 
 void LocationsBuilderRISCV64::VisitClassTableGet(HClassTableGet* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorRISCV64::VisitClassTableGet(HClassTableGet* instruction) {
@@ -3458,7 +3465,7 @@ void InstructionCodeGeneratorRISCV64::VisitClearException(
 void LocationsBuilderRISCV64::VisitClinitCheck(HClinitCheck* instruction) {
   LocationSummary* locations =
       LocationSummary::Create(allocator_, instruction, LocationSummary::kCallOnSlowPath);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   if (instruction->HasUses()) {
     locations->SetOut(Location::SameAsFirstInput());
   }
@@ -3490,16 +3497,16 @@ void LocationsBuilderRISCV64::VisitCompare(HCompare* instruction) {
     case DataType::Type::kUint32:
     case DataType::Type::kInt64:
     case DataType::Type::kUint64:
-      locations->SetInAt(0, Location::RequiresRegister());
+      locations->SetInAt(0, Location::RequiresCoreRegister());
       locations->SetInAt(1, RegisterOrZeroBitPatternLocation(instruction->InputAt(1)));
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
 
     case DataType::Type::kFloat32:
     case DataType::Type::kFloat64:
       locations->SetInAt(0, Location::RequiresFpuRegister());
       locations->SetInAt(1, Location::RequiresFpuRegister());
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
 
     default:
@@ -3585,7 +3592,7 @@ void InstructionCodeGeneratorRISCV64::VisitConstructorFence(
 
 void LocationsBuilderRISCV64::VisitCurrentMethod(HCurrentMethod* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetOut(Location::RegisterLocation(kArtMethodRegister));
+  locations->SetOut(Location::CoreRegister(kArtMethodRegister));
 }
 
 void InstructionCodeGeneratorRISCV64::VisitCurrentMethod(
@@ -3595,7 +3602,7 @@ void InstructionCodeGeneratorRISCV64::VisitCurrentMethod(
 
 void LocationsBuilderRISCV64::VisitShouldDeoptimizeFlag(HShouldDeoptimizeFlag* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 }
 
 void InstructionCodeGeneratorRISCV64::VisitShouldDeoptimizeFlag(
@@ -3609,11 +3616,11 @@ void LocationsBuilderRISCV64::VisitDeoptimize(HDeoptimize* instruction) {
   LocationSummary* locations =
       LocationSummary::Create(allocator_, instruction, LocationSummary::kCallOnSlowPath);
   InvokeRuntimeCallingConvention calling_convention;
-  RegisterSet caller_saves = RegisterSet::Empty();
-  caller_saves.Add(Location::RegisterLocation(calling_convention.GetRegisterAt(0)));
+  RegisterSet caller_saves = AllVectorRegisters();
+  caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(0));
   locations->SetCustomSlowPathCallerSaves(caller_saves);
   if (IsBooleanValueOrMaterializedCondition(instruction->InputAt(0))) {
-    locations->SetInAt(0, Location::RequiresRegister());
+    locations->SetInAt(0, Location::RequiresCoreRegister());
   }
 }
 
@@ -3631,9 +3638,9 @@ void LocationsBuilderRISCV64::VisitDiv(HDiv* instruction) {
   switch (instruction->GetResultType()) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64:
-      locations->SetInAt(0, Location::RequiresRegister());
+      locations->SetInAt(0, Location::RequiresCoreRegister());
       locations->SetInAt(1, Location::RegisterOrConstant(instruction->InputAt(1)));
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
 
     case DataType::Type::kFloat32:
@@ -3764,7 +3771,7 @@ void InstructionCodeGeneratorRISCV64::VisitGreaterThanOrEqual(HGreaterThanOrEqua
 void LocationsBuilderRISCV64::VisitIf(HIf* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
   if (IsBooleanValueOrMaterializedCondition(instruction->InputAt(0))) {
-    locations->SetInAt(0, Location::RequiresRegister());
+    locations->SetInAt(0, Location::RequiresCoreRegister());
     if (GetGraph()->IsCompilingBaseline() &&
         codegen_->GetCompilerOptions().ProfileBranches() &&
         !Runtime::Current()->IsAotCompiler()) {
@@ -3773,7 +3780,7 @@ void LocationsBuilderRISCV64::VisitIf(HIf* instruction) {
       DCHECK(info != nullptr);
       BranchCache* cache = info->GetBranchCache(instruction->GetDexPc());
       if (cache != nullptr) {
-        locations->AddTemp(Location::RequiresRegister());
+        locations->AddTemp(Location::RequiresCoreRegister());
       }
     }
   }
@@ -3871,19 +3878,19 @@ void LocationsBuilderRISCV64::VisitInstanceOf(HInstanceOf* instruction) {
 
   LocationSummary* locations = LocationSummary::Create(allocator_, instruction, call_kind);
   if (baker_read_barrier_slow_path) {
-    locations->SetCustomSlowPathCallerSaves(RegisterSet::Empty());  // No caller-save registers.
+    locations->SetCustomSlowPathCallerSaves(AllVectorRegisters());  // Only vector registers.
   }
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   if (type_check_kind == TypeCheckKind::kBitstringCheck) {
     locations->SetInAt(1, Location::ConstantLocation(instruction->InputAt(1)));
     locations->SetInAt(2, Location::ConstantLocation(instruction->InputAt(2)));
     locations->SetInAt(3, Location::ConstantLocation(instruction->InputAt(3)));
   } else {
-    locations->SetInAt(1, Location::RequiresRegister());
+    locations->SetInAt(1, Location::RequiresCoreRegister());
   }
   // The output does overlap inputs.
   // Note that TypeCheckSlowPathRISCV64 uses this register too.
-  locations->SetOut(Location::RequiresRegister(), Location::kOutputOverlap);
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kOutputOverlap);
   locations->AddRegisterTemps(
       NumberOfInstanceOfTemps(codegen_->EmitReadBarrier(), type_check_kind));
 }
@@ -3982,7 +3989,7 @@ void InstructionCodeGeneratorRISCV64::VisitInstanceOf(HInstanceOf* instruction) 
       // marking), or define two more entrypoints, or request an additional temp
       // from the register allocator instead of using a scratch register.
       ScratchRegisterScope srs(GetAssembler());
-      Location tmp = Location::RegisterLocation(srs.AllocateXRegister());
+      Location tmp = Location::CoreRegister(srs.AllocateXRegister());
       // /* HeapReference<Class> */ tmp = obj->klass_
       GenerateReferenceLoadTwoRegisters(
           instruction, tmp, obj_loc, class_offset, maybe_temp_loc, read_barrier_option);
@@ -4135,9 +4142,9 @@ void LocationsBuilderRISCV64::VisitInvokeInterface(HInvokeInterface* instruction
   // Use T0 as the hidden argument for `art_quick_imt_conflict_trampoline`.
   if (instruction->GetHiddenArgumentLoadKind() == MethodLoadKind::kRecursive) {
     instruction->GetLocations()->SetInAt(instruction->GetNumberOfArguments() - 1,
-                                         Location::RegisterLocation(T0));
+                                         Location::CoreRegister(T0));
   } else {
-    instruction->GetLocations()->AddTemp(Location::RegisterLocation(T0));
+    instruction->GetLocations()->AddTemp(Location::CoreRegister(T0));
   }
 }
 
@@ -4212,7 +4219,7 @@ void LocationsBuilderRISCV64::VisitInvokeStaticOrDirect(HInvokeStaticOrDirect* i
       // Use the next argument register, if usable for C.LD, as the target method temp. Otherwise,
       // we'll use RA. We prefer the low register temp that allows shorter encoding than RA.
       Location maybe_temp = calling_convention_visitor.GetNextLocation(DataType::Type::kInt32);
-      if (maybe_temp.IsRegister() && maybe_temp.reg() <= A5) {
+      if (maybe_temp.IsCoreRegister() && maybe_temp.reg() <= A5) {
         instruction->GetLocations()->AddTemp(maybe_temp);
       }
     }
@@ -4306,7 +4313,7 @@ void LocationsBuilderRISCV64::VisitLoadClass(HLoadClass* instruction) {
   HLoadClass::LoadKind load_kind = instruction->GetLoadKind();
   if (load_kind == HLoadClass::LoadKind::kRuntimeCall) {
     InvokeRuntimeCallingConvention calling_convention;
-    Location loc = Location::RegisterLocation(calling_convention.GetRegisterAt(0));
+    Location loc = Location::CoreRegister(calling_convention.GetRegisterAt(0));
     DCHECK_EQ(DataType::Type::kReference, instruction->GetType());
     DCHECK(loc.Equals(calling_convention.GetReturnLocation(DataType::Type::kReference)));
     CodeGenerator::CreateLoadClassRuntimeCallLocationSummary(instruction, loc, loc);
@@ -4322,12 +4329,12 @@ void LocationsBuilderRISCV64::VisitLoadClass(HLoadClass* instruction) {
       : LocationSummary::kNoCall;
   LocationSummary* locations = LocationSummary::Create(allocator_, instruction, call_kind);
   if (kUseBakerReadBarrier && requires_read_barrier && !instruction->NeedsEnvironment()) {
-    locations->SetCustomSlowPathCallerSaves(RegisterSet::Empty());  // No caller-save registers.
+    locations->SetCustomSlowPathCallerSaves(AllVectorRegisters());  // Only vector registers.
   }
   if (load_kind == HLoadClass::LoadKind::kReferrersClass) {
-    locations->SetInAt(0, Location::RequiresRegister());
+    locations->SetInAt(0, Location::RequiresCoreRegister());
   }
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
   if (load_kind == HLoadClass::LoadKind::kBssEntry ||
       load_kind == HLoadClass::LoadKind::kBssEntryPublic ||
       load_kind == HLoadClass::LoadKind::kBssEntryPackage) {
@@ -4458,7 +4465,7 @@ void InstructionCodeGeneratorRISCV64::VisitLoadClass(HLoadClass* instruction)
 
 void LocationsBuilderRISCV64::VisitLoadException(HLoadException* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 }
 
 void InstructionCodeGeneratorRISCV64::VisitLoadException(HLoadException* instruction) {
@@ -4468,7 +4475,7 @@ void InstructionCodeGeneratorRISCV64::VisitLoadException(HLoadException* instruc
 
 void LocationsBuilderRISCV64::VisitLoadMethodHandle(HLoadMethodHandle* instruction) {
   InvokeRuntimeCallingConvention calling_convention;
-  Location loc = Location::RegisterLocation(calling_convention.GetRegisterAt(0));
+  Location loc = Location::CoreRegister(calling_convention.GetRegisterAt(0));
   CodeGenerator::CreateLoadMethodHandleRuntimeCallLocationSummary(instruction, loc, loc);
 }
 
@@ -4478,7 +4485,7 @@ void InstructionCodeGeneratorRISCV64::VisitLoadMethodHandle(HLoadMethodHandle* i
 
 void LocationsBuilderRISCV64::VisitLoadMethodType(HLoadMethodType* instruction) {
   InvokeRuntimeCallingConvention calling_convention;
-  Location loc = Location::RegisterLocation(calling_convention.GetRegisterAt(0));
+  Location loc = Location::CoreRegister(calling_convention.GetRegisterAt(0));
   CodeGenerator::CreateLoadMethodTypeRuntimeCallLocationSummary(instruction, loc, loc);
 }
 
@@ -4495,7 +4502,7 @@ void LocationsBuilderRISCV64::VisitLoadString(HLoadString* instruction) {
     DCHECK_EQ(DataType::Type::kReference, instruction->GetType());
     locations->SetOut(calling_convention.GetReturnLocation(DataType::Type::kReference));
   } else {
-    locations->SetOut(Location::RequiresRegister());
+    locations->SetOut(Location::RequiresCoreRegister());
     if (load_kind == HLoadString::LoadKind::kBssEntry) {
       if (codegen_->EmitNonBakerReadBarrier()) {
         // For non-Baker read barriers we have a temp-clobbering call.
@@ -4640,7 +4647,7 @@ void LocationsBuilderRISCV64::VisitMonitorOperation(HMonitorOperation* instructi
   LocationSummary* locations =
       LocationSummary::Create(allocator_, instruction, LocationSummary::kCallOnMainOnly);
   InvokeRuntimeCallingConvention calling_convention;
-  locations->SetInAt(0, Location::RegisterLocation(calling_convention.GetRegisterAt(0)));
+  locations->SetInAt(0, Location::CoreRegister(calling_convention.GetRegisterAt(0)));
 }
 
 void InstructionCodeGeneratorRISCV64::VisitMonitorOperation(HMonitorOperation* instruction) {
@@ -4658,9 +4665,9 @@ void LocationsBuilderRISCV64::VisitMul(HMul* instruction) {
   switch (instruction->GetResultType()) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64:
-      locations->SetInAt(0, Location::RequiresRegister());
-      locations->SetInAt(1, Location::RequiresRegister());
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetInAt(0, Location::RequiresCoreRegister());
+      locations->SetInAt(1, Location::RequiresCoreRegister());
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
 
     case DataType::Type::kFloat32:
@@ -4708,8 +4715,8 @@ void LocationsBuilderRISCV64::VisitNeg(HNeg* instruction) {
   switch (instruction->GetResultType()) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64:
-      locations->SetInAt(0, Location::RequiresRegister());
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetInAt(0, Location::RequiresCoreRegister());
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
 
     case DataType::Type::kFloat32:
@@ -4753,8 +4760,8 @@ void LocationsBuilderRISCV64::VisitNewArray(HNewArray* instruction) {
       LocationSummary::Create(allocator_, instruction, LocationSummary::kCallOnMainOnly);
   InvokeRuntimeCallingConvention calling_convention;
   locations->SetOut(calling_convention.GetReturnLocation(DataType::Type::kReference));
-  locations->SetInAt(0, Location::RegisterLocation(calling_convention.GetRegisterAt(0)));
-  locations->SetInAt(1, Location::RegisterLocation(calling_convention.GetRegisterAt(1)));
+  locations->SetInAt(0, Location::CoreRegister(calling_convention.GetRegisterAt(0)));
+  locations->SetInAt(1, Location::CoreRegister(calling_convention.GetRegisterAt(1)));
 }
 
 void InstructionCodeGeneratorRISCV64::VisitNewArray(HNewArray* instruction) {
@@ -4768,7 +4775,7 @@ void LocationsBuilderRISCV64::VisitNewInstance(HNewInstance* instruction) {
   LocationSummary* locations =
       LocationSummary::Create(allocator_, instruction, LocationSummary::kCallOnMainOnly);
   InvokeRuntimeCallingConvention calling_convention;
-  locations->SetInAt(0, Location::RegisterLocation(calling_convention.GetRegisterAt(0)));
+  locations->SetInAt(0, Location::CoreRegister(calling_convention.GetRegisterAt(0)));
   locations->SetOut(calling_convention.GetReturnLocation(DataType::Type::kReference));
 }
 
@@ -4787,8 +4794,8 @@ void InstructionCodeGeneratorRISCV64::VisitNop([[maybe_unused]] HNop* instructio
 
 void LocationsBuilderRISCV64::VisitNot(HNot* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorRISCV64::VisitNot(HNot* instruction) {
@@ -4825,7 +4832,7 @@ void InstructionCodeGeneratorRISCV64::VisitNullConstant(
 
 void LocationsBuilderRISCV64::VisitNullCheck(HNullCheck* instruction) {
   LocationSummary* locations = codegen_->CreateThrowingSlowPathLocations(instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
 }
 
 void InstructionCodeGeneratorRISCV64::VisitNullCheck(HNullCheck* instruction) {
@@ -4842,7 +4849,7 @@ void InstructionCodeGeneratorRISCV64::VisitOr(HOr* instruction) {
 
 void LocationsBuilderRISCV64::VisitPackedSwitch(HPackedSwitch* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
 }
 
 void InstructionCodeGeneratorRISCV64::VisitPackedSwitch(HPackedSwitch* instruction) {
@@ -4933,16 +4940,16 @@ void LocationsBuilderRISCV64::VisitRem(HRem* instruction) {
   switch (type) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64:
-      locations->SetInAt(0, Location::RequiresRegister());
+      locations->SetInAt(0, Location::RequiresCoreRegister());
       locations->SetInAt(1, Location::RegisterOrConstant(instruction->InputAt(1)));
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
 
     case DataType::Type::kFloat32:
     case DataType::Type::kFloat64: {
       InvokeRuntimeCallingConvention calling_convention;
-      locations->SetInAt(0, Location::FpuRegisterLocation(calling_convention.GetFpuRegisterAt(0)));
-      locations->SetInAt(1, Location::FpuRegisterLocation(calling_convention.GetFpuRegisterAt(1)));
+      locations->SetInAt(0, Location::FpuRegister(calling_convention.GetFpuRegisterAt(0)));
+      locations->SetInAt(1, Location::FpuRegister(calling_convention.GetFpuRegisterAt(1)));
       locations->SetOut(calling_convention.GetReturnLocation(type));
       break;
     }
@@ -5059,7 +5066,7 @@ void InstructionCodeGeneratorRISCV64::VisitStaticFieldSet(HStaticFieldSet* instr
 }
 
 void LocationsBuilderRISCV64::VisitStringBuilderAppend(HStringBuilderAppend* instruction) {
-  codegen_->CreateStringBuilderAppendLocations(instruction, Location::RegisterLocation(A0));
+  codegen_->CreateStringBuilderAppendLocations(instruction, Location::CoreRegister(A0));
 }
 
 void InstructionCodeGeneratorRISCV64::VisitStringBuilderAppend(HStringBuilderAppend* instruction) {
@@ -5138,16 +5145,16 @@ void LocationsBuilderRISCV64::VisitSelect(HSelect* instruction) {
     locations->SetInAt(1, FpuRegisterOrZeroBitPatternLocation(instruction->GetTrueValue()));
     locations->SetOut(Location::RequiresFpuRegister(), Location::kNoOutputOverlap);
     if (!locations->InAt(0).IsConstant() && !locations->InAt(1).IsConstant()) {
-      locations->AddTemp(Location::RequiresRegister());
+      locations->AddTemp(Location::RequiresCoreRegister());
     }
   }  else {
     locations->SetInAt(0, RegisterOrZeroBitPatternLocation(instruction->GetFalseValue()));
     locations->SetInAt(1, RegisterOrZeroBitPatternLocation(instruction->GetTrueValue()));
-    locations->SetOut(Location::RequiresRegister(), Location::kOutputOverlap);
+    locations->SetOut(Location::RequiresCoreRegister(), Location::kOutputOverlap);
   }
 
   if (IsBooleanValueOrMaterializedCondition(instruction->GetCondition())) {
-    locations->SetInAt(2, Location::RequiresRegister());
+    locations->SetInAt(2, Location::RequiresCoreRegister());
   }
 }
 
@@ -5240,11 +5247,8 @@ void InstructionCodeGeneratorRISCV64::VisitSub(HSub* instruction) {
 void LocationsBuilderRISCV64::VisitSuspendCheck(HSuspendCheck* instruction) {
   LocationSummary* locations =
       LocationSummary::Create(allocator_, instruction, LocationSummary::kCallOnSlowPath);
-  // In suspend check slow path, usually there are no caller-save registers at all.
-  // If SIMD instructions are present, however, we force spilling all live SIMD
-  // registers in full width (since the runtime only saves/restores lower part).
-  locations->SetCustomSlowPathCallerSaves(GetGraph()->HasSIMD() ? RegisterSet::AllFpu() :
-                                                                  RegisterSet::Empty());
+  // In suspend check slow path, we need to spill only vector registers.
+  locations->SetCustomSlowPathCallerSaves(AllVectorRegisters());
 }
 
 void InstructionCodeGeneratorRISCV64::VisitSuspendCheck(HSuspendCheck* instruction) {
@@ -5265,7 +5269,7 @@ void LocationsBuilderRISCV64::VisitThrow(HThrow* instruction) {
   LocationSummary* locations =
       LocationSummary::Create(allocator_, instruction, LocationSummary::kCallOnMainOnly);
   InvokeRuntimeCallingConvention calling_convention;
-  locations->SetInAt(0, Location::RegisterLocation(calling_convention.GetRegisterAt(0)));
+  locations->SetInAt(0, Location::CoreRegister(calling_convention.GetRegisterAt(0)));
 }
 
 void InstructionCodeGeneratorRISCV64::VisitThrow(HThrow* instruction) {
@@ -5300,13 +5304,13 @@ void LocationsBuilderRISCV64::VisitTypeConversion(HTypeConversion* instruction) 
   if (DataType::IsFloatingPointType(input_type)) {
     locations->SetInAt(0, Location::RequiresFpuRegister());
   } else {
-    locations->SetInAt(0, Location::RequiresRegister());
+    locations->SetInAt(0, Location::RequiresCoreRegister());
   }
 
   if (DataType::IsFloatingPointType(result_type)) {
     locations->SetOut(Location::RequiresFpuRegister(), Location::kNoOutputOverlap);
   } else {
-    locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+    locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
   }
 }
 
@@ -5427,9 +5431,9 @@ void LocationsBuilderRISCV64::VisitRiscv64ShiftAdd(HRiscv64ShiftAdd* instruction
       << "Unexpected ShiftAdd type: " << instruction->GetType();
 
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetInAt(1, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorRISCV64::VisitRiscv64ShiftAdd(HRiscv64ShiftAdd* instruction) {
@@ -5462,9 +5466,9 @@ void LocationsBuilderRISCV64::HandleBitManipulations(HBinaryOperation* instructi
   DCHECK(instruction->GetResultType() == DataType::Type::kInt64);
 
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetInAt(1, Location::RegisterOrConstant(instruction->InputAt(1)));
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorRISCV64::HandleBitManipulations(HBinaryOperation* instruction) {
@@ -5540,9 +5544,9 @@ void LocationsBuilderRISCV64::VisitBitwiseNegatedRight(HBitwiseNegatedRight* ins
   DCHECK(DataType::IsIntegralType(instruction->GetType())) << instruction->GetType();
 
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetInAt(1, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorRISCV64::VisitBitwiseNegatedRight(HBitwiseNegatedRight* instruction) {
@@ -6030,9 +6034,8 @@ CodeGeneratorRISCV64::CodeGeneratorRISCV64(HGraph* graph,
     : CodeGenerator(graph,
                     kNumberOfXRegisters,
                     kNumberOfFRegisters,
-                    /*number_of_register_pairs=*/ 0u,
-                    ComputeRegisterMask(kCoreCalleeSaves, arraysize(kCoreCalleeSaves)),
-                    ComputeRegisterMask(kFpuCalleeSaves, arraysize(kFpuCalleeSaves)),
+                    kNumberOfVRegisters,
+                    ComputeCalleeSaves(),
                     compiler_options,
                     stats,
                     ArrayRef<const bool>(detail::kIsIntrinsicUnimplemented)),
@@ -6062,9 +6065,9 @@ CodeGeneratorRISCV64::CodeGeneratorRISCV64(HGraph* graph,
                           graph->GetAllocator()->Adapter(kArenaAllocCodeGenerator)),
       jit_class_patches_(TypeReferenceValueComparator(),
                          graph->GetAllocator()->Adapter(kArenaAllocCodeGenerator)) {
-  SetupBlockedRegisters();
+  blocked_registers_ = ComputeBlockedRegisters(graph);
   // Always mark the RA register to be saved.
-  AddAllocatedRegister(Location::RegisterLocation(RA));
+  AddAllocatedCoreRegister(RA);
 }
 
 void CodeGeneratorRISCV64::MaybeIncrementHotness(HSuspendCheck* suspend_check,
@@ -6225,7 +6228,7 @@ void CodeGeneratorRISCV64::GenerateFrameEntry() {
     for (size_t i = arraysize(kFpuCalleeSaves); i != 0; ) {
       --i;
       FRegister reg = kFpuCalleeSaves[i];
-      if (allocated_registers_.ContainsFloatingPointRegister(reg)) {
+      if (allocated_registers_.ContainsFpuRegister(reg)) {
         offset -= kRiscv64DoublewordSize;
         __ FStored(reg, SP, offset);
         __ cfi().RelOffset(dwarf::Reg::Riscv64Fp(reg), offset);
@@ -6268,7 +6271,7 @@ void CodeGeneratorRISCV64::GenerateFrameExit() {
     for (size_t i = arraysize(kFpuCalleeSaves); i != 0; ) {
       --i;
       FRegister reg = kFpuCalleeSaves[i];
-      if (allocated_registers_.ContainsFloatingPointRegister(reg)) {
+      if (allocated_registers_.ContainsFpuRegister(reg)) {
         offset -= kRiscv64DoublewordSize;
         __ FLoadd(reg, SP, offset);
         __ cfi().Restore(dwarf::Reg::Riscv64Fp(reg));
@@ -6287,7 +6290,7 @@ void CodeGeneratorRISCV64::GenerateFrameExit() {
 void CodeGeneratorRISCV64::Bind(HBasicBlock* block) { __ Bind(GetLabelOf(block)); }
 
 void CodeGeneratorRISCV64::MoveConstant(Location destination, int32_t value) {
-  DCHECK(destination.IsRegister());
+  DCHECK(destination.IsCoreRegister());
   __ LoadConst32(destination.AsRegister<XRegister>(), value);
 }
 
@@ -6306,23 +6309,23 @@ void CodeGeneratorRISCV64::MoveLocation(Location destination,
   // TODO(riscv64): Can unspecified `dst_type` move 32-bit GPR to FPR without NaN-boxing?
   CHECK(!unspecified_type);
 
-  if (destination.IsRegister() || destination.IsFpuRegister()) {
+  if (destination.IsCoreRegister() || destination.IsFpuRegister()) {
     if (unspecified_type) {
       HConstant* src_cst = source.IsConstant() ? source.GetConstant() : nullptr;
       if (source.IsStackSlot() ||
           (src_cst != nullptr &&
            (src_cst->IsIntConstant() || src_cst->IsFloatConstant() || src_cst->IsNullConstant()))) {
         // For stack slots and 32-bit constants, a 32-bit type is appropriate.
-        dst_type = destination.IsRegister() ? DataType::Type::kInt32 : DataType::Type::kFloat32;
+        dst_type = destination.IsCoreRegister() ? DataType::Type::kInt32 : DataType::Type::kFloat32;
       } else {
         // If the source is a double stack slot or a 64-bit constant, a 64-bit type
         // is appropriate. Else the source is a register, and since the type has not
         // been specified, we chose a 64-bit type to force a 64-bit move.
-        dst_type = destination.IsRegister() ? DataType::Type::kInt64 : DataType::Type::kFloat64;
+        dst_type = destination.IsCoreRegister() ? DataType::Type::kInt64 : DataType::Type::kFloat64;
       }
     }
     DCHECK((destination.IsFpuRegister() && DataType::IsFloatingPointType(dst_type)) ||
-           (destination.IsRegister() && !DataType::IsFloatingPointType(dst_type)));
+           (destination.IsCoreRegister() && !DataType::IsFloatingPointType(dst_type)));
 
     if (source.IsStackSlot() || source.IsDoubleStackSlot()) {
       // Move to GPR/FPR from stack
@@ -6362,8 +6365,8 @@ void CodeGeneratorRISCV64::MoveLocation(Location destination,
       } else if (dst_type == DataType::Type::kFloat64) {
         __ FMvDX(destination.AsFpuRegister<FRegister>(), gpr);
       }
-    } else if (source.IsRegister()) {
-      if (destination.IsRegister()) {
+    } else if (source.IsCoreRegister()) {
+      if (destination.IsCoreRegister()) {
         // Move to GPR from GPR
         __ Mv(destination.AsRegister<XRegister>(), source.AsRegister<XRegister>());
       } else {
@@ -6389,7 +6392,7 @@ void CodeGeneratorRISCV64::MoveLocation(Location destination,
           }
         }
       } else {
-        DCHECK(destination.IsRegister());
+        DCHECK(destination.IsCoreRegister());
         if (DataType::Is64BitType(dst_type)) {
           __ FMvXD(destination.AsRegister<XRegister>(), source.AsFpuRegister<FRegister>());
         } else {
@@ -6402,9 +6405,9 @@ void CodeGeneratorRISCV64::MoveLocation(Location destination,
     UNREACHABLE();
   } else {  // The destination is not a register. It must be a stack slot.
     DCHECK(destination.IsStackSlot() || destination.IsDoubleStackSlot());
-    if (source.IsRegister() || source.IsFpuRegister()) {
+    if (source.IsCoreRegister() || source.IsFpuRegister()) {
       if (unspecified_type) {
-        if (source.IsRegister()) {
+        if (source.IsCoreRegister()) {
           dst_type = destination.IsStackSlot() ? DataType::Type::kInt32 : DataType::Type::kInt64;
         } else {
           dst_type =
@@ -6418,13 +6421,13 @@ void CodeGeneratorRISCV64::MoveLocation(Location destination,
                      destination.IsDoubleStackSlot() == DataType::Is64BitType(dst_type));
       // Move to stack from GPR/FPR
       if (destination.IsDoubleStackSlot()) {
-        if (source.IsRegister()) {
+        if (source.IsCoreRegister()) {
           __ Stored(source.AsRegister<XRegister>(), SP, destination.GetStackIndex());
         } else {
           __ FStored(source.AsFpuRegister<FRegister>(), SP, destination.GetStackIndex());
         }
       } else {
-        if (source.IsRegister()) {
+        if (source.IsCoreRegister()) {
           __ Storew(source.AsRegister<XRegister>(), SP, destination.GetStackIndex());
         } else {
           __ FStorew(source.AsFpuRegister<FRegister>(), SP, destination.GetStackIndex());
@@ -6467,27 +6470,39 @@ void CodeGeneratorRISCV64::MoveLocation(Location destination,
 }
 
 void CodeGeneratorRISCV64::AddLocationAsTemp(Location location, LocationSummary* locations) {
-  if (location.IsRegister()) {
+  if (location.IsCoreRegister()) {
     locations->AddTemp(location);
   } else {
     UNIMPLEMENTED(FATAL) << "AddLocationAsTemp not implemented for location " << location;
   }
 }
 
-inline void CodeGeneratorRISCV64::SetupBlockedRegisters() {
-  blocked_core_registers_ =
+inline RegisterSet CodeGeneratorRISCV64::ComputeCalleeSaves() {
+  RegisterSet callee_saves = RegisterSet::Empty();
+  callee_saves.AddCoreRegisterSet(
+      ComputeRegisterMask(kCoreCalleeSaves, arraysize(kCoreCalleeSaves)));
+  callee_saves.AddFpuRegisterSet(ComputeRegisterMask(kFpuCalleeSaves, arraysize(kFpuCalleeSaves)));
+  return callee_saves;
+}
+
+inline RegisterSet CodeGeneratorRISCV64::ComputeBlockedRegisters(HGraph* graph) {
+  RegisterSet blocked_registers = RegisterSet::Empty();
+  blocked_registers.AddCoreRegisterSet(
       // ZERO, GP, SP, RA, TP and TR(S1, ART Thread register) are reserved and can't be allocated.
       (1u << Zero) | (1u << GP) | (1u << SP) | (1u << RA) | (1u << TP) | (1u << TR) |
       // TMP(T6) and TMP2(T5) are used as temporary/scratch registers.
-      (1u << TMP) | (1u << TMP2);
-  blocked_fpu_registers_ = 1u << FTMP;  // FTMP(FT11) is used as temporary/scratch register.
+      (1u << TMP) | (1u << TMP2));
+  blocked_registers.AddFpuRegister(FTMP);  // FTMP(FT11) is used as temporary/scratch register.
+  // TODO: We shall need a VTMP for parallel moves of vector registers.
 
-  if (GetGraph()->IsDebuggable()) {
+  if (graph->IsDebuggable()) {
     // Stubs do not save callee-save floating point registers. If the graph
     // is debuggable, we need to deal with these registers differently. For
     // now, just block them.
-    blocked_fpu_registers_ |= ComputeRegisterMask(kFpuCalleeSaves, arraysize(kFpuCalleeSaves));
+    blocked_registers.AddFpuRegisterSet(
+        ComputeRegisterMask(kFpuCalleeSaves, arraysize(kFpuCalleeSaves)));
   }
+  return blocked_registers;
 }
 
 size_t CodeGeneratorRISCV64::SaveCoreRegister(size_t stack_index, uint32_t reg_id) {
@@ -6526,6 +6541,10 @@ void CodeGeneratorRISCV64::DumpCoreRegister(std::ostream& stream, int reg) const
 
 void CodeGeneratorRISCV64::DumpFloatingPointRegister(std::ostream& stream, int reg) const {
   stream << FRegister(reg);
+}
+
+void CodeGeneratorRISCV64::DumpVectorRegister(std::ostream& stream, int reg) const {
+  stream << VRegister(reg);
 }
 
 const Riscv64InstructionSetFeatures& CodeGeneratorRISCV64::GetInstructionSetFeatures() const {
@@ -7085,7 +7104,7 @@ void CodeGeneratorRISCV64::GenerateStaticOrDirectCall(HInvokeStaticOrDirect* inv
         DCHECK_EQ(invoke->GetCodePtrLocation(), CodePtrLocation::kCallCriticalNative);
         // Use RA for both the target method and then the code pointer. The code shall be two
         // bytes longer because we'll have to use 32-bit instead of 16-bit encoding for one load.
-        callee_method = Location::RegisterLocation(RA);
+        callee_method = Location::CoreRegister(RA);
       }
       LoadMethod(invoke->GetMethodLoadKind(), callee_method, invoke);
       break;
@@ -7267,7 +7286,7 @@ void CodeGeneratorRISCV64::SwapLocations(Location loc1, Location loc2, DataType:
   bool is_fp_reg2 = loc2.IsFpuRegister();
 
   if ((is_slot1 != is_slot2) ||
-      (loc2.IsRegister() && loc1.IsRegister()) ||
+      (loc2.IsCoreRegister() && loc1.IsCoreRegister()) ||
       (is_fp_reg2 && is_fp_reg1)) {
     if ((is_fp_reg2 && is_fp_reg1) && GetGraph()->HasSIMD()) {
       LOG(FATAL) << "Unsupported";
@@ -7275,8 +7294,8 @@ void CodeGeneratorRISCV64::SwapLocations(Location loc1, Location loc2, DataType:
     }
     ScratchRegisterScope srs(GetAssembler());
     Location tmp = (is_fp_reg2 || is_fp_reg1)
-        ? Location::FpuRegisterLocation(srs.AllocateFRegister())
-        : Location::RegisterLocation(srs.AllocateXRegister());
+        ? Location::FpuRegister(srs.AllocateFRegister())
+        : Location::CoreRegister(srs.AllocateXRegister());
     MoveLocation(tmp, loc1, type);
     MoveLocation(loc1, loc2, type);
     MoveLocation(loc2, tmp, type);

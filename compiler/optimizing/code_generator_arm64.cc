@@ -170,7 +170,7 @@ Location InvokeRuntimeCallingConvention::GetReturnLocation(DataType::Type return
 static RegisterSet OneRegInReferenceOutSaveEverythingCallerSaves() {
   InvokeRuntimeCallingConvention calling_convention;
   RegisterSet caller_saves = RegisterSet::Empty();
-  caller_saves.Add(Location::RegisterLocation(calling_convention.GetRegisterAt(0).GetCode()));
+  caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(0).GetCode());
   DCHECK_EQ(calling_convention.GetRegisterAt(0).GetCode(),
             RegisterFrom(calling_convention.GetReturnLocation(DataType::Type::kReference),
                          DataType::Type::kReference).GetCode());
@@ -183,8 +183,8 @@ static RegisterSet OneRegInReferenceOutSaveEverythingCallerSaves() {
 
 void SlowPathCodeARM64::SaveLiveRegisters(CodeGenerator* codegen, LocationSummary* locations) {
   size_t stack_offset = codegen->GetFirstRegisterSlotInSlowPath();
-  const uint32_t core_spills = codegen->GetSlowPathSpills(locations, /* core_registers= */ true);
-  for (uint32_t i : LowToHighBits(core_spills)) {
+  const RegisterSet spills = codegen->GetSlowPathSpills(locations);
+  for (uint32_t i : LowToHighBits(spills.GetCoreRegisterSet())) {
     // If the register holds an object, update the stack mask.
     if (locations->RegisterContainsObject(i)) {
       locations->SetStackBit(stack_offset / kVRegSize);
@@ -196,8 +196,7 @@ void SlowPathCodeARM64::SaveLiveRegisters(CodeGenerator* codegen, LocationSummar
   }
 
   const size_t fp_reg_size = codegen->GetSlowPathFPWidth();
-  const uint32_t fp_spills = codegen->GetSlowPathSpills(locations, /* core_registers= */ false);
-  for (uint32_t i : LowToHighBits(fp_spills)) {
+  for (uint32_t i : LowToHighBits(spills.GetFpuRegisterSet())) {
     DCHECK_LT(stack_offset, codegen->GetFrameSize() - codegen->FrameEntrySpillSize());
     DCHECK_LT(i, kMaximumNumberOfExpectedRegisters);
     saved_fpu_stack_offsets_[i] = stack_offset;
@@ -353,7 +352,8 @@ class LoadClassSlowPathARM64 : public SlowPathCodeARM64 {
 
     // Move the class to the desired location.
     if (out.IsValid()) {
-      DCHECK(out.IsRegister() && !locations->GetLiveRegisters()->ContainsCoreRegister(out.reg()));
+      DCHECK(out.IsCoreRegister());
+      DCHECK(!locations->GetLiveRegisters()->ContainsCoreRegister(out.reg()));
       DataType::Type type = instruction_->GetType();
       arm64_codegen->MoveLocation(out, calling_convention.GetReturnLocation(type), type);
     }
@@ -731,7 +731,7 @@ class ReadBarrierForHeapReferenceSlowPathARM64 : public SlowPathCodeARM64 {
                IsUnsafeCASReference(invoke) ||
                IsVarHandleCASFamily(invoke)) << invoke->GetIntrinsic();
         DCHECK_EQ(offset_, 0u);
-        DCHECK(index_.IsRegister());
+        DCHECK(index_.IsCoreRegister());
       }
     }
 
@@ -1018,7 +1018,7 @@ Location CriticalNativeCallingConventionVisitorARM64::GetReturnLocation(DataType
 
 Location CriticalNativeCallingConventionVisitorARM64::GetMethodLocation() const {
   // Pass the method in the hidden argument x15.
-  return Location::RegisterLocation(x15.GetCode());
+  return Location::CoreRegister(x15.GetCode());
 }
 
 namespace detail {
@@ -1053,9 +1053,8 @@ CodeGeneratorARM64::CodeGeneratorARM64(HGraph* graph,
     : CodeGenerator(graph,
                     kNumberOfAllocatableRegisters,
                     kNumberOfAllocatableFPRegisters,
-                    kNumberOfAllocatableRegisterPairs,
-                    dchecked_integral_cast<uint32_t>(callee_saved_core_registers.GetList()),
-                    dchecked_integral_cast<uint32_t>(callee_saved_fp_registers.GetList()),
+                    /*number_of_vector_registers=*/ 0u,
+                    ComputeCalleeSaves(),
                     compiler_options,
                     stats,
                     ArrayRef<const bool>(detail::kIsIntrinsicUnimplemented)),
@@ -1086,9 +1085,9 @@ CodeGeneratorARM64::CodeGeneratorARM64(HGraph* graph,
       jit_patches_(&assembler_, graph->GetAllocator()),
       jit_baker_read_barrier_slow_paths_(std::less<uint32_t>(),
                                          graph->GetAllocator()->Adapter(kArenaAllocCodeGenerator)) {
-  SetupBlockedRegisters();
+  blocked_registers_ = ComputeBlockedRegisters(graph);
   // Save the link register (containing the return address) to mimic Quick.
-  AddAllocatedRegister(LocationFrom(lr));
+  AddAllocatedCoreRegister(lr.GetCode());
 
   bool use_sve = ShouldUseSVE();
   if (use_sve) {
@@ -1222,18 +1221,18 @@ void ParallelMoveResolverARM64::FinishEmitNativeCode() {
 }
 
 Location ParallelMoveResolverARM64::AllocateScratchLocationFor(Location::Kind kind) {
-  DCHECK(kind == Location::kRegister || kind == Location::kFpuRegister
+  DCHECK(kind == Location::kCoreRegister || kind == Location::kFpuRegister
          || kind == Location::kStackSlot || kind == Location::kDoubleStackSlot
          || kind == Location::kSIMDStackSlot);
   kind = (kind == Location::kFpuRegister || kind == Location::kSIMDStackSlot)
       ? Location::kFpuRegister
-      : Location::kRegister;
+      : Location::kCoreRegister;
   Location scratch = GetScratchLocation(kind);
   if (!scratch.Equals(Location::NoLocation())) {
     return scratch;
   }
   // Allocate from VIXL temp registers.
-  if (kind == Location::kRegister) {
+  if (kind == Location::kCoreRegister) {
     scratch = LocationFrom(vixl_temps_.AcquireX());
   } else {
     DCHECK_EQ(kind, Location::kFpuRegister);
@@ -1246,7 +1245,7 @@ Location ParallelMoveResolverARM64::AllocateScratchLocationFor(Location::Kind ki
 }
 
 void ParallelMoveResolverARM64::FreeScratchLocation(Location loc) {
-  if (loc.IsRegister()) {
+  if (loc.IsCoreRegister()) {
     vixl_temps_.Release(XRegisterFrom(loc));
   } else {
     DCHECK(loc.IsFpuRegister());
@@ -1364,7 +1363,7 @@ void CodeGeneratorARM64::MaybeRecordTraceEvent(bool is_method_entry) {
   // Don't instrument methods that are unlikely to be long running
   if (!graph->HasLoops() &&
       !graph->HasMonitorOperations() &&
-      graph->CountNumberOfInstructions() <= kSmallFunctionThreshold) {
+      !graph->HasMoreInstructionsThan(kSmallFunctionThreshold)) {
     return;
   }
 
@@ -1604,16 +1603,14 @@ void CodeGeneratorARM64::PopFrameAndReturn(Arm64Assembler* assembler,
 }
 
 CPURegList CodeGeneratorARM64::GetFramePreservedCoreRegisters() const {
-  DCHECK(ArtVixlRegCodeCoherentForRegSet(core_spill_mask_, GetNumberOfCoreRegisters(), 0, 0));
-  return CPURegList(CPURegister::kRegister, kXRegSize,
-                    core_spill_mask_);
+  DCHECK(ArtVixlRegCodeCoherentForRegSet(GetCoreSpillMask(), GetNumberOfCoreRegisters(), 0, 0));
+  return CPURegList(CPURegister::kRegister, kXRegSize, GetCoreSpillMask());
 }
 
 CPURegList CodeGeneratorARM64::GetFramePreservedFPRegisters() const {
-  DCHECK(ArtVixlRegCodeCoherentForRegSet(0, 0, fpu_spill_mask_,
-                                         GetNumberOfFloatingPointRegisters()));
-  return CPURegList(CPURegister::kVRegister, kDRegSize,
-                    fpu_spill_mask_);
+  DCHECK(ArtVixlRegCodeCoherentForRegSet(
+      0, 0, GetFpuSpillMask(), GetNumberOfFloatingPointRegisters()));
+  return CPURegList(CPURegister::kVRegister, kDRegSize, GetFpuSpillMask());
 }
 
 void CodeGeneratorARM64::Bind(HBasicBlock* block) {
@@ -1621,12 +1618,12 @@ void CodeGeneratorARM64::Bind(HBasicBlock* block) {
 }
 
 void CodeGeneratorARM64::MoveConstant(Location location, int32_t value) {
-  DCHECK(location.IsRegister());
+  DCHECK(location.IsCoreRegister());
   __ Mov(RegisterFrom(location, DataType::Type::kInt32), value);
 }
 
 void CodeGeneratorARM64::AddLocationAsTemp(Location location, LocationSummary* locations) {
-  if (location.IsRegister()) {
+  if (location.IsCoreRegister()) {
     locations->AddTemp(location);
   } else {
     UNIMPLEMENTED(FATAL) << "AddLocationAsTemp not implemented for location " << location;
@@ -1686,7 +1683,16 @@ void CodeGeneratorARM64::CheckGCCardIsValid(Register object) {
   __ Bind(&done);
 }
 
-inline void CodeGeneratorARM64::SetupBlockedRegisters() {
+inline RegisterSet CodeGeneratorARM64::ComputeCalleeSaves() {
+  RegisterSet callee_saves = RegisterSet::Empty();
+  callee_saves.AddCoreRegisterSet(
+      dchecked_integral_cast<uint32_t>(callee_saved_core_registers.GetList()));
+  callee_saves.AddFpuRegisterSet(
+      dchecked_integral_cast<uint32_t>(callee_saved_fp_registers.GetList()));
+  return callee_saves;
+}
+
+inline RegisterSet CodeGeneratorARM64::ComputeBlockedRegisters(HGraph* graph) {
   // Blocked core registers:
   //      lr        : Runtime reserved.
   //      tr (x19)  : Runtime reserved.
@@ -1701,16 +1707,20 @@ inline void CodeGeneratorARM64::SetupBlockedRegisters() {
   CPURegList reserved_core_registers = vixl_reserved_core_registers;
   reserved_core_registers.Combine(runtime_reserved_core_registers);
   reserved_core_registers.Combine(vixl::aarch64::x18);
-  blocked_core_registers_ = dchecked_integral_cast<uint32_t>(reserved_core_registers.GetList());
+  RegisterSet blocked_registers = RegisterSet::Empty();
+  blocked_registers.AddCoreRegisterSet(
+      dchecked_integral_cast<uint32_t>(reserved_core_registers.GetList()));
 
   CPURegList reserved_fp_registers = vixl_reserved_fp_registers;
-  if (GetGraph()->IsDebuggable()) {
+  if (graph->IsDebuggable()) {
     // Stubs do not save callee-save floating point registers. If the graph
     // is debuggable, we need to deal with these registers differently. For
     // now, just block them.
     reserved_fp_registers.Combine(callee_saved_fp_registers);
   }
-  blocked_fpu_registers_ = dchecked_integral_cast<uint32_t>(reserved_fp_registers.GetList());
+  blocked_registers.AddFpuRegisterSet(
+      dchecked_integral_cast<uint32_t>(reserved_fp_registers.GetList()));
+  return blocked_registers;
 }
 
 size_t CodeGeneratorARM64::SaveCoreRegister(size_t stack_index, uint32_t reg_id) {
@@ -1804,7 +1814,7 @@ void CodeGeneratorARM64::MoveLocation(Location destination,
   // checks the coherency of the locations and the type.
   bool unspecified_type = (dst_type == DataType::Type::kVoid);
 
-  if (destination.IsRegister() || destination.IsFpuRegister()) {
+  if (destination.IsCoreRegister() || destination.IsFpuRegister()) {
     if (unspecified_type) {
       HConstant* src_cst = source.IsConstant() ? source.GetConstant() : nullptr;
       if (source.IsStackSlot() ||
@@ -1812,17 +1822,17 @@ void CodeGeneratorARM64::MoveLocation(Location destination,
                                   || src_cst->IsFloatConstant()
                                   || src_cst->IsNullConstant()))) {
         // For stack slots and 32bit constants, a 64bit type is appropriate.
-        dst_type = destination.IsRegister() ? DataType::Type::kInt32 : DataType::Type::kFloat32;
+        dst_type = destination.IsCoreRegister() ? DataType::Type::kInt32 : DataType::Type::kFloat32;
       } else {
         // If the source is a double stack slot or a 64bit constant, a 64bit
         // type is appropriate. Else the source is a register, and since the
         // type has not been specified, we chose a 64bit type to force a 64bit
         // move.
-        dst_type = destination.IsRegister() ? DataType::Type::kInt64 : DataType::Type::kFloat64;
+        dst_type = destination.IsCoreRegister() ? DataType::Type::kInt64 : DataType::Type::kFloat64;
       }
     }
     DCHECK((destination.IsFpuRegister() && DataType::IsFloatingPointType(dst_type)) ||
-           (destination.IsRegister() && !DataType::IsFloatingPointType(dst_type)));
+           (destination.IsCoreRegister() && !DataType::IsFloatingPointType(dst_type)));
     CPURegister dst = CPURegisterFrom(destination, dst_type);
     if (source.IsStackSlot() || source.IsDoubleStackSlot()) {
       DCHECK(dst.Is64Bits() == source.IsDoubleStackSlot());
@@ -1832,8 +1842,8 @@ void CodeGeneratorARM64::MoveLocation(Location destination,
     } else if (source.IsConstant()) {
       DCHECK(CoherentConstantAndType(source, dst_type));
       MoveConstant(dst, source.GetConstant());
-    } else if (source.IsRegister()) {
-      if (destination.IsRegister()) {
+    } else if (source.IsCoreRegister()) {
+      if (destination.IsCoreRegister()) {
         __ Mov(Register(dst), RegisterFrom(source, dst_type));
       } else {
         DCHECK(destination.IsFpuRegister());
@@ -1844,7 +1854,7 @@ void CodeGeneratorARM64::MoveLocation(Location destination,
       }
     } else {
       DCHECK(source.IsFpuRegister());
-      if (destination.IsRegister()) {
+      if (destination.IsCoreRegister()) {
         DataType::Type source_type = DataType::Is64BitType(dst_type)
             ? DataType::Type::kFloat64
             : DataType::Type::kFloat32;
@@ -1862,9 +1872,9 @@ void CodeGeneratorARM64::MoveLocation(Location destination,
     GetInstructionCodeGeneratorArm64()->MoveToSIMDStackSlot(destination, source);
   } else {  // The destination is not a register. It must be a stack slot.
     DCHECK(destination.IsStackSlot() || destination.IsDoubleStackSlot());
-    if (source.IsRegister() || source.IsFpuRegister()) {
+    if (source.IsCoreRegister() || source.IsFpuRegister()) {
       if (unspecified_type) {
-        if (source.IsRegister()) {
+        if (source.IsCoreRegister()) {
           dst_type = destination.IsStackSlot() ? DataType::Type::kInt32 : DataType::Type::kInt64;
         } else {
           dst_type =
@@ -2323,9 +2333,9 @@ void LocationsBuilderARM64::HandleBinaryOp(HBinaryOperation* instr) {
   switch (type) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64:
-      locations->SetInAt(0, Location::RequiresRegister());
+      locations->SetInAt(0, Location::RequiresCoreRegister());
       locations->SetInAt(1, ARM64EncodableConstantOrRegister(instr->InputAt(1), instr));
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
 
     case DataType::Type::kFloat32:
@@ -2362,7 +2372,7 @@ void LocationsBuilderARM64::HandleFieldGet(HInstruction* instruction,
     }
   }
   // Input for object receiver.
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   if (DataType::IsFloatingPointType(instruction->GetType())) {
     locations->SetOut(Location::RequiresFpuRegister());
   } else {
@@ -2370,7 +2380,7 @@ void LocationsBuilderARM64::HandleFieldGet(HInstruction* instruction,
     // the load to overwrite the object's location, as we need it to emit the read barrier.
     // Baker read barrier implementation with introspection does not have this restriction.
     bool overlap = object_field_get_with_read_barrier && !kUseBakerReadBarrier;
-    locations->SetOut(Location::RequiresRegister(),
+    locations->SetOut(Location::RequiresCoreRegister(),
                       overlap ? Location::kOutputOverlap : Location::kNoOutputOverlap);
   }
 }
@@ -2432,14 +2442,14 @@ void InstructionCodeGeneratorARM64::HandleFieldGet(HInstruction* instruction,
 
 void LocationsBuilderARM64::HandleFieldSet(HInstruction* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   HInstruction* value = instruction->InputAt(1);
   if (IsZeroBitPattern(value)) {
     locations->SetInAt(1, Location::ConstantLocation(value));
   } else if (DataType::IsFloatingPointType(value->GetType())) {
     locations->SetInAt(1, Location::RequiresFpuRegister());
   } else {
-    locations->SetInAt(1, Location::RequiresRegister());
+    locations->SetInAt(1, Location::RequiresCoreRegister());
   }
 }
 
@@ -2577,9 +2587,9 @@ void LocationsBuilderARM64::HandleShift(HBinaryOperation* instr) {
   switch (type) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64: {
-      locations->SetInAt(0, Location::RequiresRegister());
+      locations->SetInAt(0, Location::RequiresCoreRegister());
       locations->SetInAt(1, Location::RegisterOrConstant(instr->InputAt(1)));
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
     }
     default:
@@ -2644,10 +2654,10 @@ void InstructionCodeGeneratorARM64::VisitAnd(HAnd* instruction) {
 void LocationsBuilderARM64::VisitBitwiseNegatedRight(HBitwiseNegatedRight* instr) {
   DCHECK(DataType::IsIntegralType(instr->GetType())) << instr->GetType();
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instr);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   // There is no immediate variant of negated bitwise instructions in AArch64.
-  locations->SetInAt(1, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(1, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorARM64::VisitBitwiseNegatedRight(HBitwiseNegatedRight* instr) {
@@ -2678,10 +2688,10 @@ void LocationsBuilderARM64::VisitDataProcWithShifterOp(
   if (instruction->GetInstrKind() == HInstruction::kNeg) {
     locations->SetInAt(0, Location::ConstantLocation(instruction->InputAt(0)));
   } else {
-    locations->SetInAt(0, Location::RequiresRegister());
+    locations->SetInAt(0, Location::RequiresCoreRegister());
   }
-  locations->SetInAt(1, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(1, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorARM64::VisitDataProcWithShifterOp(
@@ -2745,9 +2755,9 @@ void InstructionCodeGeneratorARM64::VisitDataProcWithShifterOp(
 
 void LocationsBuilderARM64::VisitIntermediateAddress(HIntermediateAddress* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetInAt(1, ARM64EncodableConstantOrRegister(instruction->GetOffset(), instruction));
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorARM64::VisitIntermediateAddress(HIntermediateAddress* instruction) {
@@ -2761,16 +2771,16 @@ void LocationsBuilderARM64::VisitIntermediateAddressIndex(HIntermediateAddressIn
 
   HIntConstant* shift = instruction->GetShift()->AsIntConstant();
 
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   // For byte case we don't need to shift the index variable so we can encode the data offset into
   // ADD instruction. For other cases we prefer the data_offset to be in register; that will hoist
   // data offset constant generation out of the loop and reduce the critical path length in the
   // loop.
   locations->SetInAt(1, shift->GetValue() == 0
                         ? Location::ConstantLocation(instruction->GetOffset())
-                        : Location::RequiresRegister());
+                        : Location::RequiresCoreRegister());
   locations->SetInAt(2, Location::ConstantLocation(shift));
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorARM64::VisitIntermediateAddressIndex(
@@ -2796,11 +2806,11 @@ void LocationsBuilderARM64::VisitMultiplyAccumulate(HMultiplyAccumulate* instr) 
     // Don't allocate register for Mneg instruction.
   } else {
     locations->SetInAt(HMultiplyAccumulate::kInputAccumulatorIndex,
-                       Location::RequiresRegister());
+                       Location::RequiresCoreRegister());
   }
-  locations->SetInAt(HMultiplyAccumulate::kInputMulLeftIndex, Location::RequiresRegister());
-  locations->SetInAt(HMultiplyAccumulate::kInputMulRightIndex, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(HMultiplyAccumulate::kInputMulLeftIndex, Location::RequiresCoreRegister());
+  locations->SetInAt(HMultiplyAccumulate::kInputMulRightIndex, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorARM64::VisitMultiplyAccumulate(HMultiplyAccumulate* instr) {
@@ -2863,10 +2873,10 @@ void LocationsBuilderARM64::VisitArrayGet(HArrayGet* instruction) {
       // We need a non-scratch temporary for the array data pointer in
       // CodeGeneratorARM64::GenerateArrayLoadWithBakerReadBarrier() for the case with no
       // intermediate address.
-      locations->AddTemp(Location::RequiresRegister());
+      locations->AddTemp(Location::RequiresCoreRegister());
     }
   }
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetInAt(1, Location::RegisterOrConstant(instruction->InputAt(1)));
   if (DataType::IsFloatingPointType(instruction->GetType())) {
     locations->SetOut(Location::RequiresFpuRegister(), Location::kNoOutputOverlap);
@@ -2875,7 +2885,7 @@ void LocationsBuilderARM64::VisitArrayGet(HArrayGet* instruction) {
     // the load to overwrite the object's location, as we need it to emit the read barrier.
     // Baker read barrier implementation with introspection does not have this restriction.
     bool overlap = object_array_get_with_read_barrier && !kUseBakerReadBarrier;
-    locations->SetOut(Location::RequiresRegister(),
+    locations->SetOut(Location::RequiresCoreRegister(),
                       overlap ? Location::kOutputOverlap : Location::kNoOutputOverlap);
   }
 }
@@ -3013,8 +3023,8 @@ void InstructionCodeGeneratorARM64::VisitArrayGet(HArrayGet* instruction) {
 
 void LocationsBuilderARM64::VisitArrayLength(HArrayLength* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorARM64::VisitArrayLength(HArrayLength* instruction) {
@@ -3040,7 +3050,7 @@ void LocationsBuilderARM64::VisitArraySet(HArraySet* instruction) {
       allocator_,
       instruction,
       needs_type_check ? LocationSummary::kCallOnSlowPath : LocationSummary::kNoCall);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetInAt(1, Location::RegisterOrConstant(instruction->GetIndex()));
   HInstruction* value = instruction->GetValue();
   if (IsZeroBitPattern(value)) {
@@ -3048,7 +3058,7 @@ void LocationsBuilderARM64::VisitArraySet(HArraySet* instruction) {
   } else if (DataType::IsFloatingPointType(value_type)) {
     locations->SetInAt(2, Location::RequiresFpuRegister());
   } else {
-    locations->SetInAt(2, Location::RequiresRegister());
+    locations->SetInAt(2, Location::RequiresCoreRegister());
   }
 }
 
@@ -3246,8 +3256,8 @@ void InstructionCodeGeneratorARM64::VisitArraySet(HArraySet* instruction) {
 void LocationsBuilderARM64::VisitBoundsCheck(HBoundsCheck* instruction) {
   RegisterSet caller_saves = RegisterSet::Empty();
   InvokeRuntimeCallingConvention calling_convention;
-  caller_saves.Add(Location::RegisterLocation(calling_convention.GetRegisterAt(0).GetCode()));
-  caller_saves.Add(Location::RegisterLocation(calling_convention.GetRegisterAt(1).GetCode()));
+  caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(0).GetCode());
+  caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(1).GetCode());
   LocationSummary* locations = codegen_->CreateThrowingSlowPathLocations(instruction, caller_saves);
 
   // If both index and length are constant, we can check the bounds statically and
@@ -3307,7 +3317,7 @@ void InstructionCodeGeneratorARM64::VisitBoundsCheck(HBoundsCheck* instruction) 
 void LocationsBuilderARM64::VisitClinitCheck(HClinitCheck* check) {
   LocationSummary* locations =
       LocationSummary::Create(allocator_, check, LocationSummary::kCallOnSlowPath);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   if (check->HasUses()) {
     locations->SetOut(Location::SameAsFirstInput());
   }
@@ -3368,9 +3378,9 @@ void LocationsBuilderARM64::VisitCompare(HCompare* compare) {
     case DataType::Type::kUint32:
     case DataType::Type::kInt64:
     case DataType::Type::kUint64: {
-      locations->SetInAt(0, Location::RequiresRegister());
+      locations->SetInAt(0, Location::RequiresCoreRegister());
       locations->SetInAt(1, ARM64EncodableConstantOrRegister(rhs, compare));
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
     }
     case DataType::Type::kFloat32:
@@ -3380,7 +3390,7 @@ void LocationsBuilderARM64::VisitCompare(HCompare* compare) {
                          IsFloatingPointZeroConstant(rhs)
                              ? Location::ConstantLocation(rhs)
                              : Location::RequiresFpuRegister());
-      locations->SetOut(Location::RequiresRegister());
+      locations->SetOut(Location::RequiresCoreRegister());
       break;
     }
     default:
@@ -3440,12 +3450,12 @@ void LocationsBuilderARM64::HandleCondition(HCondition* instruction) {
                            : Location::RequiresFpuRegister());
   } else {
     // Integer cases.
-    locations->SetInAt(0, Location::RequiresRegister());
+    locations->SetInAt(0, Location::RequiresCoreRegister());
     locations->SetInAt(1, ARM64EncodableConstantOrRegister(rhs, instruction));
   }
 
   if (!instruction->IsEmittedAtUseSite()) {
-    locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+    locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
   }
 }
 
@@ -3804,9 +3814,9 @@ void LocationsBuilderARM64::VisitDiv(HDiv* div) {
   switch (div->GetResultType()) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64:
-      locations->SetInAt(0, Location::RequiresRegister());
+      locations->SetInAt(0, Location::RequiresCoreRegister());
       locations->SetInAt(1, Location::RegisterOrConstant(div->InputAt(1)));
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
 
     case DataType::Type::kFloat32:
@@ -3973,7 +3983,7 @@ void InstructionCodeGeneratorARM64::GenerateTestAndBranch(HInstruction* instruct
   if (IsBooleanValueOrMaterializedCondition(cond)) {
     // The condition instruction has been materialized, compare the output to 0.
     Location cond_val = instruction->GetLocations()->InAt(condition_input_index);
-    DCHECK(cond_val.IsRegister());
+    DCHECK(cond_val.IsCoreRegister());
     if (true_target == nullptr) {
       __ Cbz(InputRegisterAt(instruction, condition_input_index), false_target);
     } else {
@@ -4047,7 +4057,7 @@ void InstructionCodeGeneratorARM64::GenerateTestAndBranch(HInstruction* instruct
 void LocationsBuilderARM64::VisitIf(HIf* if_instr) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, if_instr);
   if (IsBooleanValueOrMaterializedCondition(if_instr->InputAt(0))) {
-    locations->SetInAt(0, Location::RequiresRegister());
+    locations->SetInAt(0, Location::RequiresCoreRegister());
   }
 }
 
@@ -4099,10 +4109,10 @@ void LocationsBuilderARM64::VisitDeoptimize(HDeoptimize* deoptimize) {
       LocationSummary::Create(allocator_, deoptimize, LocationSummary::kCallOnSlowPath);
   InvokeRuntimeCallingConvention calling_convention;
   RegisterSet caller_saves = RegisterSet::Empty();
-  caller_saves.Add(Location::RegisterLocation(calling_convention.GetRegisterAt(0).GetCode()));
+  caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(0).GetCode());
   locations->SetCustomSlowPathCallerSaves(caller_saves);
   if (IsBooleanValueOrMaterializedCondition(deoptimize->InputAt(0))) {
-    locations->SetInAt(0, Location::RequiresRegister());
+    locations->SetInAt(0, Location::RequiresCoreRegister());
   }
 }
 
@@ -4117,7 +4127,7 @@ void InstructionCodeGeneratorARM64::VisitDeoptimize(HDeoptimize* deoptimize) {
 
 void LocationsBuilderARM64::VisitShouldDeoptimizeFlag(HShouldDeoptimizeFlag* flag) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, flag);
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 }
 
 void InstructionCodeGeneratorARM64::VisitShouldDeoptimizeFlag(HShouldDeoptimizeFlag* flag) {
@@ -4160,15 +4170,15 @@ void LocationsBuilderARM64::VisitSelect(HSelect* select) {
     true_value_in_register |= !is_true_value_constant;
     false_value_in_register |= !is_false_value_constant;
 
-    locations->SetInAt(1, true_value_in_register ? Location::RequiresRegister()
+    locations->SetInAt(1, true_value_in_register ? Location::RequiresCoreRegister()
                                                  : Location::ConstantLocation(cst_true_value));
-    locations->SetInAt(0, false_value_in_register ? Location::RequiresRegister()
+    locations->SetInAt(0, false_value_in_register ? Location::RequiresCoreRegister()
                                                   : Location::ConstantLocation(cst_false_value));
-    locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+    locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
   }
 
   if (IsBooleanValueOrMaterializedCondition(select->GetCondition())) {
-    locations->SetInAt(2, Location::RequiresRegister());
+    locations->SetInAt(2, Location::RequiresCoreRegister());
   }
 }
 
@@ -4296,17 +4306,17 @@ void LocationsBuilderARM64::VisitInstanceOf(HInstanceOf* instruction) {
   if (baker_read_barrier_slow_path) {
     locations->SetCustomSlowPathCallerSaves(RegisterSet::Empty());  // No caller-save registers.
   }
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   if (type_check_kind == TypeCheckKind::kBitstringCheck) {
     locations->SetInAt(1, Location::ConstantLocation(instruction->InputAt(1)));
     locations->SetInAt(2, Location::ConstantLocation(instruction->InputAt(2)));
     locations->SetInAt(3, Location::ConstantLocation(instruction->InputAt(3)));
   } else {
-    locations->SetInAt(1, Location::RequiresRegister());
+    locations->SetInAt(1, Location::RequiresCoreRegister());
   }
   // The "out" register is used as a temporary, so it overlaps with the inputs.
   // Note that TypeCheckSlowPathARM64 uses this register too.
-  locations->SetOut(Location::RequiresRegister(), Location::kOutputOverlap);
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kOutputOverlap);
   // Add temps if necessary for read barriers.
   locations->AddRegisterTemps(
       NumberOfInstanceOfTemps(codegen_->EmitReadBarrier(), type_check_kind));
@@ -4586,13 +4596,13 @@ void LocationsBuilderARM64::VisitCheckCast(HCheckCast* instruction) {
   TypeCheckKind type_check_kind = instruction->GetTypeCheckKind();
   LocationSummary::CallKind call_kind = codegen_->GetCheckCastCallKind(instruction);
   LocationSummary* locations = LocationSummary::Create(allocator_, instruction, call_kind);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
   if (type_check_kind == TypeCheckKind::kBitstringCheck) {
     locations->SetInAt(1, Location::ConstantLocation(instruction->InputAt(1)));
     locations->SetInAt(2, Location::ConstantLocation(instruction->InputAt(2)));
     locations->SetInAt(3, Location::ConstantLocation(instruction->InputAt(3)));
   } else {
-    locations->SetInAt(1, Location::RequiresRegister());
+    locations->SetInAt(1, Location::RequiresCoreRegister());
   }
   locations->AddRegisterTemps(NumberOfCheckCastTemps(codegen_->EmitReadBarrier(), type_check_kind));
 }
@@ -4928,7 +4938,7 @@ void InstructionCodeGeneratorARM64::VisitInvokeInterface(HInvokeInterface* invok
   // conflict.
   } else if (invoke->GetHiddenArgumentLoadKind() != MethodLoadKind::kRuntimeCall) {
     codegen_->LoadMethod(
-        invoke->GetHiddenArgumentLoadKind(), Location::RegisterLocation(ip1.GetCode()), invoke);
+        invoke->GetHiddenArgumentLoadKind(), Location::CoreRegister(ip1.GetCode()), invoke);
   }
 
   __ Ldr(temp,
@@ -5102,7 +5112,7 @@ void CodeGeneratorARM64::GenerateStaticOrDirectCall(
       if (invoke->GetCodePtrLocation() == CodePtrLocation::kCallCriticalNative) {
         // Use LR for both the target method and then the code pointer.
         DCHECK(callee_method.IsInvalid());
-        callee_method = Location::RegisterLocation(lr.GetCode());
+        callee_method = Location::CoreRegister(lr.GetCode());
       }
       LoadMethod(invoke->GetMethodLoadKind(), callee_method, invoke);
       break;
@@ -5739,9 +5749,9 @@ void LocationsBuilderARM64::VisitLoadClass(HLoadClass* cls) {
   }
 
   if (load_kind == HLoadClass::LoadKind::kReferrersClass) {
-    locations->SetInAt(0, Location::RequiresRegister());
+    locations->SetInAt(0, Location::RequiresCoreRegister());
   }
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
   if (load_kind == HLoadClass::LoadKind::kBssEntry ||
       load_kind == HLoadClass::LoadKind::kBssEntryPublic ||
       load_kind == HLoadClass::LoadKind::kBssEntryPackage) {
@@ -5903,7 +5913,7 @@ void LocationsBuilderARM64::VisitLoadMethodType(HLoadMethodType* load) {
   } else {
     LocationSummary* locations =
         LocationSummary::Create(allocator_, load, LocationSummary::kCallOnSlowPath);
-    locations->SetOut(Location::RequiresRegister());
+    locations->SetOut(Location::RequiresCoreRegister());
     if (load->GetLoadKind() == HLoadMethodType::LoadKind::kBssEntry) {
       if (codegen_->EmitNonBakerReadBarrier()) {
         // For non-Baker read barrier we have a temp-clobbering call.
@@ -5968,7 +5978,7 @@ static MemOperand GetExceptionTlsAddress() {
 
 void LocationsBuilderARM64::VisitLoadException(HLoadException* load) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, load);
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 }
 
 void InstructionCodeGeneratorARM64::VisitLoadException(HLoadException* instruction) {
@@ -6008,7 +6018,7 @@ void LocationsBuilderARM64::VisitLoadString(HLoadString* load) {
     InvokeRuntimeCallingConvention calling_convention;
     locations->SetOut(calling_convention.GetReturnLocation(load->GetType()));
   } else {
-    locations->SetOut(Location::RequiresRegister());
+    locations->SetOut(Location::RequiresCoreRegister());
     if (load->GetLoadKind() == HLoadString::LoadKind::kBssEntry) {
       if (codegen_->EmitNonBakerReadBarrier()) {
         // For non-Baker read barrier we have a temp-clobbering call.
@@ -6135,9 +6145,9 @@ void LocationsBuilderARM64::VisitMul(HMul* mul) {
   switch (mul->GetResultType()) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64:
-      locations->SetInAt(0, Location::RequiresRegister());
-      locations->SetInAt(1, Location::RequiresRegister());
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetInAt(0, Location::RequiresCoreRegister());
+      locations->SetInAt(1, Location::RequiresCoreRegister());
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
 
     case DataType::Type::kFloat32:
@@ -6175,7 +6185,7 @@ void LocationsBuilderARM64::VisitNeg(HNeg* neg) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64:
       locations->SetInAt(0, ARM64EncodableConstantOrRegister(neg->InputAt(0), neg));
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
 
     case DataType::Type::kFloat32:
@@ -6239,8 +6249,8 @@ void InstructionCodeGeneratorARM64::VisitNewInstance(HNewInstance* instruction) 
 
 void LocationsBuilderARM64::VisitNot(HNot* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorARM64::VisitNot(HNot* instruction) {
@@ -6257,8 +6267,8 @@ void InstructionCodeGeneratorARM64::VisitNot(HNot* instruction) {
 
 void LocationsBuilderARM64::VisitBooleanNot(HBooleanNot* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
 }
 
 void InstructionCodeGeneratorARM64::VisitBooleanNot(HBooleanNot* instruction) {
@@ -6267,7 +6277,7 @@ void InstructionCodeGeneratorARM64::VisitBooleanNot(HBooleanNot* instruction) {
 
 void LocationsBuilderARM64::VisitNullCheck(HNullCheck* instruction) {
   LocationSummary* locations = codegen_->CreateThrowingSlowPathLocations(instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
 }
 
 void CodeGeneratorARM64::GenerateImplicitNullCheck(HNullCheck* instruction) {
@@ -6368,9 +6378,9 @@ void LocationsBuilderARM64::VisitRem(HRem* rem) {
   switch (type) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64:
-      locations->SetInAt(0, Location::RequiresRegister());
+      locations->SetInAt(0, Location::RequiresCoreRegister());
       locations->SetInAt(1, Location::RegisterOrConstant(rem->InputAt(1)));
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
 
     case DataType::Type::kFloat32:
@@ -6509,8 +6519,8 @@ void LocationsBuilderARM64::VisitAbs(HAbs* abs) {
   switch (abs->GetResultType()) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64:
-      locations->SetInAt(0, Location::RequiresRegister());
-      locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+      locations->SetInAt(0, Location::RequiresCoreRegister());
+      locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
       break;
     case DataType::Type::kFloat32:
     case DataType::Type::kFloat64:
@@ -6779,13 +6789,13 @@ void LocationsBuilderARM64::VisitTypeConversion(HTypeConversion* conversion) {
   if (DataType::IsFloatingPointType(input_type)) {
     locations->SetInAt(0, Location::RequiresFpuRegister());
   } else {
-    locations->SetInAt(0, Location::RequiresRegister());
+    locations->SetInAt(0, Location::RequiresCoreRegister());
   }
 
   if (DataType::IsFloatingPointType(result_type)) {
     locations->SetOut(Location::RequiresFpuRegister(), Location::kNoOutputOverlap);
   } else {
-    locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
+    locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
   }
 }
 
@@ -6860,7 +6870,7 @@ void InstructionCodeGeneratorARM64::VisitBoundType([[maybe_unused]] HBoundType* 
 // Simple implementation of packed switch - generate cascaded compare/jumps.
 void LocationsBuilderARM64::VisitPackedSwitch(HPackedSwitch* switch_instr) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, switch_instr);
-  locations->SetInAt(0, Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
 }
 
 void InstructionCodeGeneratorARM64::VisitPackedSwitch(HPackedSwitch* switch_instr) {
@@ -7188,12 +7198,12 @@ void CodeGeneratorARM64::GenerateFieldLoadWithBakerReadBarrier(HInstruction* ins
   DCHECK_ALIGNED(offset, sizeof(mirror::HeapReference<mirror::Object>));
   Register base = obj;
   if (use_load_acquire) {
-    DCHECK(maybe_temp.IsRegister());
+    DCHECK(maybe_temp.IsCoreRegister());
     base = WRegisterFrom(maybe_temp);
     __ Add(base, obj, offset);
     offset = 0u;
   } else if (offset >= kReferenceLoadMinFarOffset) {
-    DCHECK(maybe_temp.IsRegister());
+    DCHECK(maybe_temp.IsCoreRegister());
     base = WRegisterFrom(maybe_temp);
     static_assert(IsPowerOfTwo(kReferenceLoadMinFarOffset), "Expecting a power of 2.");
     __ Add(base, obj, Operand(offset & ~(kReferenceLoadMinFarOffset - 1u)));
@@ -7372,8 +7382,8 @@ void CodeGeneratorARM64::GenerateReadBarrierForRootSlow(HInstruction* instructio
 
 void LocationsBuilderARM64::VisitClassTableGet(HClassTableGet* instruction) {
   LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, instruction);
-  locations->SetInAt(0, Location::RequiresRegister());
-  locations->SetOut(Location::RequiresRegister());
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetOut(Location::RequiresCoreRegister());
 }
 
 void InstructionCodeGeneratorARM64::VisitClassTableGet(HClassTableGet* instruction) {

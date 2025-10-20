@@ -69,8 +69,8 @@ public class SecondaryDexopter extends Dexopter<CheckedSecondaryDexInfo> {
     @Override
     @NonNull
     protected List<CheckedSecondaryDexInfo> getDexInfoList() {
-        return mInjector.getDexUseManager().getCheckedSecondaryDexInfo(
-                mPkgState.getPackageName(), true /* excludeObsoleteDexesAndLoaders */);
+        return mInjector.getDexUseManager().getCheckedSecondaryDexInfo(mPkgState.getPackageName(),
+                true /* excludeObsoleteDexesAndLoaders */, true /* excludeObsoleteClcs */);
     }
 
     @Override

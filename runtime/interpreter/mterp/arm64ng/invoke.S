@@ -74,7 +74,7 @@
 %  slow_path = add_slow_path(invoke_interface_slow_path, range)
    EXPORT_PC
    // Fast-path which gets the method from thread-local cache.
-%  fetch_from_thread_cache("x26", miss_label=slow_path)
+%  fetch_from_thread_cache("xCSTMP", miss_label=slow_path)
 .L${opcode}_resume:
    // First argument is the 'this' pointer.
    FETCH w1, 2
@@ -88,9 +88,9 @@
    // Test the first two bits of the fetched ArtMethod:
    // - If the first bit is set, this is a method on j.l.Object
    // - If the second bit is set, this is a default method.
-   tst w26, #0x3
+   tst xCSTMP, #0x3
    b.ne 2f
-   ldrh w3, [x26, #ART_METHOD_IMT_INDEX_OFFSET]
+   ldrh w3, [xCSTMP, #ART_METHOD_IMT_INDEX_OFFSET]
 1:
    ldr x2, [x2, #MIRROR_CLASS_IMT_PTR_OFFSET_64]
    ldr x0, [x2, w3, uxtw #3]
@@ -100,15 +100,15 @@
    b NterpCommonInvokeInterface
    .endif
 2:
-   tbnz w26, #0, 3f
-   and x26, x26, #-4
-   ldrh w3, [x26, #ART_METHOD_METHOD_INDEX_OFFSET]
+   tbnz xCSTMP, #0, 3f
+   and xCSTMP, xCSTMP, #-4
+   ldrh w3, [xCSTMP, #ART_METHOD_METHOD_INDEX_OFFSET]
    and w3, w3, #ART_METHOD_IMT_MASK
    b 1b
 3:
-   lsr w26, w26, #16
+   ubfx xCSTMP, xCSTMP, #16, #16
    add w2, w2, #MIRROR_CLASS_VTABLE_OFFSET_64
-   ldr x0, [x2, w26, uxtw #3]
+   ldr x0, [x2, xCSTMP, lsl #3]
    .if $range
    b NterpCommonInvokeInstanceRange
    .else
@@ -121,7 +121,7 @@
    mov x2, xPC
    mov x3, xFP
    bl nterp_get_method
-   mov x26, x0
+   mov xCSTMP, x0
    b .L${opcode}_resume
 
 %def op_invoke_interface():

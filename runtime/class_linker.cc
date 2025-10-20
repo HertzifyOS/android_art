@@ -1046,6 +1046,11 @@ bool ClassLinker::InitWithoutImage(std::vector<std::unique_ptr<const DexFile>> b
   CHECK(class_root != nullptr);
   SetClassRoot(ClassRoot::kJavaLangInvokeByteBufferViewVarHandle, class_root);
 
+  // Create java.lang.invoke.MemorySegmentVarHandle.class root
+  class_root = FindSystemClass(self, "Ljava/lang/invoke/MemorySegmentVarHandle;");
+  CHECK(class_root != nullptr);
+  SetClassRoot(ClassRoot::kJavaLangInvokeMemorySegmentVarHandle, class_root);
+
   class_root = FindSystemClass(self, "Ldalvik/system/EmulatedStackFrame;");
   CHECK(class_root != nullptr);
   SetClassRoot(ClassRoot::kDalvikSystemEmulatedStackFrame, class_root);
@@ -2810,7 +2815,9 @@ ObjPtr<mirror::DexCache> ClassLinker::AllocDexCache(Thread* self, const DexFile&
   }
   // Use InternWeak() so that the location String can be collected when the ClassLoader
   // with this DexCache is collected.
-  dex_cache->SetLocation(intern_table_->InternWeak(location));
+  location = intern_table_->InternWeak(location);
+  CHECK(location != nullptr);
+  dex_cache->SetLocation(location);
   return dex_cache.Get();
 }
 
@@ -4355,12 +4362,14 @@ void ClassLinker::LoadClassHelper::Load(const ClassAccessor& accessor,
               return lhs.dex_field_index < rhs.dex_field_index;
             });
 
-  // Sort the methods by dex methods index to facilitate fast lookups.
-  std::sort(methods.begin(),
-            methods.end(),
-            [](ArtMethodData& lhs, ArtMethodData& rhs) {
-              return lhs.dex_method_index < rhs.dex_method_index;
-            });
+  // Sort the methods by dex methods index to facilitate fast lookups. The array might contain more
+  // than one method with the same dex_method_index, where the subsequent methods are "duplicates"
+  // and should be ignored. Therefore we need to use stable_sort to preserve the original order
+  // amongst them.
+  std::stable_sort(
+      methods.begin(), methods.end(), [](const ArtMethodData& lhs, const ArtMethodData& rhs) {
+        return lhs.dex_method_index < rhs.dex_method_index;
+      });
 
   fields_ = fields;
   methods_ = methods;
@@ -10233,7 +10242,9 @@ ObjPtr<mirror::String> ClassLinker::DoResolveString(dex::StringIndex string_idx,
   const DexFile& dex_file = *dex_cache->GetDexFile();
   uint32_t utf16_length;
   const char* utf8_data = dex_file.GetStringDataAndUtf16Length(string_idx, &utf16_length);
-  ObjPtr<mirror::String> string = intern_table_->InternStrong(utf16_length, utf8_data);
+  ObjPtr<mirror::String> string = com::android::art::flags::weak_const_string()
+      ? intern_table_->InternWeak(utf16_length, utf8_data)
+      : intern_table_->InternStrong(utf16_length, utf8_data);
   if (string != nullptr) {
     dex_cache->SetResolvedString(string_idx, string);
   }

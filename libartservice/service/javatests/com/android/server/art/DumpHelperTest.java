@@ -273,8 +273,8 @@ public class DumpHelperTest {
         lenient()
                 .doReturn(List.of(info1, info2))
                 .when(mDexUseManagerLocal)
-                .getCheckedSecondaryDexInfo(
-                        PKG_NAME_FOO, false /* excludeObsoleteDexesAndLoaders */);
+                .getCheckedSecondaryDexInfo(PKG_NAME_FOO,
+                        false /* excludeObsoleteDexesAndLoaders */, true /* excludeObsoleteClcs */);
     }
 
     private void setUpForBar() {

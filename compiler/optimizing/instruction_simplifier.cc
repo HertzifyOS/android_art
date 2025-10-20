@@ -1181,9 +1181,14 @@ void InstructionSimplifierVisitor::VisitArrayLength(HArrayLength* instruction) {
   HInstruction* input = instruction->InputAt(0);
   // If the array is a NewArray with constant size, replace the array length
   // with the constant instruction. This helps the bounds check elimination phase.
+  // If the compiler is not in be_loop_friendly mode, the array length can be
+  // replaced with the input that was given to NewArray even if the input is
+  // not an IntConstant. This avoids any conflicts with the bounds check
+  // elimination phase, which assumes the array length input of a BoundsCheck
+  // instruction is an ArrayLength or IntConstant.
   if (input->IsNewArray()) {
     input = input->AsNewArray()->GetLength();
-    if (input->IsIntConstant()) {
+    if (input->IsIntConstant() || !be_loop_friendly_) {
       instruction->ReplaceWith(input);
     }
   }
@@ -1994,6 +1999,10 @@ void InstructionSimplifierVisitor::VisitCompare(HCompare* compare) {
   if (compare_left->GetUses().empty()) {
     compare_left->RemoveEnvironmentUsers();
     compare_left->GetBlock()->RemoveInstruction(compare_left);
+  }
+
+  if (compare_left == compare_right) {
+    return;
   }
 
   if (compare_right->GetUses().empty()) {
@@ -3049,7 +3058,11 @@ static bool TryReplaceStringBuilderAppend(CodeGenerator* codegen, HInvoke* invok
       ++num_args;
     } else if (user->IsConstructorFence()) {
       // The last use we see is the constructor fence.
-      DCHECK(seen_constructor);
+      if (!seen_constructor) {
+        // If we haven't seen a constructor at this point, it means that the instance was
+        // constructed using Object<init> instead of StringBuilder<init>.
+        return false;
+      }
       DCHECK(!seen_constructor_fence);
       seen_constructor_fence = true;
     } else {
@@ -3212,9 +3225,8 @@ bool InstructionSimplifierVisitor::CanUseKnownImageVarHandle(HInvoke* invoke) {
     if (Runtime::Current()->GetHeap()->ObjectIsInBootImageSpace(declaring_class)) {
       is_in_image = true;
     } else if (compiler_options.IsGeneratingImage()) {
-      std::string storage;
-      const char* descriptor = declaring_class->GetDescriptor(&storage);
-      is_in_image = compiler_options.IsImageClass(descriptor);
+      TypeReference type_ref(&declaring_class->GetDexFile(), declaring_class->GetDexTypeIndex());
+      is_in_image = compiler_options.IsImageClass(type_ref, /*array_dim=*/ 0u);
     }
     CHECK_EQ(is_in_image, load_class->IsLoadClass() && load_class->AsLoadClass()->IsInImage());
   }

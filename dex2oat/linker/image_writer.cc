@@ -40,6 +40,7 @@
 #include "dex/dex_file-inl.h"
 #include "dex/dex_file_types.h"
 #include "driver/compiler_options.h"
+#include "driver/image_class_map-inl.h"
 #include "elf/elf_utils.h"
 #include "entrypoints/entrypoint_utils-inl.h"
 #include "gc/accounting/card_table-inl.h"
@@ -54,8 +55,8 @@
 #include "gc/verification.h"
 #include "handle_scope-inl.h"
 #include "imt_conflict_table.h"
-#include "indirect_reference_table-inl.h"
 #include "intern_table-inl.h"
+#include "jni/indirect_reference_table-inl.h"
 #include "jni/java_vm_ext-inl.h"
 #include "jni/jni_internal.h"
 #include "linear_alloc.h"
@@ -965,6 +966,30 @@ class ImageWriter::PruneObjectReferenceVisitor {
   bool* const result_;
 };
 
+static bool IsImageClass(const CompilerOptions& compiler_options, ObjPtr<mirror::Class> klass)
+    REQUIRES_SHARED(Locks::mutator_lock_) {
+  size_t array_dim = 0u;
+  while (klass->IsArrayClass()) {
+    klass = klass->GetComponentType<kDefaultVerifyFlags, kWithoutReadBarrier>();
+    ++array_dim;
+  }
+  if (klass->IsPrimitive()) {
+    // All primitive classes must be in the primary boot image.
+    if (!compiler_options.IsBootImage()) {
+      return false;
+    }
+    if (array_dim == 0u) {
+      return true;
+    }
+    // Primitive classes and their arrays are attributed to the first dex file.
+    const DexFile* dex_file = compiler_options.GetDexFilesForOatFile().front();
+    std::string_view descriptor = klass->GetPrimitiveDescriptorView();
+    return compiler_options.GetImageClasses().Contains(dex_file, descriptor, array_dim);
+  } else {
+    TypeReference type_ref(&klass->GetDexFile(), klass->GetDexTypeIndex());
+    return compiler_options.IsImageClass(type_ref, array_dim);
+  }
+}
 
 bool ImageWriter::PruneImageClass(ObjPtr<mirror::Class> klass) {
   bool early_exit = false;
@@ -994,10 +1019,9 @@ bool ImageWriter::PruneImageClassInternal(
   }
   visited->insert(klass.Ptr());
   bool result = klass->IsBootStrapClassLoaded();
-  std::string temp;
   // Prune if not an image class, this handles any broken sets of image classes such as having a
   // class in the set but not it's superclass.
-  result = result || !compiler_options_.IsImageClass(klass->GetDescriptor(&temp));
+  result = result || !IsImageClass(compiler_options_, klass);
   bool my_early_exit = false;  // Only for ourselves, ignore caller.
   // Remove classes that failed to verify since we don't want to have java.lang.VerifyError in the
   // app image.
@@ -1081,8 +1105,7 @@ bool ImageWriter::KeepClass(ObjPtr<mirror::Class> klass) {
     DCHECK(!compiler_options_.IsBootImage());
     return true;
   }
-  std::string temp;
-  if (!compiler_options_.IsImageClass(klass->GetDescriptor(&temp))) {
+  if (!IsImageClass(compiler_options_, klass)) {
     return false;
   }
   if (compiler_options_.IsAppImage()) {
@@ -1272,9 +1295,10 @@ void ImageWriter::PromoteWeakInternsToStrong(Thread* self) {
 }
 
 void ImageWriter::DumpImageClasses() {
-  for (const std::string& image_class : compiler_options_.GetImageClasses()) {
-    LOG(INFO) << " " << image_class;
-  }
+  compiler_options_.GetImageClasses().ForEach([](TypeReference type_ref, size_t array_dim) {
+    LOG(INFO) << " " << type_ref.dex_file->GetTypeDescriptorView(type_ref.TypeIndex())
+        << (array_dim != 0u ? " dim=" + std::to_string(array_dim) : "");
+  });
 }
 
 bool ImageWriter::CreateImageRoots() {
@@ -2066,7 +2090,7 @@ void ImageWriter::LayoutHelper::ProcessInterns(Thread* self) {
   DCHECK(!intern_table->strong_interns_.tables_.back().IsBootImage());
   const InternTable::UnorderedSet& intern_set = intern_table->strong_interns_.tables_.back().set_;
 
-  // Assign bin slots to all interns with a corresponding StringId in one of the input dex files.
+  // Assign bin slots to all interns with a corresponding `StringId` in one of the input dex files.
   ImageWriter* image_writer = image_writer_;
   for (const DexFile* dex_file : image_writer->compiler_options_.GetDexFilesForOatFile()) {
     auto it = image_writer->dex_file_oat_index_map_.find(dex_file);
@@ -2092,6 +2116,31 @@ void ImageWriter::LayoutHelper::ProcessInterns(Thread* self) {
           DCHECK(dex_file != image_writer->compiler_options_.GetDexFilesForOatFile().front());
         }
       }
+    }
+  }
+
+  if (com::android::art::flags::weak_const_string()) {
+    // Collect interns without a `StringId` in any of the input dex files and
+    // assign them to bin slots in the first image in a deterministic order.
+    struct StringLess {
+      bool operator()(mirror::String* lhs, mirror::String* rhs) const
+          REQUIRES_SHARED(Locks::mutator_lock_) {
+        return lhs->CompareTo(rhs) < 0;
+      }
+    };
+    std::set<mirror::String*, StringLess> remaining_strings;
+    for (const GcRoot<mirror::String>& root : intern_set) {
+      mirror::String* string = root.Read<kWithoutReadBarrier>();
+      DCHECK(string != nullptr);
+      DCHECK(!image_writer->IsInBootImage(string));
+      if (!image_writer->IsImageBinSlotAssigned(string)) {
+        DCHECK(remaining_strings.find(string) == remaining_strings.end());
+        remaining_strings.insert(string);
+      }
+    }
+    for (mirror::String* string : remaining_strings) {
+      Bin bin = AssignImageBinSlot(string, /*oat_index=*/ 0u);
+      DCHECK_EQ(bin, kBinObjects ? Bin::kString : Bin::kRegular);
     }
   }
 

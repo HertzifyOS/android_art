@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <cstdint>
 #include <memory>
 #include <random>
 #include <vector>
@@ -206,7 +207,7 @@ void TestBitVectorViewIndexes() {
   StorageType empty_storage[] = {0u, 0u, 0u};
   BitVectorView empty(empty_storage, 3 * BitSizeOf<StorageType>() - 1u);
   for (size_t index : empty.Indexes()) {
-    FAIL();
+    FAIL() << index;
   }
   ASSERT_TRUE(empty.Indexes().begin().Done());
 }
@@ -286,7 +287,7 @@ void TestBitVectorViewUnionIfNotIn() {
   StorageType subset_storage[] = { kInitWord0 & mask, kInitWord1 & mask };
   BitVectorView<StorageType> subset_bvv(subset_storage, size);
   StorageType empty_storage[] = { 0u, 0u };
-  BitVectorView<StorageType> empty_bvv(subset_storage, size);
+  BitVectorView<StorageType> empty_bvv(empty_storage, size);
   static constexpr StorageType kOtherWord0 = kInitWord1;
   static constexpr StorageType kOtherWord1 = kInitWord0;
   StorageType other_storage[] = { kOtherWord0, kOtherWord1 };
@@ -621,6 +622,45 @@ TEST(BitVector, CopyTo) {
     bv.CopyTo(buf, sizeof(buf));
     EXPECT_EQ(0x80040000U, buf[0]);
     EXPECT_EQ(0x00000000U, buf[1]);
+  }
+}
+
+TEST(BitVector, GetLowestBitCleared) {
+  uint32_t storage_size = 3;
+  {
+    uint32_t storage[] = {0u, 0u, 0u};
+    BitVector bv(false, Allocator::GetNoopAllocator(), storage_size, storage);
+    EXPECT_EQ(0u, bv.GetLowestBitCleared());
+  }
+
+  {
+    uint32_t storage[] = {UINT32_MAX, UINT32_MAX, UINT32_MAX};
+    BitVector bv(false, Allocator::GetNoopAllocator(), storage_size, storage);
+    EXPECT_EQ(-1, bv.GetLowestBitCleared());
+  }
+
+  {
+    uint32_t storage[] = {UINT32_MAX, 0u, 0u};
+    BitVector bv(false, Allocator::GetNoopAllocator(), storage_size, storage);
+    EXPECT_EQ(32, bv.GetLowestBitCleared());
+  }
+
+  {
+    uint32_t storage[] = {0x1, 0u, 0u};
+    BitVector bv(false, Allocator::GetNoopAllocator(), storage_size, storage);
+    EXPECT_EQ(1, bv.GetLowestBitCleared());
+  }
+
+  {
+    uint32_t storage[] = {0x5, 0u, 0u};
+    BitVector bv(false, Allocator::GetNoopAllocator(), storage_size, storage);
+    EXPECT_EQ(1, bv.GetLowestBitCleared());
+  }
+
+  {
+    uint32_t storage[] = {UINT32_MAX, 0x5, 0u};
+    BitVector bv(false, Allocator::GetNoopAllocator(), storage_size, storage);
+    EXPECT_EQ(33, bv.GetLowestBitCleared());
   }
 }
 

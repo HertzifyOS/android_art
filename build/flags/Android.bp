@@ -109,6 +109,7 @@ java_aconfig_library {
     ],
     visibility: [
         "//art:__subpackages__",
+        "//cts/tests/tests/security",
     ],
 }
 

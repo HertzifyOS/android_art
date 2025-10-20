@@ -16,6 +16,8 @@
 
 #include "hidden_api.h"
 
+#include <dlfcn.h>
+
 #include <atomic>
 #include <optional>
 
@@ -35,10 +37,6 @@
 #include "stack.h"
 #include "thread-inl.h"
 #include "well_known_classes.h"
-
-#ifndef __APPLE__
-#include <link.h>
-#endif
 
 namespace art HIDDEN {
 namespace hiddenapi {
@@ -110,33 +108,10 @@ static const std::vector<std::string> kCorePlatformApiExemptions = {
 };
 
 static std::optional<std::string> FindDsoForNativeCaller(void* native_caller_addr) {
-#ifndef __APPLE__
-  struct dl_iterate_context {
-    void* address;
-    std::string dso_name;
-
-    static int callback(dl_phdr_info* info, [[maybe_unused]] size_t size, void* data) {
-      struct dl_iterate_context* ctx = reinterpret_cast<dl_iterate_context*>(data);
-      for (Elf64_Half i = 0; i < info->dlpi_phnum; ++i) {
-        const ElfW(Phdr) & phdr = info->dlpi_phdr[i];
-        if (phdr.p_type == PT_LOAD) {
-          uint8_t* start_addr = reinterpret_cast<uint8_t*>(info->dlpi_addr + phdr.p_vaddr);
-          uint8_t* end_addr = start_addr + phdr.p_memsz;
-          if (ctx->address >= start_addr && ctx->address < end_addr) {
-            ctx->dso_name = info->dlpi_name;
-            return 1;  // DSO found - stop iteration.
-          }
-        }
-      }
-      return 0;  // Continue iteration.
-    }
-  } context{.address = native_caller_addr};
-
-  if (dl_iterate_phdr(dl_iterate_context::callback, &context)) {
-    return std::move(context.dso_name);
+  Dl_info info;
+  if (dladdr(native_caller_addr, &info)) {
+    return std::string(info.dli_fname);
   }
-#endif
-
   return std::nullopt;
 }
 
@@ -377,6 +352,7 @@ bool ShouldDenyJniAccessToMember(T* member,
     // That's not a problem for apps with a recent enough target SDK level where
     // we always check the native caller in the standard code path below, but
     // otherwise we need to check for that specific situation.
+
     AccessMethod check_only_method =
         IsCheckOnlyMethod(access_kind) ? access_kind : AccessMethod::kCheckWithPolicy;
     if (ShouldDenyAccessToMember(
@@ -390,18 +366,17 @@ bool ShouldDenyJniAccessToMember(T* member,
             check_only_method) &&
         ctx.java_caller_context.value().GetDomain() == Domain::kPlatform) {
       // The java caller is in platform and has been denied, so check the native caller.
-      if (!ShouldDenyAccessToMember(
-              member,
-              [&ctx]() REQUIRES_SHARED(Locks::mutator_lock_) {
-                AccessContext& context = ctx.GetNativeCallerContext();
-                VLOG(hiddenapi) << "hiddenapi: Native JNI caller " << context << " from "
-                                << context.GetDomain() << " (special case)";
-                return context;
-              },
-              check_only_method) &&
-          ctx.native_caller_context.value().GetNativeCallerAddr() != nullptr) {
-        // The native caller has been positively identified
-        // (GetNativeCallerAddr() != nullptr) and is allowed, so the access is fine.
+
+      AccessContext& context = ctx.GetNativeCallerContext();
+      VLOG(hiddenapi) << "hiddenapi: Native JNI caller " << context << " from "
+                      << context.GetDomain() << " (special case)";
+      if (context.GetNativeCallerAddr() == nullptr || context.IsApplicationDomain()) {
+        // If the native caller either could not be identified or it's in an
+        // app, then either the app may have access to an API that platform
+        // doesn't, or it may be an app using a method to circumvent hidden API
+        // checks. In either case we need to be conservative and allow the
+        // access for the sake of app compat, because in this situation we must
+        // not regress on that.
         return false;
       }
     }
@@ -668,8 +643,9 @@ void MemberSignature::LogAccessToLogcat(AccessMethod access_method,
       << Dumpable<MemberSignature>(*this)
       << " (runtime_flags=" << FormatHiddenApiRuntimeFlags(runtime_flags)
       << ", domain=" << callee_context.GetDomain() << ", api=" << api_list << ") from "
-      << caller_context << " (domain=" << caller_context.GetDomain() << ") using " << access_method
-      << (access_denied ? ": denied" : ": allowed");
+      << caller_context << " (domain=" << caller_context.GetDomain()
+      << ", TargetSdkVersion=" << Runtime::Current()->GetTargetSdkVersion() << ") using "
+      << access_method << (access_denied ? ": denied" : ": allowed");
   if (access_denied && api_list.IsTestApi()) {
     // see b/177047045 for more details about test api access getting denied
     LOG(WARNING) << "hiddenapi: If this is a platform test consider enabling "

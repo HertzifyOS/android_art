@@ -90,7 +90,6 @@
 #include "gc/task_processor.h"
 #include "handle_scope-inl.h"
 #include "hidden_api.h"
-#include "indirect_reference_table.h"
 #include "instrumentation.h"
 #include "intern_table-inl.h"
 #include "interpreter/interpreter.h"
@@ -894,7 +893,8 @@ void Runtime::CallExitHook(jint status) {
 void Runtime::SweepSystemWeaks(IsMarkedVisitor* visitor) {
   // Userfaultfd compaction updates weak intern-table page-by-page via
   // LinearAlloc.
-  if (!GetHeap()->IsPerformingUffdCompaction()) {
+  bool in_uffd_compaction = GetHeap()->IsPerformingUffdCompaction();
+  if (!in_uffd_compaction) {
     GetInternTable()->SweepInternTableWeaks(visitor);
   }
   GetMonitorList()->SweepMonitorList(visitor);
@@ -903,12 +903,19 @@ void Runtime::SweepSystemWeaks(IsMarkedVisitor* visitor) {
   // Sweep JIT tables only if the GC is moving as in other cases the entries are
   // not updated.
   if (GetJit() != nullptr && GetHeap()->IsMovingGc()) {
+    auto* gc = static_cast<gc::collector::GarbageCollector*>(visitor);
+    if (in_uffd_compaction) {
+      gc->GetTimings()->StartTiming("SweepJitCodeCache");
+    }
     // Visit JIT literal tables. Objects in these tables are classes and strings
     // and only classes can be affected by class unloading. The strings always
     // stay alive as they are strongly interned.
     // TODO: Move this closer to CleanupClassLoaders, to avoid blocking weak accesses
     // from mutators. See b/32167580.
     GetJit()->GetCodeCache()->SweepRootTables(visitor);
+    if (in_uffd_compaction) {
+      gc->GetTimings()->EndTiming();
+    }
   }
 
   // All other generic system-weak holders.
@@ -1331,7 +1338,6 @@ void Runtime::InitNonZygoteOrPostFork(
     if (!odrefresh::UploadStatsIfAvailable(&err)) {
       LOG(WARNING) << "Failed to upload odrefresh metrics: " << err;
     }
-    metrics::ReportDeviceMetrics();
   }
 
   if (LIKELY(automatically_set_jni_ids_indirection_) && CanSetJniIdType()) {
@@ -2241,10 +2247,9 @@ bool Runtime::Init(RuntimeArgumentMap&& runtime_options_in) {
     LOG(FATAL) << "Unreachable";
     UNREACHABLE();
   }
-  {
-    ScopedObjectAccess soa(self);
-    callbacks_->NextRuntimePhase(RuntimePhaseCallback::RuntimePhase::kInitialAgents);
-  }
+
+  Locks::mutator_lock_->AssertSharedHeld(self);
+  callbacks_->NextRuntimePhase(RuntimePhaseCallback::RuntimePhase::kInitialAgents);
 
   if (IsZygote() && IsPerfettoHprofEnabled()) {
     constexpr const char* plugin_name = kIsDebugBuild ?

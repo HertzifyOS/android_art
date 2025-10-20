@@ -54,7 +54,8 @@ static constexpr size_t kMinBufSizeForEncodedData = kAlwaysOnTraceBufSize * kMax
 // TODO(mythria): 10 is a randomly chosen value. Tune it if required.
 static constexpr size_t kBufSizeForEncodedData = kMinBufSizeForEncodedData * 10;
 
-static constexpr size_t kAlwaysOnTraceHeaderSize = 12;
+static constexpr size_t kAlwaysOnTraceHeaderSize = 17;
+static constexpr size_t kAlwaysOnEntriesHeaderSize = 12;
 static constexpr size_t kAlwaysOnMethodInfoHeaderSize = 11;
 static constexpr size_t kAlwaysOnThreadInfoHeaderSize = 7;
 
@@ -114,8 +115,6 @@ void TraceProfiler::AllocateBuffer(Thread* thread) {
     return;
   }
 
-  Thread* self = Thread::Current();
-  MutexLock mu(self, *Locks::trace_lock_);
   if (!profile_in_progress_) {
     return;
   }
@@ -136,6 +135,10 @@ void TraceProfiler::AllocateBuffer(Thread* thread) {
 
 LowOverheadTraceType TraceProfiler::GetTraceType() {
   MutexLock mu(Thread::Current(), *Locks::trace_lock_);
+  if (Trace::IsTracingEnabledLocked()) {
+    DCHECK_EQ(trace_data_, nullptr);
+    return Trace::GetTraceType();
+  }
   // LowOverhead trace entry points are configured based on the trace type. When trace_data_ is null
   // then there is no low overhead tracing running, so we use nop entry points.
   if (trace_data_ == nullptr) {
@@ -424,7 +427,7 @@ size_t TraceProfiler::DumpBuffer(uint32_t thread_id,
                                  uint8_t* buffer,
                                  std::unordered_set<ArtMethod*>& methods) {
   // Encode header at the end once we compute the number of records.
-  uint8_t* curr_buffer_ptr = buffer + kAlwaysOnTraceHeaderSize;
+  uint8_t* curr_buffer_ptr = buffer + kAlwaysOnEntriesHeaderSize;
 
   int num_records = 0;
   uintptr_t prev_method_action_encoding = 0;
@@ -520,6 +523,16 @@ void TraceProfiler::Dump(std::unique_ptr<File>&& trace_file, std::ostringstream&
     threads_running_checkpoint = runtime->GetThreadList()->RunCheckpoint(checkpoint.get());
   }
 
+  uint64_t end_timestamp = TimestampCounter::GetNanoTime(TimestampCounter::GetTimestamp());
+  uint64_t monotonic_timer = NanoTime();
+
+  // Add a header packet with end time stamp and a monotonic timer.
+  uint8_t trace_header[kAlwaysOnTraceHeaderSize];
+  trace_header[0] = kSummaryHeaderV2;
+  Append8LE(trace_header + 1, end_timestamp);
+  Append8LE(trace_header + 9, monotonic_timer);
+  os.write(reinterpret_cast<char*>(trace_header), kAlwaysOnTraceHeaderSize);
+
   // Wait for all threads to dump their data.
   if (threads_running_checkpoint != 0) {
     checkpoint->WaitForThreadsToRunThroughCheckpoint(threads_running_checkpoint);
@@ -573,7 +586,7 @@ size_t TraceProfiler::DumpLongRunningMethodBuffer(uint32_t thread_id,
                                                   uint8_t* buffer,
                                                   std::unordered_set<ArtMethod*>& methods) {
   // Encode header at the end once we compute the number of records.
-  uint8_t* curr_buffer_ptr = buffer + kAlwaysOnTraceHeaderSize;
+  uint8_t* curr_buffer_ptr = buffer + kAlwaysOnEntriesHeaderSize;
 
   int num_records = 0;
   uintptr_t prev_time_action_encoding = 0;
@@ -625,7 +638,7 @@ size_t TraceProfiler::DumpLongRunningMethodBuffer(uint32_t thread_id,
   Append4LE(buffer + 1, thread_id);
   Append3LE(buffer + 5, num_records);
   size_t size = curr_buffer_ptr - buffer;
-  Append4LE(buffer + 8, size - kAlwaysOnTraceHeaderSize);
+  Append4LE(buffer + 8, size - kAlwaysOnEntriesHeaderSize);
   return curr_buffer_ptr - buffer;
 }
 

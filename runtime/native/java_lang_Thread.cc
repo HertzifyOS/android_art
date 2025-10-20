@@ -155,7 +155,7 @@ static jint Thread_nativeGetStatus(JNIEnv* env, jobject java_thread, jboolean ha
 }
 
 static jboolean Thread_holdsLock(JNIEnv* env, jclass, jobject java_object) {
-  ScopedObjectAccess soa(env);
+  ScopedFastNativeObjectAccess soa(env);
   ObjPtr<mirror::Object> object = soa.Decode<mirror::Object>(java_object);
   if (object == nullptr) {
     ThrowNullPointerException("object == null");
@@ -274,7 +274,7 @@ static JNINativeMethod gMethods[] = {
     NATIVE_METHOD(Thread, nativeCreate, "(Ljava/lang/Thread;JZ)V"),
     NATIVE_METHOD(Thread, nativeGetStatus, "(Z)I"),
     CRITICAL_NATIVE_METHOD(Thread, nicenessForPriority, "(I)I"),
-    NATIVE_METHOD(Thread, holdsLock, "(Ljava/lang/Object;)Z"),
+    FAST_NATIVE_METHOD(Thread, holdsLock, "(Ljava/lang/Object;)Z"),
     FAST_NATIVE_METHOD(Thread, interrupt0, "()V"),
     CRITICAL_NATIVE_METHOD(Thread, priorityForNiceness, "(I)I"),
     NATIVE_METHOD(Thread, setNativeName, "(Ljava/lang/String;)V"),

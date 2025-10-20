@@ -29,9 +29,17 @@
 #include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/utils.h"
+#include "image_class_map.h"
 #include "optimizing/register_allocator.h"
 
 namespace art HIDDEN {
+
+// Forward declare CompilerOptions so that the CreateCompilerOptions forward declare works.
+class CompilerOptions;
+
+namespace fuzzer {
+std::unique_ptr<CompilerOptions> CreateCompilerOptions(bool is_baseline);
+}  // namespace fuzzer
 
 namespace jit {
 class JitCompiler;
@@ -291,11 +299,12 @@ class CompilerOptions final {
     return dex_files_for_oat_file_;
   }
 
-  const HashSet<std::string>& GetImageClasses() const {
+  const ImageClassMap& GetImageClasses() const {
     return image_classes_;
   }
 
-  EXPORT bool IsImageClass(const char* descriptor) const;
+  static constexpr size_t kInferArrayDim = static_cast<size_t>(-1);
+  EXPORT bool IsImageClass(TypeReference type_ref, size_t array_dim = kInferArrayDim) const;
 
   // Returns whether the given `pretty_descriptor` is in the list of preloaded
   // classes. `pretty_descriptor` should be the result of calling `PrettyDescriptor`.
@@ -409,12 +418,11 @@ class CompilerOptions final {
 
   // Image classes, specifies the classes that will be included in the image if creating an image.
   // Must not be empty for real boot image, only for tests pretending to compile boot image.
-  HashSet<std::string> image_classes_;
+  ImageClassMap image_classes_;
 
   // Classes listed in the preloaded-classes file, used for boot image and
   // boot image extension compilation.
   HashSet<std::string> preloaded_classes_;
-
   CompilerType compiler_type_;
   ImageType image_type_;
   bool multi_image_;
@@ -504,6 +512,8 @@ class CompilerOptions final {
   friend class verifier::VerifierDepsTest;
   friend class linker::Arm64RelativePatcherTest;
   friend class linker::Thumb2RelativePatcherTest;
+
+  friend std::unique_ptr<CompilerOptions> fuzzer::CreateCompilerOptions(bool is_baseline);
 
   template <class Base>
   friend bool ReadCompilerOptions(Base& map, CompilerOptions* options, std::string* error_msg);

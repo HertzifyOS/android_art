@@ -91,9 +91,9 @@ class TestCodeGeneratorARMVIXL : public arm::CodeGeneratorARMVIXL {
  public:
   TestCodeGeneratorARMVIXL(HGraph* graph, const CompilerOptions& compiler_options)
       : arm::CodeGeneratorARMVIXL(graph, compiler_options) {
-    AddAllocatedRegister(Location::RegisterLocation(arm::R6));
-    AddAllocatedRegister(Location::RegisterLocation(arm::R7));
-    blocked_core_registers_ |= (1u << arm::R4) | (1u << arm::R6) | (1u << arm::R7);
+    AddAllocatedCoreRegister(arm::R6);
+    AddAllocatedCoreRegister(arm::R7);
+    blocked_registers_.AddCoreRegisterSet((1u << arm::R4) | (1u << arm::R6) | (1u << arm::R7));
   }
 
   void MaybeGenerateMarkingRegisterCheck([[maybe_unused]] int code,
@@ -146,11 +146,14 @@ class TestCodeGeneratorX86 : public x86::CodeGeneratorX86 {
   TestCodeGeneratorX86(HGraph* graph, const CompilerOptions& compiler_options)
       : x86::CodeGeneratorX86(graph, compiler_options) {
     // Save edi, we need it for getting enough registers for long multiplication.
-    AddAllocatedRegister(Location::RegisterLocation(x86::EDI));
-    // ebx is a callee-save register in C, but caller-save for ART.
-    blocked_core_registers_ |= 1u << x86::EBX;
-    // Make edi available.
-    blocked_core_registers_ &= ~(1u << x86::EDI);
+    AddAllocatedCoreRegister(x86::EDI);
+    // Block EBX because it's a callee-save register in C, but caller-save for ART.
+    // Make EDI available.
+    RegisterSet blocked_registers = RegisterSet::Empty();
+    blocked_registers.AddCoreRegisterSet(
+        (blocked_registers_.GetCoreRegisterSet() | (1u << x86::EBX)) & ~(1u << x86::EDI));
+    blocked_registers.AddFpuRegisterSet(blocked_registers_.GetFpuRegisterSet());
+    blocked_registers_ = blocked_registers;
   }
 };
 #endif
@@ -171,33 +174,34 @@ static bool CanExecuteOnHardware(const CodeGenerator& codegen) {
       && InstructionSetFeatures::FromHwcap()->HasAtLeast(isa_features);
 }
 
+static constexpr size_t kDefaultStackSize = 1 * MB;
+
 static bool CanExecuteISA(InstructionSet target_isa) {
-  std::unique_ptr<CodeSimulator> simulator(CreateCodeSimulator(target_isa));
-  return DoesHardwareSupportISA(target_isa) || bool(simulator);
+  return DoesHardwareSupportISA(target_isa) || BasicCodeSimulator::CanSimulate(target_isa);
 }
 
 static bool CanExecute(const CodeGenerator& codegen) {
-  std::unique_ptr<CodeSimulator> simulator(CreateCodeSimulator(codegen.GetInstructionSet()));
-  return CanExecuteOnHardware(codegen) || bool(simulator);
+  return CanExecuteOnHardware(codegen) ||
+         BasicCodeSimulator::CanSimulate(codegen.GetInstructionSet());
 }
 
 template <typename Expected>
-inline static Expected SimulatorExecute(CodeSimulator* simulator, Expected (*f)());
+inline static Expected SimulatorExecute(BasicCodeSimulator* simulator, Expected (*f)());
 
 template <>
-inline bool SimulatorExecute<bool>(CodeSimulator* simulator, bool (*f)()) {
+inline bool SimulatorExecute<bool>(BasicCodeSimulator* simulator, bool (*f)()) {
   simulator->RunFrom(reinterpret_cast<intptr_t>(f));
   return simulator->GetCReturnBool();
 }
 
 template <>
-inline int32_t SimulatorExecute<int32_t>(CodeSimulator* simulator, int32_t (*f)()) {
+inline int32_t SimulatorExecute<int32_t>(BasicCodeSimulator* simulator, int32_t (*f)()) {
   simulator->RunFrom(reinterpret_cast<intptr_t>(f));
   return simulator->GetCReturnInt32();
 }
 
 template <>
-inline int64_t SimulatorExecute<int64_t>(CodeSimulator* simulator, int64_t (*f)()) {
+inline int64_t SimulatorExecute<int64_t>(BasicCodeSimulator* simulator, int64_t (*f)()) {
   simulator->RunFrom(reinterpret_cast<intptr_t>(f));
   return simulator->GetCReturnInt64();
 }
@@ -210,9 +214,14 @@ static void VerifyGeneratedCode(const CodeGenerator& codegen,
   ASSERT_TRUE(CanExecute(codegen)) << "Target isa is not executable.";
 
   // Verify on simulator.
-  std::unique_ptr<CodeSimulator> simulator(CreateCodeSimulator(codegen.GetInstructionSet()));
-  if (simulator) {
+  InstructionSet target_isa = codegen.GetInstructionSet();
+  if (BasicCodeSimulator::CanSimulate(target_isa)) {
+    // Use basic simulator: for the gtests we don't have runtime started, so won't have entrypoints
+    // initialized.
+    std::unique_ptr<BasicCodeSimulator> simulator(
+        CreateBasicCodeSimulator(codegen.GetInstructionSet(), kDefaultStackSize));
     Expected result = SimulatorExecute<Expected>(simulator.get(), f);
+
     if (has_result) {
       ASSERT_EQ(expected, result);
     }
