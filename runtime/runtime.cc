@@ -1828,12 +1828,17 @@ bool Runtime::Init(RuntimeArgumentMap&& runtime_options_in) {
                         (gUseUserfaultfd ? BackgroundGcOption(gc::kCollectorTypeCMCBackground) :
                                            runtime_options.GetOrDefault(Opt::BackgroundGc));
 
+  bool enable_time_based_gc_trigger =
+      runtime_options.GetOrDefault(Opt::EnableTimeBasedGcTrigger) &&
+      !GetBoolProperty(
+          "persist.device_config.runtime_native_boot.force_disable_time_based_gc_trigger", false);
+
   heap_ = new gc::Heap(runtime_options.GetOrDefault(Opt::MemoryInitialSize),
                        runtime_options.GetOrDefault(Opt::HeapGrowthLimit),
                        runtime_options.GetOrDefault(Opt::HeapMinFree),
                        runtime_options.GetOrDefault(Opt::HeapMaxFree),
                        runtime_options.GetOrDefault(Opt::HeapTargetUtilization),
-                       runtime_options.GetOrDefault(Opt::EnableTimeBasedGcTrigger),
+                       enable_time_based_gc_trigger,
                        runtime_options.GetOrDefault(Opt::HeapMemoryGcCostFactor),
                        foreground_heap_growth_multiplier,
                        runtime_options.GetOrDefault(Opt::StopForNativeAllocs),
