@@ -1381,12 +1381,16 @@ END \name
    .endif
 .endm
 
-.macro WRITE_BARRIER_IF_OBJECT is_object, value, holder, label
-   .if \is_object
-   cbz     \value, \label
+.macro WRITE_BARRIER_NOT_NULL holder
    ldr     ip, [xSELF, #THREAD_CARD_TABLE_OFFSET]
    lsr     wip2, \holder, #CARD_TABLE_CARD_SHIFT
    strb    wip, [ip, ip2]
+.endm
+
+.macro WRITE_BARRIER_IF_OBJECT is_object, value, holder, label
+   .if \is_object
+   cbz     \value, \label
+   WRITE_BARRIER_NOT_NULL \holder
 \label:
    .endif
 .endm

@@ -267,14 +267,26 @@
    cbz w2, common_errNullObject
    .if $wide
    $store  x1, [x2, x0]
-   .else
-   POISON_HEAP_REF_IF_OBJECT $is_object, w1
+   .elseif $is_object
+   POISON_HEAP_REF w1
    $store  w1, [x2, x0]
-   WRITE_BARRIER_IF_OBJECT $is_object, w1, w2, .L${opcode}_skip_write_barrier
+   cbnz w1, .L${opcode}_slow_path_write_barrier  // Write barrier would not fit in 64B.
+   .else
+   $store  w1, [x2, x0]
    .endif
+#ifdef USE_HEAP_POISONING
+   .if $is_object
+   b .L${opcode}_slow_path_skip_write_barrier  // Dispatch would not fit in 64B.
+   .else
    FETCH_ADVANCE_INST 2
    GET_INST_OPCODE ip
    GOTO_OPCODE ip
+   .endif
+#else
+   FETCH_ADVANCE_INST 2
+   GET_INST_OPCODE ip
+   GOTO_OPCODE ip
+#endif
 
 %def op_iput_slow_path(volatile_store, wide, is_object):
    ldr     x0, [sp]
@@ -315,10 +327,15 @@
    add     x3, x2, x0
    .if $wide
    $volatile_store x1, [x3]
-   .else
-   POISON_HEAP_REF_IF_OBJECT $is_object, w1
+   .elseif $is_object
+   POISON_HEAP_REF w1
    $volatile_store w1, [x3]
-   WRITE_BARRIER_IF_OBJECT $is_object, w1, w2, .L${opcode}_slow_path_skip_write_barrier
+   cbz     w1, .L${opcode}_slow_path_skip_write_barrier
+.L${opcode}_slow_path_write_barrier:
+   WRITE_BARRIER_NOT_NULL w2
+.L${opcode}_slow_path_skip_write_barrier:
+   .else
+   $volatile_store w1, [x3]
    .endif
    FETCH_ADVANCE_INST 2
    GET_INST_OPCODE ip
@@ -457,18 +474,28 @@
    .if $wide
    GET_VREG_WIDE x2, wINST             // x2 <- v[A]
    $store  x2, [x0, x1]
+   .elseif $is_object
+   GET_VREG w2, wINST                  // w2 <- v[A]
+   POISON_HEAP_REF w2
+   $store  w2, [x0, x1]
+   cbnz    w2, .L${opcode}_slow_path_write_barrier  // Write barrier would not fit in 64B.
    .else
    GET_VREG w2, wINST                  // w2 <- v[A]
-   POISON_HEAP_REF_IF_OBJECT $is_object, w2
    $store  w2, [x0, x1]
-   WRITE_BARRIER_IF_OBJECT $is_object, w2, w0, .L${opcode}_skip_write_barrier
    .endif
+#ifdef USE_HEAP_POISONING
+   .if $is_object
+   b .L${opcode}_slow_path_skip_write_barrier  // Dispatch would not fit in 64B.
+   .else
    FETCH_ADVANCE_INST 2
    GET_INST_OPCODE ip
    GOTO_OPCODE ip
-.L${opcode}_read_barrier:
-   bl      art_quick_read_barrier_mark_reg00
-   b       .L${opcode}_resume_after_read_barrier
+   .endif
+#else
+   FETCH_ADVANCE_INST 2
+   GET_INST_OPCODE ip
+   GOTO_OPCODE ip
+#endif
 
 %def op_sput_slow_path(volatile_store, wide, is_object):
    ldr     x0, [sp]
@@ -505,11 +532,17 @@
    .if $wide
    GET_VREG_WIDE x2, wINST             // x2 <- v[A]
    $volatile_store    x2, [x1]
+   .elseif $is_object
+   GET_VREG w2, wINST                  // w2 <- v[A]
+   POISON_HEAP_REF w2
+   $volatile_store    w2, [x1]
+   cbz     w2, .L${opcode}_slow_path_skip_write_barrier
+.L${opcode}_slow_path_write_barrier:
+   WRITE_BARRIER_NOT_NULL w0
+.L${opcode}_slow_path_skip_write_barrier:
    .else
    GET_VREG w2, wINST                  // w2 <- v[A]
-   POISON_HEAP_REF_IF_OBJECT $is_object, w2
    $volatile_store    w2, [x1]
-   WRITE_BARRIER_IF_OBJECT $is_object, w2, w0, .L${opcode}_slow_path_skip_write_barrier
    .endif
    FETCH_ADVANCE_INST 2
    GET_INST_OPCODE ip
@@ -517,6 +550,9 @@
 .L${opcode}_slow_path_read_barrier:
    bl      art_quick_read_barrier_mark_reg00
    b       .L${opcode}_slow_path_resume_after_read_barrier
+.L${opcode}_read_barrier:
+   bl      art_quick_read_barrier_mark_reg00
+   b       .L${opcode}_resume_after_read_barrier
 
 %def op_sput_wide():
 %  op_sput(store="str", volatile_store="stlr", wide="1", is_object="0")
