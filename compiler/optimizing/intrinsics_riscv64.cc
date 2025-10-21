@@ -1981,6 +1981,13 @@ static void CreateSystemArrayCopyLocations(HInvoke* invoke, DataType::Type type)
     }
   }
 
+  // If source and destination are the same, fallback to native implementation: some overlapping
+  // copy regions must be copied in reverse and we can't know in all cases if it's needed.
+  SystemArrayCopyOptimizations optimizations(invoke);
+  if (optimizations.GetDestinationIsSource()) {
+    return;
+  }
+
   ArenaAllocator* allocator = invoke->GetBlock()->GetGraph()->GetAllocator();
   LocationSummary* locations =
       LocationSummary::Create(allocator, invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
@@ -2063,6 +2070,8 @@ static void SystemArrayCopyPrimitive(HInvoke* invoke,
 
   SystemArrayCopyOptimizations optimizations(invoke);
 
+  // If we know at compile time that source and destination are the same, we should not intrinsify.
+  DCHECK(!optimizations.GetDestinationIsSource());
   // If source and destination are the same, take the slow path. Overlapping copy regions must be
   // copied in reverse and we can't know in all cases if it's needed.
   __ Beq(src, dst, slow_path->GetEntryLabel());
@@ -2072,7 +2081,7 @@ static void SystemArrayCopyPrimitive(HInvoke* invoke,
     __ Beqz(src, slow_path->GetEntryLabel());
   }
 
-  if (!optimizations.GetDestinationIsNotNull() && !optimizations.GetDestinationIsSource()) {
+  if (!optimizations.GetDestinationIsNotNull()) {
     // Bail out if the destination is null.
     __ Beqz(dst, slow_path->GetEntryLabel());
   }

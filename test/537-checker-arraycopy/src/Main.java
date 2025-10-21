@@ -117,8 +117,10 @@ public class Main {
   // Test case for Char specialization when source and destination arrays are the same.
   /// CHECK-START-RISCV64: void Main.arraycopyCharSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
-  /// CHECK-NEXT:     c.j
-  /// CHECK-NEXT:     beqz
+  /// CHECK-NEXT:     auipc a0, {{\d+}}
+  /// CHECK-NEXT:     lwu a0, {{\d+}}(a0)
+  /// CHECK-NEXT:     ld ra, {{\d+}}(a0)
+  /// CHECK-NEXT:     c.jalr ra
   /// CHECK:          ReturnVoid
   public void arraycopyCharSameSrcDst() {
     System.arraycopy(arrChar, 1, arrChar, 0, 1);
@@ -139,8 +141,10 @@ public class Main {
   // Test case for Byte specialization when source and destination arrays are the same.
   /// CHECK-START-RISCV64: void Main.arraycopyByteSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
-  /// CHECK-NEXT:     c.j
-  /// CHECK-NEXT:     beqz
+  /// CHECK-NEXT:     auipc a0, {{\d+}}
+  /// CHECK-NEXT:     lwu a0, {{\d+}}(a0)
+  /// CHECK-NEXT:     ld ra, {{\d+}}(a0)
+  /// CHECK-NEXT:     c.jalr ra
   /// CHECK:          ReturnVoid
   public void arraycopyByteSameSrcDst() {
     System.arraycopy(arrByte, 1, arrByte, 0, 1);
@@ -161,8 +165,10 @@ public class Main {
   // Test case for Int specialization when source and destination arrays are the same.
   /// CHECK-START-RISCV64: void Main.arraycopyIntSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
-  /// CHECK-NEXT:     c.j
-  /// CHECK-NEXT:     beqz
+  /// CHECK-NEXT:     auipc a0, {{\d+}}
+  /// CHECK-NEXT:     lwu a0, {{\d+}}(a0)
+  /// CHECK-NEXT:     ld ra, {{\d+}}(a0)
+  /// CHECK-NEXT:     c.jalr ra
   /// CHECK:          ReturnVoid
   public void arraycopyIntSameSrcDst() {
     System.arraycopy(arrInt, 1, arrInt, 0, 1);
