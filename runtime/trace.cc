@@ -665,11 +665,18 @@ void Trace::Start(std::unique_ptr<File>&& trace_file_in,
     return;
   }
 
-  if ((TraceFlag::kTraceLowOverhead & flags) && !ShouldEnableProfileCode()) {
-    // Low-overhead tracing requested but the feature isn't enabled.
-    LOG(ERROR) << "Feature not supported. Please build with ALLOW_PROFILE_CODE and enable "
-                "com.android.art.rw.flags.enable_profile_code_rw";
-    return;
+  if ((TraceFlag::kTraceLowOverhead & flags)) {
+    if (!ShouldEnableProfileCode()) {
+      // Low-overhead tracing requested but the feature isn't enabled.
+      LOG(ERROR) << "Feature not supported. Please build with ALLOW_PROFILE_CODE and enable "
+                 "com.android.art.rw.flags.enable_profile_code_rw";
+      return;
+    }
+
+    if (flags & Trace::TraceFlag::kTraceClockSourceThreadCpu) {
+      LOG(ERROR) << "ThreadCpu time is not supported with low-overhead tracing";
+      return;
+    }
   }
 
   // Initialize the frequency of timestamp counter updates here. This is needed
