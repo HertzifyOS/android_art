@@ -3916,7 +3916,7 @@ void Heap::GrowForUtilization(collector::GarbageCollector* collector_ran,
         // generous value for target footprint as a fallback to ensure we
         // start concurrent GC before running out of heap and provide
         // reasonable values for use in things like GetTotalMemory.
-        SetIdealFootprint(std::numeric_limits<size_t>::max());
+        SetIdealFootprint(growth_limit_);
 
         uint64_t expected_gc_cost_ms = NsToMs(current_gc_iteration_.GetThreadCpuTimeNs());
         uint64_t memory_gc_cost_factor_kb = memory_gc_cost_factor_ / KB;
