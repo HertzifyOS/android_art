@@ -103,12 +103,12 @@ enum class CheckAccess {
   kYes,
 };
 
-enum class FieldAccessType {
+enum class AccessType {
   kGet,
   kPut
 };
 
-enum class FieldAccessWidth {
+enum class AccessWidth {
   kNarrow,
   kVreg,
   kWide
@@ -573,16 +573,13 @@ class MethodVerifierImpl : public ::art::verifier::MethodVerifier {
   bool VerifyPrimitivePut(RegType::Kind target_kind, uint32_t vregA)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
-  // Perform verification of an aget instruction. The destination register's type will be set to
-  // be that of component type of the array unless the array type is unknown, in which case a
-  // bottom type inferred from the type of instruction is used. is_primitive is false for an
-  // aget-object.
-  void VerifyAGet(const Instruction* inst, const RegType& insn_type,
-                  bool is_primitive) REQUIRES_SHARED(Locks::mutator_lock_);
-
-  // Perform verification of an aput instruction.
-  void VerifyAPut(const Instruction* inst, const RegType& insn_type,
-                  bool is_primitive) REQUIRES_SHARED(Locks::mutator_lock_);
+  // Perform verification of a aget/aput instruction.
+  // For aget, the destination register's type will be set to be that of component type
+  // of the array unless the array type is unknown, in which case a bottom type inferred
+  // from the type of instruction is used.
+  template <AccessType kAccType, AccessWidth kAccWidth, bool kIsPrimitive>
+  bool VerifyArrayAccess(const Instruction* inst, uint16_t inst_data, Instruction::Code opcode)
+      REQUIRES_SHARED(Locks::mutator_lock_);
 
   // Lookup instance field and fail for resolution violations
   ArtField* GetInstanceField(uint32_t vregB, uint32_t field_idx, bool is_put)
@@ -595,8 +592,8 @@ class MethodVerifierImpl : public ::art::verifier::MethodVerifier {
   ArtField* GetISFieldCommon(ArtField* field, bool is_put) REQUIRES_SHARED(Locks::mutator_lock_);
 
   // Perform verification of an iget/sget/iput/sput instruction.
-  template <FieldAccessType kAccType,
-            FieldAccessWidth kAccWidth,
+  template <AccessType kAccType,
+            AccessWidth kAccWidth,
             bool kIsStatic,
             bool kIsPrimitive>
   ALWAYS_INLINE
@@ -913,10 +910,28 @@ class MethodVerifierImpl : public ::art::verifier::MethodVerifier {
         << ", target index " << target_index;
   }
 
+  NO_INLINE void FailInvalidArrayIndex(uint16_t index_type_id)
+      REQUIRES_SHARED(Locks::mutator_lock_) {
+    const RegType& index_type = reg_types_.GetFromId(index_type_id);
+    Fail(VERIFY_ERROR_BAD_CLASS_HARD) << "Invalid reg type for array index (" << index_type << ")";
+  }
+
+  NO_INLINE void FailNonArrayType(Instruction::Code opcode, const RegType& array_type)
+      REQUIRES_SHARED(Locks::mutator_lock_) {
+    Fail(VERIFY_ERROR_BAD_CLASS_HARD) << "not array type " << array_type << " with " << opcode;
+  }
+
   NO_INLINE void FailIncompatibleArrayType(Instruction::Code opcode, const RegType& array_type)
       REQUIRES_SHARED(Locks::mutator_lock_) {
     Fail(VERIFY_ERROR_BAD_CLASS_HARD) << "array type " << array_type
         << " incompatible with " << opcode;
+  }
+
+  NO_INLINE void SoftFailArrayIsUnresolvedMergedReference(Instruction::Code opcode,
+                                                          const RegType& array_type)
+      REQUIRES_SHARED(Locks::mutator_lock_) {
+    Fail(VERIFY_ERROR_NO_CLASS) << "cannot verify " << opcode << " for " << array_type
+        << " because of missing class";
   }
 
   NO_INLINE void FailForVoidOrPrimitiveType(Instruction::Code opcode, dex::TypeIndex type_idx) {
@@ -3541,79 +3556,99 @@ bool MethodVerifier<kVerifierDebug>::CodeFlowVerifyInstruction(uint32_t* start_g
       break;
     }
     case Instruction::AGET_BOOLEAN:
-      VerifyAGet(inst, reg_types_.Boolean(), true);
-      break;
     case Instruction::AGET_BYTE:
-      VerifyAGet(inst, reg_types_.Byte(), true);
-      break;
     case Instruction::AGET_CHAR:
-      VerifyAGet(inst, reg_types_.Char(), true);
-      break;
     case Instruction::AGET_SHORT:
-      VerifyAGet(inst, reg_types_.Short(), true);
+      if (!VerifyArrayAccess<AccessType::kGet,
+                             AccessWidth::kNarrow,
+                             /*kIsPrimitive=*/ true>(inst, inst_data, opcode)) {
+        return false;
+      }
       break;
     case Instruction::AGET:
-      VerifyAGet(inst, reg_types_.Integer(), true);
+      if (!VerifyArrayAccess<AccessType::kGet,
+                             AccessWidth::kVreg,
+                             /*kIsPrimitive=*/ true>(inst, inst_data, opcode)) {
+        return false;
+      }
       break;
     case Instruction::AGET_WIDE:
-      VerifyAGet(inst, reg_types_.LongLo(), true);
+      if (!VerifyArrayAccess<AccessType::kGet,
+                             AccessWidth::kWide,
+                             /*kIsPrimitive=*/ true>(inst, inst_data, opcode)) {
+        return false;
+      }
       break;
     case Instruction::AGET_OBJECT:
-      VerifyAGet(inst, reg_types_.JavaLangObject(), false);
+      if (!VerifyArrayAccess<AccessType::kGet,
+                             AccessWidth::kVreg,
+                             /*kIsPrimitive=*/ false>(inst, inst_data, opcode)) {
+        return false;
+      }
       break;
 
     case Instruction::APUT_BOOLEAN:
-      VerifyAPut(inst, reg_types_.Boolean(), true);
-      break;
     case Instruction::APUT_BYTE:
-      VerifyAPut(inst, reg_types_.Byte(), true);
-      break;
     case Instruction::APUT_CHAR:
-      VerifyAPut(inst, reg_types_.Char(), true);
-      break;
     case Instruction::APUT_SHORT:
-      VerifyAPut(inst, reg_types_.Short(), true);
+      if (!VerifyArrayAccess<AccessType::kPut,
+                             AccessWidth::kNarrow,
+                             /*kIsPrimitive=*/ true>(inst, inst_data, opcode)) {
+        return false;
+      }
       break;
     case Instruction::APUT:
-      VerifyAPut(inst, reg_types_.Integer(), true);
+      if (!VerifyArrayAccess<AccessType::kPut,
+                             AccessWidth::kVreg,
+                             /*kIsPrimitive=*/ true>(inst, inst_data, opcode)) {
+        return false;
+      }
       break;
     case Instruction::APUT_WIDE:
-      VerifyAPut(inst, reg_types_.LongLo(), true);
+      if (!VerifyArrayAccess<AccessType::kPut,
+                             AccessWidth::kWide,
+                             /*kIsPrimitive=*/ true>(inst, inst_data, opcode)) {
+        return false;
+      }
       break;
     case Instruction::APUT_OBJECT:
-      VerifyAPut(inst, reg_types_.JavaLangObject(), false);
+      if (!VerifyArrayAccess<AccessType::kPut,
+                             AccessWidth::kVreg,
+                             /*kIsPrimitive=*/ false>(inst, inst_data, opcode)) {
+        return false;
+      }
       break;
 
     case Instruction::IGET_BOOLEAN:
     case Instruction::IGET_BYTE:
     case Instruction::IGET_CHAR:
     case Instruction::IGET_SHORT:
-      if (!VerifyISFieldAccess<FieldAccessType::kGet,
-                               FieldAccessWidth::kNarrow,
+      if (!VerifyISFieldAccess<AccessType::kGet,
+                               AccessWidth::kNarrow,
                                /*kIsStatic=*/ false,
                                /*kIsPrimitive=*/ true>(inst, inst_data, opcode)) {
         return false;
       }
       break;
     case Instruction::IGET:
-      if (!VerifyISFieldAccess<FieldAccessType::kGet,
-                               FieldAccessWidth::kVreg,
+      if (!VerifyISFieldAccess<AccessType::kGet,
+                               AccessWidth::kVreg,
                                /*kIsStatic=*/ false,
                                /*kIsPrimitive=*/ true>(inst, inst_data, opcode)) {
         return false;
       }
       break;
     case Instruction::IGET_WIDE:
-      if (!VerifyISFieldAccess<FieldAccessType::kGet,
-                               FieldAccessWidth::kWide,
+      if (!VerifyISFieldAccess<AccessType::kGet,
+                               AccessWidth::kWide,
                                /*kIsStatic=*/ false,
                                /*kIsPrimitive=*/ true>(inst, inst_data, opcode)) {
         return false;
       }
       break;
     case Instruction::IGET_OBJECT:
-      if (!VerifyISFieldAccess<FieldAccessType::kGet,
-                               FieldAccessWidth::kVreg,
+      if (!VerifyISFieldAccess<AccessType::kGet,
+                               AccessWidth::kVreg,
                                /*kIsStatic=*/ false,
                                /*kIsPrimitive=*/ false>(inst, inst_data, opcode)) {
         return false;
@@ -3624,32 +3659,32 @@ bool MethodVerifier<kVerifierDebug>::CodeFlowVerifyInstruction(uint32_t* start_g
     case Instruction::IPUT_BYTE:
     case Instruction::IPUT_CHAR:
     case Instruction::IPUT_SHORT:
-      if (!VerifyISFieldAccess<FieldAccessType::kPut,
-                               FieldAccessWidth::kNarrow,
+      if (!VerifyISFieldAccess<AccessType::kPut,
+                               AccessWidth::kNarrow,
                                /*kIsStatic=*/ false,
                                /*kIsPrimitive=*/ true>(inst, inst_data, opcode)) {
         return false;
       }
       break;
     case Instruction::IPUT:
-      if (!VerifyISFieldAccess<FieldAccessType::kPut,
-                               FieldAccessWidth::kVreg,
+      if (!VerifyISFieldAccess<AccessType::kPut,
+                               AccessWidth::kVreg,
                                /*kIsStatic=*/ false,
                                /*kIsPrimitive=*/ true>(inst, inst_data, opcode)) {
         return false;
       }
       break;
     case Instruction::IPUT_WIDE:
-      if (!VerifyISFieldAccess<FieldAccessType::kPut,
-                               FieldAccessWidth::kWide,
+      if (!VerifyISFieldAccess<AccessType::kPut,
+                               AccessWidth::kWide,
                                /*kIsStatic=*/ false,
                                /*kIsPrimitive=*/ true>(inst, inst_data, opcode)) {
         return false;
       }
       break;
     case Instruction::IPUT_OBJECT:
-      if (!VerifyISFieldAccess<FieldAccessType::kPut,
-                               FieldAccessWidth::kVreg,
+      if (!VerifyISFieldAccess<AccessType::kPut,
+                               AccessWidth::kVreg,
                                /*kIsStatic=*/ false,
                                /*kIsPrimitive=*/ false>(inst, inst_data, opcode)) {
         return false;
@@ -3660,32 +3695,32 @@ bool MethodVerifier<kVerifierDebug>::CodeFlowVerifyInstruction(uint32_t* start_g
     case Instruction::SGET_BYTE:
     case Instruction::SGET_CHAR:
     case Instruction::SGET_SHORT:
-      if (!VerifyISFieldAccess<FieldAccessType::kGet,
-                               FieldAccessWidth::kNarrow,
+      if (!VerifyISFieldAccess<AccessType::kGet,
+                               AccessWidth::kNarrow,
                                /*kIsStatic=*/ true,
                                /*kIsPrimitive=*/ true>(inst, inst_data, opcode)) {
         return false;
       }
       break;
     case Instruction::SGET:
-      if (!VerifyISFieldAccess<FieldAccessType::kGet,
-                               FieldAccessWidth::kVreg,
+      if (!VerifyISFieldAccess<AccessType::kGet,
+                               AccessWidth::kVreg,
                                /*kIsStatic=*/ true,
                                /*kIsPrimitive=*/ true>(inst, inst_data, opcode)) {
         return false;
       }
       break;
     case Instruction::SGET_WIDE:
-      if (!VerifyISFieldAccess<FieldAccessType::kGet,
-                               FieldAccessWidth::kWide,
+      if (!VerifyISFieldAccess<AccessType::kGet,
+                               AccessWidth::kWide,
                                /*kIsStatic=*/ true,
                                /*kIsPrimitive=*/ true>(inst, inst_data, opcode)) {
         return false;
       }
       break;
     case Instruction::SGET_OBJECT:
-      if (!VerifyISFieldAccess<FieldAccessType::kGet,
-                               FieldAccessWidth::kVreg,
+      if (!VerifyISFieldAccess<AccessType::kGet,
+                               AccessWidth::kVreg,
                                /*kIsStatic=*/ true,
                                /*kIsPrimitive=*/ false>(inst, inst_data, opcode)) {
         return false;
@@ -3696,32 +3731,32 @@ bool MethodVerifier<kVerifierDebug>::CodeFlowVerifyInstruction(uint32_t* start_g
     case Instruction::SPUT_BYTE:
     case Instruction::SPUT_CHAR:
     case Instruction::SPUT_SHORT:
-      if (!VerifyISFieldAccess<FieldAccessType::kPut,
-                               FieldAccessWidth::kNarrow,
+      if (!VerifyISFieldAccess<AccessType::kPut,
+                               AccessWidth::kNarrow,
                                /*kIsStatic=*/ true,
                                /*kIsPrimitive=*/ true>(inst, inst_data, opcode)) {
         return false;
       }
       break;
     case Instruction::SPUT:
-      if (!VerifyISFieldAccess<FieldAccessType::kPut,
-                               FieldAccessWidth::kVreg,
+      if (!VerifyISFieldAccess<AccessType::kPut,
+                               AccessWidth::kVreg,
                                /*kIsStatic=*/ true,
                                /*kIsPrimitive=*/ true>(inst, inst_data, opcode)) {
         return false;
       }
       break;
     case Instruction::SPUT_WIDE:
-      if (!VerifyISFieldAccess<FieldAccessType::kPut,
-                               FieldAccessWidth::kWide,
+      if (!VerifyISFieldAccess<AccessType::kPut,
+                               AccessWidth::kWide,
                                /*kIsStatic=*/ true,
                                /*kIsPrimitive=*/ true>(inst, inst_data, opcode)) {
         return false;
       }
       break;
     case Instruction::SPUT_OBJECT:
-      if (!VerifyISFieldAccess<FieldAccessType::kPut,
-                               FieldAccessWidth::kVreg,
+      if (!VerifyISFieldAccess<AccessType::kPut,
+                               AccessWidth::kVreg,
                                /*kIsStatic=*/ true,
                                /*kIsPrimitive=*/ false>(inst, inst_data, opcode)) {
         return false;
@@ -5154,69 +5189,6 @@ bool MethodVerifierImpl::VerifyFilledNewArray(const Instruction* inst, bool is_r
   return true;
 }
 
-void MethodVerifierImpl::VerifyAGet(const Instruction* inst,
-                                    const RegType& insn_type,
-                                    bool is_primitive) {
-  const RegType& index_type = work_line_->GetRegisterType(this, inst->VRegC_23x());
-  if (!index_type.IsArrayIndexTypes()) {
-    Fail(VERIFY_ERROR_BAD_CLASS_HARD) << "Invalid reg type for array index (" << index_type << ")";
-  } else {
-    const RegType& array_type = work_line_->GetRegisterType(this, inst->VRegB_23x());
-    if (array_type.IsZeroOrNull()) {
-      // Null array class; this code path will fail at runtime. Infer a merge-able type from the
-      // instruction type.
-      if (!is_primitive) {
-        work_line_->SetRegisterType<LockOp::kClear>(inst->VRegA_23x(), reg_types_.Null());
-      } else if (insn_type.IsInteger()) {
-        // Pick a non-zero constant (to distinguish with null) that can fit in any primitive.
-        // We cannot use 'insn_type' as it could be a float array or an int array.
-        work_line_->SetRegisterType(inst->VRegA_23x(), DetermineCat1Constant(1));
-      } else if (insn_type.IsCategory1Types()) {
-        // Category 1
-        // The 'insn_type' is exactly the type we need.
-        work_line_->SetRegisterType<LockOp::kClear>(inst->VRegA_23x(), insn_type);
-      } else {
-        // Category 2
-        work_line_->SetRegisterTypeWide(inst->VRegA_23x(),
-                                        RegType::kConstantLo,
-                                        RegType::kConstantHi);
-      }
-    } else if (!array_type.IsArrayTypes()) {
-      Fail(VERIFY_ERROR_BAD_CLASS_HARD) << "not array type " << array_type << " with aget";
-    } else if (array_type.IsUnresolvedMergedReference()) {
-      // Unresolved array types must be reference array types.
-      if (is_primitive) {
-        FailIncompatibleArrayType(inst->Opcode(), array_type);
-      } else {
-        Fail(VERIFY_ERROR_NO_CLASS) << "cannot verify aget for " << array_type
-            << " because of missing class";
-        // Approximate with java.lang.Object[].
-        work_line_->SetRegisterType(inst->VRegA_23x(), RegType::Kind::kJavaLangObject);
-      }
-    } else {
-      /* verify the class */
-      const RegType& component_type = reg_types_.GetComponentType(array_type);
-      if (!component_type.IsReferenceTypes() && !is_primitive) {
-        FailIncompatibleArrayType(inst->Opcode(), array_type);
-      } else if (is_primitive && !insn_type.Equals(component_type) &&
-                 !((insn_type.IsInteger() && component_type.IsFloat()) ||
-                 (insn_type.IsLongLo() && component_type.IsDoubleLo()))) {
-        FailIncompatibleArrayType(inst->Opcode(), array_type);
-      } else {
-        // Use knowledge of the field type which is stronger than the type inferred from the
-        // instruction, which can't differentiate object types and ints from floats, longs from
-        // doubles.
-        if (!component_type.IsLowHalf()) {
-          work_line_->SetRegisterType<LockOp::kClear>(inst->VRegA_23x(), component_type);
-        } else {
-          work_line_->SetRegisterTypeWide(inst->VRegA_23x(), component_type,
-                                          component_type.HighHalf(&reg_types_));
-        }
-      }
-    }
-  }
-}
-
 ALWAYS_INLINE
 inline bool MethodVerifierImpl::VerifyPrimitivePut(RegType::Kind target_kind, uint32_t vregA) {
   // Primitive assignability rules are weaker than regular assignability rules.
@@ -5253,15 +5225,60 @@ inline bool MethodVerifierImpl::VerifyPrimitivePut(RegType::Kind target_kind, ui
   }
 }
 
-void MethodVerifierImpl::VerifyAPut(const Instruction* inst,
-                                    const RegType& insn_type,
-                                    bool is_primitive) {
-  const RegType& index_type = work_line_->GetRegisterType(this, inst->VRegC_23x());
-  if (!index_type.IsArrayIndexTypes()) {
-    Fail(VERIFY_ERROR_BAD_CLASS_HARD) << "Invalid reg type for array index (" << index_type << ")";
+template <AccessType kAccType, AccessWidth kAccWidth, bool kIsPrimitive>
+bool MethodVerifierImpl::VerifyArrayAccess(const Instruction* inst,
+                                           uint16_t inst_data,
+                                           Instruction::Code opcode) {
+  static_assert(kIsPrimitive || kAccWidth == AccessWidth::kVreg);
+  uint16_t index_type_id = work_line_->GetRegisterTypeId(inst->VRegC_23x());
+  if (UNLIKELY(index_type_id >= RegTypeCache::NumberOfRegKindCacheIds()) ||
+      UNLIKELY(!RegType::IsArrayIndexTypes(RegTypeCache::RegKindForId(index_type_id)))) {
+    FailInvalidArrayIndex(index_type_id);
+    return false;
+  }
+
+  // TODO: Avoid conversion to `insn_type` and work directly with template parameters and `opcode`.
+  RegType::Kind insn_kind;
+  if (!kIsPrimitive) {
+    insn_kind = RegType::Kind::kJavaLangObject;
+  } else if (kAccWidth == AccessWidth::kNarrow) {
+    static constexpr Instruction::Code kBaseOpcode =
+        (kAccType == AccessType::kGet) ? Instruction::AGET_BOOLEAN : Instruction::APUT_BOOLEAN;
+    // Boolean, Byte, Char, Short kinds are ordered as in get/put instructions.
+    insn_kind = enum_cast<RegType::Kind>(RegType::Kind::kBoolean + (opcode - kBaseOpcode));
+  } else if (kAccWidth == AccessWidth::kVreg) {
+    insn_kind = RegType::Kind::kInteger;
   } else {
-    const RegType& array_type = work_line_->GetRegisterType(this, inst->VRegB_23x());
-    if (array_type.IsZeroOrNull()) {
+    DCHECK(kAccWidth == AccessWidth::kWide);
+    insn_kind = RegType::Kind::kLongLo;
+  }
+  const RegType& insn_type = reg_types_.GetFromId(RegTypeCache::IdForRegKind(insn_kind));
+
+  const RegType& array_type = work_line_->GetRegisterType(this, inst->VRegB_23x());
+  uint32_t vregA = inst->VRegA_23x(inst_data);
+  if (array_type.IsZeroOrNull()) {
+    if (kAccType == AccessType::kGet) {
+      // Null array class; this code path will fail at runtime. Infer a merge-able type from the
+      // instruction type.
+      if (!kIsPrimitive) {
+        work_line_->SetRegisterType<LockOp::kClear>(vregA, reg_types_.Null());
+      } else if (insn_type.IsInteger()) {
+        // Pick a non-zero constant (to distinguish with null) that can fit in any primitive.
+        // We cannot use 'insn_type' as it could be a float array or an int array.
+        // FIXME: We should simply use `RegType::kIntegerConstant` but this may require
+        // relaxing the value type verification below for primitive `aput` with null array.
+        work_line_->SetRegisterType(vregA, DetermineCat1Constant(1));
+      } else if (insn_type.IsCategory1Types()) {
+        // Category 1
+        // The 'insn_type' is exactly the type we need.
+        work_line_->SetRegisterType<LockOp::kClear>(vregA, insn_type);
+      } else {
+        // Category 2
+        work_line_->SetRegisterTypeWide(vregA, RegType::kConstantLo, RegType::kConstantHi);
+      }
+      return true;
+    } else {
+      DCHECK(kAccType == AccessType::kPut);
       // Null array type; this code path will fail at runtime.
       // Still check that the given value matches the instruction's type.
       // Note: this is, as usual, complicated by the fact the the instruction isn't fully typed
@@ -5270,7 +5287,7 @@ void MethodVerifierImpl::VerifyAPut(const Instruction* inst,
       if ((modified_reg_type == &reg_types_.Integer()) ||
           (modified_reg_type == &reg_types_.LongLo())) {
         // May be integer or float | long or double. Overwrite insn_type accordingly.
-        const RegType& value_type = work_line_->GetRegisterType(this, inst->VRegA_23x());
+        const RegType& value_type = work_line_->GetRegisterType(this, vregA);
         if (modified_reg_type == &reg_types_.Integer()) {
           if (&value_type == &reg_types_.Float()) {
             modified_reg_type = &value_type;
@@ -5281,21 +5298,56 @@ void MethodVerifierImpl::VerifyAPut(const Instruction* inst,
           }
         }
       }
-      VerifyRegisterType(inst->VRegA_23x(), *modified_reg_type);
-    } else if (!array_type.IsArrayTypes()) {
-      Fail(VERIFY_ERROR_BAD_CLASS_HARD) << "not array type " << array_type << " with aput";
-    } else if (array_type.IsUnresolvedMergedReference()) {
-      // Unresolved array types must be reference array types.
-      if (is_primitive) {
-        FailIncompatibleArrayType(inst->Opcode(), array_type);
+      // FIXME: This is too restrictive for primitive types. Compare with `VerifyPrimitivePut()`.
+      return VerifyRegisterType(vregA, *modified_reg_type);
+    }
+  } else if (!array_type.IsArrayTypes()) {
+    FailNonArrayType(opcode, array_type);
+    return false;
+  } else if (array_type.IsUnresolvedMergedReference()) {
+    // Unresolved array types must be reference array types.
+    if (kIsPrimitive) {
+      FailIncompatibleArrayType(opcode, array_type);
+      return false;
+    } else {
+      SoftFailArrayIsUnresolvedMergedReference(opcode, array_type);
+      if (kAccType == AccessType::kGet) {
+        // Approximate with java.lang.Object[].
+        work_line_->SetRegisterType(vregA, RegType::Kind::kJavaLangObject);
+        return true;
       } else {
-        Fail(VERIFY_ERROR_NO_CLASS) << "cannot verify aput for " << array_type
-                                    << " because of missing class";
+        DCHECK(kAccType == AccessType::kPut);
+        // FIXME: Missing value type verification.
+        return true;
+      }
+    }
+  } else {
+    const RegType& component_type = reg_types_.GetComponentType(array_type);
+    if (kAccType == AccessType::kGet) {
+      /* verify the class */
+      if (!component_type.IsReferenceTypes() && !kIsPrimitive) {
+        FailIncompatibleArrayType(opcode, array_type);
+        return false;
+      } else if (kIsPrimitive && !insn_type.Equals(component_type) &&
+                 !((insn_type.IsInteger() && component_type.IsFloat()) ||
+                 (insn_type.IsLongLo() && component_type.IsDoubleLo()))) {
+        FailIncompatibleArrayType(opcode, array_type);
+        return false;
+      } else {
+        // Use knowledge of the field type which is stronger than the type inferred from the
+        // instruction, which can't differentiate object types and ints from floats, longs from
+        // doubles.
+        if (!component_type.IsLowHalf()) {
+          work_line_->SetRegisterType<LockOp::kClear>(vregA, component_type);
+        } else {
+          work_line_->SetRegisterTypeWide(
+              vregA, component_type, component_type.HighHalf(&reg_types_));
+        }
+        return true;
       }
     } else {
-      const RegType& component_type = reg_types_.GetComponentType(array_type);
-      const uint32_t vregA = inst->VRegA_23x();
-      if (is_primitive) {
+      DCHECK(kAccType == AccessType::kPut);
+      if (kIsPrimitive) {
         bool instruction_compatible;
         if (component_type.IsIntegralTypes()) {
           instruction_compatible = component_type.Equals(insn_type);
@@ -5312,18 +5364,19 @@ void MethodVerifierImpl::VerifyAPut(const Instruction* inst,
           // This is a global failure rather than a class change failure as the instructions and
           // the descriptors for the type should have been consistent within the same file at
           // compile time.
-          FailIncompatibleArrayType(inst->Opcode(), array_type);
-          return;
+          FailIncompatibleArrayType(opcode, array_type);
+          return false;
         }
-        VerifyPrimitivePut(component_type.GetKind(), vregA);
+        return VerifyPrimitivePut(component_type.GetKind(), vregA);
       } else {
         if (!component_type.IsReferenceTypes()) {
-          FailIncompatibleArrayType(inst->Opcode(), array_type);
+          FailIncompatibleArrayType(opcode, array_type);
+          return false;
         } else {
           // The instruction agrees with the type of array, confirm the value to be stored does too
           // Note: we use the instruction type (rather than the component type) for aput-object as
           // incompatible classes will be caught at runtime as an array store exception
-          VerifyRegisterType(vregA, insn_type);
+          return VerifyRegisterType(vregA, insn_type);
         }
       }
     }
@@ -5501,23 +5554,22 @@ ArtField* MethodVerifierImpl::GetISFieldCommon(ArtField* field, bool is_put) {
   return field;
 }
 
-template <FieldAccessType kAccType,
-          FieldAccessWidth kAccWidth,
+template <AccessType kAccType,
+          AccessWidth kAccWidth,
           bool kIsStatic,
           bool kIsPrimitive>
 ALWAYS_INLINE inline bool MethodVerifierImpl::VerifyISFieldAccess(const Instruction* inst,
                                                                   uint16_t inst_data,
                                                                   Instruction::Code opcode) {
-  static_assert(kIsPrimitive || kAccWidth == FieldAccessWidth::kVreg);
+  static_assert(kIsPrimitive || kAccWidth == AccessWidth::kVreg);
   const uint32_t vregA = kIsStatic ? inst->VRegA_21c(inst_data) : inst->VRegA_22c(inst_data);
   uint32_t field_idx = GetFieldIdxOfFieldAccess(inst);
   DCHECK(!flags_.have_pending_hard_failure_);
   ArtField* field;
   if (kIsStatic) {
-    field = GetStaticField(field_idx, kAccType == FieldAccessType::kPut);
+    field = GetStaticField(field_idx, kAccType == AccessType::kPut);
   } else {
-    field = GetInstanceField(
-        inst->VRegB_22c(inst_data), field_idx, kAccType == FieldAccessType::kPut);
+    field = GetInstanceField(inst->VRegB_22c(inst_data), field_idx, kAccType == AccessType::kPut);
     if (UNLIKELY(flags_.have_pending_hard_failure_)) {
       return false;
     }
@@ -5526,18 +5578,18 @@ ALWAYS_INLINE inline bool MethodVerifierImpl::VerifyISFieldAccess(const Instruct
   DCHECK_IMPLIES(
       field == nullptr && IsSdkVersionSetAndAtLeast(api_level_, SdkVersion::kP),
       dex_file_->GetFieldId(field_idx).class_idx_ == class_def_.class_idx_ || !failures_.empty());
-  static_assert(kAccType == FieldAccessType::kPut || kAccType == FieldAccessType::kGet,
+  static_assert(kAccType == AccessType::kPut || kAccType == AccessType::kGet,
                 "Unexpected third access type");
-  if (kAccWidth == FieldAccessWidth::kNarrow) {
+  if (kAccWidth == AccessWidth::kNarrow) {
     // Register types Boolean, Byte, Char, Short are ordered as in get/put instructions.
-    constexpr Instruction::Code kBaseOpcode = (kAccType == FieldAccessType::kPut)
+    constexpr Instruction::Code kBaseOpcode = (kAccType == AccessType::kPut)
         ? (kIsStatic ? Instruction::SPUT_BOOLEAN : Instruction::IPUT_BOOLEAN)
         : (kIsStatic ? Instruction::SGET_BOOLEAN : Instruction::IGET_BOOLEAN);
     RegType::Kind kind =
         enum_cast<RegType::Kind>((opcode - kBaseOpcode) + RegType::Kind::kBoolean);
     DCHECK_EQ(RegTypeCache::IdForRegKind(kind),
               reg_types_.IdFromTypeIndex(dex_file_->GetFieldId(field_idx).type_idx_));
-    if (kAccType == FieldAccessType::kGet) {
+    if (kAccType == AccessType::kGet) {
       work_line_->SetRegisterType(vregA, kind);
       return true;
     } else {
@@ -5546,20 +5598,20 @@ ALWAYS_INLINE inline bool MethodVerifierImpl::VerifyISFieldAccess(const Instruct
   } else if (kIsPrimitive) {
     RegType::Kind kind = RegTypeCache::RegKindForId(
         reg_types_.IdFromTypeIndex(dex_file_->GetFieldId(field_idx).type_idx_));
-    if (kAccWidth == FieldAccessWidth::kWide) {
+    if (kAccWidth == AccessWidth::kWide) {
       DCHECK(kind == RegType::Kind::kLongLo || kind == RegType::Kind::kDoubleLo) << kind;
-      if (kAccType == FieldAccessType::kGet) {
+      if (kAccType == AccessType::kGet) {
         work_line_->SetRegisterTypeWide(vregA, kind, RegType::ToHighHalf(kind));
         return true;
       }
     } else {
       DCHECK(kind == RegType::Kind::kInteger || kind == RegType::Kind::kFloat) << kind;
-      if (kAccType == FieldAccessType::kGet) {
+      if (kAccType == AccessType::kGet) {
         work_line_->SetRegisterType(vregA, kind);
         return true;
       }
     }
-    DCHECK(kAccType == FieldAccessType::kPut);
+    DCHECK(kAccType == AccessType::kPut);
     return VerifyPrimitivePut(kind, vregA);
   } else {
     const RegType& field_type =
@@ -5567,7 +5619,7 @@ ALWAYS_INLINE inline bool MethodVerifierImpl::VerifyISFieldAccess(const Instruct
     DCHECK(field_type.IsJavaLangObject() ||
            field_type.IsReference() ||
            field_type.IsUnresolvedReference());
-    if (kAccType == FieldAccessType::kGet) {
+    if (kAccType == AccessType::kGet) {
       work_line_->SetRegisterType<LockOp::kClear>(vregA, field_type);
       return true;
     } else {
