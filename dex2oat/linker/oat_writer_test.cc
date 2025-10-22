@@ -248,6 +248,11 @@ class OatTest : public CommonCompilerDriverTest {
       opened_dex_files_maps_.emplace_back(std::move(map));
     }
     for (std::unique_ptr<const DexFile>& dex_file : opened_dex_files) {
+      // FIXME: We shall soon destroy the `OatWriter` which owns the `OatDexFile`s
+      // with type lookup tables. Do not let dex files have dangling pointers.
+      // We should clean up the ownership of these `OatDexFiles`.
+      dex_file->SetOatDexFile(nullptr);
+
       opened_dex_files_.emplace_back(dex_file.release());
     }
     return true;
