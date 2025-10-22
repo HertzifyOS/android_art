@@ -468,6 +468,10 @@ extern "C" JNIEXPORT jboolean JNICALL Java_Main_isDebuggable(JNIEnv*, jclass) {
   return Runtime::Current()->IsJavaDebuggable() ? JNI_TRUE : JNI_FALSE;
 }
 
+extern "C" JNIEXPORT jint JNICALL Java_Main_getTargetSdkVersion(JNIEnv*, jclass) {
+  return Runtime::Current()->GetTargetSdkVersion();
+}
+
 extern "C" JNIEXPORT void JNICALL Java_Main_setTargetSdkVersion(JNIEnv*, jclass, jint version) {
   Runtime::Current()->SetTargetSdkVersion(static_cast<uint32_t>(version));
 }

@@ -102,6 +102,8 @@ struct EXPORT WellKnownClasses {
   static jclass java_lang_reflect_Parameter__array;
   static jclass java_lang_StringFactory;
   static jclass java_lang_Void;
+  static jclass java_util_concurrent_atomic_AIFU;
+  static jclass java_util_concurrent_atomic_ALFU;
   static jclass java_util_concurrent_atomic_ARFU;
   static jclass libcore_reflect_AnnotationMember__array;
 

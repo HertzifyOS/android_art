@@ -170,6 +170,7 @@
 namespace art HIDDEN {
 
 using android::base::StringPrintf;
+using std::string_view_literals::operator""sv;
 
 static constexpr bool kCheckImageObjects = kIsDebugBuild;
 static constexpr bool kVerifyArtMethodDeclaringClasses = kIsDebugBuild;
@@ -3740,6 +3741,71 @@ ObjPtr<mirror::Class> ClassLinker::DefineClass(Thread* self,
   self->AssertNoPendingException();
   CHECK(h_new_class != nullptr) << descriptor;
   CHECK(h_new_class->IsResolved()) << descriptor << " " << h_new_class->GetStatus();
+
+  bool all_final_fields_are_monotonic = false;
+  if (h_new_class->IsRecordClass()) {
+    // According to JLS all instance fields in record classes are final (with extra immutability
+    // guarantees), but there seems to be nothing in JVMS which enforces that.
+    // TODO(mingaleev): sort out how record classes with non-final fields should be handled.
+    all_final_fields_are_monotonic = true;
+  } else if (h_new_class->IsBootStrapClassLoaded()
+             && !h_new_class->IsArrayClass()
+             && !h_new_class->IsPrimitive()
+             && !h_new_class->IsProxyClass()) {
+    // `final` fields in box and Atomic*FieldUpdater implementation classes and classes defined in
+    // java.lang.invoke package classes are unmodifiable too.
+    std::string_view class_name = h_new_class->GetDescriptorView();
+    if (class_name.starts_with("Ljava/")) {
+      static constexpr const std::string_view kBoxClasses[] = {
+          "Ljava/lang/Boolean;"sv,
+          "Ljava/lang/Byte;"sv,
+          "Ljava/lang/Character;"sv,
+          "Ljava/lang/Short;"sv,
+          "Ljava/lang/Integer;"sv,
+          "Ljava/lang/Float;"sv,
+          "Ljava/lang/Long;"sv,
+          "Ljava/lang/Double;"sv
+      };
+
+      // Ideally this should be applied to all java.lang.* classes, but there is at least one app
+      // which overwrites ClassLoader.parent field.
+      for (const std::string_view box_class : kBoxClasses) {
+        if (class_name == box_class) {
+          all_final_fields_are_monotonic = true;
+        }
+      }
+
+      if (class_name.starts_with("Ljava/lang/invoke/")) {
+        all_final_fields_are_monotonic = true;
+      }
+
+      if (class_name.starts_with("Ljava/util/concurrent/atomic/")) {
+        // Exact implementations of Atomic*FieldUpdater classes.
+        static constexpr const std::string_view kAtomicUpdaterImplClasses[] = {
+            "Ljava/util/concurrent/atomic/"
+                "AtomicReferenceFieldUpdater$AtomicReferenceFieldUpdaterImpl;"sv,
+            "Ljava/util/concurrent/atomic/"
+                "AtomicIntegerFieldUpdater$AtomicIntegerFieldUpdaterImpl;"sv,
+            "Ljava/util/concurrent/atomic/"
+                "AtomicLongFieldUpdater$CASUpdater;"sv
+        };
+
+        for (const std::string_view updater : kAtomicUpdaterImplClasses) {
+          if (class_name == updater) {
+            all_final_fields_are_monotonic = true;
+          }
+        }
+      }
+    }
+  }
+
+  if (all_final_fields_are_monotonic) {
+    for (ArtField& field : h_new_class->GetFields()) {
+      if (field.IsFinal()) {
+        field.SetMonotonicField();
+      }
+    }
+  }
 
   // Instrumentation may have updated entrypoints for all methods of all
   // classes. However it could not update methods of this class while we

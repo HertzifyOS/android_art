@@ -58,6 +58,8 @@ jclass WellKnownClasses::java_lang_Record;
 jclass WellKnownClasses::java_lang_reflect_Parameter__array;
 jclass WellKnownClasses::java_lang_StringFactory;
 jclass WellKnownClasses::java_lang_Void;
+jclass WellKnownClasses::java_util_concurrent_atomic_AIFU;
+jclass WellKnownClasses::java_util_concurrent_atomic_ALFU;
 jclass WellKnownClasses::java_util_concurrent_atomic_ARFU;
 jclass WellKnownClasses::libcore_reflect_AnnotationMember__array;
 
@@ -397,6 +399,10 @@ void WellKnownClasses::Init(JNIEnv* env) {
   java_lang_reflect_Parameter__array = CacheClass(env, "[Ljava/lang/reflect/Parameter;");
   java_lang_StringFactory = CacheClass(env, "java/lang/StringFactory");
   java_lang_Void = CacheClass(env, "java/lang/Void");
+  java_util_concurrent_atomic_AIFU =
+      CacheClass(env, "java/util/concurrent/atomic/AtomicIntegerFieldUpdater");
+  java_util_concurrent_atomic_ALFU =
+      CacheClass(env, "java/util/concurrent/atomic/AtomicLongFieldUpdater");
   java_util_concurrent_atomic_ARFU =
       CacheClass(env, "java/util/concurrent/atomic/AtomicReferenceFieldUpdater");
   libcore_reflect_AnnotationMember__array = CacheClass(env, "[Llibcore/reflect/AnnotationMember;");
@@ -1037,6 +1043,8 @@ void WellKnownClasses::Clear() {
   java_lang_reflect_Parameter__array = nullptr;
   java_lang_StringFactory = nullptr;
   java_lang_Void = nullptr;
+  java_util_concurrent_atomic_AIFU = nullptr;
+  java_util_concurrent_atomic_ALFU = nullptr;
   java_util_concurrent_atomic_ARFU = nullptr;
   libcore_reflect_AnnotationMember__array = nullptr;
 

@@ -72,6 +72,8 @@ class EXPORT ArtField final {
     access_flags_ = new_access_flags;
   }
 
+  void SetMonotonicField();
+
   bool IsPublic() {
     return (GetAccessFlags() & kAccPublic) != 0;
   }
