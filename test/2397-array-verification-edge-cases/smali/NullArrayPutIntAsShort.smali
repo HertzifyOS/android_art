@@ -13,19 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-.class public Lb_448576150;
+.class public LNullArrayPutIntAsShort;
 .super Ljava/lang/Object;
 
-.method public static test()I
-   .registers 2
+.field static intField:I
+
+.method public static test()V
+   .registers 3
    const/4 v0, 0x0
    const/4 v1, 0x0
-   # Note that the array is null.
-   aget-object v0, v1, v0
-   # Compare null reference against non-zero integral => error.
-   const/4 v1, 0x2
-   if-eq v0, v1, :end
-   return v1
-:end
-   return v1
+   sget v2, LNullArrayPutIntAsShort;->intField:I
+   # Note that the array is null, so this shall throw at runtime.
+   # However, for verification, null is valid as `short[]`
+   # and primitive aput allows storing wider types in narrow array elements.
+   aput-short v2, v1, v0
+   return-void
 .end method

@@ -5263,11 +5263,9 @@ bool MethodVerifierImpl::VerifyArrayAccess(const Instruction* inst,
       if (!kIsPrimitive) {
         work_line_->SetRegisterType<LockOp::kClear>(vregA, reg_types_.Null());
       } else if (insn_type.IsInteger()) {
-        // Pick a non-zero constant (to distinguish with null) that can fit in any primitive.
         // We cannot use 'insn_type' as it could be a float array or an int array.
-        // FIXME: We should simply use `RegType::kIntegerConstant` but this may require
-        // relaxing the value type verification below for primitive `aput` with null array.
-        work_line_->SetRegisterType(vregA, DetermineCat1Constant(1));
+        // Use integer constant which can serve as either `int` or `float`.
+        work_line_->SetRegisterType(vregA, RegType::kIntegerConstant);
       } else if (insn_type.IsCategory1Types()) {
         // Category 1
         // The 'insn_type' is exactly the type we need.
@@ -5298,8 +5296,11 @@ bool MethodVerifierImpl::VerifyArrayAccess(const Instruction* inst,
           }
         }
       }
-      // FIXME: This is too restrictive for primitive types. Compare with `VerifyPrimitivePut()`.
-      return VerifyRegisterType(vregA, *modified_reg_type);
+      if (kIsPrimitive) {
+        return VerifyPrimitivePut(modified_reg_type->GetKind(), vregA);
+      } else {
+        return VerifyRegisterType(vregA, *modified_reg_type);
+      }
     }
   } else if (!array_type.IsArrayTypes()) {
     FailNonArrayType(opcode, array_type);

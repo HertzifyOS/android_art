@@ -19,10 +19,26 @@ import java.lang.reflect.InvocationTargetException;
 public class Main {
     public static void main(String[] args) throws Exception {
         try {
-            Object retValue = Class.forName("Test").getDeclaredMethod("foo").invoke(null);
+            Class.forName("b_448576150");
             throw new Error("UNREACHABLE");
-        } catch (java.lang.VerifyError e) {
-            // expected
+        } catch (java.lang.VerifyError expected) {
+        }
+        try {
+            Class.forName("NullArrayGetIPutS").getDeclaredMethod("test").invoke(null);
+        } catch (InvocationTargetException ite) {
+            // We expect NPE, so rethrow if the cause is different.
+            if (!(ite.getCause() instanceof NullPointerException)) {
+                throw ite;
+            }
+        }
+        try {
+            Class.forName("NullArrayPutIntAsShort").getDeclaredMethod("test").invoke(null);
+            throw new Error("UNREACHABLE");
+        } catch (InvocationTargetException ite) {
+            // We expect NPE, so rethrow if the cause is different.
+            if (!(ite.getCause() instanceof NullPointerException)) {
+                throw ite;
+            }
         }
     }
 }

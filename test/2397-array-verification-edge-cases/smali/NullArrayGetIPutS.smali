@@ -13,19 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-.class public Lb_448576150;
+.class public LNullArrayGetIPutS;
 .super Ljava/lang/Object;
 
-.method public static test()I
-   .registers 2
+.method public static test()V
+   .registers 3
    const/4 v0, 0x0
    const/4 v1, 0x0
-   # Note that the array is null.
-   aget-object v0, v1, v0
-   # Compare null reference against non-zero integral => error.
-   const/4 v1, 0x2
-   if-eq v0, v1, :end
-   return v1
-:end
-   return v1
+   # Note that the array is null, so this shall throw at runtime.
+   # However, for verification, null is valid as both `int[]` and `short[]`
+   # and primitive aput allows storing wider types in narrow array elements.
+   aget v2, v1, v0
+   aput-short v2, v1, v0
+   return-void
 .end method
