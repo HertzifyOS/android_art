@@ -770,7 +770,6 @@ bool FastCompilerARM64::InitializeParameters() {
       CatchHandlerIterator iterator(handlers_ptr);
       for (; iterator.HasNext(); iterator.Next()) {
         catch_pcs_.SetBit(iterator.GetHandlerAddress());
-        AddToWorkQueue(iterator.GetHandlerAddress());
       }
       handlers_ptr = iterator.EndDataPointer();
     }
@@ -912,6 +911,7 @@ bool FastCompilerARM64::ProcessBlock(uint32_t dex_pc) {
             return false;
           }
           UpdateMasks(iterator.GetHandlerAddress());
+          AddToWorkQueue(iterator.GetHandlerAddress());
         }
       }
     }
