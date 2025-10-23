@@ -1051,8 +1051,12 @@ enum class ResumeParentPolicy {
   DEFERRED
 };
 
-pid_t ForkUnderThreadListLock(art::Thread* self) {
-  art::MutexLock lk(self, *art::Locks::thread_list_lock_);
+pid_t ForkUnderLocks(art::Thread* self) {
+  art::MutexLock tll(self, *art::Locks::thread_list_lock_);
+  art::ReaderMutexLock jnigl(self, *art::Locks::jni_globals_lock_);
+  art::MutexLock jniwgl(self, *art::Locks::jni_weak_globals_lock_);
+  art::MutexLock jl(self, *art::Locks::jit_lock_);
+  art::ReaderMutexLock jml(self, *art::Locks::jit_mutator_lock_);
   return fork();
 }
 
@@ -1080,8 +1084,9 @@ void ForkAndRun(art::Thread* self,
 
   std::optional<art::ScopedSuspendAll> ssa(std::in_place, __FUNCTION__, /* long_suspend=*/ true);
 
-  // Optimistically get the thread_list_lock_ to avoid the child process deadlocking
-  pid_t pid = ForkUnderThreadListLock(self);
+  // Optimistically acquire critical sections to avoid the child process deadlocking or in
+  // inconsistent states.
+  pid_t pid = ForkUnderLocks(self);
   if (pid == -1) {
     // Fork error.
     PLOG(ERROR) << "fork";
