@@ -346,6 +346,8 @@ class OptimizingCompiler final : public Compiler {
                        bool is_intrinsic,
                        const dex::CodeItem* item) const;
 
+  CompiledMethod* Emit(InstructionSet instruction_set, FastCompiler* compiler) const;
+
   // Try compiling a method and return the code generator used for
   // compiling it.
   // This method:
@@ -749,6 +751,21 @@ CompiledMethod* OptimizingCompiler::Emit(ArenaAllocator* allocator,
     }
   }
 
+  return compiled_method;
+}
+
+CompiledMethod* OptimizingCompiler::Emit(InstructionSet instruction_set,
+                                         FastCompiler* compiler) const {
+  ScopedArenaVector<uint8_t> stack_map = compiler->BuildStackMaps();
+  CompiledCodeStorage* storage = GetCompiledCodeStorage();
+  CompiledMethod* compiled_method = storage->CreateCompiledMethod(
+      instruction_set,
+      compiler->GetCode(),
+      ArrayRef<const uint8_t>(stack_map),
+      ArrayRef<const uint8_t>(compiler->GetCfiData()),
+      // TODO: Support linker patches for the fast compiler.
+      ArrayRef<const linker::LinkerPatch>(),
+      /* is_intrinsic= */ false);
   return compiled_method;
 }
 
@@ -1174,6 +1191,20 @@ CompiledMethod* OptimizingCompiler::Compile(const dex::CodeItem* code_item,
       }
     }
     if (codegen == nullptr) {
+      if (compiler_options.IsFast()) {
+        std::unique_ptr<FastCompiler> fast_compiler =
+            FastCompiler::Compile(method,
+                                  &allocator,
+                                  &arena_stack,
+                                  &handles,
+                                  compiler_options,
+                                  dex_compilation_unit);
+        if (fast_compiler != nullptr) {
+          return Emit(compiler_options.GetInstructionSet(), fast_compiler.get());
+        } else {
+          return nullptr;
+        }
+      }
       codegen.reset(
           TryCompile(&allocator,
                      &arena_stack,

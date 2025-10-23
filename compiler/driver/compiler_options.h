@@ -230,6 +230,10 @@ class CompilerOptions final {
     return baseline_;
   }
 
+  bool IsFast() const {
+    return fast_;
+  }
+
   bool ProfileBranches() const {
     return profile_branches_;
   }
@@ -429,6 +433,7 @@ class CompilerOptions final {
   bool compile_art_test_;
   bool emit_read_barrier_;
   bool baseline_;
+  bool fast_;
   bool debuggable_;
   bool generate_debug_info_;
   bool generate_mini_debug_info_;

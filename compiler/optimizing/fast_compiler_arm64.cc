@@ -1400,9 +1400,7 @@ bool FastCompilerARM64::GenerateFrame() {
 
   // Increment hotness. We use the ArtMethod's counter as we're not allocating a
   // `ProfilingInfo` object in the fast baseline compiler.
-  if (!Runtime::Current()->IsAotCompiler()) {
-    IncrementHotness(kArtMethodRegister);
-  }
+  IncrementHotness(kArtMethodRegister);
   return true;
 }
 
@@ -1494,10 +1492,6 @@ bool FastCompilerARM64::SetupArguments(InvokeType invoke_type,
 }
 
 bool FastCompilerARM64::LoadMethod(Register reg, ArtMethod* method) {
-  if (Runtime::Current()->IsAotCompiler()) {
-    unimplemented_reason_ = "AOTLoadMethod";
-    return false;
-  }
   __ Ldr(reg, jit_patches_.DeduplicateUint64Literal(reinterpret_cast<uint64_t>(method)));
   return true;
 }
@@ -1669,10 +1663,6 @@ bool FastCompilerARM64::BuildLoadString(uint32_t vreg,
   if (HitUnimplemented()) {
     return false;
   }
-  if (Runtime::Current()->IsAotCompiler()) {
-    unimplemented_reason_ = "AOTLoadString";
-    return false;
-  }
 
   ScopedObjectAccess soa(Thread::Current());
   ClassLinker* const class_linker = dex_compilation_unit_.GetClassLinker();
@@ -1706,10 +1696,6 @@ bool FastCompilerARM64::BuildLoadClass(uint32_t vreg,
   if (HitUnimplemented()) {
     return false;
   }
-  if (Runtime::Current()->IsAotCompiler()) {
-    unimplemented_reason_ = "AOTLoadClass";
-    return false;
-  }
 
   ScopedObjectAccess soa(Thread::Current());
   ObjPtr<mirror::Class> klass = dex_compilation_unit_.GetClassLinker()->ResolveType(
@@ -1737,10 +1723,6 @@ bool FastCompilerARM64::BuildNewInstance(uint32_t vreg,
                                          uint32_t dex_pc,
                                          const Instruction* next) {
   if (!EnsureHasFrame()) {
-    return false;
-  }
-  if (Runtime::Current()->IsAotCompiler()) {
-    unimplemented_reason_ = "AOTNewInstance";
     return false;
   }
 
@@ -1796,10 +1778,6 @@ bool FastCompilerARM64::BuildNewArray(dex::TypeIndex type_index,
   QuickEntrypointEnum entrypoint =
       CodeGenerator::GetArrayAllocationEntrypoint(component_type_shift);
   DCHECK(has_frame_);
-  if (Runtime::Current()->IsAotCompiler()) {
-    unimplemented_reason_ = "AOTNewArray";
-    return false;
-  }
 
   InvokeRuntimeCallingConvention calling_convention;
   Register cls_reg = calling_convention.GetRegisterAt(0);
@@ -2769,10 +2747,6 @@ bool FastCompilerARM64::BuildStaticFieldAccess(const Instruction& instruction,
                                                bool is_object,
                                                bool is_put,
                                                const Instruction* next) {
-  if (Runtime::Current()->IsAotCompiler()) {
-    unimplemented_reason_ = "AOTStaticFieldAccess";
-    return false;
-  }
   // We need a frame for the read barrier and the clinit check.
   if (!EnsureHasFrame()) {
     return false;

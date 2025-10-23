@@ -52,6 +52,7 @@ CompilerOptions::CompilerOptions()
       compile_art_test_(false),
       emit_read_barrier_(false),
       baseline_(false),
+      fast_(false),
       debuggable_(false),
       generate_debug_info_(kDefaultGenerateDebugInfo),
       generate_mini_debug_info_(kDefaultGenerateMiniDebugInfo),
