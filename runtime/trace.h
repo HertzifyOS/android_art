@@ -390,7 +390,7 @@ class TraceWriter {
   // In non-streaming mode, this data is flushed at the end of tracing. If the buffer gets full
   // we stop tracing and following trace events are ignored. The size of this buffer is
   // specified by the user in non-streaming mode.
-  std::unique_ptr<uint8_t[]> buf_;
+  std::unique_ptr<uint8_t[]> buf_ GUARDED_BY(trace_writer_lock_);
 
   // The cur_offset_ into the buf_. Accessed only in SuspendAll scope when flushing data from the
   // thread local buffers to buf_.
