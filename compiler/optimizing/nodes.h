@@ -6368,6 +6368,7 @@ class HLoadMethodType final : public HInstruction {
         special_input_(HUserRecord<HInstruction*>(current_method)),
         proto_index_(proto_index),
         dex_file_(dex_file) {
+    DCHECK_LT(proto_index_.index_, dex_file_.NumProtoIds());
     SetPackedField<LoadKindField>(LoadKind::kRuntimeCall);
   }
 
