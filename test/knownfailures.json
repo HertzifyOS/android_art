@@ -219,10 +219,7 @@
         "variant": "trace | stream"
     },
     {
-        "tests": ["570-checker-osr",
-                  "570-checker-osr-locals",
-                  "2398-checkexacttype-methodhandles"
-        ],
+        "tests": ["570-checker-osr", "570-checker-osr-locals"],
         "description": ["These tests wait for OSR, which never happens when tracing."],
         "variant": "trace | stream"
     },
@@ -1078,8 +1075,7 @@
           "2288-checker-smali-string-builder-wrong-init",
           "2289-smali-invalid-rti",
           "2292-checker-smali-peek-poke-truncation",
-          "2397-array-verification-edge-cases",
-          "2398-checkexacttype-methodhandles"
+          "2397-array-verification-edge-cases"
         ],
         "variant": "jvm",
         "bug": "b/73888836",

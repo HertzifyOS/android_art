@@ -5949,6 +5949,9 @@ void IntrinsicLocationsBuilderARM64::VisitMethodHandleInvokeExact(HInvoke* invok
   Location receiver_mh_loc = calling_convention.GetNextLocation(DataType::Type::kReference);
   locations->SetInAt(0, receiver_mh_loc);
 
+  // The last input is MethodType object corresponding to the call-site.
+  locations->SetInAt(number_of_args, Location::RequiresCoreRegister());
+
   locations->AddTemp(calling_convention.GetMethodLocation());
   locations->AddRegisterTemps(4);
 
@@ -5975,9 +5978,16 @@ void IntrinsicCodeGeneratorARM64::VisitMethodHandleInvokeExact(HInvoke* invoke) 
       new (codegen_->GetScopedAllocator()) InvokePolymorphicSlowPathARM64(invoke, method_handle);
   codegen_->AddSlowPath(slow_path);
 
-  Register temp = WRegisterFrom(locations->GetTemp(1));
-  Register method = XRegisterFrom(locations->GetTemp(0));
+  Register call_site_type = InputRegisterAt(invoke, invoke->GetNumberOfArguments());
 
+  // Call site should match with MethodHandle's type.
+  Register temp = WRegisterFrom(locations->GetTemp(1));
+  __ Ldr(temp, HeapOperand(method_handle.W(), mirror::MethodHandle::MethodTypeOffset()));
+  codegen_->GetAssembler()->MaybeUnpoisonHeapReference(temp);
+  __ Cmp(call_site_type, temp);
+  __ B(ne, slow_path->GetEntryLabel());
+
+  Register method = XRegisterFrom(locations->GetTemp(0));
   __ Ldr(method, HeapOperand(method_handle.W(), mirror::MethodHandle::ArtFieldOrMethodOffset()));
 
   vixl::aarch64::Label execute_target_method;

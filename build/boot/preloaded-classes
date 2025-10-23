@@ -972,7 +972,6 @@ java.lang.invoke.DirectMethodHandle$Holder
 java.lang.invoke.DirectMethodHandle$MethodKey
 java.lang.invoke.DirectMethodHandle
 java.lang.invoke.FieldVarHandle
-java.lang.invoke.Invokers
 java.lang.invoke.MethodHandle
 java.lang.invoke.MethodHandleImpl$HandleInfo
 java.lang.invoke.MethodHandleImpl
