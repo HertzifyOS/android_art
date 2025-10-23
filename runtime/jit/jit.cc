@@ -1734,21 +1734,26 @@ void Jit::MaybeEnqueueCompilation(ArtMethod* method, Thread* self) {
     return;
   }
 
-  static constexpr size_t kIndividualSharedMethodHotnessThreshold = 0x3f;
-  // Intrinsics are always in the boot image and considered hot.
-  if (method->IsMemorySharedMethod() && !method->IsIntrinsic()) {
-    MutexLock mu(self, lock_);
-    auto it = shared_method_counters_.find(method);
-    if (it == shared_method_counters_.end()) {
-      shared_method_counters_[method] = kIndividualSharedMethodHotnessThreshold;
-      return;
-    } else if (it->second != 0) {
-      DCHECK_LE(it->second, kIndividualSharedMethodHotnessThreshold);
-      shared_method_counters_[method] = it->second - 1;
-      return;
-    } else {
-      shared_method_counters_[method] = kIndividualSharedMethodHotnessThreshold;
+  if (method->IsMemorySharedMethod()) {
+    // Intrinsics are always in the boot image and considered hot.
+    if (!method->IsIntrinsic()) {
+      MutexLock mu(self, lock_);
+      auto it = shared_method_info_map_.find(method);
+      if (it == shared_method_info_map_.end()) {
+        shared_method_info_map_[method] = SharedMethodInfo();
+        return;
+      } else if (it->second.counter != 0) {
+        DCHECK_LE(it->second.counter, kIndividualSharedMethodHotnessThreshold);
+        it->second.counter--;
+        return;
+      } else {
+        it->second.counter = kIndividualSharedMethodHotnessThreshold;
+        it->second.previously_warm = true;
+      }
     }
+  } else {
+    // Mark the method as warm for the profile saver.
+    method->SetPreviouslyWarm();
   }
 
   if (!method->IsNative() && GetCodeCache()->CanAllocateProfilingInfo()) {
@@ -1813,6 +1818,16 @@ bool Jit::CompileMethod(ArtMethod* method,
   // TODO(ngeoffray): For JIT at first use, use kPreCompile. Currently we don't due to
   // conflicts with jitzygote optimizations.
   return CompileMethodInternal(method, self, compilation_kind, prejit);
+}
+
+SharedMethodInfo Jit::GetSharedMethodInfo(ArtMethod* method) {
+  DCHECK(method->IsMemorySharedMethod());
+  MutexLock mu(Thread::Current(), lock_);
+  auto it = shared_method_info_map_.find(method);
+  if (it != shared_method_info_map_.end()) {
+    return it->second;
+  }
+  return SharedMethodInfo();
 }
 
 size_t JitThreadPool::GetTaskCount(Thread* self) {

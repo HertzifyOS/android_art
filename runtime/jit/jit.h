@@ -19,6 +19,8 @@
 
 #include <android-base/unique_fd.h>
 
+#include <cstdint>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "app_info.h"
@@ -62,6 +64,7 @@ class JitOptions;
 
 static constexpr int16_t kJitCheckForOSR = -1;
 static constexpr int16_t kJitHotnessDisabled = -2;
+static constexpr uint16_t kIndividualSharedMethodHotnessThreshold = 0x3f;
 
 // The frequency at which we are going to check if we want to do fast
 // compilation. Only the main thread will request fast compilations.
@@ -111,6 +114,13 @@ struct OsrData {
   static constexpr MemberOffset MemoryOffset() {
     return MemberOffset(OFFSETOF_MEMBER(OsrData, memory));
   }
+};
+
+// Info about a method that resides in shared memory (shared between zygote and apps).
+// We keep the info here to avoid dirtying the `ArtMethod`'s page.
+struct SharedMethodInfo {
+  uint8_t counter = kIndividualSharedMethodHotnessThreshold;
+  bool previously_warm = false;
 };
 
 /**
@@ -406,6 +416,9 @@ class Jit {
   EXPORT static bool TryPatternMatch(ArtMethod* method, CompilationKind compilation_kind)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
+  // Get a snapshot of the current info for a shared method. The argument must be a shared method.
+  SharedMethodInfo GetSharedMethodInfo(ArtMethod* method);
+
  private:
   Jit(JitCodeCache* code_cache, JitOptions* options);
 
@@ -475,9 +488,8 @@ class Jit {
   // recomputing it.
   size_t fd_methods_size_;
 
-  // Map of hotness counters for methods which we want to share the memory
-  // between the zygote and apps.
-  std::map<ArtMethod*, uint16_t> shared_method_counters_;
+  // Map from shared methods to their info.
+  std::unordered_map<ArtMethod*, SharedMethodInfo> shared_method_info_map_;
 
   friend class art::jit::JitCompileTask;
 
