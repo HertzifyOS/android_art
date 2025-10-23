@@ -1129,6 +1129,7 @@
           "2288-checker-smali-string-builder-wrong-init",
           "2289-smali-invalid-rti",
           "2292-checker-smali-peek-poke-truncation",
+          "2294-smali-select-do-not-simplify",
           "2295-smali-duplicate-phis",
           "2397-array-verification-edge-cases",
           "2398-checkexacttype-methodhandles",

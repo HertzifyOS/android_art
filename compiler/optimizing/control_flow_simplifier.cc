@@ -300,11 +300,26 @@ HBasicBlock* HControlFlowSimplifier::TryFixupDoubleDiamondPattern(HBasicBlock* b
     return nullptr;
   }
 
-  size_t index = second_merge->GetPredecessorIndexOf(merges_into_second_merge);
   HPhi* second_phi = second_merge->GetFirstPhi()->AsPhi();
+  size_t first_merge_index = second_merge->GetPredecessorIndexOf(first_merge);
+  if (second_phi->InputAt(first_merge_index) != first_phi) {
+    // The first phi does not merge into the second one. This is an odd case where `first_phi` is
+    // dead but hasn't been eliminated from the graph yet.
+    // TODO(solanes): We can refactor this method to do:
+    //                1) Keep the `second_merge` alive instead of `first_merge`
+    //                2) For all `first_phi` instances, fetch the appropriate `first_phi` input
+    //                3) For the rest of the inputs, duplicate the value that was already present in
+    //                `second_phi`.
+    //                When we do this, we can eliminate this `if` case, but it would complicate the
+    //                logic of this method.
+    return nullptr;
+  }
+
+  size_t merges_into_second_merge_index =
+      second_merge->GetPredecessorIndexOf(merges_into_second_merge);
 
   // Merge the phis.
-  first_phi->AddInput(second_phi->InputAt(index));
+  first_phi->AddInput(second_phi->InputAt(merges_into_second_merge_index));
   merges_into_second_merge->ReplaceSuccessor(second_merge, first_merge);
   second_phi->ReplaceWith(first_phi);
   second_merge->RemovePhi(second_phi);
