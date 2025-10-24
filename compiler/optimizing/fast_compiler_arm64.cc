@@ -779,6 +779,7 @@ bool FastCompilerARM64::InitializeParameters() {
 }
 
 void FastCompilerARM64::MoveConstantsAndFpusToRegisters() {
+  DCHECK(has_frame_);
   for (uint32_t i = 0; i < vreg_locations_.size(); ++i) {
     Location location  = vreg_locations_[i];
     if (location.IsConstant()) {
@@ -798,6 +799,7 @@ void FastCompilerARM64::MoveConstantsAndFpusToRegisters() {
 }
 
 void FastCompilerARM64::ResetLocations() {
+  DCHECK(has_frame_);
   for (uint32_t i = 0; i < vreg_locations_.size(); ++i) {
     vreg_locations_[i] = CreateNewLocation(i, DataType::Type::kInt64);
   }
@@ -1088,6 +1090,7 @@ bool FastCompilerARM64::MoveLocation(Location destination,
 }
 
 Location FastCompilerARM64::CreateNewLocation(uint32_t reg, DataType::Type type) {
+  DCHECK(has_frame_);
   if (reg >= kMaximumRegisters) {
     return Location::StackSlot(GetStackSlot(reg));
   }
@@ -3174,6 +3177,9 @@ bool FastCompilerARM64::ProcessDexInstruction(const Instruction& instruction,
     case Instruction::GOTO:
     case Instruction::GOTO_16:
     case Instruction::GOTO_32: {
+      if (!EnsureHasFrame()) {
+        return false;
+      }
       int32_t target_offset = instruction.GetTargetOffset();
       if (target_offset <= 0 && !CanHandleBackwardsBranch(dex_pc + target_offset)) {
         return false;
