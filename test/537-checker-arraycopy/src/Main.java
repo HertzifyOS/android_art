@@ -111,23 +111,13 @@ public class Main {
   /// CHECK-NOT:      beqz <<reg2>>,
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-X86_64: void Main.arraycopyCharDstNonNull() disassembly (after)
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyCharDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
   /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
   /// CHECK-NEXT:     jz/eq
   /// CHECK-NEXT:     test <<reg1>>, <<reg1>>
   /// CHECK-NEXT:     jz/eq
   /// CHECK-NOT:      test <<reg2>>, <<reg2>>
-  /// CHECK:          ReturnVoid
-  //
-  /// CHECK-START-X86: void Main.arraycopyCharDstNonNull() disassembly (after)
-  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
-  /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
-  /// CHECK-NEXT:     jz/eq
-  /// CHECK-NEXT:     test <<reg1>>, <<reg1>>
-  /// CHECK-NEXT:     jz/eq
-  /// CHECK-NEXT:     test <<reg2>>, <<reg2>>
-  /// CHECK-NEXT:     jz/eq
   /// CHECK:          ReturnVoid
   public void arraycopyCharDstNonNull() {
     char[] arrChar2 = new char[1];
@@ -144,20 +134,10 @@ public class Main {
   /// CHECK-NEXT:     c.jalr ra
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-X86_64: void Main.arraycopyCharSameSrcDst() disassembly (after)
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyCharSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
-  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [RIP + 0x{{\w+}}]
+  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [{{RIP|ebp}} + {{\w+}}]
   /// CHECK-NEXT:     call [{{\w+}} + {{\d+}}]
-  /// CHECK:          ReturnVoid
-  //
-  /// CHECK-START-X86: void Main.arraycopyCharSameSrcDst() disassembly (after)
-  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
-  /// CHECK-NEXT:     cmp <<reg:\w+>>, <<reg>>
-  /// CHECK-NEXT:     jz/eq
-  /// CHECK-NEXT:     test <<reg>>, <<reg>>
-  /// CHECK-NEXT:     jz/eq
-  /// CHECK-NEXT:     test <<reg>>, <<reg>>
-  /// CHECK-NEXT:     jz/eq
   /// CHECK:          ReturnVoid
   public void arraycopyCharSameSrcDst() {
     System.arraycopy(arrChar, 1, arrChar, 0, 1);
@@ -172,23 +152,13 @@ public class Main {
   /// CHECK-NOT:      beqz <<reg2>>,
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-X86_64: void Main.arraycopyByteDstNonNull() disassembly (after)
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyByteDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
   /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
   /// CHECK-NEXT:     jz/eq
   /// CHECK-NEXT:     test <<reg1>>, <<reg1>>
   /// CHECK-NEXT:     jz/eq
   /// CHECK-NOT:      test <<reg2>>, <<reg2>>
-  /// CHECK:          ReturnVoid
-  //
-  /// CHECK-START-X86: void Main.arraycopyByteDstNonNull() disassembly (after)
-  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
-  /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
-  /// CHECK-NEXT:     jz/eq
-  /// CHECK-NEXT:     test <<reg1>>, <<reg1>>
-  /// CHECK-NEXT:     jz/eq
-  /// CHECK-NEXT:     test <<reg2>>, <<reg2>>
-  /// CHECK-NEXT:     jz/eq
   /// CHECK:          ReturnVoid
   public void arraycopyByteDstNonNull() {
     byte[] arrByte2 = new byte[1];
@@ -204,20 +174,10 @@ public class Main {
   /// CHECK-NEXT:     c.jalr ra
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-X86_64: void Main.arraycopyByteSameSrcDst() disassembly (after)
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyByteSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
-  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [RIP + 0x{{\w+}}]
+  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [{{RIP|ebp}} + {{\w+}}]
   /// CHECK-NEXT:     call [{{\w+}} + {{\d+}}]
-  /// CHECK:          ReturnVoid
-  //
-  /// CHECK-START-X86: void Main.arraycopyByteSameSrcDst() disassembly (after)
-  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
-  /// CHECK-NEXT:     cmp <<reg:\w+>>, <<reg>>
-  /// CHECK-NEXT:     jz/eq
-  /// CHECK-NEXT:     test <<reg>>, <<reg>>
-  /// CHECK-NEXT:     jz/eq
-  /// CHECK-NEXT:     test <<reg>>, <<reg>>
-  /// CHECK-NEXT:     jz/eq
   /// CHECK:          ReturnVoid
   public void arraycopyByteSameSrcDst() {
     System.arraycopy(arrByte, 1, arrByte, 0, 1);
@@ -232,23 +192,13 @@ public class Main {
   /// CHECK-NOT:      beqz <<reg2>>,
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-X86_64: void Main.arraycopyIntDstNonNull() disassembly (after)
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyIntDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
   /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
   /// CHECK-NEXT:     jz/eq
   /// CHECK-NEXT:     test <<reg1>>, <<reg1>>
   /// CHECK-NEXT:     jz/eq
   /// CHECK-NOT:      test <<reg2>>, <<reg2>>
-  /// CHECK:          ReturnVoid
-  //
-  /// CHECK-START-X86: void Main.arraycopyIntDstNonNull() disassembly (after)
-  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
-  /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
-  /// CHECK-NEXT:     jz/eq
-  /// CHECK-NEXT:     test <<reg1>>, <<reg1>>
-  /// CHECK-NEXT:     jz/eq
-  /// CHECK-NEXT:     test <<reg2>>, <<reg2>>
-  /// CHECK-NEXT:     jz/eq
   /// CHECK:          ReturnVoid
   public void arraycopyIntDstNonNull() {
     int[] arrInt2 = new int[1];
@@ -264,20 +214,10 @@ public class Main {
   /// CHECK-NEXT:     c.jalr ra
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-X86_64: void Main.arraycopyIntSameSrcDst() disassembly (after)
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyIntSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
-  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [RIP + 0x{{\w+}}]
+  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [{{RIP|ebp}} + {{\w+}}]
   /// CHECK-NEXT:     call [{{\w+}} + {{\d+}}]
-  /// CHECK:          ReturnVoid
-  //
-  /// CHECK-START-X86: void Main.arraycopyIntSameSrcDst() disassembly (after)
-  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
-  /// CHECK-NEXT:     cmp <<reg:\w+>>, <<reg>>
-  /// CHECK-NEXT:     jz/eq
-  /// CHECK-NEXT:     test <<reg>>, <<reg>>
-  /// CHECK-NEXT:     jz/eq
-  /// CHECK-NEXT:     test <<reg>>, <<reg>>
-  /// CHECK-NEXT:     jz/eq
   /// CHECK:          ReturnVoid
   public void arraycopyIntSameSrcDst() {
     System.arraycopy(arrInt, 1, arrInt, 0, 1);
