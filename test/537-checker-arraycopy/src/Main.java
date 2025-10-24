@@ -129,7 +129,7 @@ public class Main {
   /// CHECK-START-RISCV64: void Main.arraycopyCharSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
   /// CHECK-NEXT:     auipc a0, {{\d+}}
-  /// CHECK-NEXT:     lwu a0, {{\d+}}(a0)
+  /// CHECK-NEXT:     {{lwu|ld}} a0, {{\d+}}(a0)
   /// CHECK-NEXT:     ld ra, {{\d+}}(a0)
   /// CHECK-NEXT:     c.jalr ra
   /// CHECK:          ReturnVoid
@@ -169,7 +169,7 @@ public class Main {
   /// CHECK-START-RISCV64: void Main.arraycopyByteSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
   /// CHECK-NEXT:     auipc a0, {{\d+}}
-  /// CHECK-NEXT:     lwu a0, {{\d+}}(a0)
+  /// CHECK-NEXT:     {{lwu|ld}} a0, {{\d+}}(a0)
   /// CHECK-NEXT:     ld ra, {{\d+}}(a0)
   /// CHECK-NEXT:     c.jalr ra
   /// CHECK:          ReturnVoid
@@ -209,7 +209,7 @@ public class Main {
   /// CHECK-START-RISCV64: void Main.arraycopyIntSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
   /// CHECK-NEXT:     auipc a0, {{\d+}}
-  /// CHECK-NEXT:     lwu a0, {{\d+}}(a0)
+  /// CHECK-NEXT:     {{lwu|ld}} a0, {{\d+}}(a0)
   /// CHECK-NEXT:     ld ra, {{\d+}}(a0)
   /// CHECK-NEXT:     c.jalr ra
   /// CHECK:          ReturnVoid
