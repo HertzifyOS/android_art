@@ -410,6 +410,7 @@ class FastCompilerARM64 : public FastCompiler {
             uint32_t dex_pc,
             DataType::Type type);
   bool BuildSwitch(const Instruction& instruction, uint32_t dex_pc);
+  bool BuildFillArrayData(const Instruction& instruction, uint32_t dex_pc);
 
   void AddToWorkQueue(uint32_t dex_pc) {
     if (!processed_.IsBitSet(dex_pc)) {
@@ -2414,7 +2415,7 @@ bool FastCompilerARM64::BuildArrayAccess(const Instruction& instruction,
   Register temp = calling_convention.GetRegisterAt(1);
   // Fetch the length, and do a null pointer check.
   {
-    // Ensure the pc position is recorded immediately after the store instruction.
+    // Ensure the pc position is recorded immediately after the load instruction.
     EmissionCheckScope guard(GetVIXLAssembler(), kMaxMacroInstructionSizeInBytes);
     __ Ldr(temp, mem);
     if (CanBeNull(array_reg)) {
@@ -3038,6 +3039,73 @@ bool FastCompilerARM64::BuildSwitch(const Instruction& instruction, uint32_t dex
   return true;
 }
 
+bool FastCompilerARM64::BuildFillArrayData(const Instruction& instruction, uint32_t dex_pc) {
+  if (!EnsureHasFrame()) {
+    return false;
+  }
+
+  uint32_t array_reg = instruction.VRegA_31t();
+  Register array = RegisterFrom(
+      GetExistingRegisterLocation(array_reg, DataType::Type::kReference),
+      DataType::Type::kReference);
+  InvokeRuntimeCallingConvention calling_convention;
+  Register length = calling_convention.GetRegisterAt(1).W();
+  MemOperand mem = HeapOperand(array.W(), mirror::Array::LengthOffset().Uint32Value());
+  // Fetch the length, and do a null pointer check.
+  {
+    // Ensure the pc position is recorded immediately after the load instruction.
+    EmissionCheckScope guard(GetVIXLAssembler(), kMaxMacroInstructionSizeInBytes);
+    __ Ldr(length, mem);
+    if (CanBeNull(array_reg)) {
+      RecordPcInfo(dex_pc);
+    }
+  }
+
+  int32_t payload_offset = instruction.VRegB_31t() + dex_pc;
+  const Instruction::ArrayDataPayload* payload =
+      reinterpret_cast<const Instruction::ArrayDataPayload*>(
+          GetCodeItemAccessor().Insns() + payload_offset);
+  uint32_t element_count = payload->element_count;
+  if (element_count == 0u) {
+    return true;
+  }
+  Register temp = calling_convention.GetRegisterAt(0);
+
+  {
+    __ Mov(temp.W(), element_count - 1);
+    // Bounds check.
+    __ Cmp(temp.W(), length.W());
+    vixl::aarch64::Label cont;
+    __ B(vixl::aarch64::lo, &cont);
+    InvokeRuntime(kQuickThrowArrayBounds, dex_pc);
+    __ Bind(&cont);
+  }
+
+  const uint8_t* data = payload->data;
+  uint16_t element_width = payload->element_width;
+#define STORE(type, data_type, instruction, reg) \
+  { \
+    size_t offset = mirror::Array::DataOffset(DataType::Size(data_type)).Uint32Value(); \
+    for (uint32_t i = 0; i < element_count; ++i) { \
+      __ Mov(reg, reinterpret_cast<const type*>(data)[i]); \
+      __ instruction(reg, HeapOperand(array, offset)); \
+      offset += DataType::Size(data_type); \
+    } \
+    break; \
+  }
+
+  switch (element_width) {
+    case 1: STORE(int8_t, DataType::Type::kInt8, Strb, temp.W())
+    case 2: STORE(int16_t, DataType::Type::kInt16, Strh, temp.W())
+    case 4: STORE(int32_t, DataType::Type::kInt32, Str, temp.W())
+    case 8: STORE(int64_t, DataType::Type::kInt64, Str, temp.X())
+    default:
+      LOG(FATAL) << "Unknown element width for " << element_width;
+  }
+#undef STORE
+  return true;
+}
+
 // Don't error on the stack size of `ProcessDexInstruction`, we know we are not
 // going to stack overflow in the compiler.
 #pragma GCC diagnostic push
@@ -3658,7 +3726,7 @@ bool FastCompilerARM64::ProcessDexInstruction(const Instruction& instruction,
     }
 
     case Instruction::FILL_ARRAY_DATA: {
-      break;
+      return BuildFillArrayData(instruction, dex_pc);
     }
 
     case Instruction::MOVE_RESULT_OBJECT:
