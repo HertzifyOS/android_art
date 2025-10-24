@@ -136,8 +136,8 @@ public class Main {
   //
   /// CHECK-START-X86_64: void Main.arraycopyCharSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
-  /// CHECK-NEXT:     mov edi, [RIP + 0x{{\w+}}]
-  /// CHECK-NEXT:     call [rdi + {{\d+}}]
+  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [RIP + 0x{{\w+}}]
+  /// CHECK-NEXT:     call [{{\w+}} + {{\d+}}]
   /// CHECK:          ReturnVoid
   public void arraycopyCharSameSrcDst() {
     System.arraycopy(arrChar, 1, arrChar, 0, 1);
@@ -176,8 +176,8 @@ public class Main {
   //
   /// CHECK-START-X86_64: void Main.arraycopyByteSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
-  /// CHECK-NEXT:     mov edi, [RIP + 0x{{\w+}}]
-  /// CHECK-NEXT:     call [rdi + {{\d+}}]
+  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [RIP + 0x{{\w+}}]
+  /// CHECK-NEXT:     call [{{\w+}} + {{\d+}}]
   /// CHECK:          ReturnVoid
   public void arraycopyByteSameSrcDst() {
     System.arraycopy(arrByte, 1, arrByte, 0, 1);
@@ -216,8 +216,8 @@ public class Main {
   //
   /// CHECK-START-X86_64: void Main.arraycopyIntSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
-  /// CHECK-NEXT:     mov edi, [RIP + 0x{{\w+}}]
-  /// CHECK-NEXT:     call [rdi + {{\d+}}]
+  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [RIP + 0x{{\w+}}]
+  /// CHECK-NEXT:     call [{{\w+}} + {{\d+}}]
   /// CHECK:          ReturnVoid
   public void arraycopyIntSameSrcDst() {
     System.arraycopy(arrInt, 1, arrInt, 0, 1);
