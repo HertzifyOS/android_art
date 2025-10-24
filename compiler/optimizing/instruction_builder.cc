@@ -24,6 +24,7 @@
 #include "class_linker-inl.h"
 #include "code_generator.h"
 #include "data_type-inl.h"
+#include "deoptimization_kind.h"
 #include "dex/bytecode_utils.h"
 #include "dex/dex_instruction-inl.h"
 #include "driver/compiler_options.h"
@@ -1494,11 +1495,11 @@ bool HInstructionBuilder::BuildInvokePolymorphic(uint32_t dex_pc,
   // MethodHandle.invokeExact intrinsic needs to check whether call-site matches with MethodHandle's
   // type. To do that, MethodType corresponding to the call-site is passed as an extra input.
   // Other invoke-polymorphic calls do not need it.
-  bool can_be_intrinsified =
+  bool is_invoke_exact =
       static_cast<Intrinsics>(resolved_method->GetIntrinsic()) ==
           Intrinsics::kMethodHandleInvokeExact;
 
-  uint32_t number_of_other_inputs = can_be_intrinsified ? 1u : 0u;
+  uint32_t number_of_other_inputs = is_invoke_exact ? 1u : 0u;
 
   HInvoke* invoke = new (allocator_) HInvokePolymorphic(allocator_,
                                                         number_of_arguments,
@@ -1514,7 +1515,7 @@ bool HInstructionBuilder::BuildInvokePolymorphic(uint32_t dex_pc,
     return false;
   }
 
-  DCHECK_EQ(invoke->AsInvokePolymorphic()->IsMethodHandleInvokeExact(), can_be_intrinsified);
+  DCHECK_EQ(invoke->AsInvokePolymorphic()->IsMethodHandleInvokeExact(), is_invoke_exact);
 
   if (invoke->GetIntrinsic() != Intrinsics::kNone &&
       invoke->GetIntrinsic() != Intrinsics::kMethodHandleInvoke &&
@@ -2034,6 +2035,57 @@ bool HInstructionBuilder::HandleInvoke(HInvoke* invoke,
 
   AppendInstruction(invoke);
   latest_result_ = invoke;
+
+  if (invoke->IsInvokePolymorphic()) {
+    HInvokePolymorphic* invoke_polymorphic = invoke->AsInvokePolymorphic();
+
+    // invokeExact has to check that target method handle matches exactly with the call site type.
+    // Doing it in IR instead of intrinsics: IR can be reasoned about and eventually this check
+    // and const-method-type instructions could be eliminated.
+    // Skipping in OSR mode because it does not allow deoptimization nodes.
+    if (invoke_polymorphic->IsMethodHandleInvokeExact() && !graph_->IsCompilingOsr()) {
+      DCHECK(invoke->InputAt(invoke->GetNumberOfArguments())->IsLoadMethodType());
+      HLoadMethodType* load_method_type =
+          invoke->InputAt(invoke->GetNumberOfArguments())->AsLoadMethodType();
+
+      // Null check is done in SetupInvokeArguments.
+      HInstruction* receiver = invoke_polymorphic->InputAt(0);
+
+      // Ideally here should be a call to checkExactType(MethodHandle,MethodType).
+      // But the MethodHandle.type() call in that method can be deopted in some configurations
+      // and that is not handled well in the interpreter. Current implementation represents
+      // MethodHandle.type() as InstanceFieldGet instruction.
+      HInstanceFieldGet* method_handle_type;
+      {
+        ScopedObjectAccess soa(Thread::Current());
+        method_handle_type = new (allocator_) HInstanceFieldGet(
+          receiver,
+          WellKnownClasses::java_lang_invoke_MethodHandle_type,
+          DataType::Type::kReference,
+          WellKnownClasses::java_lang_invoke_MethodHandle_type->GetOffset(),
+          /*is_volatile=*/ false,
+          WellKnownClasses::java_lang_invoke_MethodHandle_type->GetDexFieldIndex(),
+          WellKnownClasses::java_lang_invoke_MethodHandle->GetDexClassDefIndex(),
+          WellKnownClasses::java_lang_invoke_MethodHandle->GetDexFile(),
+          invoke_polymorphic->GetDexPc());
+      }
+      current_block_->InsertInstructionBefore(method_handle_type, invoke_polymorphic);
+
+      HNotEqual* not_equal = new (allocator_) HNotEqual(method_handle_type, load_method_type);
+      current_block_->InsertInstructionBefore(not_equal, invoke_polymorphic);
+
+      HDeoptimize* deopt = new (allocator_) HDeoptimize(
+          allocator_,
+          not_equal,
+          DeoptimizationKind::kMethodHandleTypeMismatch,
+          invoke_polymorphic->GetDexPc());
+      current_block_->InsertInstructionBefore(deopt, invoke_polymorphic);
+      deopt->CopyEnvironmentFrom(invoke_polymorphic->GetEnvironment());
+
+      invoke_polymorphic->SkipCallSiteTypeCheck();
+      invoke_polymorphic->RemoveInputAt(invoke_polymorphic->GetNumberOfArguments());
+    }
+  }
 
   return true;
 }

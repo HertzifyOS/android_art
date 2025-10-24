@@ -138,6 +138,7 @@ ArtField* WellKnownClasses::dalvik_system_DexPathList__Element_dexFile;
 ArtField* WellKnownClasses::dalvik_system_VMRuntime_nonSdkApiUsageConsumer;
 ArtField* WellKnownClasses::dalvik_system_VirtualThreadParkedStates_frames;
 ArtField* WellKnownClasses::java_io_FileDescriptor_descriptor;
+ArtField* WellKnownClasses::java_lang_invoke_MethodHandle_type;
 ArtField* WellKnownClasses::java_lang_ref_Reference_disableIntrinsic;
 ArtField* WellKnownClasses::java_lang_ref_Reference_slowPathEnabled;
 ArtField* WellKnownClasses::java_lang_ClassLoader_parent;
@@ -821,6 +822,9 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
       "(I[BII)Lorg/apache/harmony/dalvik/ddmc/Chunk;",
       pointer_size);
 
+  java_lang_invoke_MethodHandle_type = CacheField(
+      j_l_i_MethodHandle.Get(), /*is_static=*/ false, "type", "Ljava/lang/invoke/MethodType;");
+
   ObjPtr<mirror::Class> j_l_Object = GetClassRoot<mirror::Object>(class_linker);
   java_lang_Object_shadowKlass = CacheField(
       j_l_Object, /*is_static=*/ false, "shadow$_klass_", "Ljava/lang/Class;");
@@ -1088,6 +1092,7 @@ void WellKnownClasses::Clear() {
   dalvik_system_DexPathList_dexElements = nullptr;
   dalvik_system_DexPathList__Element_dexFile = nullptr;
   dalvik_system_VMRuntime_nonSdkApiUsageConsumer = nullptr;
+  java_lang_invoke_MethodHandle_type = nullptr;
   java_lang_ref_Reference_disableIntrinsic = nullptr;
   java_lang_ref_Reference_slowPathEnabled = nullptr;
   java_lang_ClassLoader_parent = nullptr;

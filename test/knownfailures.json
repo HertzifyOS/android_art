@@ -218,7 +218,10 @@
         "variant": "trace | stream"
     },
     {
-        "tests": ["570-checker-osr", "570-checker-osr-locals"],
+        "tests": ["570-checker-osr",
+                  "570-checker-osr-locals",
+                  "2398-checkexacttype-methodhandles"
+        ],
         "description": ["These tests wait for OSR, which never happens when tracing."],
         "variant": "trace | stream"
     },
@@ -1109,6 +1112,7 @@
           "2292-checker-smali-peek-poke-truncation",
           "2295-smali-duplicate-phis",
           "2397-array-verification-edge-cases",
+          "2398-checkexacttype-methodhandles",
           "2400-setstaticfield-uninitialized"
         ],
         "variant": "jvm",
