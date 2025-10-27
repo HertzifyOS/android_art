@@ -2164,7 +2164,8 @@ bool HLoopOptimization::TrySetVectorType(DataType::Type type, uint64_t* restrict
 }
 
 bool HLoopOptimization::TrySetVectorLengthImpl(uint32_t length) {
-  DCHECK(IsPowerOfTwo(length) && length >= 2u);
+  DCHECK_GE(length, 2u);
+  DCHECK(IsPowerOfTwo(length));
   // First time set?
   if (vector_length_ == 0) {
     vector_length_ = length;
