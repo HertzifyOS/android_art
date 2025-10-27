@@ -933,11 +933,9 @@ class EXPORT Thread {
   }
   void Notify() REQUIRES(!wait_mutex_);
 
-  ALWAYS_INLINE void PoisonObjectPointers() {
-    ++poison_object_cookie_;
-  }
+  ALWAYS_INLINE void PoisonObjectPointers();
 
-  ALWAYS_INLINE static void PoisonObjectPointersIfDebug();
+  ALWAYS_INLINE static void PoisonObjectPointersOnCurrentThread();
 
   ALWAYS_INLINE uintptr_t GetPoisonObjectCookie() const {
     return poison_object_cookie_;

@@ -2983,10 +2983,10 @@ ObjPtr<mirror::Class> ClassLinker::EnsureResolved(Thread* self,
                                                   std::string_view descriptor,
                                                   ObjPtr<mirror::Class> klass) {
   DCHECK(klass != nullptr);
-  if (kIsDebugBuild) {
+  if (kObjPtrPoisoning) {
     StackHandleScope<1> hs(self);
     HandleWrapperObjPtr<mirror::Class> h = hs.NewHandleWrapper(&klass);
-    Thread::PoisonObjectPointersIfDebug();
+    Thread::PoisonObjectPointersOnCurrentThread();
   }
 
   // Helper lambda to make sure we wait for a particular status (i.e. retired or resolved) while
@@ -3552,7 +3552,7 @@ struct ScopedDefiningClass {
     CHECK(!returned_);
     self_->DecrDefineClassCount();
     Runtime::Current()->GetRuntimeCallbacks()->EndDefineClass();
-    Thread::PoisonObjectPointersIfDebug();
+    Thread::PoisonObjectPointersOnCurrentThread();
     returned_ = true;
     return h_klass.Get();
   }
@@ -10473,8 +10473,8 @@ ArtMethod* ClassLinker::ResolveMethodId(uint32_t method_idx,
                                         Handle<mirror::DexCache> dex_cache,
                                         Handle<mirror::ClassLoader> class_loader) {
   DCHECK(dex_cache->GetClassLoader() == class_loader.Get());
+  Thread::PoisonObjectPointersOnCurrentThread();
   ArtMethod* resolved = dex_cache->GetResolvedMethod(method_idx);
-  Thread::PoisonObjectPointersIfDebug();
   if (resolved != nullptr) {
     DCHECK(!resolved->IsRuntimeMethod());
     DCHECK(resolved->GetDeclaringClassUnchecked() != nullptr) << resolved->GetDexMethodIndex();
@@ -10515,8 +10515,8 @@ ArtField* ClassLinker::ResolveFieldJLS(uint32_t field_idx,
                                        Handle<mirror::ClassLoader> class_loader) {
   DCHECK(dex_cache != nullptr);
   DCHECK(dex_cache->GetClassLoader() == class_loader.Get());
+  Thread::PoisonObjectPointersOnCurrentThread();
   ArtField* resolved = dex_cache->GetResolvedField(field_idx);
-  Thread::PoisonObjectPointersIfDebug();
   if (resolved != nullptr) {
     return resolved;
   }
