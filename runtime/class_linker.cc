@@ -44,6 +44,7 @@
 #include "base/file_utils.h"
 #include "base/hash_map.h"
 #include "base/hash_set.h"
+#include "base/inlined_vector.h"
 #include "base/leb128.h"
 #include "base/logging.h"
 #include "base/mem_map_arena_pool.h"
@@ -2505,6 +2506,29 @@ bool ClassLinker::AddImageSpaces(ArrayRef<gc::space::ImageSpace*> spaces,
     std::move(space_dex_files.begin(), space_dex_files.end(), std::back_inserter(*dex_files));
   }
   return true;
+}
+
+void ClassLinker::PruneDexCacheAndBssStringEntries(Thread* self) {
+  ReaderMutexLock mu(self, *Locks::dex_lock_);
+  InlinedVector<const OatFile*, 32u> pruned_oat_files;
+  for (const auto& entry : dex_caches_) {
+    const DexFile* dex_file = entry.first;
+    ObjPtr<mirror::DexCache> dex_cache =
+        ObjPtr<mirror::DexCache>::DownCast(self->DecodeJObject(entry.second.weak_root));
+    if (dex_cache != nullptr) {
+      dex_cache->ClearAllStrings();
+      if (dex_file->GetOatDexFile() != nullptr &&
+          dex_file->GetOatDexFile()->GetOatFile() != nullptr &&
+          !ContainsElement(pruned_oat_files.GetArray(), dex_file->GetOatDexFile()->GetOatFile())) {
+        const OatFile* oat_file = dex_file->GetOatDexFile()->GetOatFile();
+        pruned_oat_files.push_back(oat_file);
+        for (GcRoot<mirror::Object>& root : oat_file->GetBssStrings()) {
+          DCHECK_IMPLIES(!root.IsNull(), root.Read<kWithoutReadBarrier>()->IsString());
+          root = GcRoot<mirror::Object>(nullptr);
+        }
+      }
+    }
+  }
 }
 
 void ClassLinker::VisitClassRoots(RootVisitor* visitor, VisitRootFlags flags) {

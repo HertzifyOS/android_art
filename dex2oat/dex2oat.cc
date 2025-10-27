@@ -2180,6 +2180,7 @@ class Dex2Oat final {
                                           oat_writer->GetBssSize(),
                                           oat_writer->GetBssMethodsOffset(),
                                           oat_writer->GetBssRootsOffset(),
+                                          oat_writer->GetBssStringsOffset(),
                                           oat_writer->GetVdexSize());
         if (IsImage()) {
           // Update oat layout.

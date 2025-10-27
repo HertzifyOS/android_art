@@ -1,2 +1,0 @@
-Smali test that makes sure that comparison of null reference to a non-zero
-integral type raises a verifier error.

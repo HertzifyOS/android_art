@@ -1460,6 +1460,11 @@ bool DexFileVerifier::CheckIntraClassDefItem(uint32_t class_def_index) {
   if (!CheckIndex(class_def->class_idx_.index_, header_->type_ids_size_, "class_def.class")) {
     return false;
   }
+  if (class_def->source_file_idx_.IsValid() &&
+      !CheckIndex(
+          class_def->source_file_idx_.index_, header_->string_ids_size_, "class_def.source_file")) {
+    return false;
+  }
 
   // Check superclass, if any.
   if (UNLIKELY(class_def->pad2_ != 0u)) {

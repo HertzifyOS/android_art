@@ -455,23 +455,24 @@ OatWriter::OatWriter(const CompilerOptions& compiler_options,
       bss_size_(0u),
       bss_methods_offset_(0u),
       bss_roots_offset_(0u),
+      bss_strings_offset_(0u),
       boot_image_rel_ro_entries_(),
       bss_method_entry_references_(),
       bss_type_entry_references_(),
       bss_public_type_entry_references_(),
       bss_package_type_entry_references_(),
-      bss_string_entry_references_(),
       bss_method_type_entry_references_(),
+      bss_string_entry_references_(),
       app_image_rel_ro_method_entries_(),
       app_image_rel_ro_method_entries_sorted_(),
-      bss_method_entries_(),
       app_image_rel_ro_type_entries_(),
       app_image_rel_ro_type_entries_sorted_(),
+      bss_method_entries_(),
       bss_type_entries_(),
       bss_public_type_entries_(),
       bss_package_type_entries_(),
-      bss_string_entries_(),
       bss_method_type_entries_(),
+      bss_string_entries_(),
       oat_data_offset_(0u),
       oat_header_(nullptr),
       relative_patcher_(nullptr),
@@ -2142,10 +2143,11 @@ size_t OatWriter::InitIndexBssMappings(size_t offset) {
       bss_type_entry_references_.empty() &&
       bss_public_type_entry_references_.empty() &&
       bss_package_type_entry_references_.empty() &&
-      bss_string_entry_references_.empty() &&
-      bss_method_type_entry_references_.empty()) {
+      bss_method_type_entry_references_.empty() &&
+      bss_string_entry_references_.empty()) {
     return offset;
   }
+
   // If there are any classes, the class offsets allocation aligns the offset
   // and we cannot have any index bss mappings without class offsets.
   static_assert(alignof(IndexBssMapping) == 4u, "IndexBssMapping alignment check.");
@@ -2221,8 +2223,8 @@ size_t OatWriter::InitIndexBssMappings(size_t offset) {
   CHECK_EQ(number_of_type_dex_files, bss_type_entry_references_.size());
   CHECK_EQ(number_of_public_type_dex_files, bss_public_type_entry_references_.size());
   CHECK_EQ(number_of_package_type_dex_files, bss_package_type_entry_references_.size());
-  CHECK_EQ(number_of_string_dex_files, bss_string_entry_references_.size());
   CHECK_EQ(number_of_method_type_dex_files, bss_method_type_entry_references_.size());
+  CHECK_EQ(number_of_string_dex_files, bss_string_entry_references_.size());
 
   return offset;
 }
@@ -2280,21 +2282,6 @@ size_t OatWriter::InitIndexBssMappingsHelper(size_t offset,
     offset += CalculateIndexBssMappingSize(dex_file, type_indexes, bss_package_type_entries_);
   }
 
-  auto string_it = bss_string_entry_references_.find(dex_file);
-  if (string_it != bss_string_entry_references_.end()) {
-    const BitVector& string_indexes = string_it->second;
-    ++number_of_string_dex_files;
-    string_bss_mapping_offset = offset;
-    offset += CalculateIndexBssMappingSize(
-        dex_file->NumStringIds(),
-        sizeof(GcRoot<mirror::String>),
-        string_indexes,
-        [this, dex_file](uint32_t index) {
-          return bss_string_entries_.find(StringReference(dex_file, dex::StringIndex(index)))
-              ->second;
-        });
-  }
-
   auto method_type_it = bss_method_type_entry_references_.find(dex_file);
   if (method_type_it != bss_method_type_entry_references_.end()) {
     const BitVector& proto_indexes = method_type_it->second;
@@ -2306,6 +2293,21 @@ size_t OatWriter::InitIndexBssMappingsHelper(size_t offset,
         proto_indexes,
         [this, dex_file](uint32_t index) {
           return bss_method_type_entries_.find(ProtoReference(dex_file, dex::ProtoIndex(index)))
+              ->second;
+        });
+  }
+
+  auto string_it = bss_string_entry_references_.find(dex_file);
+  if (string_it != bss_string_entry_references_.end()) {
+    const BitVector& string_indexes = string_it->second;
+    ++number_of_string_dex_files;
+    string_bss_mapping_offset = offset;
+    offset += CalculateIndexBssMappingSize(
+        dex_file->NumStringIds(),
+        sizeof(GcRoot<mirror::String>),
+        string_indexes,
+        [this, dex_file](uint32_t index) {
+          return bss_string_entries_.find(StringReference(dex_file, dex::StringIndex(index)))
               ->second;
         });
   }
@@ -2534,8 +2536,8 @@ void OatWriter::InitBssLayout(InstructionSet instruction_set) {
       bss_type_entries_.empty() &&
       bss_public_type_entries_.empty() &&
       bss_package_type_entries_.empty() &&
-      bss_string_entries_.empty() &&
-      bss_method_type_entries_.empty()) {
+      bss_method_type_entries_.empty() &&
+      bss_string_entries_.empty()) {
     // Nothing to put to the .bss section.
     return;
   }
@@ -2555,11 +2557,14 @@ void OatWriter::InitBssLayout(InstructionSet instruction_set) {
       bss_public_type_entries_, sizeof(GcRoot<mirror::Class>), TypeReferenceValueComparator());
   InitBssLayoutOffset(
       bss_package_type_entries_, sizeof(GcRoot<mirror::Class>), TypeReferenceValueComparator());
-  InitBssLayoutOffset(
-      bss_string_entries_, sizeof(GcRoot<mirror::String>), StringReferenceValueComparator());
   InitBssLayoutOffset(bss_method_type_entries_,
                       sizeof(GcRoot<mirror::MethodType>),
                       ProtoReferenceValueComparator());
+
+  bss_strings_offset_ = bss_size_;
+
+  InitBssLayoutOffset(
+      bss_string_entries_, sizeof(GcRoot<mirror::String>), StringReferenceValueComparator());
 }
 
 bool OatWriter::WriteRodata(OutputStream* out) {
@@ -3061,29 +3066,6 @@ size_t OatWriter::WriteIndexBssMappingsHelper(OutputStream* out,
     DCHECK_EQ(0u, package_type_bss_mapping_offset);
   }
 
-  auto string_it = bss_string_entry_references_.find(dex_file);
-  if (string_it != bss_string_entry_references_.end()) {
-    const BitVector& string_indexes = string_it->second;
-    DCHECK_EQ(relative_offset, string_bss_mapping_offset);
-    DCHECK_OFFSET();
-    size_t string_mappings_size = WriteIndexBssMapping(
-        out,
-        dex_file->NumStringIds(),
-        sizeof(GcRoot<mirror::String>),
-        string_indexes,
-        [this, dex_file](uint32_t index) {
-          return bss_string_entries_.find(StringReference(dex_file, dex::StringIndex(index)))
-              ->second;
-        });
-    if (string_mappings_size == 0u) {
-      return 0u;
-    }
-    size_string_bss_mappings_ += string_mappings_size;
-    relative_offset += string_mappings_size;
-  } else {
-    DCHECK_EQ(0u, string_bss_mapping_offset);
-  }
-
   auto method_type_it = bss_method_type_entry_references_.find(dex_file);
   if (method_type_it != bss_method_type_entry_references_.end()) {
     const BitVector& method_type_indexes = method_type_it->second;
@@ -3107,6 +3089,29 @@ size_t OatWriter::WriteIndexBssMappingsHelper(OutputStream* out,
     DCHECK_EQ(0u, method_type_bss_mapping_offset);
   }
 
+  auto string_it = bss_string_entry_references_.find(dex_file);
+  if (string_it != bss_string_entry_references_.end()) {
+    const BitVector& string_indexes = string_it->second;
+    DCHECK_EQ(relative_offset, string_bss_mapping_offset);
+    DCHECK_OFFSET();
+    size_t string_mappings_size = WriteIndexBssMapping(
+        out,
+        dex_file->NumStringIds(),
+        sizeof(GcRoot<mirror::String>),
+        string_indexes,
+        [this, dex_file](uint32_t index) {
+          return bss_string_entries_.find(StringReference(dex_file, dex::StringIndex(index)))
+              ->second;
+        });
+    if (string_mappings_size == 0u) {
+      return 0u;
+    }
+    size_string_bss_mappings_ += string_mappings_size;
+    relative_offset += string_mappings_size;
+  } else {
+    DCHECK_EQ(0u, string_bss_mapping_offset);
+  }
+
   return relative_offset;
 }
 
@@ -3117,8 +3122,8 @@ size_t OatWriter::WriteIndexBssMappings(OutputStream* out,
       bss_type_entry_references_.empty() &&
       bss_public_type_entry_references_.empty() &&
       bss_package_type_entry_references_.empty() &&
-      bss_string_entry_references_.empty() &&
-      bss_method_type_entry_references_.empty()) {
+      bss_method_type_entry_references_.empty() &&
+      bss_string_entry_references_.empty()) {
     return relative_offset;
   }
   // If there are any classes, the class offsets allocation aligns the offset

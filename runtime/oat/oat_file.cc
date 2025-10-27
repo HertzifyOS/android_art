@@ -488,6 +488,9 @@ bool OatFileBase::ComputeFields(const std::string& file_path, std::string* error
         const_cast<uint8_t*>(FindDynamicSymbolAddress("oatbssmethods", &symbol_error_msg));
     // Find bss roots if present.
     bss_roots_ = const_cast<uint8_t*>(FindDynamicSymbolAddress("oatbssroots", &symbol_error_msg));
+    // Find bss strings if present.
+    bss_strings_ =
+        const_cast<uint8_t*>(FindDynamicSymbolAddress("oatbssstrings", &symbol_error_msg));
   }
 
   vdex_begin_ = const_cast<uint8_t*>(FindDynamicSymbolAddress("oatdex", &symbol_error_msg));
@@ -764,24 +767,30 @@ bool OatFileBase::Setup(int zip_fd,
   if (!IsAlignedParam(bss_begin_, MemMap::GetPageSize()) ||
       !IsAlignedParam(bss_methods_, static_cast<size_t>(pointer_size)) ||
       !IsAlignedParam(bss_roots_, static_cast<size_t>(pointer_size)) ||
+      !IsAlignedParam(bss_strings_, sizeof(GcRoot<mirror::Object>)) ||
       !IsAligned<alignof(GcRoot<mirror::Object>)>(bss_end_)) {
     *error_msg = ErrorPrintf(
-        "unaligned bss symbol(s): begin = %p, methods_ = %p, roots = %p, end = %p",
+        "unaligned bss symbol(s): begin = %p, methods_ = %p, roots = %p, strings = %p, end = %p",
         bss_begin_,
         bss_methods_,
         bss_roots_,
+        bss_strings_,
         bss_end_);
     return false;
   }
 
   if ((bss_methods_ != nullptr && (bss_methods_ < bss_begin_ || bss_methods_ > bss_end_)) ||
       (bss_roots_ != nullptr && (bss_roots_ < bss_begin_ || bss_roots_ > bss_end_)) ||
-      (bss_methods_ != nullptr && bss_roots_ != nullptr && bss_methods_ > bss_roots_)) {
+      (bss_strings_ != nullptr && (bss_strings_ < bss_begin_ || bss_strings_ > bss_end_)) ||
+      (bss_methods_ != nullptr && bss_roots_ != nullptr && bss_methods_ > bss_roots_) ||
+      (bss_strings_ != nullptr && (bss_roots_ == nullptr || bss_roots_ > bss_strings_))) {
     *error_msg = ErrorPrintf(
-        "bss symbol(s) outside .bss or unordered: begin = %p, methods = %p, roots = %p, end = %p",
+        "bss symbol(s) outside .bss or unordered, or strings present without roots: "
+            "begin = %p, methods = %p, roots = %p, strings = %p, end = %p",
         bss_begin_,
         bss_methods_,
         bss_roots_,
+        bss_strings_,
         bss_end_);
     return false;
   }
@@ -2159,6 +2168,7 @@ OatFile::OatFile(const std::string& location, bool is_executable)
       bss_end_(nullptr),
       bss_methods_(nullptr),
       bss_roots_(nullptr),
+      bss_strings_(nullptr),
       is_executable_(is_executable),
       vdex_begin_(nullptr),
       vdex_end_(nullptr),
@@ -2235,6 +2245,16 @@ ArrayRef<GcRoot<mirror::Object>> OatFile::GetBssGcRoots() const {
     auto* roots = reinterpret_cast<GcRoot<mirror::Object>*>(bss_roots_);
     auto* roots_end = reinterpret_cast<GcRoot<mirror::Object>*>(bss_end_);
     return ArrayRef<GcRoot<mirror::Object>>(roots, roots_end - roots);
+  } else {
+    return ArrayRef<GcRoot<mirror::Object>>();
+  }
+}
+
+ArrayRef<GcRoot<mirror::Object>> OatFile::GetBssStrings() const {
+  if (bss_strings_ != nullptr) {
+    auto* strings = reinterpret_cast<GcRoot<mirror::Object>*>(bss_strings_);
+    auto* strings_end = reinterpret_cast<GcRoot<mirror::Object>*>(bss_end_);
+    return ArrayRef<GcRoot<mirror::Object>>(strings, strings_end - strings);
   } else {
     return ArrayRef<GcRoot<mirror::Object>>();
   }

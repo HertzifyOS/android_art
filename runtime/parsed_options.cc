@@ -169,7 +169,7 @@ std::unique_ptr<RuntimeParser> ParsedOptions::MakeParser(bool ignore_unrecognize
           .WithValueMap({{"false", false}, {"true", true}})
           .IntoKey(M::EnableTimeBasedGcTrigger)
       .Define("-XX:HeapMemoryGcCostFactor=_")
-          .WithType<MemoryKiB>()
+          .WithType<double>().WithRange(0.1, 100.0)
           .IntoKey(M::HeapMemoryGcCostFactor)
       .Define("-XX:ForegroundHeapGrowthMultiplier=_")
           .WithType<double>().WithRange(0.1, 5.0)

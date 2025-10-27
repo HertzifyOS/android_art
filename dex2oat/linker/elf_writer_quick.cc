@@ -99,6 +99,7 @@ class ElfWriterQuick final : public ElfWriter {
                              size_t bss_size,
                              size_t bss_methods_offset,
                              size_t bss_roots_offset,
+                             size_t bss_strings_offset,
                              size_t dex_section_size) override;
   std::unique_ptr<ThreadPool> PrepareDebugInfo(const debug::DebugInfo& debug_info) override;
   OutputStream* StartRoData() override;
@@ -181,6 +182,7 @@ void ElfWriterQuick<ElfTypes>::PrepareDynamicSection(size_t rodata_size,
                                                      size_t bss_size,
                                                      size_t bss_methods_offset,
                                                      size_t bss_roots_offset,
+                                                     size_t bss_strings_offset,
                                                      size_t dex_section_size) {
   DCHECK_EQ(rodata_size_, 0u);
   rodata_size_ = rodata_size;
@@ -200,6 +202,7 @@ void ElfWriterQuick<ElfTypes>::PrepareDynamicSection(size_t rodata_size,
                                   bss_size_,
                                   bss_methods_offset,
                                   bss_roots_offset,
+                                  bss_strings_offset,
                                   dex_section_size);
 }
 

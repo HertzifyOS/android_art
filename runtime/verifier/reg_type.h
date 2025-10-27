@@ -222,9 +222,9 @@ class RegType {
   constexpr bool IsIntegralTypes() const {
     return IsIntegralTypes(GetKind());
   }
-  // Give the constant value encoded, but this shouldn't be called in the
-  // general case.
-  bool IsArrayIndexTypes() const { return IsIntegralTypes(); }
+
+  static constexpr bool IsArrayIndexTypes(Kind kind) { return IsIntegralTypes(kind); }
+  bool IsArrayIndexTypes() const { return IsArrayIndexTypes(GetKind()); }
 
   // Float type may be derived from any constant type
   static constexpr bool IsFloatTypes(Kind kind) {

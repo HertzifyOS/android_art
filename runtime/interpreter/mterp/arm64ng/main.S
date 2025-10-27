@@ -1381,12 +1381,16 @@ END \name
    .endif
 .endm
 
-.macro WRITE_BARRIER_IF_OBJECT is_object, value, holder, label
-   .if \is_object
-   cbz     \value, \label
+.macro WRITE_BARRIER_NOT_NULL holder
    ldr     ip, [xSELF, #THREAD_CARD_TABLE_OFFSET]
    lsr     wip2, \holder, #CARD_TABLE_CARD_SHIFT
    strb    wip, [ip, ip2]
+.endm
+
+.macro WRITE_BARRIER_IF_OBJECT is_object, value, holder, label
+   .if \is_object
+   cbz     \value, \label
+   WRITE_BARRIER_NOT_NULL \holder
 \label:
    .endif
 .endm
@@ -1554,6 +1558,8 @@ END \name
     b \if_not_hot
 .endm
 
+// We don't use implicit suspend check in nterp because it wouldn't work
+// with execute-only mapped binaries with the current implementation.
 .macro DO_SUSPEND_CHECK continue_label
     ldr wip, [xSELF, #THREAD_FLAGS_OFFSET]
     tst wip, #THREAD_SUSPEND_OR_CHECKPOINT_REQUEST

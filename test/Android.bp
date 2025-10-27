@@ -2091,10 +2091,11 @@ art_host_test_data {
 }
 
 test_suite_package {
-    name: "art-host-tests-bp",
+    name: "art-host-tests",
     include_host_shared_libs_in_main_zip: true,
     art_data_zips: [
         ":art_host_test_data",
+        ":art_host_test_data_symlink",
         ":art_test_common_host_jars_zip",
         ":apex_icu_dat_zip",
         ":art_common_host_test_libs_zip",
@@ -2227,4 +2228,28 @@ genrule {
     ],
     out: ["art_common_host_test_libs_zip.zip"],
     cmd: "$(location merge_zips) $(out) $(in)",
+}
+
+// This genrule creates symbolic links required for the art-host-tests.zip
+// package.
+//
+// These symlinks (e.g., dalvikvm -> dalvikvm64) are necessary for art
+// host tests (e.g., dex2oat_test) that execute binaries using their
+// non-suffixed names (e.g., 'dex2oatd'). Without them, tests fail with
+// 'No such file or directory' errors.
+genrule {
+    name: "art_host_test_data_symlink",
+    out: ["art_host_test_data_symlink.zip"],
+    tools: ["soong_zip"],
+    cmd: "TMP_DIR=$(genDir)/staging && " +
+        "BIN_DIR=$${TMP_DIR}/host/testcases/art_common/out/host/linux-x86/bin && " +
+        "mkdir -p $${BIN_DIR} && " +
+        "ln -sf dalvikvm64 $${BIN_DIR}/dalvikvm && " +
+        "ln -sf dex2oat64 $${BIN_DIR}/dex2oat && " +
+        "ln -sf dex2oatd64 $${BIN_DIR}/dex2oatd && " +
+        "ln -sf find_unshared_pages64 $${BIN_DIR}/find_unshared_pages && " +
+        "ln -sf imgdiag64 $${BIN_DIR}/imgdiag && " +
+        "ln -sf imgdiagd64 $${BIN_DIR}/imgdiagd && " +
+        "ln -sf pageinfo64 $${BIN_DIR}/pageinfo && " +
+        "$(location soong_zip) -o $(out) -C $${TMP_DIR} -D $${TMP_DIR}",
 }

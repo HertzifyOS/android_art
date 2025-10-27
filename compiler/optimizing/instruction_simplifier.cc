@@ -2689,7 +2689,8 @@ void InstructionSimplifierVisitor::SimplifySystemArrayCopy(HInvoke* instruction)
     optimizations.SetCountIsDestinationLength();
   }
 
-  {
+  // Specialization is only needed for the generic intrinsic version.
+  if (instruction->GetIntrinsic() == Intrinsics::kSystemArrayCopy) {
     ScopedObjectAccess soa(Thread::Current());
     DataType::Type source_component_type = DataType::Type::kVoid;
     DataType::Type destination_component_type = DataType::Type::kVoid;
@@ -3313,6 +3314,9 @@ void InstructionSimplifierVisitor::VisitInvoke(HInvoke* instruction) {
       SimplifyStringEquals(instruction);
       break;
     case Intrinsics::kSystemArrayCopy:
+    case Intrinsics::kSystemArrayCopyChar:
+    case Intrinsics::kSystemArrayCopyByte:
+    case Intrinsics::kSystemArrayCopyInt:
       SimplifySystemArrayCopy(instruction);
       break;
     case Intrinsics::kFloatFloatToIntBits:

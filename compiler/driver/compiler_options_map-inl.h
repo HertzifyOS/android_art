@@ -123,6 +123,9 @@ inline bool ReadCompilerOptions(Base& map, CompilerOptions* options, std::string
   if (map.Exists(Base::Baseline)) {
     options->baseline_ = true;
   }
+  if (map.Exists(Base::Fast)) {
+    options->fast_ = true;
+  }
   if (map.Exists(Base::ProfileBranches)) {
     options->profile_branches_ = true;
   }
@@ -254,8 +257,12 @@ NO_INLINE void AddCompilerOptionsArgumentParserOptions(Builder& b) {
           .IntoKey(Map::Debuggable)
 
       .Define("--baseline")
-          .WithHelp("Produce code using the baseline compilation")
+          .WithHelp("Produce code using the baseline compiler")
           .IntoKey(Map::Baseline)
+
+      .Define("--fast")
+          .WithHelp("Produce code using the fast compiler. ONLY FOR TESTING.")
+          .IntoKey(Map::Fast)
 
       .Define("--profile-branches")
           .WithHelp("Profile branches in baseline generated code")
