@@ -941,7 +941,8 @@ public class ArtManagerLocalTest {
                                         DexContainerFileDexoptResult.create("dex-file-2",
                                                 true /* isPrimaryAbi */, "arm64", "speed-profile",
                                                 DexoptResult.DEXOPT_SKIPPED)),
-                                null /* packageLevelStatus */)));
+                                null /* packageLevelStatus */)),
+                null /* overallStatus */);
         var supplementaryResult = DexoptResult.create();
         var cancellationSignal = new CancellationSignal();
 

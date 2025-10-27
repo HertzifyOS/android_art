@@ -101,6 +101,9 @@ public class DexoptHelper {
             @NonNull CancellationSignal cancellationSignal, @NonNull Executor dexoptExecutor,
             @Nullable Executor progressCallbackExecutor,
             @Nullable Consumer<OperationProgress> progressCallback) {
+        Integer overallStatus =
+                cancellationSignal.isCanceled() ? DexoptResult.DEXOPT_CANCELLED : null;
+
         List<PackageState> pkgStates = getPackageStates(snapshot, packageNames,
                 (params.getFlags() & ArtFlags.FLAG_SHOULD_INCLUDE_DEPENDENCIES) != 0);
         // TODO(jiakaiz): Find out whether this is still needed.
@@ -161,8 +164,8 @@ public class DexoptHelper {
 
             List<PackageDexoptResult> results = futures.stream().map(Utils::getFuture).toList();
 
-            var result =
-                    DexoptResult.create(params.getCompilerFilter(), params.getReason(), results);
+            var result = DexoptResult.create(
+                    params.getCompilerFilter(), params.getReason(), results, overallStatus);
 
             for (Callback<DexoptDoneCallback, Boolean> doneCallback :
                     mInjector.getConfig().getDexoptDoneCallbacks()) {
@@ -173,8 +176,8 @@ public class DexoptHelper {
                                     .filter(PackageDexoptResult::hasUpdatedArtifacts)
                                     .toList();
                     if (!filteredResults.isEmpty()) {
-                        var resultForCallback = DexoptResult.create(
-                                params.getCompilerFilter(), params.getReason(), filteredResults);
+                        var resultForCallback = DexoptResult.create(params.getCompilerFilter(),
+                                params.getReason(), filteredResults, overallStatus);
                         CompletableFuture.runAsync(() -> {
                             doneCallback.get().onDexoptDone(resultForCallback);
                         }, doneCallback.executor());
