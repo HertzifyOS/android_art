@@ -117,6 +117,7 @@ func (s *artHostTestDataSingleton) GenerateBuildActions(ctx android.SingletonCon
 	}
 
 	rule := android.NewRuleBuilder(pctx, ctx)
+	rule.SandboxDisabled()
 	cmd := rule.Command().
 		BuiltTool("soong_zip").
 		Flag("-j").
