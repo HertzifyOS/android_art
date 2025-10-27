@@ -2754,8 +2754,7 @@ bool FastCompilerARM64::BuildStaticFieldAccess(const Instruction& instruction,
   ArtField* field = nullptr;
   uint16_t field_index = instruction.VRegB_21c();
   uint32_t source_or_dest_reg = instruction.VRegA_21c();
-  UseScratchRegisterScope temps(GetVIXLAssembler());
-  Register temp = temps.AcquireX();
+  Register temp = vixl::aarch64::XRegister(GetTempCoreRegister());
   bool generate_clinit_check = false;
   {
     ScopedObjectAccess soa(Thread::Current());
