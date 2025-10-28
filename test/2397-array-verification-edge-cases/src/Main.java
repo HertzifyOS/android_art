@@ -40,5 +40,10 @@ public class Main {
                 throw ite;
             }
         }
+        try {
+            Class.forName("UnresolvedMergedArrayPutIntAsObject");
+            throw new Error("UNREACHABLE");
+        } catch (VerifyError expected) {
+        }
     }
 }

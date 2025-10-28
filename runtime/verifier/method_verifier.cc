@@ -5318,8 +5318,7 @@ bool MethodVerifierImpl::VerifyArrayAccess(const Instruction* inst,
         return true;
       } else {
         DCHECK(kAccType == AccessType::kPut);
-        // FIXME: Missing value type verification.
-        return true;
+        return VerifyRegisterType(vregA, insn_type);
       }
     }
   } else {
