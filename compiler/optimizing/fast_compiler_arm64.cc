@@ -272,7 +272,7 @@ class FastCompilerARM64 : public FastCompiler {
   bool EnsureHasFrame();
 
   bool GenerateFrame();
-  void GenerateSuspendCheck();
+  void GenerateSuspendCheck(uint32_t dex_pc);
   void IncrementHotness(Register method);
 
   // Generate code for a frame exit.
@@ -749,7 +749,7 @@ bool FastCompilerARM64::InitializeParameters() {
 
   if (needs_spill) {
     // We can now generate the suspend check.
-    GenerateSuspendCheck();
+    GenerateSuspendCheck(/* dex_pc= */ 0u);
   }
 
   if (loop_header_pcs_.IsAnyBitSet()) {
@@ -889,7 +889,7 @@ bool FastCompilerARM64::ProcessBlock(uint32_t dex_pc) {
     if (is_linked || is_loop_header) {
       __ Bind(label);
       if (is_loop_header) {
-        GenerateSuspendCheck();
+        GenerateSuspendCheck(pair.DexPc());
         UseScratchRegisterScope temps(GetVIXLAssembler());
         Register temp = temps.AcquireX();
         __ Ldr(temp, MemOperand(sp, 0));
@@ -1303,7 +1303,7 @@ bool FastCompilerARM64::EnsureHasFrame() {
     return false;
   }
 
-  GenerateSuspendCheck();
+  GenerateSuspendCheck(/* dex_pc= */ 0u);
   return true;
 }
 
@@ -1408,12 +1408,12 @@ bool FastCompilerARM64::GenerateFrame() {
   return true;
 }
 
-void FastCompilerARM64::GenerateSuspendCheck() {
+void FastCompilerARM64::GenerateSuspendCheck(uint32_t dex_pc) {
   MacroAssembler* masm = GetVIXLAssembler();
   if (compiler_options_.GetImplicitSuspendChecks()) {
     ExactAssemblyScope eas(masm, kInstructionSize, CodeBufferCheckScope::kExactSize);
     __ ldr(kImplicitSuspendCheckRegister, MemOperand(kImplicitSuspendCheckRegister));
-    RecordPcInfo(0);
+    RecordPcInfo(dex_pc);
   } else {
     UseScratchRegisterScope temps(masm);
     Register temp = temps.AcquireW();
@@ -1427,7 +1427,7 @@ void FastCompilerARM64::GenerateSuspendCheck() {
     {
       ExactAssemblyScope eas(masm, kInstructionSize, CodeBufferCheckScope::kExactSize);
       __ blr(lr);
-      RecordPcInfo(0);
+      RecordPcInfo(dex_pc);
     }
     __ Bind(&continue_label);
   }
