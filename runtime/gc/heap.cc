@@ -1906,7 +1906,14 @@ void Heap::RecordFree(uint64_t freed_objects, int64_t freed_bytes) {
   RACING_DCHECK_LE(freed_bytes,
                    static_cast<int64_t>(num_bytes_allocated_.load(std::memory_order_relaxed)));
   // Note: This relies on 2s complement for handling negative freed_bytes.
-  num_bytes_allocated_.fetch_sub(static_cast<ssize_t>(freed_bytes), std::memory_order_relaxed);
+  size_t bytes_allocated =
+      num_bytes_allocated_.fetch_sub(static_cast<ssize_t>(freed_bytes), std::memory_order_relaxed);
+  if (freed_bytes > 0 && TraceEnabled()) {
+    // Use release memory-order to ensure that the updation of num_bytes_allocated_
+    // above doesn't get reordered with this store.
+    TraceHeapSize(last_reported_heap_size_.fetch_sub(freed_bytes, std::memory_order_release) -
+                  freed_bytes);
+  }
   if (Runtime::Current()->HasStatsEnabled()) {
     RuntimeStats* thread_stats = Thread::Current()->GetStats();
     thread_stats->freed_objects += freed_objects;
@@ -3823,14 +3830,6 @@ void Heap::GrowForUtilization(collector::GarbageCollector* collector_ran,
   // This doesn't actually resize any memory. It just lets the heap grow more when necessary.
   const size_t bytes_allocated = GetBytesAllocated();
 
-  // Report the new heap size after the GC is finished and bytes_allocated has
-  // been adjusted with freed bytes.
-  if (TraceEnabled()) {
-    // Use release memory-order to ensure that the updation of num_bytes_allocated_
-    // (in RecordFree()) doesn't get reordered with this store.
-    last_reported_heap_size_.store(bytes_allocated, std::memory_order_release);
-    TraceHeapSize(bytes_allocated);
-  }
   uint64_t target_size, grow_bytes;
   collector::GcType gc_type = collector_ran->GetGcType();
   MutexLock mu(Thread::Current(), process_state_update_lock_);
