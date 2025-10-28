@@ -538,8 +538,8 @@ void HConstantFoldingVisitor::FoldReverseBytesIntrinsic(HInvoke* inst) {
     inst->ReplaceWith(GetGraph()->GetLongConstant(BSWAP(input->AsLongConstant()->GetValue())));
   } else {
     DCHECK(input->IsIntConstant());
-    inst->ReplaceWith(GetGraph()->GetIntConstant(
-        BSWAP(dchecked_integral_cast<int16_t>(input->AsIntConstant()->GetValue()))));
+    inst->ReplaceWith(
+        GetGraph()->GetIntConstant(BSWAP<int16_t>(input->AsIntConstant()->GetValue())));
   }
   inst->GetBlock()->RemoveInstruction(inst);
 }

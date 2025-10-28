@@ -21,6 +21,8 @@ import sun.misc.Unsafe;
 public class Main {
     public static void main(String[] args) throws Exception {
         $noinline$testPokeByte();
+        $noinline$testPokeShort(false);
+        $noinline$testPokeShort(true);
     }
 
     public static void $noinline$testPokeByte() {
@@ -32,6 +34,25 @@ public class Main {
                     .invoke(null, addr);
             if (unsafe.getByte(addr) != 0x78) {
                 throw new RuntimeException("Expected 0x78, got " + unsafe.getByte(addr));
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        } finally {
+            unsafe.freeMemory(addr);
+        }
+    }
+
+    public static void $noinline$testPokeShort(boolean swap) {
+        Unsafe unsafe = getUnsafe();
+        long addr = unsafe.allocateMemory(2);
+        try {
+            Class.forName("B446169228")
+                    .getDeclaredMethod("pokeShort12345678", long.class, boolean.class)
+                    .invoke(null, new Object[] {addr, swap});
+            short expected_value = swap ? (short) 0x7856 : (short) 0x5678;
+            if (unsafe.getShort(addr) != expected_value) {
+                throw new RuntimeException("Expected 0x" + Integer.toHexString(expected_value)
+                        + ", got 0x" + Integer.toHexString(unsafe.getShort(addr)));
             }
         } catch (Exception e) {
             throw new RuntimeException(e);
