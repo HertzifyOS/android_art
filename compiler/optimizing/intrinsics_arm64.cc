@@ -2893,10 +2893,6 @@ void IntrinsicCodeGeneratorARM64::VisitStringGetCharsNoCheck(HInvoke* invoke) {
   __ Bind(&done);
 }
 
-// This value is greater than ARRAYCOPY_SHORT_CHAR_ARRAY_THRESHOLD in libcore,
-// so if we choose to jump to the slow path we will end up in the native implementation.
-static constexpr int32_t kSystemArrayCopyCharThreshold = 192;
-
 static Location LocationForSystemArrayCopyInput(HInstruction* input) {
   HIntConstant* const_input = input->AsIntConstantOrNull();
   if (const_input != nullptr && vixl::aarch64::Assembler::IsImmAddSub(const_input->GetValue())) {
@@ -2906,7 +2902,14 @@ static Location LocationForSystemArrayCopyInput(HInstruction* input) {
   }
 }
 
-void IntrinsicLocationsBuilderARM64::VisitSystemArrayCopyChar(HInvoke* invoke) {
+// This value is in bytes and greater than ARRAYCOPY_SHORT_XXX_ARRAY_THRESHOLD
+// in libcore, so if we choose to jump to the slow path we will end up
+// in the native implementation.
+static constexpr int32_t kSystemArrayCopyPrimThreshold = 384;
+
+static void CreateSystemArrayCopyLocations(HInvoke* invoke, DataType::Type type) {
+  int32_t copy_threshold = kSystemArrayCopyPrimThreshold / DataType::Size(type);
+
   // Check to see if we have known failures that will cause us to have to bail out
   // to the runtime, and just generate the runtime call directly.
   HIntConstant* src_pos = invoke->InputAt(1)->AsIntConstantOrNull();
@@ -2924,14 +2927,15 @@ void IntrinsicLocationsBuilderARM64::VisitSystemArrayCopyChar(HInvoke* invoke) {
   HIntConstant* length = invoke->InputAt(4)->AsIntConstantOrNull();
   if (length != nullptr) {
     int32_t len = length->GetValue();
-    if (len < 0 || len > kSystemArrayCopyCharThreshold) {
+    if (len < 0 || len > copy_threshold) {
       // Just call as normal.
       return;
     }
   }
 
+  ArenaAllocator* allocator = invoke->GetBlock()->GetGraph()->GetAllocator();
   LocationSummary* locations =
-      LocationSummary::Create(allocator_, invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
+      LocationSummary::Create(allocator, invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
   // arraycopy(char[] src, int src_pos, char[] dst, int dst_pos, int length).
   locations->SetInAt(0, Location::RequiresCoreRegister());
   locations->SetInAt(1, LocationForSystemArrayCopyInput(invoke->InputAt(1)));
@@ -2940,6 +2944,18 @@ void IntrinsicLocationsBuilderARM64::VisitSystemArrayCopyChar(HInvoke* invoke) {
   locations->SetInAt(4, LocationForSystemArrayCopyInput(invoke->InputAt(4)));
 
   locations->AddRegisterTemps(3);
+}
+
+void IntrinsicLocationsBuilderARM64::VisitSystemArrayCopyByte(HInvoke* invoke) {
+  CreateSystemArrayCopyLocations(invoke, DataType::Type::kInt8);
+}
+
+void IntrinsicLocationsBuilderARM64::VisitSystemArrayCopyChar(HInvoke* invoke) {
+  CreateSystemArrayCopyLocations(invoke, DataType::Type::kUint16);
+}
+
+void IntrinsicLocationsBuilderARM64::VisitSystemArrayCopyInt(HInvoke* invoke) {
+  CreateSystemArrayCopyLocations(invoke, DataType::Type::kInt32);
 }
 
 static void CheckSystemArrayCopyPosition(MacroAssembler* masm,
@@ -3024,8 +3040,9 @@ static void GenSystemArrayCopyAddresses(MacroAssembler* masm,
                                         Register src_base,
                                         Register dst_base,
                                         Register src_end) {
-  // This routine is used by the SystemArrayCopy and the SystemArrayCopyChar intrinsics.
-  DCHECK(type == DataType::Type::kReference || type == DataType::Type::kUint16)
+  // This routine is used by the SystemArrayCopy* intrinsics.
+  DCHECK(type == DataType::Type::kReference || type == DataType::Type::kInt8 ||
+         type == DataType::Type::kUint16 || type == DataType::Type::kInt32)
       << "Unexpected element type: " << type;
   const int32_t element_size = DataType::Size(type);
   const uint32_t data_offset = mirror::Array::DataOffset(element_size).Uint32Value();
@@ -3037,8 +3054,10 @@ static void GenSystemArrayCopyAddresses(MacroAssembler* masm,
   }
 }
 
-void IntrinsicCodeGeneratorARM64::VisitSystemArrayCopyChar(HInvoke* invoke) {
-  MacroAssembler* masm = GetVIXLAssembler();
+static void SystemArrayCopyPrimitive(HInvoke* invoke,
+                                     CodeGeneratorARM64* codegen,
+                                     DataType::Type type) {
+  MacroAssembler* masm = codegen->GetVIXLAssembler();
   LocationSummary* locations = invoke->GetLocations();
   Register src = XRegisterFrom(locations->InAt(0));
   Location src_pos = locations->InAt(1);
@@ -3047,8 +3066,8 @@ void IntrinsicCodeGeneratorARM64::VisitSystemArrayCopyChar(HInvoke* invoke) {
   Location length = locations->InAt(4);
 
   SlowPathCodeARM64* slow_path =
-      new (codegen_->GetScopedAllocator()) IntrinsicSlowPathARM64(invoke);
-  codegen_->AddSlowPath(slow_path);
+      new (codegen->GetScopedAllocator()) IntrinsicSlowPathARM64(invoke);
+  codegen->AddSlowPath(slow_path);
 
   // If source and destination are the same, take the slow path. Overlapping copy regions must be
   // copied in reverse and we can't know in all cases if it's needed.
@@ -3061,17 +3080,17 @@ void IntrinsicCodeGeneratorARM64::VisitSystemArrayCopyChar(HInvoke* invoke) {
   // Bail out if the destination is null.
   __ Cbz(dst, slow_path->GetEntryLabel());
 
+  int32_t copy_threshold = kSystemArrayCopyPrimThreshold / DataType::Size(type);
   if (!length.IsConstant()) {
     // Merge the following two comparisons into one:
     //   If the length is negative, bail out (delegate to libcore's native implementation).
-    //   If the length > kSystemArrayCopyCharThreshold then (currently) prefer libcore's
-    //   native implementation.
-    __ Cmp(WRegisterFrom(length), kSystemArrayCopyCharThreshold);
+    //   If the length > copy_threshold then (currently) prefer libcore's native implementation.
+    __ Cmp(WRegisterFrom(length), copy_threshold);
     __ B(slow_path->GetEntryLabel(), hi);
   } else {
     // We have already checked in the LocationsBuilder for the constant case.
     DCHECK_GE(length.GetConstant()->AsIntConstant()->GetValue(), 0);
-    DCHECK_LE(length.GetConstant()->AsIntConstant()->GetValue(), kSystemArrayCopyCharThreshold);
+    DCHECK_LE(length.GetConstant()->AsIntConstant()->GetValue(), copy_threshold);
   }
 
   Register src_curr_addr = WRegisterFrom(locations->GetTemp(0));
@@ -3101,7 +3120,7 @@ void IntrinsicCodeGeneratorARM64::VisitSystemArrayCopyChar(HInvoke* invoke) {
   src_stop_addr = src_stop_addr.X();
 
   GenSystemArrayCopyAddresses(masm,
-                              DataType::Type::kUint16,
+                              type,
                               src,
                               src_pos,
                               dst,
@@ -3112,7 +3131,7 @@ void IntrinsicCodeGeneratorARM64::VisitSystemArrayCopyChar(HInvoke* invoke) {
                               Register());
 
   // Iterate over the arrays and do a raw copy of the chars.
-  const int32_t char_size = DataType::Size(DataType::Type::kUint16);
+  const int32_t element_size = DataType::Size(type);
   UseScratchRegisterScope temps(masm);
 
   // We split processing of the array in two parts: head and tail.
@@ -3138,67 +3157,69 @@ void IntrinsicCodeGeneratorARM64::VisitSystemArrayCopyChar(HInvoke* invoke) {
   // loop, respectively. This ensures that any remaining length after each
   // head loop iteration means there is a full block remaining, reducing the
   // number of conditional checks required on every iteration.
-  constexpr int32_t chars_per_block = 4;
-  constexpr int32_t unroll_threshold = 2 * chars_per_block;
+  constexpr int32_t max_stride_in_bytes = 8;
+  constexpr int32_t unroll_threshold = 2 * max_stride_in_bytes;
+  DCHECK_EQ(max_stride_in_bytes % element_size, 0);
+  int32_t elements_per_block = max_stride_in_bytes / element_size;
   vixl::aarch64::Label loop1, loop2, pre_loop2, done;
 
   Register length_tmp = src_stop_addr.W();
-  Register tmp = temps.AcquireRegisterOfSize(char_size * chars_per_block * kBitsPerByte);
+  Register tmp = temps.AcquireW();
 
   auto emitHeadLoop = [&]() {
     __ Bind(&loop1);
-    __ Ldr(tmp, MemOperand(src_curr_addr, char_size * chars_per_block, PostIndex));
-    __ Subs(length_tmp, length_tmp, chars_per_block);
-    __ Str(tmp, MemOperand(dst_curr_addr, char_size * chars_per_block, PostIndex));
+    __ Ldr(tmp.X(), MemOperand(src_curr_addr, max_stride_in_bytes, PostIndex));
+    __ Subs(length_tmp, length_tmp, elements_per_block);
+    __ Str(tmp.X(), MemOperand(dst_curr_addr, max_stride_in_bytes, PostIndex));
     __ B(&loop1, ge);
   };
 
   auto emitTailLoop = [&]() {
     __ Bind(&loop2);
-    __ Ldrh(tmp, MemOperand(src_curr_addr, char_size, PostIndex));
+    codegen->Load(type, tmp, MemOperand(src_curr_addr, element_size, PostIndex));
     __ Subs(length_tmp, length_tmp, 1);
-    __ Strh(tmp, MemOperand(dst_curr_addr, char_size, PostIndex));
+    codegen->Store(type, tmp, MemOperand(dst_curr_addr, element_size, PostIndex));
     __ B(&loop2, gt);
   };
 
-  auto emitUnrolledTailLoop = [&](const int32_t tail_length) {
-    DCHECK_LT(tail_length, 4);
+  auto emitUnrolledTailLoop = [&](const int32_t length_in_bytes) {
+    static constexpr DataType::Type types[] = {DataType::Type::kUint8,
+                                               DataType::Type::kUint16,
+                                               DataType::Type::kInt32,
+                                               DataType::Type::kInt64};
+    const CPURegister tmps[] = {tmp, tmp, tmp, tmp.X()};
+    size_t offset = 0;
 
-    // Don't use post-index addressing, and instead add a constant offset later.
-    if ((tail_length & 2) != 0) {
-      __ Ldr(tmp.W(), MemOperand(src_curr_addr));
-      __ Str(tmp.W(), MemOperand(dst_curr_addr));
-    }
-    if ((tail_length & 1) != 0) {
-      const int32_t offset = (tail_length & ~1) * char_size;
-      __ Ldrh(tmp, MemOperand(src_curr_addr, offset));
-      __ Strh(tmp, MemOperand(dst_curr_addr, offset));
+    DCHECK_LT(length_in_bytes, unroll_threshold);
+    DCHECK_GE(length_in_bytes, 0);
+    for (uint32_t i : HighToLowBits(static_cast<uint32_t>(length_in_bytes))) {
+      // Don't use post-index addressing, and instead accumulate a constant offset.
+      codegen->Load(types[i], tmps[i], MemOperand(src_curr_addr, offset));
+      codegen->Store(types[i], tmps[i], MemOperand(dst_curr_addr, offset));
+      DCHECK_EQ(1u << i, DataType::Size(types[i]));
+      offset += 1u << i;
     }
   };
 
   if (length.IsConstant()) {
-    const int32_t constant_length = length.GetConstant()->AsIntConstant()->GetValue();
-    if (constant_length >= unroll_threshold) {
-      __ Mov(length_tmp, constant_length - chars_per_block);
+    int32_t length_in_elems = length.GetConstant()->AsIntConstant()->GetValue();
+    int32_t length_in_bytes = length_in_elems * element_size;
+    if (length_in_bytes >= unroll_threshold) {
+      length_in_bytes %= max_stride_in_bytes;
+      length_in_elems -= length_in_bytes / element_size;
+      __ Mov(length_tmp, length_in_elems - elements_per_block);
       emitHeadLoop();
-    } else {
-      static_assert(unroll_threshold == 8, "The unroll_threshold must be 8.");
-      // Fully unroll both the head and tail loops.
-      if ((constant_length & 4) != 0) {
-        __ Ldr(tmp, MemOperand(src_curr_addr, 4 * char_size, PostIndex));
-        __ Str(tmp, MemOperand(dst_curr_addr, 4 * char_size, PostIndex));
-      }
     }
-    emitUnrolledTailLoop(constant_length % chars_per_block);
+    emitUnrolledTailLoop(length_in_bytes);
   } else {
     Register length_reg = WRegisterFrom(length);
-    __ Subs(length_tmp, length_reg, chars_per_block);
+    __ Subs(length_tmp, length_reg, elements_per_block);
     __ B(&pre_loop2, lt);
 
     emitHeadLoop();
 
     __ Bind(&pre_loop2);
-    __ Adds(length_tmp, length_tmp, chars_per_block);
+    __ Adds(length_tmp, length_tmp, elements_per_block);
     __ B(&done, eq);
 
     emitTailLoop();
@@ -3206,6 +3227,18 @@ void IntrinsicCodeGeneratorARM64::VisitSystemArrayCopyChar(HInvoke* invoke) {
 
   __ Bind(&done);
   __ Bind(slow_path->GetExitLabel());
+}
+
+void IntrinsicCodeGeneratorARM64::VisitSystemArrayCopyByte(HInvoke* invoke) {
+  SystemArrayCopyPrimitive(invoke, codegen_, DataType::Type::kInt8);
+}
+
+void IntrinsicCodeGeneratorARM64::VisitSystemArrayCopyChar(HInvoke* invoke) {
+  SystemArrayCopyPrimitive(invoke, codegen_, DataType::Type::kUint16);
+}
+
+void IntrinsicCodeGeneratorARM64::VisitSystemArrayCopyInt(HInvoke* invoke) {
+  SystemArrayCopyPrimitive(invoke, codegen_, DataType::Type::kInt32);
 }
 
 // We choose to use the native implementation for longer copy lengths.

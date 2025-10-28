@@ -156,8 +156,6 @@ vixl::aarch64::Condition ARM64PCondition(HVecPredToBoolean::PCondKind cond);
   V(StringBuilderAppendDouble)                \
   V(StringBuilderLength)                      \
   V(StringBuilderToString)                    \
-  V(SystemArrayCopyByte)                      \
-  V(SystemArrayCopyInt)                       \
   V(UnsafeArrayBaseOffset)                    \
   /* 1.8 */                                   \
   V(MethodHandleInvoke)                       \
