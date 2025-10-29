@@ -685,8 +685,8 @@ void LiveInterval::Dump(std::ostream& stream) const {
     stream << " ";
   }
   stream << "}";
-  stream << " is_fixed: " << is_fixed_ << ", is_split: " << IsSplit();
-  stream << " is_pair: " << IsPair();
+  stream << " fixed:" << is_fixed_ << " temp:" << IsTemp() << " split:" << IsSplit();
+  stream << " pair:" << IsPair();
 }
 
 bool LiveInterval::SameRegisterKind(Location other) const {
@@ -706,10 +706,13 @@ bool LiveInterval::SameRegisterKind(Location other) const {
 }
 
 size_t LiveInterval::NumberOfSpillSlotsNeeded() const {
+  DCHECK(!IsTemp());
+  DCHECK(!IsFixed());
   // For a SIMD operation, compute the number of needed spill slots.
   // TODO: do through vector type?
   HInstruction* definition = GetDefinedBy();
-  if (definition != nullptr && HVecOperation::ReturnsSIMDValue(definition)) {
+  DCHECK(definition != nullptr);
+  if (HVecOperation::ReturnsSIMDValue(definition)) {
     if (definition->IsPhi()) {
       definition = definition->InputAt(1);  // SIMD always appears on back-edge
     }

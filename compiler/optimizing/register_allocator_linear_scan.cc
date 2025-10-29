@@ -645,7 +645,7 @@ void RegisterAllocatorLinearScan::CheckForTempLiveIntervals(HInstruction* instru
       switch (temp.GetPolicy()) {
         case Location::kRequiresCoreRegister: {
           LiveInterval* interval = LiveInterval::MakeTempInterval(
-              allocator_, DataType::Type::kInt32, /*is_pair=*/ false, i, position);
+              allocator_, DataType::Type::kInt32, /*is_pair=*/ false, i, position, instruction);
           temp_intervals_.push_back(interval);
           unhandled_core_intervals_.push_back(interval);
           break;
@@ -654,7 +654,7 @@ void RegisterAllocatorLinearScan::CheckForTempLiveIntervals(HInstruction* instru
         case Location::kRequiresFpuRegister: {
           bool is_pair = codegen_->NeedsTwoRegisters(DataType::Type::kFloat64);
           LiveInterval* interval = LiveInterval::MakeTempInterval(
-              allocator_, DataType::Type::kFloat64, is_pair, i, position);
+              allocator_, DataType::Type::kFloat64, is_pair, i, position, instruction);
           temp_intervals_.push_back(interval);
           unhandled_fp_intervals_.push_back(interval);
           break;
@@ -662,7 +662,7 @@ void RegisterAllocatorLinearScan::CheckForTempLiveIntervals(HInstruction* instru
 
         case Location::kRequiresVecRegister: {
           LiveInterval* interval = LiveInterval::MakeTempInterval(
-              allocator_, DataType::Type::kFloat64, /*is_pair=*/ false, i, position);
+              allocator_, DataType::Type::kFloat64, /*is_pair=*/ false, i, position, instruction);
           temp_intervals_.push_back(interval);
           unhandled_vector_intervals_.push_back(interval);
           break;
@@ -1263,8 +1263,9 @@ bool RegisterAllocatorLinearScan::LinearScan::TryAllocateFreeReg(LiveInterval* c
     // An interval that starts an instruction (that is, it is not split), may
     // re-use the registers used by the inputs of that instruciton, based on the
     // location summary.
-    HInstruction* defined_by = current->GetDefinedBy();
-    if (defined_by != nullptr && !current->IsSplit()) {
+    if (!current->IsTemp() && !current->IsSplit()) {
+      HInstruction* defined_by = current->GetDefinedBy();
+      DCHECK(defined_by != nullptr);
       LocationSummary* locations = defined_by->GetLocations();
       if (!locations->OutputCanOverlapWithInputs() && locations->Out().IsUnallocated()) {
         HInputsRef inputs = defined_by->GetInputs();

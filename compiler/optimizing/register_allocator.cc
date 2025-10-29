@@ -195,10 +195,10 @@ bool RegisterAllocator::ValidateIntervals(ArrayRef<LiveInterval* const> interval
     for (AllRangesIterator it(start_interval); !it.Done(); it.Advance()) {
       LiveInterval* current = it.CurrentInterval();
       HInstruction* defined_by = current->GetDefinedBy();
-      if (current->GetParent()->HasSpillSlot()
-           // Parameters and current method have their own stack slot.
-           && !(defined_by != nullptr && (defined_by->IsParameterValue()
-                                          || defined_by->IsCurrentMethod()))) {
+      DCHECK_IMPLIES(current->GetParent()->HasSpillSlot(), defined_by != nullptr);
+      if (current->GetParent()->HasSpillSlot() &&
+          // Parameters and current method have their own stack slot.
+          !(defined_by->IsParameterValue() || defined_by->IsCurrentMethod())) {
         BitVector* liveness_of_spill_slot = liveness_of_values[number_of_registers
             + current->GetParent()->GetSpillSlot() / kVRegSize
             - number_of_out_slots];
@@ -237,7 +237,8 @@ bool RegisterAllocator::ValidateIntervals(ArrayRef<LiveInterval* const> interval
               message << "Register conflict at " << j
                       << " in " << codegen.GetGraph()->PrettyMethod() << " ";
               if (defined_by != nullptr) {
-                message << "(" << defined_by->DebugName() << "#" << defined_by->GetId() << ")";
+                message << "(" << (current->IsTemp() ? "temp for " : "")
+                        << defined_by->DebugName() << "#" << defined_by->GetId() << ")";
               }
               message << "for ";
               DumpRegister(message, reg, register_type, &codegen);

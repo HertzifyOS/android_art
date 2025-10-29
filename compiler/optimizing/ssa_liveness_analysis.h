@@ -260,12 +260,13 @@ class LiveInterval : public ArenaObject<kArenaAllocSsaLiveness> {
                                         DataType::Type type,
                                         bool is_pair,
                                         size_t temp_index,
-                                        size_t position) {
+                                        size_t position,
+                                        HInstruction* instruction) {
     int8_t checked_index = dchecked_integral_cast<int8_t>(temp_index);
     LiveInterval* temp = new (allocator) LiveInterval(allocator,
                                                       type,
                                                       is_pair,
-                                                      /*defined_by*/ nullptr,
+                                                      /*defined_by*/ instruction,
                                                       /*is_fixed=*/ false,
                                                       /*regs=*/ kNoRegisters,
                                                       checked_index);
