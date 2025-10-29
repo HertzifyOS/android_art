@@ -2501,7 +2501,7 @@ Thread::DumpOrder Thread::DumpStack(std::ostream& os,
                                     bool dump_native_stack,
                                     bool force_dump_stack) const {
   unwindstack::AndroidLocalUnwinder unwinder;
-  unwinder.set_check_global_elf_cache(true);
+  unwinder.set_use_global_elf_cache(true);
   return DumpStack(os, unwinder, dump_native_stack, force_dump_stack);
 }
 
