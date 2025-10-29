@@ -100,7 +100,12 @@ cc_defaults {
         acknowledgement: [
             "Santiago Aboy Solanes of Google",
         ],
+        vector: "local_no_privileges_required",
+        service_privilege: "constrained",
+        users: "single_user",
+        fuzzed_code_usage: "shipped",
     },
+    native_coverage: false,
 }
 
 // Release/debug defaults that fuzzers should use to abstract from the ones above.
