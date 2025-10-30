@@ -1906,8 +1906,7 @@ void Heap::RecordFree(uint64_t freed_objects, int64_t freed_bytes) {
   RACING_DCHECK_LE(freed_bytes,
                    static_cast<int64_t>(num_bytes_allocated_.load(std::memory_order_relaxed)));
   // Note: This relies on 2s complement for handling negative freed_bytes.
-  size_t bytes_allocated =
-      num_bytes_allocated_.fetch_sub(static_cast<ssize_t>(freed_bytes), std::memory_order_relaxed);
+  num_bytes_allocated_.fetch_sub(static_cast<ssize_t>(freed_bytes), std::memory_order_relaxed);
   if (freed_bytes > 0 && TraceEnabled()) {
     // Use release memory-order to ensure that the updation of num_bytes_allocated_
     // above doesn't get reordered with this store.
