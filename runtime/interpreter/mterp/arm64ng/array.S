@@ -5,35 +5,35 @@
  * for: aget, aget-boolean, aget-byte, aget-char, aget-short, aget-wide, aget-object
  *
  */
-    FETCH_B w2, 1, 0                    // w2<- BB
-    lsr     w9, wINST, #8               // w9<- AA
+    FETCH_B w9, 1, 0                    // w9<- BB
+    lsr     w2, wINST, #8               // w2<- AA
     FETCH_B w3, 1, 1                    // w3<- CC
-    GET_VREG w0, w2                     // w0<- vBB (array object)
+    GET_VREG w0, w9                     // w0<- vBB (array object)
     GET_VREG w1, w3                     // w1<- vCC (requested index)
     // Note: if x0 is null, this will be handled by our SIGSEGV handler.
     ldr     w3, [x0, #MIRROR_ARRAY_LENGTH_OFFSET]    // w3<- arrayObj->length
     add     x0, x0, w1, uxtw #$shift    // w0<- arrayObj + index*width
     cmp     w1, w3                      // compare unsigned index, length
     bcs     common_errArrayIndex        // index >= length, bail
-    FETCH_ADVANCE_INST 2                // advance rPC, load rINST
-    GET_INST_OPCODE x10                 // extract opcode from wINST
+    // To fit some handlers in 64B, use the dispatch in the corresponding `iget` slow path.
+%  iget_opcode = re.sub("op_aget", "op_iget", opcode)
     .if $wide
-    ldr     x2, [x0, #$data_offset]     // x2<- vBB[vCC]
-    SET_VREG_WIDE x2, w9
-    GOTO_OPCODE x10                     // jump to next instruction
+    ldr     x0, [x0, #$data_offset]     // x0<- vBB[vCC]
+    FETCH_ADVANCE_INST 2                // advance rPC, load rINST
+    SET_VREG_WIDE x0, w2
+    b .L${iget_opcode}_slow_path_dispatch  // Dispatch would not fit in 64B.
     .elseif $is_object
-    $load   w2, [x0, #$data_offset]     // w2<- vBB[vCC]
-    UNPOISON_HEAP_REF w2
-    TEST_IF_MARKING 2f
-1:
-    SET_VREG_OBJECT w2, w9              // vAA<- w2
-    GOTO_OPCODE x10                     // jump to next instruction
-2:
-    bl art_quick_read_barrier_mark_reg02
-    b 1b
+    $load   w0, [x0, #$data_offset]     // w0<- vBB[vCC]
+    UNPOISON_HEAP_REF w0
+    TEST_IF_MARKING .L${iget_opcode}_slow_path_mark_and_store_r0_to_vreg_r2_fetch_advance_2_dispatch
+    FETCH_ADVANCE_INST 2                // advance rPC, load rINST
+    SET_VREG_OBJECT w0, w2              // vAA<- w0
+    b .L${iget_opcode}_slow_path_dispatch  // Dispatch would not fit in 64B.
     .else
-    $load   w2, [x0, #$data_offset]     // w2<- vBB[vCC]
-    SET_VREG w2, w9                     // vAA<- w2
+    $load   w0, [x0, #$data_offset]     // w0<- vBB[vCC]
+    FETCH_ADVANCE_INST 2                // advance rPC, load rINST
+    SET_VREG w0, w2                     // vAA<- w0
+    GET_INST_OPCODE x10                 // extract opcode from wINST
     GOTO_OPCODE x10                     // jump to next instruction
     .endif
 

@@ -172,20 +172,18 @@
    .elseif $is_object
    $load   w0, [x3, x0]
    UNPOISON_HEAP_REF w0
-   TEST_IF_MARKING .L${opcode}_read_barrier
-.L${opcode}_resume_after_read_barrier:
+   TEST_IF_MARKING .L${opcode}_slow_path_mark_and_store_r0_to_vreg_r2_fetch_advance_2_dispatch
    SET_VREG_OBJECT w0, w2              // fp[A] <- value
    .else
    $load   w0, [x3, x0]
    SET_VREG w0, w2                     // fp[A] <- value
    .endif
    FETCH_ADVANCE_INST 2
+   .if $wide || $is_object
+   b .L${opcode}_slow_path_dispatch
+   .else
    GET_INST_OPCODE ip
    GOTO_OPCODE ip
-   .if $is_object
-.L${opcode}_read_barrier:
-   bl      art_quick_read_barrier_mark_reg00
-   b       .L${opcode}_resume_after_read_barrier
    .endif
 
 %def op_iget_slow_path(volatile_load, maybe_extend, wide, is_object):
@@ -222,7 +220,8 @@
    .elseif $is_object
    $volatile_load w0, [x3]
    UNPOISON_HEAP_REF w0
-   TEST_IF_MARKING .L${opcode}_read_barrier
+   TEST_IF_MARKING .L${opcode}_slow_path_mark_and_store_r0_to_vreg_r2_fetch_advance_2_dispatch
+.L${opcode}_slow_path_store_r0_to_vreg_r2_fetch_advance_2_dispatch:
    SET_VREG_OBJECT w0, w2              // fp[A] <- value
    .else
    $volatile_load w0, [x3]
@@ -230,8 +229,16 @@
    SET_VREG w0, w2                     // fp[A] <- value
    .endif
    FETCH_ADVANCE_INST 2
+   // `aget-wide` and `aget-object` handlers jump here to shorten the code.
+.L${opcode}_slow_path_dispatch:
    GET_INST_OPCODE ip
    GOTO_OPCODE ip
+   .if $is_object
+   // `aget-object` handler jumps here when marking to shorten the code.
+.L${opcode}_slow_path_mark_and_store_r0_to_vreg_r2_fetch_advance_2_dispatch:
+   bl      art_quick_read_barrier_mark_reg00
+   b       .L${opcode}_slow_path_store_r0_to_vreg_r2_fetch_advance_2_dispatch
+   .endif
 
 %def op_iget_wide():
 %  op_iget(load="ldr", volatile_load="ldar", maybe_extend="", wide="1", is_object="0")
@@ -360,7 +367,7 @@
 %  op_sget(load="ldrsh", volatile_load="ldarh", maybe_extend="sxth w0, w0", wide="0", is_object="0")
 
 %def op_sget(load="ldr", volatile_load="ldar", maybe_extend="", wide="0", is_object="0"):
-%  slow_path = add_slow_path(op_sget_slow_path, volatile_load, maybe_extend, wide, is_object)
+%  slow_path = add_slow_path(op_sget_slow_path, load, volatile_load, maybe_extend, wide, is_object)
    // Fast-path which gets the field from thread-local cache.
 %  fetch_from_thread_cache("x0", miss_label=slow_path)
 .L${opcode}_resume:
@@ -383,22 +390,23 @@
    SET_VREG w0, w2                     // fp[A] <- value
    .endif
    FETCH_ADVANCE_INST 2
+#ifdef USE_HEAP_POISONING
+   .if $wide || $is_object
+   b .L${opcode}_slow_path_dispatch    // Dispatch would not fit in 64B.
+   .else
    GET_INST_OPCODE ip
    GOTO_OPCODE ip
-.L${opcode}_read_barrier:
-   bl      art_quick_read_barrier_mark_reg00
-   .if $is_object
-   $load   w0, [x0, x1]
-   UNPOISON_HEAP_REF w0
-.L${opcode}_mark_after_load:
-   // Here, we know the marking register is set.
-   bl      art_quick_read_barrier_mark_reg00
-   b       .L${opcode}_after_reference_load
-   .else
-   b       .L${opcode}_resume_after_read_barrier
    .endif
+#else
+   .if $wide
+   b .L${opcode}_slow_path_dispatch    // Dispatch would not fit in 64B.
+   .else
+   GET_INST_OPCODE ip
+   GOTO_OPCODE ip
+   .endif
+#endif
 
-%def op_sget_slow_path(volatile_load, maybe_extend, wide, is_object):
+%def op_sget_slow_path(load, volatile_load, maybe_extend, wide, is_object):
    ldr     x0, [sp]
    ldr     w1, [x0, #ART_METHOD_ACCESS_FLAGS_OFFSET]
    tbnz    w1, #ART_METHOD_IS_OBSOLETE_FLAG_BIT, .L${opcode}_slow_path_continue
@@ -437,11 +445,24 @@
    SET_VREG w0, w2                     // fp[A] <- value
    .endif
    FETCH_ADVANCE_INST 2
+.L${opcode}_slow_path_dispatch:
    GET_INST_OPCODE ip
    GOTO_OPCODE ip
 .L${opcode}_slow_path_read_barrier:
    bl      art_quick_read_barrier_mark_reg00
    b       .L${opcode}_slow_path_resume_after_read_barrier
+.L${opcode}_read_barrier:
+   bl      art_quick_read_barrier_mark_reg00
+   .if $is_object
+   $load   w0, [x0, x1]
+   UNPOISON_HEAP_REF w0
+.L${opcode}_mark_after_load:
+   // Here, we know the marking register is set.
+   bl      art_quick_read_barrier_mark_reg00
+   b       .L${opcode}_after_reference_load
+   .else
+   b       .L${opcode}_resume_after_read_barrier
+   .endif
 
 %def op_sget_wide():
 %  op_sget(load="ldr", volatile_load="ldar", maybe_extend="", wide="1", is_object="0")
