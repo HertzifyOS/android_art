@@ -141,7 +141,7 @@
 /*
  * Return a 32-bit value.
  */
-%def op_return(is_object="0", is_void="0", is_wide="0"):
+%def op_return(is_object=False, is_void=False, is_wide=False):
     .if $is_void
       // Thread fence for constructor
       dmb ishst
@@ -171,13 +171,13 @@
     CFI_DEF_CFA_BREG_PLUS_UCONST CFI_REFS, -4, CALLEE_SAVES_SIZE
 
 %def op_return_object():
-%  op_return(is_object="1", is_void="0", is_wide="0")
+%  op_return(is_object=True)
 
 %def op_return_void():
-%  op_return(is_object="0", is_void="1", is_wide="0")
+%  op_return(is_void=True)
 
 %def op_return_wide():
-%  op_return(is_object="0", is_void="0", is_wide="1")
+%  op_return(is_wide=True)
 
 %def op_throw():
   EXPORT_PC

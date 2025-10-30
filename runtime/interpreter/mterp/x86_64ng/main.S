@@ -1438,7 +1438,7 @@ END_FUNCTION \name
    .endif
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalStaticField", success_label="1b", fail_label="5f", is_static="1")
+%  fetch_field_from_fast_path("NterpGetLocalStaticField", success_label="1b", fail_label="5f", is_static=True)
 5:
    EXPORT_PC
    movq rSELF:THREAD_SELF_OFFSET, %rdi
@@ -1473,7 +1473,7 @@ END_FUNCTION \name
    \store    \rINST_reg, (%rax,%rdx,1)
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalStaticField", success_label="1b", fail_label="7f", is_static="1")
+%  fetch_field_from_fast_path("NterpGetLocalStaticField", success_label="1b", fail_label="7f", is_static=True)
 7:
    EXPORT_PC
    movq rSELF:THREAD_SELF_OFFSET, %rdi
@@ -1531,7 +1531,7 @@ END_FUNCTION \name
    OP_IPUT_INTERNAL \rINST_reg, \store, \wide
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalInstanceField", success_label="1b", fail_label="3f", is_static="0")
+%  fetch_field_from_fast_path("NterpGetLocalInstanceField", success_label="1b", fail_label="3f")
 3:
    EXPORT_PC
    movq rSELF:THREAD_SELF_OFFSET, %rdi
@@ -1567,7 +1567,7 @@ END_FUNCTION \name
    .endif
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalInstanceField", success_label="1b", fail_label="3f", is_static="0")
+%  fetch_field_from_fast_path("NterpGetLocalInstanceField", success_label="1b", fail_label="3f")
 3:
    EXPORT_PC
    movq rSELF:THREAD_SELF_OFFSET, %rdi
@@ -1795,7 +1795,7 @@ OAT_ENTRY ExecuteNterpImpl
    jne ${miss_label}
    movq __SIZEOF_POINTER__+THREAD_INTERPRETER_CACHE_OFFSET(%rax, %rdx, 1), ${dest_reg}
 
-%def fetch_field_from_fast_path(get_local, success_label, fail_label, is_static):
+%def fetch_field_from_fast_path(get_local, success_label, fail_label, is_static=False):
    movq 0(%rsp), %rdi
    testl $$ART_METHOD_IS_OBSOLETE_FLAG, ART_METHOD_ACCESS_FLAGS_OFFSET(%rdi)
    jne ${fail_label}
@@ -1949,7 +1949,7 @@ NterpPutObjectInstanceField:
 4:
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalInstanceFieldForIPutObject", success_label="1b", fail_label="3f", is_static="0")
+%  fetch_field_from_fast_path("NterpGetLocalInstanceFieldForIPutObject", success_label="1b", fail_label="3f")
 3:
    EXPORT_PC
    movq rSELF:THREAD_SELF_OFFSET, %rdi
@@ -1996,7 +1996,7 @@ NterpGetObjectInstanceField:
    SET_VREG_OBJECT %eax, rINSTq            # fp[A] <- value
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalInstanceField", success_label="1b", fail_label="5f", is_static="0")
+%  fetch_field_from_fast_path("NterpGetLocalInstanceField", success_label="1b", fail_label="5f")
 5:
    EXPORT_PC
    movq rSELF:THREAD_SELF_OFFSET, %rdi
@@ -2036,7 +2036,7 @@ NterpPutObjectStaticField:
 4:
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalStaticFieldForSPutObject", success_label="1b", fail_label="9f", is_static="1")
+%  fetch_field_from_fast_path("NterpGetLocalStaticFieldForSPutObject", success_label="1b", fail_label="9f", is_static=True)
 9:
    EXPORT_PC
    movq rSELF:THREAD_SELF_OFFSET, %rdi
@@ -2088,7 +2088,7 @@ NterpGetObjectStaticField:
    SET_VREG_OBJECT %eax, rINSTq            # fp[A] <- value
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalStaticField", success_label="1b", fail_label="7f", is_static="1")
+%  fetch_field_from_fast_path("NterpGetLocalStaticField", success_label="1b", fail_label="7f", is_static=True)
 7:
    EXPORT_PC
    movq rSELF:THREAD_SELF_OFFSET, %rdi

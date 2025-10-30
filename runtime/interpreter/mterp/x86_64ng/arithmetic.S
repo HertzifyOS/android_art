@@ -1,4 +1,4 @@
-%def bindiv(result="", second="", tmp="", wide="", suffix="", rem="0", ext="cdq"):
+%def bindiv(result="", second="", tmp="", wide=False, suffix="", rem=False, ext="cdq"):
 /*
  * 32-bit binary div/rem operation.  Handles special case of op1=-1.
  */
@@ -58,7 +58,7 @@
     .endif
     jmp     1b
 
-%def bindiv2addr(result="", second="", tmp="", wide="", suffix="", rem="0", ext="cdq"):
+%def bindiv2addr(result="", second="", tmp="", wide=False, suffix="", rem=False, ext="cdq"):
 /*
  * 32-bit binary div/rem operation.  Handles special case of op1=-1.
  */
@@ -119,7 +119,7 @@
     .endif
     jmp     1b
 
-%def bindivLit16(result="", rem="0"):
+%def bindivLit16(result="", rem=False):
 /*
  * 32-bit binary div/rem operation.  Handles special case of op1=-1.
  */
@@ -147,7 +147,7 @@
     .endif
     jmp     1b
 
-%def bindivLit8(result="", rem="0"):
+%def bindivLit8(result="", rem=False):
 /*
  * 32-bit div/rem "lit8" binary operation.  Handles special case of
  * op0=minint & op1=-1
@@ -191,7 +191,7 @@
     SET_VREG $result, rINSTq
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 
-%def binop1(wide="0", instr=""):
+%def binop1(wide=False, instr=""):
 /*
  * Generic 32-bit binary operation in which both operands loaded to
  * registers (op0 in eax, op1 in ecx).
@@ -295,7 +295,7 @@
     CLEAR_WIDE_REF %rcx
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
-%def cvtfp_int(fp_suffix="", i_suffix="", max_const="", result_reg="", wide=""):
+%def cvtfp_int(fp_suffix="", i_suffix="", max_const="", result_reg="", wide=False):
 /* On fp to int conversions, Java requires that
  * if the result > maxint, it should be clamped to maxint.  If it is less
  * than minint, it should be clamped to minint.  If it is a nan, the result
@@ -323,7 +323,7 @@
     .endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
-%def shop2addr(wide="0", instr=""):
+%def shop2addr(wide=False, instr=""):
 /*
  * Generic 32-bit "shift/2addr" operation.
  */
@@ -343,7 +343,7 @@
     .endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
-%def unop(preinstr="", instr="", wide="0"):
+%def unop(preinstr="", instr="", wide=False):
 /*
  * Generic 32/64-bit unary operation.  Provide an "instr" line that
  * specifies an instruction that performs "result = op eax".
@@ -422,10 +422,10 @@ $instr
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 
 %def op_div_int():
-%  bindiv(result="%eax", second="%ecx", tmp="%edx", wide="0", suffix="l")
+%  bindiv(result="%eax", second="%ecx", tmp="%edx", suffix="l")
 
 %def op_div_int_2addr():
-%  bindiv2addr(result="%eax", second="%ecx", tmp="%edx", wide="0", suffix="l")
+%  bindiv2addr(result="%eax", second="%ecx", tmp="%edx", suffix="l")
 
 %def op_div_int_lit16():
 %  bindivLit16(result="%eax")
@@ -434,10 +434,10 @@ $instr
 %  bindivLit8(result="%eax")
 
 %def op_div_long():
-%  bindiv(result="%rax", second="%rcx", tmp="%rdx", wide="1", suffix="q", ext="cqo")
+%  bindiv(result="%rax", second="%rcx", tmp="%rdx", wide=True, suffix="q", ext="cqo")
 
 %def op_div_long_2addr():
-%  bindiv2addr(result="%rax", second="%rcx", tmp="%rdx", wide="1", suffix="q", ext="cqo")
+%  bindiv2addr(result="%rax", second="%rcx", tmp="%rdx", wide=True, suffix="q", ext="cqo")
 
 %def op_int_to_byte():
 %  unop(instr="movsbl  %al, %eax")
@@ -498,13 +498,13 @@ $instr
 %  unop(instr="    negl    %eax")
 
 %def op_neg_long():
-%  unop(instr="    negq    %rax", wide="1")
+%  unop(instr="    negq    %rax", wide=True)
 
 %def op_not_int():
 %  unop(instr="    notl    %eax")
 
 %def op_not_long():
-%  unop(instr="    notq    %rax", wide="1")
+%  unop(instr="    notq    %rax", wide=True)
 
 %def op_or_int():
 %  binop(instr="orl")
@@ -525,22 +525,22 @@ $instr
 %  binopWide2addr(instr="orq")
 
 %def op_rem_int():
-%  bindiv(result="%edx", second="%ecx", tmp="%eax", wide="0", suffix="l", rem="1")
+%  bindiv(result="%edx", second="%ecx", tmp="%eax", suffix="l", rem=True)
 
 %def op_rem_int_2addr():
-%  bindiv2addr(result="%edx", second="%ecx", tmp="%eax", wide="0", suffix="l", rem="1")
+%  bindiv2addr(result="%edx", second="%ecx", tmp="%eax", suffix="l", rem=True)
 
 %def op_rem_int_lit16():
-%  bindivLit16(result="%edx", rem="1")
+%  bindivLit16(result="%edx", rem=True)
 
 %def op_rem_int_lit8():
-%  bindivLit8(result="%edx", rem="1")
+%  bindivLit8(result="%edx", rem=True)
 
 %def op_rem_long():
-%  bindiv(result="%rdx", second="%rcx", tmp="%rax", wide="1", suffix="q", ext="cqo", rem="1")
+%  bindiv(result="%rdx", second="%rcx", tmp="%rax", wide=True, suffix="q", ext="cqo", rem=True)
 
 %def op_rem_long_2addr():
-%  bindiv2addr(result="%rdx", second="%rcx", tmp="%rax", wide="1", suffix="q", rem="1", ext="cqo")
+%  bindiv2addr(result="%rdx", second="%rcx", tmp="%rax", wide=True, suffix="q", rem=True, ext="cqo")
 
 %def op_rsub_int():
 /* this op is "rsub-int", but can be thought of as "rsub-int/lit16" */
@@ -559,10 +559,10 @@ $instr
 %  binopLit8(instr="sall    %cl, %eax")
 
 %def op_shl_long():
-%  binop1(instr="salq    %cl, %rax", wide="1")
+%  binop1(instr="salq    %cl, %rax", wide=True)
 
 %def op_shl_long_2addr():
-%  shop2addr(instr="salq    %cl, %rax", wide="1")
+%  shop2addr(instr="salq    %cl, %rax", wide=True)
 
 %def op_shr_int():
 %  binop1(instr="sarl    %cl, %eax")
@@ -574,10 +574,10 @@ $instr
 %  binopLit8(instr="sarl    %cl, %eax")
 
 %def op_shr_long():
-%  binop1(instr="sarq    %cl, %rax", wide="1")
+%  binop1(instr="sarq    %cl, %rax", wide=True)
 
 %def op_shr_long_2addr():
-%  shop2addr(instr="sarq    %cl, %rax", wide="1")
+%  shop2addr(instr="sarq    %cl, %rax", wide=True)
 
 %def op_sub_int():
 %  binop(instr="subl")
@@ -601,10 +601,10 @@ $instr
 %  binopLit8(instr="shrl    %cl, %eax")
 
 %def op_ushr_long():
-%  binop1(instr="shrq    %cl, %rax", wide="1")
+%  binop1(instr="shrq    %cl, %rax", wide=True)
 
 %def op_ushr_long_2addr():
-%  shop2addr(instr="shrq    %cl, %rax", wide="1")
+%  shop2addr(instr="shrq    %cl, %rax", wide=True)
 
 %def op_xor_int():
 %  binop(instr="xorl")

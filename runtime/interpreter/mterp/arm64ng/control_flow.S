@@ -17,7 +17,7 @@
     PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
     GOTO_OPCODE                         // jump to next instruction
 
-%def zcmp(compare="1", branch=""):
+%def zcmp(compare=False, branch=""):
     /*
      * Generic one-operand compare-and-branch operation.  Provide a "condition"
      * fragment that specifies the comparison to perform.
@@ -80,37 +80,37 @@
 %  bincmp(condition="eq")
 
 %def op_if_eqz():
-%  zcmp(compare="0", branch="cbz     w2,")
+%  zcmp(branch="cbz     w2,")
 
 %def op_if_ge():
 %  bincmp(condition="ge")
 
 %def op_if_gez():
-%  zcmp(compare="0", branch="tbz     w2, #31,")
+%  zcmp(branch="tbz     w2, #31,")
 
 %def op_if_gt():
 %  bincmp(condition="gt")
 
 %def op_if_gtz():
-%  zcmp(branch="b.gt")
+%  zcmp(compare=True, branch="b.gt")
 
 %def op_if_le():
 %  bincmp(condition="le")
 
 %def op_if_lez():
-%  zcmp(branch="b.le")
+%  zcmp(compare=True, branch="b.le")
 
 %def op_if_lt():
 %  bincmp(condition="lt")
 
 %def op_if_ltz():
-%  zcmp(compare="0", branch="tbnz    w2, #31,")
+%  zcmp(branch="tbnz    w2, #31,")
 
 %def op_if_ne():
 %  bincmp(condition="ne")
 
 %def op_if_nez():
-%  zcmp(compare="0", branch="cbnz    w2,")
+%  zcmp(branch="cbnz    w2,")
 
 %def op_packed_switch(func="NterpDoPackedSwitch"):
 /*
@@ -139,7 +139,7 @@
 /*
  * Return a 32-bit value.
  */
-%def op_return(is_object="0", is_void="0", is_wide="0"):
+%def op_return(is_object=False, is_void=False, is_wide=False):
     .if $is_void
       // Thread fence for constructor
       dmb ishst
@@ -177,13 +177,13 @@
     .endif
 
 %def op_return_object():
-%  op_return(is_object="1", is_void="0", is_wide="0")
+%  op_return(is_object=True)
 
 %def op_return_void():
-%  op_return(is_object="0", is_void="1", is_wide="0")
+%  op_return(is_void=True)
 
 %def op_return_wide():
-%  op_return(is_object="0", is_void="0", is_wide="1")
+%  op_return(is_wide=True)
 
 %def op_throw():
   EXPORT_PC

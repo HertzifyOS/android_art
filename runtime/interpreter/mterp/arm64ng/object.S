@@ -151,18 +151,18 @@
    GOTO_OPCODE
 
 %def op_iget_boolean():
-%  op_iget(load="ldrb", volatile_load="ldarb", maybe_extend="", wide="0", is_object="0")
+%  op_iget(load="ldrb", volatile_load="ldarb", maybe_extend="")
 
 %def op_iget_byte():
-%  op_iget(load="ldrsb", volatile_load="ldarb", maybe_extend="sxtb w0, w0", wide="0", is_object="0")
+%  op_iget(load="ldrsb", volatile_load="ldarb", maybe_extend="sxtb w0, w0")
 
 %def op_iget_char():
-%  op_iget(load="ldrh", volatile_load="ldarh", maybe_extend="", wide="0", is_object="0")
+%  op_iget(load="ldrh", volatile_load="ldarh", maybe_extend="")
 
 %def op_iget_short():
-%  op_iget(load="ldrsh", volatile_load="ldarh", maybe_extend="sxth w0, w0", wide="0", is_object="0")
+%  op_iget(load="ldrsh", volatile_load="ldarh", maybe_extend="sxth w0, w0")
 
-%def op_iget(load="ldr", volatile_load="ldar", maybe_extend="", wide="0", is_object="0"):
+%def op_iget(load="ldr", volatile_load="ldar", maybe_extend="", wide=False, is_object=False):
 %  slow_path = add_slow_path(op_iget_slow_path, volatile_load, maybe_extend, wide, is_object)
    // Fast-path which gets the field from thread-local cache.
 %  fetch_from_thread_cache("x0", miss_label=slow_path)
@@ -247,24 +247,24 @@
    .endif
 
 %def op_iget_wide():
-%  op_iget(load="ldr", volatile_load="ldar", maybe_extend="", wide="1", is_object="0")
+%  op_iget(load="ldr", volatile_load="ldar", maybe_extend="", wide=True)
 
 %def op_iget_object():
-%  op_iget(load="ldr", volatile_load="ldar", maybe_extend="", wide="0", is_object="1")
+%  op_iget(load="ldr", volatile_load="ldar", maybe_extend="", is_object=True)
 
 %def op_iput_boolean():
-%  op_iput(store="strb", volatile_store="stlrb", wide="0", is_object="0")
+%  op_iput(store="strb", volatile_store="stlrb")
 
 %def op_iput_byte():
-%  op_iput(store="strb", volatile_store="stlrb", wide="0", is_object="0")
+%  op_iput(store="strb", volatile_store="stlrb")
 
 %def op_iput_char():
-%  op_iput(store="strh", volatile_store="stlrh", wide="0", is_object="0")
+%  op_iput(store="strh", volatile_store="stlrh")
 
 %def op_iput_short():
-%  op_iput(store="strh", volatile_store="stlrh", wide="0", is_object="0")
+%  op_iput(store="strh", volatile_store="stlrh")
 
-%def op_iput(store="str", volatile_store="stlr", wide="0", is_object="0"):
+%def op_iput(store="str", volatile_store="stlr", wide=False, is_object=False):
 %  slow_path = add_slow_path(op_iput_slow_path, volatile_store, wide, is_object)
    // Fast-path which gets the field from thread-local cache.
 %  fetch_from_thread_cache("x0", miss_label=slow_path)
@@ -355,24 +355,24 @@
    GOTO_OPCODE
 
 %def op_iput_wide():
-%  op_iput(store="str", volatile_store="stlr", wide="1", is_object="0")
+%  op_iput(store="str", volatile_store="stlr", wide=True)
 
 %def op_iput_object():
-%  op_iput(store="str", volatile_store="stlr", wide="0", is_object="1")
+%  op_iput(store="str", volatile_store="stlr", is_object=True)
 
 %def op_sget_boolean():
-%  op_sget(load="ldrb", volatile_load="ldarb", maybe_extend="", wide="0", is_object="0")
+%  op_sget(load="ldrb", volatile_load="ldarb", maybe_extend="")
 
 %def op_sget_byte():
-%  op_sget(load="ldrsb", volatile_load="ldarb", maybe_extend="sxtb w0, w0", wide="0", is_object="0")
+%  op_sget(load="ldrsb", volatile_load="ldarb", maybe_extend="sxtb w0, w0")
 
 %def op_sget_char():
-%  op_sget(load="ldrh", volatile_load="ldarh", maybe_extend="", wide="0", is_object="0")
+%  op_sget(load="ldrh", volatile_load="ldarh", maybe_extend="")
 
 %def op_sget_short():
-%  op_sget(load="ldrsh", volatile_load="ldarh", maybe_extend="sxth w0, w0", wide="0", is_object="0")
+%  op_sget(load="ldrsh", volatile_load="ldarh", maybe_extend="sxth w0, w0")
 
-%def op_sget(load="ldr", volatile_load="ldar", maybe_extend="", wide="0", is_object="0"):
+%def op_sget(load="ldr", volatile_load="ldar", maybe_extend="", wide=False, is_object=False):
 %  slow_path = add_slow_path(op_sget_slow_path, load, volatile_load, maybe_extend, wide, is_object)
    // Fast-path which gets the field from thread-local cache.
 %  fetch_from_thread_cache("x0", miss_label=slow_path)
@@ -471,24 +471,24 @@
    .endif
 
 %def op_sget_wide():
-%  op_sget(load="ldr", volatile_load="ldar", maybe_extend="", wide="1", is_object="0")
+%  op_sget(load="ldr", volatile_load="ldar", maybe_extend="", wide=True)
 
 %def op_sget_object():
-%  op_sget(load="ldr", volatile_load="ldar", maybe_extend="", wide="0", is_object="1")
+%  op_sget(load="ldr", volatile_load="ldar", maybe_extend="", is_object=True)
 
 %def op_sput_boolean():
-%  op_sput(store="strb", volatile_store="stlrb", wide="0", is_object="0")
+%  op_sput(store="strb", volatile_store="stlrb")
 
 %def op_sput_byte():
-%  op_sput(store="strb", volatile_store="stlrb", wide="0", is_object="0")
+%  op_sput(store="strb", volatile_store="stlrb")
 
 %def op_sput_char():
-%  op_sput(store="strh", volatile_store="stlrh", wide="0", is_object="0")
+%  op_sput(store="strh", volatile_store="stlrh")
 
 %def op_sput_short():
-%  op_sput(store="strh", volatile_store="stlrh", wide="0", is_object="0")
+%  op_sput(store="strh", volatile_store="stlrh")
 
-%def op_sput(store="str", volatile_store="stlr", wide="0", is_object="0"):
+%def op_sput(store="str", volatile_store="stlr", wide=False, is_object=False):
 %  slow_path = add_slow_path(op_sput_slow_path, volatile_store, wide, is_object)
    lsr     wINST, wINST, #8            // wINST <- A
    // Fast-path which gets the field from thread-local cache.
@@ -582,10 +582,10 @@
    b       .L${opcode}_resume_after_read_barrier
 
 %def op_sput_wide():
-%  op_sput(store="str", volatile_store="stlr", wide="1", is_object="0")
+%  op_sput(store="str", volatile_store="stlr", wide=True)
 
 %def op_sput_object():
-%  op_sput(store="str", volatile_store="stlr", wide="0", is_object="1")
+%  op_sput(store="str", volatile_store="stlr", is_object=True)
 
 %def op_new_instance():
 %  slow_path = add_slow_path(op_new_instance_slow_path)

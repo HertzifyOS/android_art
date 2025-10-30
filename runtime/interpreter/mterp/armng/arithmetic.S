@@ -1,4 +1,4 @@
-%def binop(preinstr="", result="r0", chkzero="0", instr=""):
+%def binop(preinstr="", result="r0", chkzero=False, instr=""):
     /*
      * Generic 32-bit binary operation.  Provide an "instr" line that
      * specifies an instruction that performs "result = r0 op r1".
@@ -34,7 +34,7 @@
     GOTO_OPCODE ip                      @ jump to next instruction
     /* 11-14 instructions */
 
-%def binop2addr(preinstr="", result="r0", chkzero="0", instr=""):
+%def binop2addr(preinstr="", result="r0", chkzero=False, instr=""):
     /*
      * Generic 32-bit "/2addr" binary operation.  Provide an "instr" line
      * that specifies an instruction that performs "result = r0 op r1".
@@ -67,7 +67,7 @@
     GOTO_OPCODE ip                      @ jump to next instruction
     /* 10-13 instructions */
 
-%def binopLit16(result="r0", chkzero="0", instr=""):
+%def binopLit16(result="r0", chkzero=False, instr=""):
     /*
      * Generic 32-bit "lit16" binary operation.  Provide an "instr" line
      * that specifies an instruction that performs "result = r0 op r1".
@@ -97,7 +97,7 @@
     GOTO_OPCODE ip                      @ jump to next instruction
     /* 10-13 instructions */
 
-%def binopLit8(extract="asr     r1, r3, #8", result="r0", chkzero="0", instr=""):
+%def binopLit8(extract="asr     r1, r3, #8", result="r0", chkzero=False, instr=""):
     /*
      * Generic 32-bit "lit8" binary operation.  Provide an "instr" line
      * that specifies an instruction that performs "result = r0 op r1".
@@ -133,7 +133,7 @@
     GOTO_OPCODE ip                      @ jump to next instruction
     /* 10-12 instructions */
 
-%def binopWide(preinstr="", result0="r0", result1="r1", chkzero="0", instr=""):
+%def binopWide(preinstr="", result0="r0", result1="r1", chkzero=False, instr=""):
     /*
      * Generic 64-bit binary operation.  Provide an "instr" line that
      * specifies an instruction that performs "result = r0-r1 op r2-r3".
@@ -172,7 +172,7 @@
     GOTO_OPCODE ip                      @ jump to next instruction
     /* 14-17 instructions */
 
-%def binopWide2addr(preinstr="", result0="r0", result1="r1", chkzero="0", instr=""):
+%def binopWide2addr(preinstr="", result0="r0", result1="r1", chkzero=False, instr=""):
     /*
      * Generic 64-bit "/2addr" binary operation.  Provide an "instr" line
      * that specifies an instruction that performs "result = r0-r1 op r2-r3".
@@ -482,10 +482,10 @@
     /* 10-12 instructions */
 
 %def op_div_long():
-%  binopWide(instr="bl      __aeabi_ldivmod", chkzero="1")
+%  binopWide(instr="bl      __aeabi_ldivmod", chkzero=True)
 
 %def op_div_long_2addr():
-%  binopWide2addr(instr="bl      __aeabi_ldivmod", chkzero="1")
+%  binopWide2addr(instr="bl      __aeabi_ldivmod", chkzero=True)
 
 %def op_int_to_byte():
 %  unop(instr="sxtb    r0, r0")
@@ -750,11 +750,11 @@
 
 %def op_rem_long():
 /* ldivmod returns quotient in r0/r1 and remainder in r2/r3 */
-%  binopWide(instr="bl      __aeabi_ldivmod", result0="r2", result1="r3", chkzero="1")
+%  binopWide(instr="bl      __aeabi_ldivmod", result0="r2", result1="r3", chkzero=True)
 
 %def op_rem_long_2addr():
 /* ldivmod returns quotient in r0/r1 and remainder in r2/r3 */
-%  binopWide2addr(instr="bl      __aeabi_ldivmod", result0="r2", result1="r3", chkzero="1")
+%  binopWide2addr(instr="bl      __aeabi_ldivmod", result0="r2", result1="r3", chkzero=True)
 
 %def op_rsub_int():
 /* this op is "rsub-int", but can be thought of as "rsub-int/lit16" */

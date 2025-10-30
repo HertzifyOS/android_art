@@ -74,7 +74,7 @@ def generate_script(output_filename, input_filenames):
         if line.endswith(":"):
           indent += "  "
       else:
-        line = escape_re.sub(r"''' + \g<name> + '''", line)
+        line = escape_re.sub(r"''' + to_string(\g<name>) + '''", line)
         line = line.replace("\\", "\\\\")
         line = line.replace("$$", "$")
         script.write(indent + "write_line('''" + line + "''')\n")

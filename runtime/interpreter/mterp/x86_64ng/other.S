@@ -28,7 +28,7 @@
     SET_VREG %eax, rINSTq                   # vAA <- eax
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 
-%def op_const_object(jumbo="0", helper="nterp_load_object"):
+%def op_const_object(jumbo=False, helper="nterp_load_object"):
 %  slow_path = add_slow_path(op_const_object_slow_path, helper)
    // Fast-path which gets the object from thread-local cache.
 %  fetch_from_thread_cache("%rax", miss_label=slow_path)
@@ -55,21 +55,21 @@
    jmp .L${opcode}_resume
 
 %def op_const_class():
-%  op_const_object(jumbo="0", helper="nterp_get_class")
+%  op_const_object(helper="nterp_get_class")
 
 %def op_const_method_handle():
-%  op_const_object(jumbo="0")
+%  op_const_object()
 
 %def op_const_method_type():
-%  op_const_object(jumbo="0")
+%  op_const_object()
 
 %def op_const_string():
    /* const/string vAA, String@BBBB */
-%  op_const_object(jumbo="0")
+%  op_const_object()
 
 %def op_const_string_jumbo():
    /* const/string vAA, String@BBBBBBBB */
-%  op_const_object(jumbo="1")
+%  op_const_object(jumbo=True)
 
 %def op_const_wide():
     /* const-wide vAA, #+HHHHhhhhBBBBbbbb */
@@ -120,7 +120,7 @@
     call art_quick_unlock_object
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
-%def op_move(is_object="0"):
+%def op_move(is_object=False):
     /* for move, move-object, long-to-int */
     /* op vA, vB */
     movl    rINST, %eax                     # eax <- BA
@@ -134,7 +134,7 @@
     .endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
-%def op_move_16(is_object="0"):
+%def op_move_16(is_object=False):
     /* for: move/16, move-object/16 */
     /* op vAAAA, vBBBB */
     movzwq  4(rPC), %rcx                    # ecx <- BBBB
@@ -154,7 +154,7 @@
     movl    $$0, rSELF:THREAD_EXCEPTION_OFFSET
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
-%def op_move_from16(is_object="0"):
+%def op_move_from16(is_object=False):
     /* for: move/from16, move-object/from16 */
     /* op vAA, vBBBB */
     movzwq  2(rPC), %rax                    # eax <- BBBB
@@ -167,15 +167,15 @@
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 
 %def op_move_object():
-%  op_move(is_object="1")
+%  op_move(is_object=True)
 
 %def op_move_object_16():
-%  op_move_16(is_object="1")
+%  op_move_16(is_object=True)
 
 %def op_move_object_from16():
-%  op_move_from16(is_object="1")
+%  op_move_from16(is_object=True)
 
-%def op_move_result(is_object="0"):
+%def op_move_result(is_object=False):
     /* for: move-result, move-result-object */
     /* op vAA */
     .if $is_object
@@ -186,7 +186,7 @@
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
 %def op_move_result_object():
-%  op_move_result(is_object="1")
+%  op_move_result(is_object=True)
 
 %def op_move_result_wide():
     /* move-result-wide vAA */

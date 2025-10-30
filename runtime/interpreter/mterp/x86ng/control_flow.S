@@ -129,7 +129,7 @@
 /*
  * Return a 32-bit value.
  */
-%def op_return(is_object="0"):
+%def op_return(is_object=False):
     GET_VREG %eax, rINST                    # eax <- vAA
     .if !$is_object
     // In case we're going back to compiled code, put the
@@ -146,7 +146,7 @@
     NTERP_DEF_CFA CFI_REFS
 
 %def op_return_object():
-%  op_return(is_object="1")
+%  op_return(is_object=True)
 
 %def op_return_void():
     // Thread fence for constructor is a no-op on x86_64.

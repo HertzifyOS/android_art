@@ -31,6 +31,9 @@ opnum = ""
 def write_line(line):
   out.write(line + "\n")
 
+def to_string(value):
+  return str(int(value)) if isinstance(value, bool) else str(value)
+
 def balign():
   write_line("    .balign {}".format(handler_size_bytes))
 

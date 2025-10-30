@@ -40,7 +40,7 @@
     GET_INST_OPCODE ip                  @ extract opcode from rINST
     GOTO_OPCODE ip                      @ jump to next instruction
 
-%def op_const_object(jumbo="0", helper="nterp_load_object"):
+%def op_const_object(jumbo=False, helper="nterp_load_object"):
 %  slow_path = add_slow_path(op_const_object_slow_path, helper)
    // Fast-path which gets the object from thread-local cache.
 %  fetch_from_thread_cache("r0", miss_label=slow_path)
@@ -69,21 +69,21 @@
    b .L${opcode}_resume
 
 %def op_const_class():
-%  op_const_object(jumbo="0", helper="nterp_get_class")
+%  op_const_object(helper="nterp_get_class")
 
 %def op_const_method_handle():
-%  op_const_object(jumbo="0")
+%  op_const_object()
 
 %def op_const_method_type():
-%  op_const_object(jumbo="0")
+%  op_const_object()
 
 %def op_const_string():
    /* const/string vAA, String@BBBB */
-%  op_const_object(jumbo="0")
+%  op_const_object()
 
 %def op_const_string_jumbo():
    /* const/string vAA, String@BBBBBBBB */
-%  op_const_object(jumbo="1")
+%  op_const_object(jumbo=True)
 
 %def op_const_wide():
     /* const-wide vAA, #+HHHHhhhhBBBBbbbb */
@@ -170,7 +170,7 @@
     GET_INST_OPCODE ip                  @ extract opcode from rINST
     GOTO_OPCODE ip                      @ jump to next instruction
 
-%def op_move(is_object="0"):
+%def op_move(is_object=False):
     /* for move, move-object, long-to-int */
     /* op vA, vB */
     mov     r1, rINST, lsr #12          @ r1<- B from 15:12
@@ -185,7 +185,7 @@
     .endif
     GOTO_OPCODE ip                      @ execute next instruction
 
-%def op_move_16(is_object="0"):
+%def op_move_16(is_object=False):
     /* for: move/16, move-object/16 */
     /* op vAAAA, vBBBB */
     FETCH r1, 2                         @ r1<- BBBB
@@ -211,7 +211,7 @@
     str     r1, [rSELF, #THREAD_EXCEPTION_OFFSET]  @ clear exception
     GOTO_OPCODE ip                      @ jump to next instruction
 
-%def op_move_from16(is_object="0"):
+%def op_move_from16(is_object=False):
     /* for: move/from16, move-object/from16 */
     /* op vAA, vBBBB */
     FETCH r1, 1                         @ r1<- BBBB
@@ -227,15 +227,15 @@
     GOTO_OPCODE ip                      @ jump to next instruction
 
 %def op_move_object():
-%  op_move(is_object="1")
+%  op_move(is_object=True)
 
 %def op_move_object_16():
-%  op_move_16(is_object="1")
+%  op_move_16(is_object=True)
 
 %def op_move_object_from16():
-%  op_move_from16(is_object="1")
+%  op_move_from16(is_object=True)
 
-%def op_move_result(is_object="0"):
+%def op_move_result(is_object=False):
     /* for: move-result, move-result-object */
     /* op vAA */
     mov     r2, rINST, lsr #8           @ r2<- AA
@@ -249,7 +249,7 @@
     GOTO_OPCODE ip                      @ jump to next instruction
 
 %def op_move_result_object():
-%  op_move_result(is_object="1")
+%  op_move_result(is_object=True)
 
 %def op_move_result_wide():
     /* move-result-wide vAA */

@@ -1,4 +1,4 @@
-%def binop(preinstr="", result="w0", chkzero="0", instr=""):
+%def binop(preinstr="", result="w0", chkzero=False, instr=""):
     /*
      * Generic 32-bit binary operation.  Provide an "instr" line that
      * specifies an instruction that performs "result = w0 op w1".
@@ -32,7 +32,7 @@
     GOTO_OPCODE                         // jump to next instruction
     /* 11-14 instructions */
 
-%def binop2addr(preinstr="", result="w0", chkzero="0", instr=""):
+%def binop2addr(preinstr="", result="w0", chkzero=False, instr=""):
     /*
      * Generic 32-bit "/2addr" binary operation.  Provide an "instr" line
      * that specifies an instruction that performs "result = w0 op w1".
@@ -63,7 +63,7 @@
     GOTO_OPCODE                         // jump to next instruction
     /* 10-13 instructions */
 
-%def binopLit16(preinstr="", result="w0", chkzero="0", instr=""):
+%def binopLit16(preinstr="", result="w0", chkzero=False, instr=""):
     /*
      * Generic 32-bit "lit16" binary operation.  Provide an "instr" line
      * that specifies an instruction that performs "result = w0 op w1".
@@ -92,7 +92,7 @@
     GOTO_OPCODE                         // jump to next instruction
     /* 10-13 instructions */
 
-%def binopLit8(extract="asr     w1, w3, #8", preinstr="", result="w0", chkzero="0", instr=""):
+%def binopLit8(extract="asr     w1, w3, #8", preinstr="", result="w0", chkzero=False, instr=""):
     /*
      * Generic 32-bit "lit8" binary operation.  Provide an "instr" line
      * that specifies an instruction that performs "result = w0 op w1".
@@ -127,7 +127,7 @@
     GOTO_OPCODE                         // jump to next instruction
     /* 10-12 instructions */
 
-%def binopWide(preinstr="", instr="add x0, x1, x2", result="x0", r1="x1", r2="x2", chkzero="0"):
+%def binopWide(preinstr="", instr="add x0, x1, x2", result="x0", r1="x1", r2="x2", chkzero=False):
     /*
      * Generic 64-bit binary operation.  Provide an "instr" line that
      * specifies an instruction that performs "result = x1 op x2".
@@ -159,7 +159,7 @@
     GOTO_OPCODE                           // jump to next instruction
     /* 11-14 instructions */
 
-%def binopWide2addr(preinstr="", instr="add x0, x0, x1", r0="x0", r1="x1", chkzero="0"):
+%def binopWide2addr(preinstr="", instr="add x0, x0, x1", r0="x0", r1="x1", chkzero=False):
     /*
      * Generic 64-bit "/2addr" binary operation.  Provide an "instr" line
      * that specifies an instruction that performs "x0 = x0 op x1".
@@ -316,22 +316,22 @@
     GOTO_OPCODE                         // jump to next instruction
 
 %def op_div_int():
-%  binop(instr="sdiv     w0, w0, w1", chkzero="1")
+%  binop(instr="sdiv     w0, w0, w1", chkzero=True)
 
 %def op_div_int_2addr():
-%  binop2addr(instr="sdiv     w0, w0, w1", chkzero="1")
+%  binop2addr(instr="sdiv     w0, w0, w1", chkzero=True)
 
 %def op_div_int_lit16():
-%  binopLit16(instr="sdiv w0, w0, w1", chkzero="1")
+%  binopLit16(instr="sdiv w0, w0, w1", chkzero=True)
 
 %def op_div_int_lit8():
-%  binopLit8(instr="sdiv     w0, w0, w1", chkzero="1")
+%  binopLit8(instr="sdiv     w0, w0, w1", chkzero=True)
 
 %def op_div_long():
-%  binopWide(instr="sdiv x0, x1, x2", chkzero="1")
+%  binopWide(instr="sdiv x0, x1, x2", chkzero=True)
 
 %def op_div_long_2addr():
-%  binopWide2addr(instr="sdiv     x0, x0, x1", chkzero="1")
+%  binopWide2addr(instr="sdiv     x0, x0, x1", chkzero=True)
 
 %def op_int_to_byte():
 %  unop(instr="sxtb    w0, w0")
@@ -409,22 +409,22 @@
 %  binopWide2addr(instr="orr     x0, x0, x1")
 
 %def op_rem_int():
-%  binop(preinstr="sdiv     w2, w0, w1", instr="msub w0, w2, w1, w0", chkzero="1")
+%  binop(preinstr="sdiv     w2, w0, w1", instr="msub w0, w2, w1, w0", chkzero=True)
 
 %def op_rem_int_2addr():
-%  binop2addr(preinstr="sdiv     w2, w0, w1", instr="msub w0, w2, w1, w0", chkzero="1")
+%  binop2addr(preinstr="sdiv     w2, w0, w1", instr="msub w0, w2, w1, w0", chkzero=True)
 
 %def op_rem_int_lit16():
-%  binopLit16(preinstr="sdiv w3, w0, w1", instr="msub w0, w3, w1, w0", chkzero="1")
+%  binopLit16(preinstr="sdiv w3, w0, w1", instr="msub w0, w3, w1, w0", chkzero=True)
 
 %def op_rem_int_lit8():
-%  binopLit8(preinstr="sdiv w3, w0, w1", instr="msub w0, w3, w1, w0", chkzero="1")
+%  binopLit8(preinstr="sdiv w3, w0, w1", instr="msub w0, w3, w1, w0", chkzero=True)
 
 %def op_rem_long():
-%  binopWide(preinstr="sdiv x3, x1, x2", instr="msub x0, x3, x2, x1", chkzero="1")
+%  binopWide(preinstr="sdiv x3, x1, x2", instr="msub x0, x3, x2, x1", chkzero=True)
 
 %def op_rem_long_2addr():
-%  binopWide2addr(preinstr="sdiv x3, x0, x1", instr="msub x0, x3, x1, x0", chkzero="1")
+%  binopWide2addr(preinstr="sdiv x3, x0, x1", instr="msub x0, x3, x1, x0", chkzero=True)
 
 %def op_rsub_int():
 /* this op is "rsub-int", but can be thought of as "rsub-int/lit16" */

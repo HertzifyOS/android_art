@@ -1,4 +1,4 @@
-%def bindiv(result="", special="", rem=""):
+%def bindiv(result="", special="", rem=False):
 /*
  * 32-bit binary div/rem operation.  Handles special case of op0=minint and
  * op1=-1.
@@ -262,7 +262,7 @@
     CLEAR_WIDE_REF rINST
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
-%def cvtfp_int(srcdouble="1", tgtlong="1"):
+%def cvtfp_int(srcdouble=False, tgtlong=False):
 /* On fp to int conversions, Java requires that
  * if the result > maxint, it should be clamped to maxint.  If it is less
  * than minint, it should be clamped to minint.  If it is a nan, the result
@@ -420,7 +420,7 @@
     jmp     .L${opcode}_finish
 
 %def op_div_int():
-%  bindiv(result="%eax", special="$0x80000000", rem="0")
+%  bindiv(result="%eax", special="$0x80000000")
 
 %def op_div_int_2addr():
 %  bindiv2addr(result="%eax", special="$0x80000000")
@@ -684,7 +684,7 @@
 %  binopWide2addr(instr1="orl", instr2="orl")
 
 %def op_rem_int():
-%  bindiv(result="rIBASE", special="$0", rem="1")
+%  bindiv(result="rIBASE", special="$0", rem=True)
 
 %def op_rem_int_2addr():
 %  bindiv2addr(result="rIBASE", special="$0")
