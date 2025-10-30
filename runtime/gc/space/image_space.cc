@@ -593,17 +593,17 @@ class ImageSpace::Relocator {
  private:
   class SimpleRelocateVisitor {
    public:
-    SimpleRelocateVisitor(uint32_t diff, uint32_t begin, uint32_t size)
-        : diff_(diff), begin_(begin), size_(size) {}
+    SimpleRelocateVisitor(uintptr_t begin, uintptr_t size, uintptr_t diff)
+        : begin_(begin), size_(size), diff_(diff) {}
 
     // Adapter taking the same arguments as SplitRangeRelocateVisitor
     // to simplify constructing the various visitors in RelocateBootImage().
-    SimpleRelocateVisitor(uint32_t base_diff,
-                          uint32_t current_diff,
-                          uint32_t bound,
-                          uint32_t begin,
-                          uint32_t size)
-        : SimpleRelocateVisitor(base_diff, begin, size) {
+    SimpleRelocateVisitor(uintptr_t begin,
+                          uintptr_t size,
+                          uintptr_t bound,
+                          uintptr_t base_diff,
+                          uintptr_t current_diff)
+        : SimpleRelocateVisitor(begin, size, base_diff) {
       // Check arguments unused by this class.
       DCHECK_EQ(base_diff, current_diff);
       DCHECK_EQ(bound, begin);
@@ -612,41 +612,41 @@ class ImageSpace::Relocator {
     template <typename T>
     ALWAYS_INLINE T* operator()(T* src) const {
       DCHECK(InSource(src));
-      uint32_t raw_src = reinterpret_cast32<uint32_t>(src);
-      return reinterpret_cast32<T*>(raw_src + diff_);
+      uintptr_t raw_src = reinterpret_cast<uintptr_t>(src);
+      return reinterpret_cast<T*>(raw_src + diff_);
     }
 
     template <typename T>
     ALWAYS_INLINE bool InSource(T* ptr) const {
-      uint32_t raw_ptr = reinterpret_cast32<uint32_t>(ptr);
+      uintptr_t raw_ptr = reinterpret_cast<uintptr_t>(ptr);
       return raw_ptr - begin_ < size_;
     }
 
     template <typename T>
     ALWAYS_INLINE bool InDest(T* ptr) const {
-      uint32_t raw_ptr = reinterpret_cast32<uint32_t>(ptr);
-      uint32_t src_ptr = raw_ptr - diff_;
+      uintptr_t raw_ptr = reinterpret_cast<uintptr_t>(ptr);
+      uintptr_t src_ptr = raw_ptr - diff_;
       return src_ptr - begin_ < size_;
     }
 
    private:
-    const uint32_t diff_;
-    const uint32_t begin_;
-    const uint32_t size_;
+    const uintptr_t begin_;
+    const uintptr_t size_;
+    const uintptr_t diff_;
   };
 
   class SplitRangeRelocateVisitor {
    public:
-    SplitRangeRelocateVisitor(uint32_t base_diff,
-                              uint32_t current_diff,
-                              uint32_t bound,
-                              uint32_t begin,
-                              uint32_t size)
-        : base_diff_(base_diff),
-          current_diff_(current_diff),
+    SplitRangeRelocateVisitor(uintptr_t begin,
+                              uintptr_t size,
+                              uintptr_t bound,
+                              uintptr_t base_diff,
+                              uintptr_t current_diff)
+        : begin_(begin),
+          size_(size),
           bound_(bound),
-          begin_(begin),
-          size_(size) {
+          base_diff_(base_diff),
+          current_diff_(current_diff) {
       DCHECK_NE(begin_, bound_);
       // The bound separates the boot image range and the extension range.
       DCHECK_LT(bound_ - begin_, size_);
@@ -655,23 +655,23 @@ class ImageSpace::Relocator {
     template <typename T>
     ALWAYS_INLINE T* operator()(T* src) const {
       DCHECK(InSource(src));
-      uint32_t raw_src = reinterpret_cast32<uint32_t>(src);
-      uint32_t diff = (raw_src < bound_) ? base_diff_ : current_diff_;
-      return reinterpret_cast32<T*>(raw_src + diff);
+      uintptr_t raw_src = reinterpret_cast<uintptr_t>(src);
+      uintptr_t diff = (raw_src < bound_) ? base_diff_ : current_diff_;
+      return reinterpret_cast<T*>(raw_src + diff);
     }
 
     template <typename T>
     ALWAYS_INLINE bool InSource(T* ptr) const {
-      uint32_t raw_ptr = reinterpret_cast32<uint32_t>(ptr);
+      uintptr_t raw_ptr = reinterpret_cast<uintptr_t>(ptr);
       return raw_ptr - begin_ < size_;
     }
 
    private:
-    const uint32_t base_diff_;
-    const uint32_t current_diff_;
-    const uint32_t bound_;
-    const uint32_t begin_;
-    const uint32_t size_;
+    const uintptr_t begin_;
+    const uintptr_t size_;
+    const uintptr_t bound_;
+    const uintptr_t base_diff_;
+    const uintptr_t current_diff_;
   };
 
   static void** PointerAddress(ArtMethod* method, MemberOffset offset) {
@@ -800,16 +800,16 @@ void ImageSpace::Relocator::RelocateBootImage(
   if (base_diff64 == 0 && current_diff64 == 0) {
     return;
   }
-  uint32_t base_diff = static_cast<uint32_t>(base_diff64);
-  uint32_t current_diff = static_cast<uint32_t>(current_diff64);
+  uintptr_t base_diff = static_cast<uintptr_t>(base_diff64);
+  uintptr_t current_diff = static_cast<uintptr_t>(current_diff64);
 
   // For boot image the main visitor is a SimpleRelocateVisitor. For the boot image extension we
   // mostly use a SplitRangeRelocateVisitor but some work can still use the SimpleRelocateVisitor.
   using MainRelocateVisitor = typename std::conditional<
       kExtension, SplitRangeRelocateVisitor, SimpleRelocateVisitor>::type;
-  SimpleRelocateVisitor simple_relocate_visitor(current_diff, image_begin, image_size);
+  SimpleRelocateVisitor simple_relocate_visitor(image_begin, image_size, current_diff);
   MainRelocateVisitor main_relocate_visitor(
-      base_diff, current_diff, /*bound=*/ image_begin, source_begin, source_size);
+      source_begin, source_size, /*bound=*/ image_begin, base_diff, current_diff);
 
   using MainPatchRelocateVisitor = PatchObjectVisitor<kPointerSize, MainRelocateVisitor>;
   using SimplePatchRelocateVisitor = PatchObjectVisitor<kPointerSize, SimpleRelocateVisitor>;
@@ -830,9 +830,9 @@ void ImageSpace::Relocator::RelocateBootImage(
     DCHECK(!patched_objects->Test(image_roots.Ptr()));
 
     SimpleRelocateVisitor base_relocate_visitor(
-        base_diff,
         source_begin,
-        kExtension ? source_size - image_size : image_size);
+        kExtension ? source_size - image_size : image_size,
+        base_diff);
     int32_t class_roots_index = enum_cast<int32_t>(ImageHeader::kClassRoots);
     DCHECK_LT(class_roots_index, image_roots->GetLength<kVerifyNone>());
     class_roots = ObjPtr<mirror::ObjectArray<mirror::Class>>::DownCast(base_relocate_visitor(
