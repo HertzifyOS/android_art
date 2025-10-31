@@ -17,6 +17,7 @@
 #ifndef ART_RUNTIME_MIRROR_CLASS_H_
 #define ART_RUNTIME_MIRROR_CLASS_H_
 
+#include <atomic>
 #include <string_view>
 
 #include "base/bit_utils.h"
@@ -80,6 +81,8 @@ template <typename T> struct alignas(8) DexCachePair;
 
 // C++ mirror of java.lang.Class
 class EXPORT MANAGED Class final : public Object {
+  // Most member functions are not declared const, even if they logically are const, since they
+  // require Java object accesses, and read barriers may modify the object.
  public:
   MIRROR_CLASS("Ljava/lang/Class;");
 
@@ -632,7 +635,7 @@ class EXPORT MANAGED Class final : public Object {
     return OFFSET_OF_OBJECT_MEMBER(Class, object_size_alloc_fast_path_);
   }
   static constexpr MemberOffset ClinitThreadIdOffset() {
-    return OFFSET_OF_OBJECT_MEMBER(Class, clinit_thread_id_);
+    return OFFSET_OF_OBJECT_MEMBER(Class, clinit_thread_id_or_hash_);
   }
 
   ALWAYS_INLINE void SetObjectSize(uint32_t new_object_size) REQUIRES_SHARED(Locks::mutator_lock_);
@@ -1175,11 +1178,7 @@ class EXPORT MANAGED Class final : public Object {
                                                                bool force_resolve)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
-
-  pid_t GetClinitThreadId() REQUIRES_SHARED(Locks::mutator_lock_) {
-    DCHECK(IsIdxLoaded() || IsErroneous()) << PrettyClass();
-    return GetField32(OFFSET_OF_OBJECT_MEMBER(Class, clinit_thread_id_));
-  }
+  pid_t GetClinitThreadId() REQUIRES_SHARED(Locks::mutator_lock_);
 
   void SetClinitThreadId(pid_t new_clinit_thread_id) REQUIRES_SHARED(Locks::mutator_lock_);
 
@@ -1272,7 +1271,16 @@ class EXPORT MANAGED Class final : public Object {
   bool DescriptorEquals(ObjPtr<mirror::Class> match) REQUIRES_SHARED(Locks::mutator_lock_);
   bool DescriptorEquals(std::string_view match) REQUIRES_SHARED(Locks::mutator_lock_);
 
+  // Look up cached descriptor hash, or recompute if that hasn't yet been initialized.
+  // May update the cache, but that is not guaranteed.
   uint32_t DescriptorHash() REQUIRES_SHARED(Locks::mutator_lock_);
+
+  // Should be called by initializing thread once other initialization is completed, since it may
+  // reuse initialization state. Unconditionally clears the initializing thread id.
+  void CacheDescriptorHash(uint32_t hash) REQUIRES_SHARED(Locks::mutator_lock_);
+
+  // Same as above, but computes the hash itself.
+  void CacheDescriptorHash() REQUIRES_SHARED(Locks::mutator_lock_);
 
   const dex::ClassDef* GetClassDef() REQUIRES_SHARED(Locks::mutator_lock_);
 
@@ -1413,6 +1421,13 @@ class EXPORT MANAGED Class final : public Object {
 
   size_t GetProxyThrowsIndex(ArtMethod* method) REQUIRES_SHARED(Locks::mutator_lock_);
 
+  // Ensure the class does not store the thread id of the initializing thread, so that its
+  // contents are deterministic, and we can safely write it out.
+  // Used e.g. to ensure determinism when writing an image. `class_for_descr` is used only to
+  // compute the class descriptor, since `this` may not be in the Java heap, and
+  // ComputeClassDescriptor() assumes that.
+  void FixThreadId(Class* class_for_descr) REQUIRES_SHARED(Locks::mutator_lock_);
+
  private:
   template <typename SignatureType>
   static ArtMethod* FindInterfaceMethodWithSignature(ObjPtr<Class> klass,
@@ -1473,6 +1488,9 @@ class EXPORT MANAGED Class final : public Object {
   // Helper to set the status without any validity cheks.
   void SetStatusInternal(ClassStatus new_status)
       REQUIRES_SHARED(Locks::mutator_lock_) REQUIRES(!Roles::uninterruptible_);
+
+  // Compute the descriptor hash without relying on the cached value.
+  uint32_t ComputeDescriptorHash() REQUIRES_SHARED(Locks::mutator_lock_);
 
   // 'Class' Object Fields
   // Order governed by java field ordering. See art::ClassLinker::LinkFieldsHelper::LinkFields.
@@ -1563,8 +1581,22 @@ class EXPORT MANAGED Class final : public Object {
   // See also object_size_.
   uint32_t class_size_;
 
-  // Tid used to check for recursive <clinit> invocation.
-  pid_t clinit_thread_id_;
+  // The number of high bits in a tid that are guaranteed to be zero. This should be at most
+  // 32 - ceil(log2(PID_MAX_LIMIT)), where PID_MAX_LIMIT is defined as in the kernel's thread.h.
+  // This is a slightly dubious assumption, already made by some other packages.
+  // We're careful about CHECK()ing this.
+  static constexpr uint32_t kTidExtraBits = 10;
+  static constexpr uint32_t kTidUnusedBitsMask = ~((1 << (32 - kTidExtraBits)) - 1);
+
+  // Tid used to check for recursive <clinit> invocation during initialization, and briefly for
+  // circular class hierarchy check in DefineClass.  When not used to store the tid, it may be
+  // used to contain the bitwise complement of the class descriptor hash, provided the high
+  // kTidExtraBits of the hash are not all one.  Thus the high bits can be used to distinguish the
+  // two cases.  We store the complement of the hash code, instead of the hash code itself, since
+  // Java String's hashCode(), which is replicated here, has high zero bits for very short
+  // strings.  The thread id is typically accessed while holding the monitor on the class.  The
+  // hash code is accessed without synchronization.
+  std::atomic<uint32_t> clinit_thread_id_or_hash_;
   static_assert(sizeof(pid_t) == sizeof(int32_t), "java.lang.Class.clinitThreadId size check");
 
   // ClassDef index in dex file, -1 if no class definition such as an array.
