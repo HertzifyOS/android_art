@@ -29,7 +29,6 @@
 #include "base/value_object.h"
 #include "physical_register_type.h"
 #include "register_set.h"
-#include "runtime_globals.h"
 
 namespace art HIDDEN {
 
@@ -59,7 +58,7 @@ class Location : public ValueObject {
   enum Kind {
     kInvalid = 0,
     kConstant = 1,
-    kStackSlot = 2,        // 32bit stack slot.
+    kStackSlot = 2,  // 32bit stack slot.
     kDoubleStackSlot = 3,  // 64bit stack slot.
     kSIMDStackSlot = 4,  // 128bit stack slot. TODO: generalize with encoded #bytes?
 
@@ -150,8 +149,8 @@ class Location : public ValueObject {
     return Location(kCoreRegister, reg);
   }
 
-  static constexpr Location FpuRegister(int reg, int vec_len = 0) {
-    return Location(kFpuRegister, reg, vec_len);
+  static constexpr Location FpuRegister(int reg) {
+    return Location(kFpuRegister, reg);
   }
 
   static constexpr Location VecRegister(int reg) {
@@ -188,10 +187,6 @@ class Location : public ValueObject {
 
   bool IsRegister() const {
     return IsCoreRegister() || IsFpuRegister() || IsVecRegister();
-  }
-
-  bool IsFpuVecRegister() const {
-    return IsFpuRegister() && GetVecLen() > 0;
   }
 
   bool IsRegisterPair() const {
@@ -233,12 +228,6 @@ class Location : public ValueObject {
   T AsVecRegister() const {
     DCHECK(IsVecRegister());
     return static_cast<T>(reg());
-  }
-
-  template <typename T>
-  T AsFpuVecRegister() const {
-    DCHECK(IsFpuRegister());
-    return T(reg(), GetVecLen());
   }
 
   template <typename T>
@@ -336,9 +325,9 @@ class Location : public ValueObject {
     return GetKind() == kDoubleStackSlot;
   }
 
-  static Location SIMDStackSlot(intptr_t stack_index, size_t num_of_slots = 0) {
+  static Location SIMDStackSlot(intptr_t stack_index) {
     uintptr_t payload = EncodeStackIndex(stack_index);
-    Location loc(kSIMDStackSlot, payload, num_of_slots * kVRegSize);
+    Location loc(kSIMDStackSlot, payload);
     // Ensure that sign is preserved.
     DCHECK_EQ(loc.GetStackIndex(), stack_index);
     return loc;
@@ -357,7 +346,7 @@ class Location : public ValueObject {
         return DoubleStackSlot(spill_slot);
       default:
         // Assume all other stack slot sizes correspond to SIMD slot size.
-        return SIMDStackSlot(spill_slot, num_of_slots);
+        return SIMDStackSlot(spill_slot);
     }
   }
 
@@ -378,8 +367,7 @@ class Location : public ValueObject {
   }
 
   bool Equals(Location other) const {
-    // Always ignore bits for VecLen
-    return ((value_ ^ other.value_) & ~VecLenField::MaskInPlace()) == 0u;
+    return value_ == other.value_;
   }
 
   bool Contains(Location other) const {
@@ -488,37 +476,16 @@ class Location : public ValueObject {
     return GetPayload();
   }
 
-  size_t GetVecLen() const {
-    uint8_t decodedVecLen = GetVecLenAsPowerOf2();
-    return (decodedVecLen > 0) ? (1 << decodedVecLen) : 0;
-  }
-
-  uint8_t GetVecLenAsPowerOf2() const {
-    DCHECK(IsFpuRegister() || IsSIMDStackSlot());
-    return VecLenField::Decode(value_);
-  }
-
  private:
   // Number of bits required to encode Kind value.
   static constexpr uint32_t kBitsForKind = 4;
-  static constexpr uint32_t kBitsForVecLen = 4;
-  static constexpr uint32_t kBitsForPayload = kBitsPerIntPtrT - (kBitsForKind + kBitsForVecLen);
+  static constexpr uint32_t kBitsForPayload = kBitsPerIntPtrT - kBitsForKind;
   static constexpr uintptr_t kLocationConstantMask = 0x3;
 
   explicit Location(uintptr_t value) : value_(value) {}
 
-  constexpr Location(Kind kind, uintptr_t payload, size_t vec_len = 0)
-      : value_(KindField::Encode(kind) | PayloadField::Encode(payload) | VecLenField::Encode(0)) {
-    if (vec_len > 0) {
-      DCHECK(kind == kFpuRegister || kind == kSIMDStackSlot);
-      size_t vec_len_as_pow_of_2 = CTZ(vec_len);
-      DCHECK_LE(vec_len_as_pow_of_2, MaxInt<size_t>(kBitsForVecLen))
-          << "Insufficient bits to represent vector length";
-      value_ |= VecLenField::Encode(vec_len_as_pow_of_2);
-    } else {
-      DCHECK_EQ(vec_len, 0U) << "Invalid vector length on Location of kind - " << DebugString();
-    }
-  }
+  constexpr Location(Kind kind, uintptr_t payload)
+      : value_(KindField::Encode(kind) | PayloadField::Encode(payload)) {}
 
   uintptr_t GetPayload() const {
     return PayloadField::Decode(value_);
@@ -527,8 +494,7 @@ class Location : public ValueObject {
   static void DCheckInstructionIsConstant(HInstruction* instruction);
 
   using KindField = BitField<Kind, 0, kBitsForKind>;
-  using VecLenField = BitField<size_t, kBitsForKind, kBitsForVecLen>;
-  using PayloadField = BitField<uintptr_t, kBitsForKind + kBitsForVecLen, kBitsForPayload>;
+  using PayloadField = BitField<uintptr_t, kBitsForKind, kBitsForPayload>;
 
   // Layout for kUnallocated locations payload.
   using PolicyField = BitField<Policy, 0, 3>;

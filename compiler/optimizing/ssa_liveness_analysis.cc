@@ -706,6 +706,7 @@ bool LiveInterval::SameRegisterKind(Location other) const {
 }
 
 size_t LiveInterval::NumberOfSpillSlotsNeeded() const {
+  DCHECK(!IsTemp());
   DCHECK(!IsFixed());
   // For a SIMD operation, compute the number of needed spill slots.
   // TODO: do through vector type?

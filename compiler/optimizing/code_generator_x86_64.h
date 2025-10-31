@@ -214,8 +214,7 @@ class ParallelMoveResolverX86_64 : public ParallelMoveResolverWithSwap {
   void Exchange64(CpuRegister reg1, CpuRegister reg2);
   void Exchange64(CpuRegister reg, int mem);
   void Exchange64(XmmRegister reg, int mem);
-  void ExchangeSIMD(XmmRegister reg, int mem);
-  void ExchangeFPReg(XmmRegister reg1, XmmRegister reg2);
+  void Exchange128(XmmRegister reg, int mem);
   void ExchangeMemory32(int mem1, int mem2);
   void ExchangeMemory64(int mem1, int mem2, int num_of_qwords);
 
@@ -261,18 +260,6 @@ class LocationsBuilderX86_64 : public HGraphVisitor {
   InvokeDexCallingConventionVisitorX86_64 parameter_visitor_;
 
   DISALLOW_COPY_AND_ASSIGN(LocationsBuilderX86_64);
-};
-
-class SlowPathCodeX86_64 : public SlowPathCode {
- public:
-  explicit SlowPathCodeX86_64(HInstruction* instruction)
-      : SlowPathCode(instruction) {}
-
-  void SaveLiveRegisters(CodeGenerator* codegen, LocationSummary* locations) override;
-  void RestoreLiveRegisters(CodeGenerator* codegen, LocationSummary* locations) override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SlowPathCodeX86_64);
 };
 
 class InstructionCodeGeneratorX86_64 : public InstructionCodeGenerator {
@@ -324,7 +311,7 @@ class InstructionCodeGeneratorX86_64 : public InstructionCodeGenerator {
   // is the block to branch to if the suspend check is not needed, and after
   // the suspend call.
   void GenerateSuspendCheck(HSuspendCheck* instruction, HBasicBlock* successor);
-  void GenerateClassInitializationCheck(SlowPathCodeX86_64* slow_path, CpuRegister class_reg);
+  void GenerateClassInitializationCheck(SlowPathCode* slow_path, CpuRegister class_reg);
   void GenerateBitstringTypeCheckCompare(HTypeCheckInstruction* check, CpuRegister temp);
   void HandleBitwiseOperation(HBinaryOperation* operation);
   void GenerateRemFP(HRem* rem);
@@ -425,8 +412,6 @@ class CodeGeneratorX86_64 : public CodeGenerator {
   size_t RestoreCoreRegister(size_t stack_index, uint32_t reg_id) override;
   size_t SaveFloatingPointRegister(size_t stack_index, uint32_t reg_id) override;
   size_t RestoreFloatingPointRegister(size_t stack_index, uint32_t reg_id) override;
-  size_t SaveVectorRegister(size_t stack_index, Location loc);
-  size_t RestoreVectorRegister(size_t stack_index, Location loc);
 
   // Generate code to invoke a runtime entry point.
   void InvokeRuntime(QuickEntrypointEnum entrypoint,
@@ -458,8 +443,6 @@ class CodeGeneratorX86_64 : public CodeGenerator {
   size_t GetSIMDRegisterWidth() const override {
     return 2 * kX86_64WordSize;
   }
-
-  bool HasOverlappingFPVecRegisters() const override { return true; }
 
   HGraphVisitor* GetLocationBuilder() override {
     return &location_builder_;

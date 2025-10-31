@@ -48,7 +48,6 @@
 #include "utils/x86_64/assembler_x86_64.h"
 #include "utils/x86_64/constants_x86_64.h"
 #include "utils/x86_64/managed_register_x86_64.h"
-#include "base/bit_utils_iterator.h"
 
 namespace art HIDDEN {
 
@@ -79,9 +78,9 @@ static RegisterSet OneRegInReferenceOutSaveEverythingCallerSaves() {
 #define __ down_cast<X86_64Assembler*>(codegen->GetAssembler())->  // NOLINT
 #define QUICK_ENTRY_POINT(x) QUICK_ENTRYPOINT_OFFSET(kX86_64PointerSize, x).Int32Value()
 
-class NullCheckSlowPathX86_64 : public SlowPathCodeX86_64 {
+class NullCheckSlowPathX86_64 : public SlowPathCode {
  public:
-  explicit NullCheckSlowPathX86_64(HNullCheck* instruction) : SlowPathCodeX86_64(instruction) {}
+  explicit NullCheckSlowPathX86_64(HNullCheck* instruction) : SlowPathCode(instruction) {}
 
   void EmitNativeCode(CodeGenerator* codegen) override {
     CodeGeneratorX86_64* x86_64_codegen = down_cast<CodeGeneratorX86_64*>(codegen);
@@ -102,10 +101,9 @@ class NullCheckSlowPathX86_64 : public SlowPathCodeX86_64 {
   DISALLOW_COPY_AND_ASSIGN(NullCheckSlowPathX86_64);
 };
 
-class DivZeroCheckSlowPathX86_64 : public SlowPathCodeX86_64 {
+class DivZeroCheckSlowPathX86_64 : public SlowPathCode {
  public:
-  explicit DivZeroCheckSlowPathX86_64(HDivZeroCheck* instruction)
-      : SlowPathCodeX86_64(instruction) {}
+  explicit DivZeroCheckSlowPathX86_64(HDivZeroCheck* instruction) : SlowPathCode(instruction) {}
 
   void EmitNativeCode(CodeGenerator* codegen) override {
     CodeGeneratorX86_64* x86_64_codegen = down_cast<CodeGeneratorX86_64*>(codegen);
@@ -122,10 +120,10 @@ class DivZeroCheckSlowPathX86_64 : public SlowPathCodeX86_64 {
   DISALLOW_COPY_AND_ASSIGN(DivZeroCheckSlowPathX86_64);
 };
 
-class DivRemMinusOneSlowPathX86_64 : public SlowPathCodeX86_64 {
+class DivRemMinusOneSlowPathX86_64 : public SlowPathCode {
  public:
   DivRemMinusOneSlowPathX86_64(HInstruction* at, Register reg, DataType::Type type, bool is_div)
-      : SlowPathCodeX86_64(at), cpu_reg_(CpuRegister(reg)), type_(type), is_div_(is_div) {}
+      : SlowPathCode(at), cpu_reg_(CpuRegister(reg)), type_(type), is_div_(is_div) {}
 
   void EmitNativeCode(CodeGenerator* codegen) override {
     __ Bind(GetEntryLabel());
@@ -156,10 +154,10 @@ class DivRemMinusOneSlowPathX86_64 : public SlowPathCodeX86_64 {
   DISALLOW_COPY_AND_ASSIGN(DivRemMinusOneSlowPathX86_64);
 };
 
-class SuspendCheckSlowPathX86_64 : public SlowPathCodeX86_64 {
+class SuspendCheckSlowPathX86_64 : public SlowPathCode {
  public:
   SuspendCheckSlowPathX86_64(HSuspendCheck* instruction, HBasicBlock* successor)
-      : SlowPathCodeX86_64(instruction), successor_(successor) {}
+      : SlowPathCode(instruction), successor_(successor) {}
 
   void EmitNativeCode(CodeGenerator* codegen) override {
     LocationSummary* locations = instruction_->GetLocations();
@@ -194,10 +192,10 @@ class SuspendCheckSlowPathX86_64 : public SlowPathCodeX86_64 {
   DISALLOW_COPY_AND_ASSIGN(SuspendCheckSlowPathX86_64);
 };
 
-class BoundsCheckSlowPathX86_64 : public SlowPathCodeX86_64 {
+class BoundsCheckSlowPathX86_64 : public SlowPathCode {
  public:
   explicit BoundsCheckSlowPathX86_64(HBoundsCheck* instruction)
-    : SlowPathCodeX86_64(instruction) {}
+    : SlowPathCode(instruction) {}
 
   void EmitNativeCode(CodeGenerator* codegen) override {
     LocationSummary* locations = instruction_->GetLocations();
@@ -269,9 +267,9 @@ class BoundsCheckSlowPathX86_64 : public SlowPathCodeX86_64 {
   DISALLOW_COPY_AND_ASSIGN(BoundsCheckSlowPathX86_64);
 };
 
-class LoadMethodTypeSlowPathX86_64: public SlowPathCodeX86_64 {
+class LoadMethodTypeSlowPathX86_64: public SlowPathCode {
  public:
-  explicit LoadMethodTypeSlowPathX86_64(HLoadMethodType* mt) : SlowPathCodeX86_64(mt) {}
+  explicit LoadMethodTypeSlowPathX86_64(HLoadMethodType* mt) : SlowPathCode(mt) {}
 
   void EmitNativeCode(CodeGenerator* codegen) override {
     LocationSummary* locations = instruction_->GetLocations();
@@ -298,10 +296,10 @@ class LoadMethodTypeSlowPathX86_64: public SlowPathCodeX86_64 {
   DISALLOW_COPY_AND_ASSIGN(LoadMethodTypeSlowPathX86_64);
 };
 
-class LoadClassSlowPathX86_64 : public SlowPathCodeX86_64 {
+class LoadClassSlowPathX86_64 : public SlowPathCode {
  public:
   LoadClassSlowPathX86_64(HLoadClass* cls, HInstruction* at)
-      : SlowPathCodeX86_64(at), cls_(cls) {
+      : SlowPathCode(at), cls_(cls) {
     DCHECK(at->IsLoadClass() || at->IsClinitCheck());
     DCHECK_EQ(instruction_->IsLoadClass(), cls_ == instruction_);
   }
@@ -362,9 +360,9 @@ class LoadClassSlowPathX86_64 : public SlowPathCodeX86_64 {
   DISALLOW_COPY_AND_ASSIGN(LoadClassSlowPathX86_64);
 };
 
-class LoadStringSlowPathX86_64 : public SlowPathCodeX86_64 {
+class LoadStringSlowPathX86_64 : public SlowPathCode {
  public:
-  explicit LoadStringSlowPathX86_64(HLoadString* instruction) : SlowPathCodeX86_64(instruction) {}
+  explicit LoadStringSlowPathX86_64(HLoadString* instruction) : SlowPathCode(instruction) {}
 
   void EmitNativeCode(CodeGenerator* codegen) override {
     LocationSummary* locations = instruction_->GetLocations();
@@ -391,10 +389,10 @@ class LoadStringSlowPathX86_64 : public SlowPathCodeX86_64 {
   DISALLOW_COPY_AND_ASSIGN(LoadStringSlowPathX86_64);
 };
 
-class TypeCheckSlowPathX86_64 : public SlowPathCodeX86_64 {
+class TypeCheckSlowPathX86_64 : public SlowPathCode {
  public:
   TypeCheckSlowPathX86_64(HInstruction* instruction, bool is_fatal)
-      : SlowPathCodeX86_64(instruction), is_fatal_(is_fatal) {}
+      : SlowPathCode(instruction), is_fatal_(is_fatal) {}
 
   void EmitNativeCode(CodeGenerator* codegen) override {
     LocationSummary* locations = instruction_->GetLocations();
@@ -453,10 +451,10 @@ class TypeCheckSlowPathX86_64 : public SlowPathCodeX86_64 {
   DISALLOW_COPY_AND_ASSIGN(TypeCheckSlowPathX86_64);
 };
 
-class DeoptimizationSlowPathX86_64 : public SlowPathCodeX86_64 {
+class DeoptimizationSlowPathX86_64 : public SlowPathCode {
  public:
   explicit DeoptimizationSlowPathX86_64(HDeoptimize* instruction)
-      : SlowPathCodeX86_64(instruction) {}
+      : SlowPathCode(instruction) {}
 
   void EmitNativeCode(CodeGenerator* codegen) override {
     CodeGeneratorX86_64* x86_64_codegen = down_cast<CodeGeneratorX86_64*>(codegen);
@@ -477,9 +475,9 @@ class DeoptimizationSlowPathX86_64 : public SlowPathCodeX86_64 {
   DISALLOW_COPY_AND_ASSIGN(DeoptimizationSlowPathX86_64);
 };
 
-class ArraySetSlowPathX86_64 : public SlowPathCodeX86_64 {
+class ArraySetSlowPathX86_64 : public SlowPathCode {
  public:
-  explicit ArraySetSlowPathX86_64(HInstruction* instruction) : SlowPathCodeX86_64(instruction) {}
+  explicit ArraySetSlowPathX86_64(HInstruction* instruction) : SlowPathCode(instruction) {}
 
   void EmitNativeCode(CodeGenerator* codegen) override {
     LocationSummary* locations = instruction_->GetLocations();
@@ -529,12 +527,12 @@ class ArraySetSlowPathX86_64 : public SlowPathCodeX86_64 {
 // probably still be a from-space reference (unless it gets updated by
 // another thread, or if another thread installed another object
 // reference (different from `ref`) in `obj.field`).
-class ReadBarrierMarkSlowPathX86_64 : public SlowPathCodeX86_64 {
+class ReadBarrierMarkSlowPathX86_64 : public SlowPathCode {
  public:
   ReadBarrierMarkSlowPathX86_64(HInstruction* instruction,
                                 Location ref,
                                 bool unpoison_ref_before_marking)
-      : SlowPathCodeX86_64(instruction),
+      : SlowPathCode(instruction),
         ref_(ref),
         unpoison_ref_before_marking_(unpoison_ref_before_marking) {
   }
@@ -612,7 +610,7 @@ class ReadBarrierMarkSlowPathX86_64 : public SlowPathCodeX86_64 {
 // and `obj.field` will be up-to-date; i.e., after the flip, both will
 // hold the same to-space reference (unless another thread installed
 // another object reference (different from `ref`) in `obj.field`).
-class ReadBarrierMarkAndUpdateFieldSlowPathX86_64 : public SlowPathCodeX86_64 {
+class ReadBarrierMarkAndUpdateFieldSlowPathX86_64 : public SlowPathCode {
  public:
   ReadBarrierMarkAndUpdateFieldSlowPathX86_64(HInstruction* instruction,
                                               Location ref,
@@ -621,7 +619,7 @@ class ReadBarrierMarkAndUpdateFieldSlowPathX86_64 : public SlowPathCodeX86_64 {
                                               bool unpoison_ref_before_marking,
                                               CpuRegister temp1,
                                               CpuRegister temp2)
-      : SlowPathCodeX86_64(instruction),
+      : SlowPathCode(instruction),
         ref_(ref),
         obj_(obj),
         field_addr_(field_addr),
@@ -776,7 +774,7 @@ class ReadBarrierMarkAndUpdateFieldSlowPathX86_64 : public SlowPathCodeX86_64 {
 };
 
 // Slow path generating a read barrier for a heap reference.
-class ReadBarrierForHeapReferenceSlowPathX86_64 : public SlowPathCodeX86_64 {
+class ReadBarrierForHeapReferenceSlowPathX86_64 : public SlowPathCode {
  public:
   ReadBarrierForHeapReferenceSlowPathX86_64(HInstruction* instruction,
                                             Location out,
@@ -784,7 +782,7 @@ class ReadBarrierForHeapReferenceSlowPathX86_64 : public SlowPathCodeX86_64 {
                                             Location obj,
                                             uint32_t offset,
                                             Location index)
-      : SlowPathCodeX86_64(instruction),
+      : SlowPathCode(instruction),
         out_(out),
         ref_(ref),
         obj_(obj),
@@ -837,9 +835,9 @@ class ReadBarrierForHeapReferenceSlowPathX86_64 : public SlowPathCodeX86_64 {
           // calls to art::x86_64::X86_64Assembler::shll and
           // art::x86_64::X86_64Assembler::AddImmediate below), but it
           // has not been saved by the previous call to
-          // art::SlowPathCodeX86_64::SaveLiveRegisters, as it is a
+          // art::SlowPathCode::SaveLiveRegisters, as it is a
           // callee-save register --
-          // art::SlowPathCodeX86_64::SaveLiveRegisters does not consider
+          // art::SlowPathCode::SaveLiveRegisters does not consider
           // callee-save registers, as it has been designed with the
           // assumption that callee-save registers are supposed to be
           // handled by the called function.  So, as a callee-save
@@ -861,7 +859,7 @@ class ReadBarrierForHeapReferenceSlowPathX86_64 : public SlowPathCodeX86_64 {
           index = Location::CoreRegister(index_reg);
         } else {
           // The initial register stored in `index_` has already been
-          // saved in the call to art::SlowPathCodeX86_64::SaveLiveRegisters
+          // saved in the call to art::SlowPathCode::SaveLiveRegisters
           // (as it is not a callee-save register), so we can freely
           // use it.
         }
@@ -960,10 +958,10 @@ class ReadBarrierForHeapReferenceSlowPathX86_64 : public SlowPathCodeX86_64 {
 };
 
 // Slow path generating a read barrier for a GC root.
-class ReadBarrierForRootSlowPathX86_64 : public SlowPathCodeX86_64 {
+class ReadBarrierForRootSlowPathX86_64 : public SlowPathCode {
  public:
   ReadBarrierForRootSlowPathX86_64(HInstruction* instruction, Location out, Location root)
-      : SlowPathCodeX86_64(instruction), out_(out), root_(root) {
+      : SlowPathCode(instruction), out_(out), root_(root) {
   }
 
   void EmitNativeCode(CodeGenerator* codegen) override {
@@ -998,10 +996,10 @@ class ReadBarrierForRootSlowPathX86_64 : public SlowPathCodeX86_64 {
   DISALLOW_COPY_AND_ASSIGN(ReadBarrierForRootSlowPathX86_64);
 };
 
-class MethodEntryExitHooksSlowPathX86_64 : public SlowPathCodeX86_64 {
+class MethodEntryExitHooksSlowPathX86_64 : public SlowPathCode {
  public:
   explicit MethodEntryExitHooksSlowPathX86_64(HInstruction* instruction)
-      : SlowPathCodeX86_64(instruction) {}
+      : SlowPathCode(instruction) {}
 
   void EmitNativeCode(CodeGenerator* codegen) override {
     CodeGeneratorX86_64* x86_64_codegen = down_cast<CodeGeneratorX86_64*>(codegen);
@@ -1027,10 +1025,10 @@ class MethodEntryExitHooksSlowPathX86_64 : public SlowPathCodeX86_64 {
   DISALLOW_COPY_AND_ASSIGN(MethodEntryExitHooksSlowPathX86_64);
 };
 
-class CompileOptimizedSlowPathX86_64 : public SlowPathCodeX86_64 {
+class CompileOptimizedSlowPathX86_64 : public SlowPathCode {
  public:
   CompileOptimizedSlowPathX86_64(HSuspendCheck* suspend_check, uint64_t counter_address)
-      : SlowPathCodeX86_64(suspend_check),
+      : SlowPathCode(suspend_check),
         counter_address_(counter_address) {}
 
   void EmitNativeCode(CodeGenerator* codegen) override {
@@ -1547,24 +1545,6 @@ size_t CodeGeneratorX86_64::RestoreFloatingPointRegister(size_t stack_index, uin
   return GetSlowPathFPWidth();
 }
 
-size_t CodeGeneratorX86_64::SaveVectorRegister(size_t stack_index, Location loc) {
-  DCHECK(loc.IsFpuRegister());
-  DCHECK(GetGraph()->HasSIMD());
-  DCHECK_EQ(loc.GetVecLen(), GetSlowPathFPWidth());
-  XmmRegister vReg(loc.reg(), loc.GetVecLen());
-  __ movups(Address(CpuRegister(RSP), stack_index), vReg);
-  return loc.GetVecLen();
-}
-
-size_t CodeGeneratorX86_64::RestoreVectorRegister(size_t stack_index, Location loc) {
-  DCHECK(loc.IsFpuRegister());
-  DCHECK(GetGraph()->HasSIMD());
-  DCHECK_EQ(loc.GetVecLen(), GetSlowPathFPWidth());
-  XmmRegister vReg(loc.reg(), loc.GetVecLen());
-  __ movups(vReg, Address(CpuRegister(RSP), stack_index));
-  return loc.GetVecLen();
-}
-
 void CodeGeneratorX86_64::InvokeRuntime(QuickEntrypointEnum entrypoint,
                                         HInstruction* instruction,
                                         SlowPathCode* slow_path) {
@@ -1693,7 +1673,7 @@ void LocationsBuilderX86_64::VisitMethodEntryHook(HMethodEntryHook* method_hook)
 }
 
 void InstructionCodeGeneratorX86_64::GenerateMethodEntryExitHook(HInstruction* instruction) {
-  SlowPathCodeX86_64* slow_path =
+  SlowPathCode* slow_path =
       new (codegen_->GetScopedAllocator()) MethodEntryExitHooksSlowPathX86_64(instruction);
   LocationSummary* locations = instruction->GetLocations();
   codegen_->AddSlowPath(slow_path);
@@ -1837,7 +1817,7 @@ void CodeGeneratorX86_64::MaybeIncrementHotness(HSuspendCheck* suspend_check, bo
     CHECK(!HasEmptyFrame());
     uint64_t address = reinterpret_cast64<uint64_t>(info) +
         ProfilingInfo::BaselineHotnessCountOffset().Int32Value();
-    SlowPathCodeX86_64* slow_path =
+    SlowPathCode* slow_path =
         new (GetScopedAllocator()) CompileOptimizedSlowPathX86_64(suspend_check, address);
     AddSlowPath(slow_path);
     // Note: if the address was in the 32bit range, we could use
@@ -2010,13 +1990,11 @@ void CodeGeneratorX86_64::Move(Location destination, Location source) {
       __ movq(dest, Address(CpuRegister(RSP), source.GetStackIndex()));
     }
   } else if (destination.IsFpuRegister()) {
-    XmmRegister dest = destination.AsFpuVecRegister<XmmRegister>();
+    XmmRegister dest = destination.AsFpuRegister<XmmRegister>();
     if (source.IsCoreRegister()) {
       __ movq(dest, source.AsRegister<CpuRegister>());
     } else if (source.IsFpuRegister()) {
-      XmmRegister src = source.AsFpuVecRegister<XmmRegister>();
-      DCHECK_EQ(dest.GetVecLen(), src.GetVecLen());
-      __ movaps(dest, src);
+      __ movaps(dest, source.AsFpuRegister<XmmRegister>());
     } else if (source.IsConstant()) {
       HConstant* constant = source.GetConstant();
       int64_t value = CodeGenerator::GetInt64ValueOf(constant);
@@ -2442,8 +2420,7 @@ void LocationsBuilderX86_64::VisitDeoptimize(HDeoptimize* deoptimize) {
 }
 
 void InstructionCodeGeneratorX86_64::VisitDeoptimize(HDeoptimize* deoptimize) {
-  SlowPathCodeX86_64* slow_path =
-      deopt_slow_paths_.NewSlowPath<DeoptimizationSlowPathX86_64>(deoptimize);
+  SlowPathCode* slow_path = deopt_slow_paths_.NewSlowPath<DeoptimizationSlowPathX86_64>(deoptimize);
   GenerateTestAndBranch<Label>(deoptimize,
                                /* condition_input_index= */ 0,
                                slow_path->GetEntryLabel(),
@@ -4526,7 +4503,7 @@ void InstructionCodeGeneratorX86_64::GenerateDivRemIntegral(HBinaryOperation* in
       GenerateDivRemWithAnyConstant(instruction);
     }
   } else {
-    SlowPathCodeX86_64* slow_path =
+    SlowPathCode* slow_path =
         new (codegen_->GetScopedAllocator()) DivRemMinusOneSlowPathX86_64(
             instruction, out.AsRegister(), type, is_div);
     codegen_->AddSlowPath(slow_path);
@@ -4928,7 +4905,7 @@ void LocationsBuilderX86_64::VisitDivZeroCheck(HDivZeroCheck* instruction) {
 }
 
 void InstructionCodeGeneratorX86_64::VisitDivZeroCheck(HDivZeroCheck* instruction) {
-  SlowPathCodeX86_64* slow_path =
+  SlowPathCode* slow_path =
       new (codegen_->GetScopedAllocator()) DivZeroCheckSlowPathX86_64(instruction);
   codegen_->AddSlowPath(slow_path);
 
@@ -5790,7 +5767,7 @@ void CodeGeneratorX86_64::GenerateImplicitNullCheck(HNullCheck* instruction) {
 }
 
 void CodeGeneratorX86_64::GenerateExplicitNullCheck(HNullCheck* instruction) {
-  SlowPathCodeX86_64* slow_path = new (GetScopedAllocator()) NullCheckSlowPathX86_64(instruction);
+  SlowPathCode* slow_path = new (GetScopedAllocator()) NullCheckSlowPathX86_64(instruction);
   AddSlowPath(slow_path);
 
   LocationSummary* locations = instruction->GetLocations();
@@ -6018,7 +5995,7 @@ void InstructionCodeGeneratorX86_64::VisitArraySet(HArraySet* instruction) {
         }
       }
 
-      SlowPathCodeX86_64* slow_path = nullptr;
+      SlowPathCode* slow_path = nullptr;
       if (needs_type_check) {
         slow_path = new (codegen_->GetScopedAllocator()) ArraySetSlowPathX86_64(instruction);
         codegen_->AddSlowPath(slow_path);
@@ -6218,7 +6195,7 @@ void InstructionCodeGeneratorX86_64::VisitBoundsCheck(HBoundsCheck* instruction)
   LocationSummary* locations = instruction->GetLocations();
   Location index_loc = locations->InAt(0);
   Location length_loc = locations->InAt(1);
-  SlowPathCodeX86_64* slow_path =
+  SlowPathCode* slow_path =
       new (codegen_->GetScopedAllocator()) BoundsCheckSlowPathX86_64(instruction);
 
   if (length_loc.IsConstant()) {
@@ -6414,9 +6391,6 @@ void ParallelMoveResolverX86_64::EmitMove(size_t index) {
   Location source = move->GetSource();
   Location destination = move->GetDestination();
 
-  // Parallel moves may involve vector registers.
-  // Hence the special handling to always retrieve
-  // FpuRegister locations as VectorRegister
   if (source.IsCoreRegister()) {
     if (destination.IsCoreRegister()) {
       __ movq(destination.AsRegister<CpuRegister>(), source.AsRegister<CpuRegister>());
@@ -6433,9 +6407,8 @@ void ParallelMoveResolverX86_64::EmitMove(size_t index) {
       __ movl(destination.AsRegister<CpuRegister>(),
               Address(CpuRegister(RSP), source.GetStackIndex()));
     } else if (destination.IsFpuRegister()) {
-      DCHECK_EQ(destination.GetVecLen(), 0u);
-      __ movss(destination.AsFpuVecRegister<XmmRegister>(),
-               Address(CpuRegister(RSP), source.GetStackIndex()));
+      __ movss(destination.AsFpuRegister<XmmRegister>(),
+              Address(CpuRegister(RSP), source.GetStackIndex()));
     } else {
       DCHECK(destination.IsStackSlot());
       __ movl(CpuRegister(TMP), Address(CpuRegister(RSP), source.GetStackIndex()));
@@ -6446,8 +6419,7 @@ void ParallelMoveResolverX86_64::EmitMove(size_t index) {
       __ movq(destination.AsRegister<CpuRegister>(),
               Address(CpuRegister(RSP), source.GetStackIndex()));
     } else if (destination.IsFpuRegister()) {
-      DCHECK_EQ(destination.GetVecLen(), 0u);
-      __ movsd(destination.AsFpuVecRegister<XmmRegister>(),
+      __ movsd(destination.AsFpuRegister<XmmRegister>(),
                Address(CpuRegister(RSP), source.GetStackIndex()));
     } else {
       DCHECK(destination.IsDoubleStackSlot()) << destination;
@@ -6456,8 +6428,7 @@ void ParallelMoveResolverX86_64::EmitMove(size_t index) {
     }
   } else if (source.IsSIMDStackSlot()) {
     if (destination.IsFpuRegister()) {
-      DCHECK_EQ(source.GetVecLen(), destination.GetVecLen());
-      __ movups(destination.AsFpuVecRegister<XmmRegister>(),
+      __ movups(destination.AsFpuRegister<XmmRegister>(),
                 Address(CpuRegister(RSP), source.GetStackIndex()));
     } else {
       DCHECK(destination.IsSIMDStackSlot());
@@ -6513,22 +6484,17 @@ void ParallelMoveResolverX86_64::EmitMove(size_t index) {
     }
   } else if (source.IsFpuRegister()) {
     if (destination.IsFpuRegister()) {
-      DCHECK_EQ(source.GetVecLen(), destination.GetVecLen());
-      __ movaps(destination.AsFpuVecRegister<XmmRegister>(),
-                source.AsFpuVecRegister<XmmRegister>());
+      __ movaps(destination.AsFpuRegister<XmmRegister>(), source.AsFpuRegister<XmmRegister>());
     } else if (destination.IsStackSlot()) {
-      DCHECK_EQ(source.GetVecLen(), 0u);
       __ movss(Address(CpuRegister(RSP), destination.GetStackIndex()),
-               source.AsFpuVecRegister<XmmRegister>());
+               source.AsFpuRegister<XmmRegister>());
     } else if (destination.IsDoubleStackSlot()) {
-      DCHECK_EQ(source.GetVecLen(), 0u);
       __ movsd(Address(CpuRegister(RSP), destination.GetStackIndex()),
-               source.AsFpuVecRegister<XmmRegister>());
+               source.AsFpuRegister<XmmRegister>());
     } else {
        DCHECK(destination.IsSIMDStackSlot());
-       DCHECK_EQ(source.GetVecLen(), destination.GetVecLen());
-       __ movups(Address(CpuRegister(RSP), destination.GetStackIndex()),
-                 source.AsFpuVecRegister<XmmRegister>());
+      __ movups(Address(CpuRegister(RSP), destination.GetStackIndex()),
+                source.AsFpuRegister<XmmRegister>());
     }
   }
 }
@@ -6563,22 +6529,13 @@ void ParallelMoveResolverX86_64::Exchange64(XmmRegister reg, int mem) {
   __ movq(reg, CpuRegister(TMP));
 }
 
-void ParallelMoveResolverX86_64::ExchangeSIMD(XmmRegister reg, int mem) {
-  // We are operating on Vector register for sure
-  size_t extra_slot = reg.GetVecLen();
+void ParallelMoveResolverX86_64::Exchange128(XmmRegister reg, int mem) {
+  size_t extra_slot = 2 * kX86_64WordSize;
   __ subq(CpuRegister(RSP), Immediate(extra_slot));
-  __ movups(Address(CpuRegister(RSP), 0), reg);
-  ExchangeMemory64(0, mem + extra_slot, extra_slot >> 3);
-  __ movups(reg, Address(CpuRegister(RSP), 0));
+  __ movups(Address(CpuRegister(RSP), 0), XmmRegister(reg));
+  ExchangeMemory64(0, mem + extra_slot, 2);
+  __ movups(XmmRegister(reg), Address(CpuRegister(RSP), 0));
   __ addq(CpuRegister(RSP), Immediate(extra_slot));
-}
-
-void ParallelMoveResolverX86_64::ExchangeFPReg(XmmRegister reg1, XmmRegister reg2) {
-  // We may be either operating on plain FP registers or Vector registers
-  DCHECK_EQ(reg1.GetVecLen(), reg2.GetVecLen());
-  __ pxor(reg1, reg2);
-  __ pxor(reg2, reg1);
-  __ pxor(reg1, reg2);
 }
 
 void ParallelMoveResolverX86_64::ExchangeMemory32(int mem1, int mem2) {
@@ -6619,9 +6576,6 @@ void ParallelMoveResolverX86_64::EmitSwap(size_t index) {
   Location source = move->GetSource();
   Location destination = move->GetDestination();
 
-  // Parallel moves may involve vector registers.
-  // Hence the special handling to always retrieve
-  // FpuRegister locations as VectorRegister
   if (source.IsCoreRegister() && destination.IsCoreRegister()) {
     Exchange64(source.AsRegister<CpuRegister>(), destination.AsRegister<CpuRegister>());
   } else if (source.IsCoreRegister() && destination.IsStackSlot()) {
@@ -6637,29 +6591,23 @@ void ParallelMoveResolverX86_64::EmitSwap(size_t index) {
   } else if (source.IsDoubleStackSlot() && destination.IsDoubleStackSlot()) {
     ExchangeMemory64(destination.GetStackIndex(), source.GetStackIndex(), 1);
   } else if (source.IsFpuRegister() && destination.IsFpuRegister()) {
-    ExchangeFPReg(source.AsFpuVecRegister<XmmRegister>(),
-                  destination.AsFpuVecRegister<XmmRegister>());
+    __ movq(CpuRegister(TMP), source.AsFpuRegister<XmmRegister>());
+    __ movaps(source.AsFpuRegister<XmmRegister>(), destination.AsFpuRegister<XmmRegister>());
+    __ movq(destination.AsFpuRegister<XmmRegister>(), CpuRegister(TMP));
   } else if (source.IsFpuRegister() && destination.IsStackSlot()) {
-    DCHECK_EQ(source.GetVecLen(), 0u);
-    Exchange32(source.AsFpuVecRegister<XmmRegister>(), destination.GetStackIndex());
+    Exchange32(source.AsFpuRegister<XmmRegister>(), destination.GetStackIndex());
   } else if (source.IsStackSlot() && destination.IsFpuRegister()) {
-    DCHECK_EQ(destination.GetVecLen(), 0u);
-    Exchange32(destination.AsFpuVecRegister<XmmRegister>(), source.GetStackIndex());
+    Exchange32(destination.AsFpuRegister<XmmRegister>(), source.GetStackIndex());
   } else if (source.IsFpuRegister() && destination.IsDoubleStackSlot()) {
-    DCHECK_EQ(source.GetVecLen(), 0u);
-    Exchange64(source.AsFpuVecRegister<XmmRegister>(), destination.GetStackIndex());
+    Exchange64(source.AsFpuRegister<XmmRegister>(), destination.GetStackIndex());
   } else if (source.IsDoubleStackSlot() && destination.IsFpuRegister()) {
-    DCHECK_EQ(destination.GetVecLen(), 0u);
-    Exchange64(destination.AsFpuVecRegister<XmmRegister>(), source.GetStackIndex());
+    Exchange64(destination.AsFpuRegister<XmmRegister>(), source.GetStackIndex());
   } else if (source.IsSIMDStackSlot() && destination.IsSIMDStackSlot()) {
-    DCHECK_EQ(source.GetVecLen(), destination.GetVecLen());
-    ExchangeMemory64(destination.GetStackIndex(), source.GetStackIndex(), source.GetVecLen() >> 3);
+    ExchangeMemory64(destination.GetStackIndex(), source.GetStackIndex(), 2);
   } else if (source.IsFpuRegister() && destination.IsSIMDStackSlot()) {
-    DCHECK_EQ(source.GetVecLen(), destination.GetVecLen());
-    ExchangeSIMD(source.AsFpuVecRegister<XmmRegister>(), destination.GetStackIndex());
+    Exchange128(source.AsFpuRegister<XmmRegister>(), destination.GetStackIndex());
   } else if (destination.IsFpuRegister() && source.IsSIMDStackSlot()) {
-    DCHECK_EQ(source.GetVecLen(), destination.GetVecLen());
-    ExchangeSIMD(destination.AsFpuVecRegister<XmmRegister>(), source.GetStackIndex());
+    Exchange128(destination.AsFpuRegister<XmmRegister>(), source.GetStackIndex());
   } else {
     LOG(FATAL) << "Unimplemented swap between " << source << " and " << destination;
   }
@@ -6676,7 +6624,7 @@ void ParallelMoveResolverX86_64::RestoreScratch(int reg) {
 }
 
 void InstructionCodeGeneratorX86_64::GenerateClassInitializationCheck(
-    SlowPathCodeX86_64* slow_path, CpuRegister class_reg) {
+    SlowPathCode* slow_path, CpuRegister class_reg) {
   __ cmpb(Address(class_reg, kClassStatusByteOffset), Immediate(kShiftedVisiblyInitializedValue));
   __ j(kBelow, slow_path->GetEntryLabel());
   __ Bind(slow_path->GetExitLabel());
@@ -6868,7 +6816,7 @@ void InstructionCodeGeneratorX86_64::VisitLoadClass(HLoadClass* cls) NO_THREAD_S
 
   if (generate_null_check || cls->MustGenerateClinitCheck()) {
     DCHECK(cls->CanCallRuntime());
-    SlowPathCodeX86_64* slow_path =
+    SlowPathCode* slow_path =
         new (codegen_->GetScopedAllocator()) LoadClassSlowPathX86_64(cls, cls);
     codegen_->AddSlowPath(slow_path);
     if (generate_null_check) {
@@ -6947,7 +6895,7 @@ void InstructionCodeGeneratorX86_64::VisitLoadMethodType(HLoadMethodType* load) 
       GenerateGcRootFieldLoad(
           load, out_loc, address, fixup_label, codegen_->GetCompilerReadBarrierOption());
       // No need for memory fence, thanks to the x86-64 memory model.
-      SlowPathCodeX86_64* slow_path =
+      SlowPathCode* slow_path =
           new (codegen_->GetScopedAllocator()) LoadMethodTypeSlowPathX86_64(load);
       codegen_->AddSlowPath(slow_path);
       __ testl(out, out);
@@ -6975,7 +6923,7 @@ void InstructionCodeGeneratorX86_64::VisitLoadMethodType(HLoadMethodType* load) 
 
 void InstructionCodeGeneratorX86_64::VisitClinitCheck(HClinitCheck* check) {
   // We assume the class to not be null.
-  SlowPathCodeX86_64* slow_path =
+  SlowPathCode* slow_path =
       new (codegen_->GetScopedAllocator()) LoadClassSlowPathX86_64(check->GetLoadClass(), check);
   codegen_->AddSlowPath(slow_path);
   GenerateClassInitializationCheck(slow_path,
@@ -7059,8 +7007,7 @@ void InstructionCodeGeneratorX86_64::VisitLoadString(HLoadString* load) NO_THREA
       GenerateGcRootFieldLoad(
           load, out_loc, address, fixup_label, codegen_->GetCompilerReadBarrierOption());
       // No need for memory fence, thanks to the x86-64 memory model.
-      SlowPathCodeX86_64* slow_path =
-          new (codegen_->GetScopedAllocator()) LoadStringSlowPathX86_64(load);
+      SlowPathCode* slow_path = new (codegen_->GetScopedAllocator()) LoadStringSlowPathX86_64(load);
       codegen_->AddSlowPath(slow_path);
       __ testl(out, out);
       __ j(kEqual, slow_path->GetEntryLabel());
@@ -7212,7 +7159,7 @@ void InstructionCodeGeneratorX86_64::VisitInstanceOf(HInstanceOf* instruction) {
   const uint32_t array_length_offset = mirror::Array::LengthOffset().Uint32Value();
   const uint32_t object_array_data_offset =
       mirror::Array::DataOffset(kHeapReferenceSize).Uint32Value();
-  SlowPathCodeX86_64* slow_path = nullptr;
+  SlowPathCode* slow_path = nullptr;
   NearLabel done, zero;
 
   // Return 0 if `obj` is null.
@@ -7550,7 +7497,7 @@ void InstructionCodeGeneratorX86_64::VisitCheckCast(HCheckCast* instruction) {
       mirror::Array::DataOffset(kHeapReferenceSize).Uint32Value();
 
   bool is_type_check_slow_path_fatal = codegen_->IsTypeCheckSlowPathFatal(instruction);
-  SlowPathCodeX86_64* type_check_slow_path =
+  SlowPathCode* type_check_slow_path =
       new (codegen_->GetScopedAllocator()) TypeCheckSlowPathX86_64(
           instruction, is_type_check_slow_path_fatal);
   codegen_->AddSlowPath(type_check_slow_path);
@@ -8029,9 +7976,8 @@ void InstructionCodeGeneratorX86_64::GenerateGcRootFieldLoad(
                     "have different sizes.");
 
       // Slow path marking the GC root `root`.
-      SlowPathCodeX86_64* slow_path =
-          new (codegen_->GetScopedAllocator()) ReadBarrierMarkSlowPathX86_64(
-              instruction, root, /* unpoison_ref_before_marking= */ false);
+      SlowPathCode* slow_path = new (codegen_->GetScopedAllocator()) ReadBarrierMarkSlowPathX86_64(
+          instruction, root, /* unpoison_ref_before_marking= */ false);
       codegen_->AddSlowPath(slow_path);
 
       // Test the `Thread::Current()->pReadBarrierMarkReg ## root.reg()` entrypoint.
@@ -8155,7 +8101,7 @@ void CodeGeneratorX86_64::GenerateReferenceLoadWithBakerReadBarrier(HInstruction
 
   // Note: Reference unpoisoning modifies the flags, so we need to delay it after the branch.
   // Slow path marking the object `ref` when it is gray.
-  SlowPathCodeX86_64* slow_path;
+  SlowPathCode* slow_path;
   if (always_update_field) {
     DCHECK(temp1 != nullptr);
     DCHECK(temp2 != nullptr);
@@ -8195,7 +8141,7 @@ void CodeGeneratorX86_64::GenerateReadBarrierSlow(HInstruction* instruction,
   // not used by the artReadBarrierSlow entry point.
   //
   // TODO: Unpoison `ref` when it is used by artReadBarrierSlow.
-  SlowPathCodeX86_64* slow_path = new (GetScopedAllocator())
+  SlowPathCode* slow_path = new (GetScopedAllocator())
       ReadBarrierForHeapReferenceSlowPathX86_64(instruction, out, ref, obj, offset, index);
   AddSlowPath(slow_path);
 
@@ -8230,7 +8176,7 @@ void CodeGeneratorX86_64::GenerateReadBarrierForRootSlow(HInstruction* instructi
   //
   // Note that GC roots are not affected by heap poisoning, so we do
   // not need to do anything special for this here.
-  SlowPathCodeX86_64* slow_path =
+  SlowPathCode* slow_path =
       new (GetScopedAllocator()) ReadBarrierForRootSlowPathX86_64(instruction, out, root);
   AddSlowPath(slow_path);
 
@@ -8682,64 +8628,6 @@ void InstructionCodeGeneratorX86_64::VisitBitwiseNegatedRight(HBitwiseNegatedRig
   Location dest = locations->Out();
   __ andn(dest.AsRegister<CpuRegister>(), second.AsRegister<CpuRegister>(),
           first.AsRegister<CpuRegister>());
-}
-
-void SlowPathCodeX86_64::SaveLiveRegisters(CodeGenerator* codegen, LocationSummary* locations) {
-  size_t stack_offset = codegen->GetFirstRegisterSlotInSlowPath();
-
-  const RegisterSet spills = codegen->GetSlowPathSpills(locations);
-  for (uint32_t i : LowToHighBits(spills.GetCoreRegisterSet())) {
-    // If the register holds an object, update the stack mask.
-    if (locations->RegisterContainsObject(i)) {
-      locations->SetStackBit(stack_offset / kVRegSize);
-    }
-    DCHECK_LT(stack_offset, codegen->GetFrameSize() - codegen->FrameEntrySpillSize());
-    DCHECK_LT(i, kMaximumNumberOfExpectedRegisters);
-    saved_core_stack_offsets_[i] = stack_offset;
-    stack_offset += codegen->SaveCoreRegister(stack_offset, i);
-  }
-
-  CodeGeneratorX86_64* codegenX86_64 = down_cast<CodeGeneratorX86_64*>(codegen);
-  bool save_as_vector_regs = locations->GetLiveRegisters()->GetVecRegisterSet() > 0;
-  for (uint32_t i : LowToHighBits(spills.GetFpuRegisterSet())) {
-    DCHECK_LT(stack_offset, codegenX86_64->GetFrameSize() - codegenX86_64->FrameEntrySpillSize());
-    DCHECK_LT(i, kMaximumNumberOfExpectedRegisters);
-    saved_fpu_stack_offsets_[i] = stack_offset;
-    // If there is at least 1 live 256-bit register, we must emit AVX2 for all registers,
-    // to avoid performance issues
-    if (save_as_vector_regs) {
-      stack_offset += codegenX86_64->SaveVectorRegister(
-          stack_offset, Location::FpuRegister(i, codegenX86_64->GetSIMDRegisterWidth()));
-    } else {
-      stack_offset += codegenX86_64->SaveFloatingPointRegister(stack_offset, i);
-    }
-  }
-}
-
-void SlowPathCodeX86_64::RestoreLiveRegisters(CodeGenerator* codegen, LocationSummary* locations) {
-  size_t stack_offset = codegen->GetFirstRegisterSlotInSlowPath();
-
-  const RegisterSet spills = codegen->GetSlowPathSpills(locations);
-  for (uint32_t i : LowToHighBits(spills.GetCoreRegisterSet())) {
-    DCHECK_LT(stack_offset, codegen->GetFrameSize() - codegen->FrameEntrySpillSize());
-    DCHECK_LT(i, kMaximumNumberOfExpectedRegisters);
-    stack_offset += codegen->RestoreCoreRegister(stack_offset, i);
-  }
-
-  CodeGeneratorX86_64* codegenX86_64 = down_cast<CodeGeneratorX86_64*>(codegen);
-  bool restore_as_vector_regs = locations->GetLiveRegisters()->GetVecRegisterSet() > 0;
-  for (uint32_t i : LowToHighBits(spills.GetFpuRegisterSet())) {
-    DCHECK_LT(stack_offset, codegenX86_64->GetFrameSize() - codegenX86_64->FrameEntrySpillSize());
-    DCHECK_LT(i, kMaximumNumberOfExpectedRegisters);
-    // If there is at least 1 live 256-bit register, we must emit AVX2 for all registers,
-    // to avoid performance issues
-    if (restore_as_vector_regs) {
-      stack_offset += codegenX86_64->RestoreVectorRegister(
-          stack_offset, Location::FpuRegister(i, codegenX86_64->GetSIMDRegisterWidth()));
-    } else {
-      stack_offset += codegenX86_64->RestoreFloatingPointRegister(stack_offset, i);
-    }
-  }
 }
 
 #undef __
