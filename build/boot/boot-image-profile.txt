@@ -8159,7 +8159,7 @@ HSPLjava/util/stream/Streams$2;-><init>(Ljava/util/stream/BaseStream;Ljava/util/
 HSPLjava/util/stream/Streams$ConcatSpliterator$OfRef;-><init>(Ljava/util/Spliterator;Ljava/util/Spliterator;)V
 HSPLjava/util/stream/Streams$ConcatSpliterator;-><init>(Ljava/util/Spliterator;Ljava/util/Spliterator;)V
 HSPLjava/util/stream/Streams$ConcatSpliterator;->characteristics()I
-SPLjava/util/stream/Streams$ConcatSpliterator;->estimateSize()J
+HSPLjava/util/stream/Streams$ConcatSpliterator;->estimateSize()J
 HSPLjava/util/stream/Streams$ConcatSpliterator;->forEachRemaining(Ljava/util/function/Consumer;)V
 HSPLjava/util/stream/Streams$RangeIntSpliterator;-><init>(III)V
 HSPLjava/util/stream/Streams$RangeIntSpliterator;-><init>(IIZ)V
@@ -13244,6 +13244,8 @@ Ljdk/internal/foreign/MemorySessionImpl$$ExternalSyntheticLambda1;
 Ljdk/internal/foreign/MemorySessionImpl;
 Ljdk/internal/foreign/NativeMemorySegmentImpl;
 Ljdk/internal/foreign/SegmentFactories;
+Ljdk/internal/foreign/layout/AbstractLayout;
+Ljdk/internal/foreign/layout/ValueLayouts$AbstractValueLayout;
 Ljdk/internal/math/DoubleToDecimal;
 Ljdk/internal/math/FDBigInteger;
 Ljdk/internal/math/FloatToDecimal;
