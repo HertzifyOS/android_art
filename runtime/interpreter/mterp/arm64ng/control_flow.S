@@ -14,8 +14,8 @@
     b.${condition} .L${opcode}z_branch  // If taken, use the branch code in corresponding
                                         // `if-{cond}z` instruction to keep this handler under 64B.
     FETCH_ADVANCE_INST 2
-    GET_INST_OPCODE ip                  // extract opcode from wINST
-    GOTO_OPCODE ip                      // jump to next instruction
+    PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
+    GOTO_OPCODE                         // jump to next instruction
 
 %def zcmp(compare="1", branch=""):
     /*
@@ -32,8 +32,8 @@
     .endif
     ${branch} .L${opcode}_branch
     FETCH_ADVANCE_INST 2
-    GET_INST_OPCODE ip                  // extract opcode from wINST
-    GOTO_OPCODE ip                      // jump to next instruction
+    PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
+    GOTO_OPCODE                         // jump to next instruction
 .L${opcode}_branch:                     // `if-{cond}` handlers also jump here to shorten the code.
     FETCH_S wINST, 1                    // w1<- branch offset, in code units
     BRANCH
@@ -153,7 +153,7 @@
       .else
         GET_VREG w0, w2                     // r0<- vAA
         .if $is_object
-.Lrestore_registers_and_return:  // `return-wide` handler jumps here to shorten the code.
+.L${opcode}_restore_registers_and_return:  // `return-wide` handler jumps here to shorten the code.
         .else
         // In case we're going back to compiled code, put the
         // result also in s0.
@@ -163,7 +163,8 @@
     .endif
     .if $is_wide
       // To fit the handler in the 64B, jump to the code in `return-object`.
-      b .Lrestore_registers_and_return
+%  return_object_opcode = re.sub("return_wide", "return_object", opcode);
+      b .L${return_object_opcode}_restore_registers_and_return
     .else
       .cfi_remember_state
       ldr ip, [xREFS, #-8]

@@ -13,8 +13,8 @@
    bne     .L${opcode}_slow_path_check_hierarchy
 .L${opcode}_next:
    FETCH_ADVANCE_INST 2
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
+   PREPARE_OPCODE_DISPATCH
+   GOTO_OPCODE
 
 %def op_check_cast_slow_path():
    EXPORT_PC
@@ -71,21 +71,23 @@
 
 %def op_instance_of():
 %  slow_path = add_slow_path(op_instance_of_slow_path)
+%  check_hierarchy = add_slow_path_for_last_prefix(
+%      op_instance_check_hierarchy, suffix="_check_hierarchy")
+%  # Reset python indentation.
    /* instance-of vA, vB, class@CCCC */
    // Fast-path which gets the class from thread-local cache.
 %  fetch_from_thread_cache("x1", miss_label=slow_path)
 .L${opcode}_resume:
    lsr     w2, wINST, #12              // w2<- B
    GET_VREG w0, w2                     // w0<- vB (object)
-   cbz     w0, .L${opcode}_store_result
+   cbz     w0, .L${check_hierarchy}_store_result
    ldr     w2, [x0, #MIRROR_OBJECT_CLASS_OFFSET]
    UNPOISON_HEAP_REF w2
    // Fast path: do a comparison without read barrier.
    cmp     w1, w2
-   bne     .L${opcode}_slow_path_check_hierarchy
-.L${opcode}_set_one:
+   bne     ${check_hierarchy}
    mov     w0, #1
-   b       .L${opcode}_store_result
+   b       .L${check_hierarchy}_store_result
 
 %def op_instance_of_slow_path():
    EXPORT_PC
@@ -95,7 +97,8 @@
    bl      nterp_get_class
    mov     x1, x0
    b       .L${opcode}_resume
-.L${opcode}_slow_path_check_hierarchy:
+
+%def op_instance_check_hierarchy():
    // Go slow path if we are marking. Checking now allows
    // not going to slow path if the super class hierarchy check fails.
    TEST_IF_MARKING 4f
@@ -104,15 +107,17 @@
    ldr     w3, [x1, #MIRROR_CLASS_COMPONENT_TYPE_OFFSET]
    UNPOISON_HEAP_REF w3
    cbnz    w3, 3f
+   // Prepare result value 1 for a match in the loop below.
+   mov     w0, #1
 1:
    ldr     w2, [x2, #MIRROR_CLASS_SUPER_CLASS_OFFSET]
    UNPOISON_HEAP_REF w2
    cmp     w1, w2
-   beq     .L${opcode}_set_one
+   beq     .L${opcode}_check_hierarchy_store_result
    cbnz    w2, 1b
 2:
    mov     w0, #0
-   b       .L${opcode}_store_result
+   b       .L${opcode}_check_hierarchy_store_result
 3:
    // Class in x1 is an array, x3 is the component type of x1, and x2 is the class of the object.
    ldr     w2, [x2, #MIRROR_CLASS_COMPONENT_TYPE_OFFSET]
@@ -132,18 +137,18 @@
    ldrh    w2, [x2, #MIRROR_CLASS_OBJECT_PRIMITIVE_TYPE_OFFSET]
    cmp     w2, #0
    cset    w0, eq
-   b       .L${opcode}_store_result
+   b       .L${opcode}_check_hierarchy_store_result
 4:
    bl      art_quick_read_barrier_mark_reg01
 5:
    EXPORT_PC
    bl      artInstanceOfFromCode
-.L${opcode}_store_result:
+.L${opcode}_check_hierarchy_store_result:
    ubfx    w1, wINST, #8, #4           // w1<- A
    SET_VREG w0, w1
    FETCH_ADVANCE_INST 2
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
+   PREPARE_OPCODE_DISPATCH
+   GOTO_OPCODE
 
 %def op_iget_boolean():
 %  op_iget(load="ldrb", volatile_load="ldarb", maybe_extend="", wide="0", is_object="0")
@@ -182,8 +187,8 @@
    .if $wide || $is_object
    b .L${opcode}_slow_path_dispatch
    .else
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
+   PREPARE_OPCODE_DISPATCH
+   GOTO_OPCODE
    .endif
 
 %def op_iget_slow_path(volatile_load, maybe_extend, wide, is_object):
@@ -232,8 +237,8 @@
    FETCH_ADVANCE_INST 2
    // `aget-wide`, `aget-object` and `new-instance` handlers jump here to shorten the code.
 .L${opcode}_slow_path_dispatch:
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
+   PREPARE_OPCODE_DISPATCH
+   GOTO_OPCODE
    .if $is_object
    // `aget-object` handler jumps here when marking to shorten the code.
 .L${opcode}_slow_path_mark_and_store_r0_to_vreg_r2_fetch_advance_2_dispatch:
@@ -287,13 +292,13 @@
    b .L${opcode}_slow_path_skip_write_barrier  // Dispatch would not fit in 64B.
    .else
    FETCH_ADVANCE_INST 2
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
+   PREPARE_OPCODE_DISPATCH
+   GOTO_OPCODE
    .endif
 #else
    FETCH_ADVANCE_INST 2
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
+   PREPARE_OPCODE_DISPATCH
+   GOTO_OPCODE
 #endif
 
 %def op_iput_slow_path(volatile_store, wide, is_object):
@@ -346,8 +351,8 @@
    $volatile_store w1, [x3]
    .endif
    FETCH_ADVANCE_INST 2
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
+   PREPARE_OPCODE_DISPATCH
+   GOTO_OPCODE
 
 %def op_iput_wide():
 %  op_iput(store="str", volatile_store="stlr", wide="1", is_object="0")
@@ -395,15 +400,15 @@
    .if $wide || $is_object
    b .L${opcode}_slow_path_dispatch    // Dispatch would not fit in 64B.
    .else
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
+   PREPARE_OPCODE_DISPATCH
+   GOTO_OPCODE
    .endif
 #else
    .if $wide
    b .L${opcode}_slow_path_dispatch    // Dispatch would not fit in 64B.
    .else
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
+   PREPARE_OPCODE_DISPATCH
+   GOTO_OPCODE
    .endif
 #endif
 
@@ -447,8 +452,8 @@
    .endif
    FETCH_ADVANCE_INST 2
 .L${opcode}_slow_path_dispatch:
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
+   PREPARE_OPCODE_DISPATCH
+   GOTO_OPCODE
 .L${opcode}_slow_path_read_barrier:
    bl      art_quick_read_barrier_mark_reg00
    b       .L${opcode}_slow_path_resume_after_read_barrier
@@ -510,13 +515,13 @@
    b .L${opcode}_slow_path_skip_write_barrier  // Dispatch would not fit in 64B.
    .else
    FETCH_ADVANCE_INST 2
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
+   PREPARE_OPCODE_DISPATCH
+   GOTO_OPCODE
    .endif
 #else
    FETCH_ADVANCE_INST 2
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
+   PREPARE_OPCODE_DISPATCH
+   GOTO_OPCODE
 #endif
 
 %def op_sput_slow_path(volatile_store, wide, is_object):
@@ -567,8 +572,8 @@
    $volatile_store    w2, [x1]
    .endif
    FETCH_ADVANCE_INST 2
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
+   PREPARE_OPCODE_DISPATCH
+   GOTO_OPCODE
 .L${opcode}_slow_path_read_barrier:
    bl      art_quick_read_barrier_mark_reg00
    b       .L${opcode}_slow_path_resume_after_read_barrier

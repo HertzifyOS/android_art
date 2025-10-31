@@ -1979,19 +1979,19 @@ artNterpAsmInstructionEnd:
     .type artNterpAsmInstructionStart, #function
     .hidden artNterpAsmInstructionStart
     .global artNterpAsmInstructionStart
-artNterpAsmInstructionStart = .L_op_nop
+artNterpAsmInstructionStart = ${opcode_name_prefix}op_nop
     .text
 
-%def opcode_name_prefix():
-%   return "nterp_"
+%def opcode_name_prefixes():
+%   return ["nterp_"]
 %def opcode_start():
-    NAME_START nterp_${opcode}
+    NAME_START ${opcode}
     # Explicitly restore CFA, just in case the previous opcode clobbered it (by .cfi_def_*).
     CFI_DEF_CFA_BREG_PLUS_UCONST CFI_REFS, -4, CALLEE_SAVES_SIZE
 %def opcode_end():
-    NAME_END nterp_${opcode}
+    NAME_END ${opcode}
     // Advance to the end of this handler. Causes error if we are past that point.
-    .org nterp_${opcode} + NTERP_HANDLER_SIZE  // ${opcode} handler is too big!
+    .org ${opcode} + NTERP_HANDLER_SIZE  // ${opcode} handler is too big!
 %def opcode_slow_path_start(name):
     NAME_START ${name}
 %def opcode_slow_path_end(name):

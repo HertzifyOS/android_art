@@ -27,9 +27,9 @@
     FETCH_ADVANCE_INST 2                // advance rPC, load rINST
     $preinstr                           // optional op; may set condition codes
     $instr                              // $result<- op, w0-w3 changed
-    GET_INST_OPCODE ip                  // extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
     SET_VREG $result, w9                // vAA<- $result
-    GOTO_OPCODE ip                      // jump to next instruction
+    GOTO_OPCODE                         // jump to next instruction
     /* 11-14 instructions */
 
 %def binop2addr(preinstr="", result="w0", chkzero="0", instr=""):
@@ -58,9 +58,9 @@
     FETCH_ADVANCE_INST 1                // advance rPC, load rINST
     $preinstr                           // optional op; may set condition codes
     $instr                              // $result<- op, w0-w3 changed
-    GET_INST_OPCODE ip                  // extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
     SET_VREG $result, w9                // vAA<- $result
-    GOTO_OPCODE ip                      // jump to next instruction
+    GOTO_OPCODE                         // jump to next instruction
     /* 10-13 instructions */
 
 %def binopLit16(preinstr="", result="w0", chkzero="0", instr=""):
@@ -87,9 +87,9 @@
     FETCH_ADVANCE_INST 2                // advance rPC, load rINST
     $preinstr
     $instr                              // $result<- op, w0-w3 changed
-    GET_INST_OPCODE ip                  // extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
     SET_VREG $result, w9                // vAA<- $result
-    GOTO_OPCODE ip                      // jump to next instruction
+    GOTO_OPCODE                         // jump to next instruction
     /* 10-13 instructions */
 
 %def binopLit8(extract="asr     w1, w3, #8", preinstr="", result="w0", chkzero="0", instr=""):
@@ -122,9 +122,9 @@
     FETCH_ADVANCE_INST 2                // advance rPC, load rINST
     $preinstr                           // optional op; may set condition codes
     $instr                              // $result<- op, w0-w3 changed
-    GET_INST_OPCODE ip                  // extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
     SET_VREG $result, w9                // vAA<- $result
-    GOTO_OPCODE ip                      // jump to next instruction
+    GOTO_OPCODE                         // jump to next instruction
     /* 10-12 instructions */
 
 %def binopWide(preinstr="", instr="add x0, x1, x2", result="x0", r1="x1", r2="x2", chkzero="0"):
@@ -154,9 +154,9 @@
     FETCH_ADVANCE_INST 2                  // advance rPC, load rINST
     $preinstr
     $instr                                // $result<- op, w0-w4 changed
-    GET_INST_OPCODE ip                    // extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH               // insert opcode to xIBASE
     SET_VREG_WIDE_PRESCALED $result, w4   // vAA<- $result
-    GOTO_OPCODE ip                        // jump to next instruction
+    GOTO_OPCODE                           // jump to next instruction
     /* 11-14 instructions */
 
 %def binopWide2addr(preinstr="", instr="add x0, x0, x1", r0="x0", r1="x1", chkzero="0"):
@@ -184,9 +184,9 @@
     FETCH_ADVANCE_INST 1                // advance rPC, load rINST
     $preinstr
     $instr                              // result<- op
-    GET_INST_OPCODE ip                  // extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
     SET_VREG_WIDE $r0, w2               // vAA<- result
-    GOTO_OPCODE ip                      // jump to next instruction
+    GOTO_OPCODE                         // jump to next instruction
     /* 10-13 instructions */
 
 %def shiftWide(opcode="shl"):
@@ -204,9 +204,9 @@
     GET_VREG_WIDE x1, w1                // x1<- vBB
     FETCH_ADVANCE_INST 2                // advance rPC, load rINST
     $opcode  x0, x1, x2                 // Do the shift. Only low 6 bits of x2 are used.
-    GET_INST_OPCODE ip                  // extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
     SET_VREG_WIDE x0, w3                // vAA<- x0
-    GOTO_OPCODE ip                      // jump to next instruction
+    GOTO_OPCODE                         // jump to next instruction
     /* 11-14 instructions */
 
 %def shiftWide2addr(opcode="lsl"):
@@ -220,9 +220,9 @@
     GET_VREG_WIDE x0, w2                // x0<- vA
     FETCH_ADVANCE_INST 1                // advance rPC, load rINST
     $opcode x0, x0, x1                  // Do the shift. Only low 6 bits of x1 are used.
-    GET_INST_OPCODE ip                  // extract opcode from rINST
-    SET_VREG_WIDE x0, w2               // vAA<- result
-    GOTO_OPCODE ip                      // jump to next instruction
+    PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
+    SET_VREG_WIDE x0, w2                // vAA<- result
+    GOTO_OPCODE                         // jump to next instruction
     /* 10-13 instructions */
 
 %def unop(instr=""):
@@ -240,9 +240,9 @@
     ubfx    w9, wINST, #8, #4           // w9<- A
     FETCH_ADVANCE_INST 1                // advance rPC, load rINST
     $instr                              // w0<- op, w0-w3 changed
-    GET_INST_OPCODE ip                  // extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
     SET_VREG w0, w9                     // vAA<- w0
-    GOTO_OPCODE ip                      // jump to next instruction
+    GOTO_OPCODE                         // jump to next instruction
     /* 8-9 instructions */
 
 %def unopWide(instr="sub x0, xzr, x0"):
@@ -258,9 +258,9 @@
     GET_VREG_WIDE x0, w3
     FETCH_ADVANCE_INST 1                // advance rPC, load wINST
     $instr
-    GET_INST_OPCODE ip                  // extract opcode from wINST
+    PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
     SET_VREG_WIDE x0, w4
-    GOTO_OPCODE ip                      // jump to next instruction
+    GOTO_OPCODE                         // jump to next instruction
     /* 10-11 instructions */
 
 %def op_add_int():
@@ -312,8 +312,8 @@
     cneg    w0, w0, lt
     FETCH_ADVANCE_INST 2                // advance rPC, load wINST
     SET_VREG w0, w4
-    GET_INST_OPCODE ip                  // extract opcode from wINST
-    GOTO_OPCODE ip                      // jump to next instruction
+    PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
+    GOTO_OPCODE                         // jump to next instruction
 
 %def op_div_int():
 %  binop(instr="sdiv     w0, w0, w1", chkzero="1")
@@ -345,9 +345,9 @@
     ubfx    w4, wINST, #8, #4           // w4<- A
     GET_VREG_S x0, w3                   // x0<- sign_extend(fp[B])
     FETCH_ADVANCE_INST 1                // advance rPC, load wINST
-    GET_INST_OPCODE ip                  // extract opcode from wINST
+    PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
     SET_VREG_WIDE x0, w4                // fp[A]<- x0
-    GOTO_OPCODE ip                      // jump to next instruction
+    GOTO_OPCODE                         // jump to next instruction
 
 %def op_int_to_short():
 %  unop(instr="sxth    w0, w0")

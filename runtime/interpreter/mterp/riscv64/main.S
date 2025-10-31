@@ -707,7 +707,7 @@ END nterp_deliver_pending_exception
     .type artNterpAsmInstructionStart, @function
     .hidden artNterpAsmInstructionStart
     .global artNterpAsmInstructionStart
-artNterpAsmInstructionStart = .L_op_nop
+artNterpAsmInstructionStart = ${opcode_name_prefix}op_nop
     .text
 
 %def instruction_end():
@@ -723,12 +723,12 @@ artNterpAsmInstructionEnd:
 
 %def opcode_pre():
 %   pass
-%def opcode_name_prefix():
-%   return "nterp_"
+%def opcode_name_prefixes():
+%   return ["nterp_"]
 %def opcode_start():
-    NAME_START nterp_${opcode}
+    NAME_START ${opcode}
 %def opcode_end():
-    NAME_END nterp_${opcode}
+    NAME_END ${opcode}
 %def opcode_slow_path_start(name):
     NAME_START ${name}
 %def opcode_slow_path_end(name):

@@ -2323,17 +2323,17 @@ SYMBOL(artNterpAsmInstructionEnd):
     FUNCTION_TYPE(artNterpAsmInstructionStart)
     ASM_HIDDEN SYMBOL(artNterpAsmInstructionStart)
     .global SYMBOL(artNterpAsmInstructionStart)
-SYMBOL(artNterpAsmInstructionStart) = .L_op_nop
+SYMBOL(artNterpAsmInstructionStart) = ${opcode_name_prefix}op_nop
     .text
 
-%def opcode_name_prefix():
-%   return "nterp_"
+%def opcode_name_prefixes():
+%   return ["nterp_"]
 %def opcode_start():
-    ENTRY nterp_${opcode}
+    ENTRY ${opcode}
 %def opcode_end():
-    END nterp_${opcode}
+    END ${opcode}
     // Advance to the end of this handler. Causes error if we are past that point.
-    .org nterp_${opcode} + NTERP_HANDLER_SIZE  // ${opcode} handler is too big!
+    .org ${opcode} + NTERP_HANDLER_SIZE  // ${opcode} handler is too big!
 %def opcode_slow_path_start(name):
     ENTRY ${name}
 %def opcode_slow_path_end(name):
