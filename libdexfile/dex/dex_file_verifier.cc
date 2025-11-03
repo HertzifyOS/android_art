@@ -111,12 +111,10 @@ constexpr bool IsDataSectionType(DexFile::MapItemType map_item_type) {
 // Fields and methods may have only one of public/protected/private.
 ALWAYS_INLINE
 constexpr bool CheckAtMostOneOfPublicProtectedPrivate(uint32_t flags) {
-  // Semantically we want 'return POPCOUNT(flags & kAcc) <= 1;'.
-  static_assert(IsPowerOfTwo(0), "0 not marked as power of two");
   static_assert(IsPowerOfTwo(kAccPublic), "kAccPublic not marked as power of two");
   static_assert(IsPowerOfTwo(kAccProtected), "kAccProtected not marked as power of two");
   static_assert(IsPowerOfTwo(kAccPrivate), "kAccPrivate not marked as power of two");
-  return IsPowerOfTwo(flags & (kAccPublic | kAccProtected | kAccPrivate));
+  return POPCOUNT(flags & (kAccPublic | kAccProtected | kAccPrivate)) <= 1;
 }
 
 }  // namespace

@@ -111,7 +111,15 @@ public class Main {
   /// CHECK-NOT:      beqz <<reg2>>,
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-X86_64: void Main.arraycopyCharDstNonNull() disassembly (after)
+  /// CHECK-START-ARM64: void Main.arraycopyCharDstNonNull() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
+  /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
+  /// CHECK-NEXT:     b.eq
+  /// CHECK-NEXT:     cbz <<reg1>>,
+  /// CHECK-NEXT:     cbz <<reg2>>,
+  /// CHECK:          ReturnVoid
+  //
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyCharDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
   /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
   /// CHECK-NEXT:     jz/eq
@@ -129,14 +137,22 @@ public class Main {
   /// CHECK-START-RISCV64: void Main.arraycopyCharSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
   /// CHECK-NEXT:     auipc a0, {{\d+}}
-  /// CHECK-NEXT:     lwu a0, {{\d+}}(a0)
+  /// CHECK-NEXT:     {{lwu|ld}} a0, {{\d+}}(a0)
   /// CHECK-NEXT:     ld ra, {{\d+}}(a0)
   /// CHECK-NEXT:     c.jalr ra
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-X86_64: void Main.arraycopyCharSameSrcDst() disassembly (after)
+  /// CHECK-START-ARM64: void Main.arraycopyCharSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
-  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [RIP + 0x{{\w+}}]
+  /// CHECK-NEXT:     cmp <<reg:\w+>>, <<reg>>
+  /// CHECK-NEXT:     b.eq
+  /// CHECK-NEXT:     cbz <<reg>>,
+  /// CHECK-NEXT:     cbz <<reg>>,
+  /// CHECK:          ReturnVoid
+  //
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyCharSameSrcDst() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
+  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [{{RIP|ebp}} + {{\w+}}]
   /// CHECK-NEXT:     call [{{\w+}} + {{\d+}}]
   /// CHECK:          ReturnVoid
   public void arraycopyCharSameSrcDst() {
@@ -152,7 +168,15 @@ public class Main {
   /// CHECK-NOT:      beqz <<reg2>>,
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-X86_64: void Main.arraycopyByteDstNonNull() disassembly (after)
+  /// CHECK-START-ARM64: void Main.arraycopyByteDstNonNull() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
+  /// CHECK-NEXT:     adrp
+  /// CHECK-NEXT:     ldr
+  /// CHECK-NEXT:     ldr lr,
+  /// CHECK-NEXT:     blr lr
+  /// CHECK:          ReturnVoid
+  //
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyByteDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
   /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
   /// CHECK-NEXT:     jz/eq
@@ -169,14 +193,22 @@ public class Main {
   /// CHECK-START-RISCV64: void Main.arraycopyByteSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
   /// CHECK-NEXT:     auipc a0, {{\d+}}
-  /// CHECK-NEXT:     lwu a0, {{\d+}}(a0)
+  /// CHECK-NEXT:     {{lwu|ld}} a0, {{\d+}}(a0)
   /// CHECK-NEXT:     ld ra, {{\d+}}(a0)
   /// CHECK-NEXT:     c.jalr ra
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-X86_64: void Main.arraycopyByteSameSrcDst() disassembly (after)
+  /// CHECK-START-ARM64: void Main.arraycopyByteSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
-  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [RIP + 0x{{\w+}}]
+  /// CHECK-NEXT:     adrp
+  /// CHECK-NEXT:     ldr
+  /// CHECK-NEXT:     ldr lr,
+  /// CHECK-NEXT:     blr lr
+  /// CHECK:          ReturnVoid
+  //
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyByteSameSrcDst() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
+  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [{{RIP|ebp}} + {{\w+}}]
   /// CHECK-NEXT:     call [{{\w+}} + {{\d+}}]
   /// CHECK:          ReturnVoid
   public void arraycopyByteSameSrcDst() {
@@ -192,7 +224,15 @@ public class Main {
   /// CHECK-NOT:      beqz <<reg2>>,
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-X86_64: void Main.arraycopyIntDstNonNull() disassembly (after)
+  /// CHECK-START-ARM64: void Main.arraycopyIntDstNonNull() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
+  /// CHECK-NEXT:     adrp
+  /// CHECK-NEXT:     ldr
+  /// CHECK-NEXT:     ldr lr,
+  /// CHECK-NEXT:     blr lr
+  /// CHECK:          ReturnVoid
+  //
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyIntDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
   /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
   /// CHECK-NEXT:     jz/eq
@@ -209,14 +249,22 @@ public class Main {
   /// CHECK-START-RISCV64: void Main.arraycopyIntSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
   /// CHECK-NEXT:     auipc a0, {{\d+}}
-  /// CHECK-NEXT:     lwu a0, {{\d+}}(a0)
+  /// CHECK-NEXT:     {{lwu|ld}} a0, {{\d+}}(a0)
   /// CHECK-NEXT:     ld ra, {{\d+}}(a0)
   /// CHECK-NEXT:     c.jalr ra
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-X86_64: void Main.arraycopyIntSameSrcDst() disassembly (after)
+  /// CHECK-START-ARM64: void Main.arraycopyIntSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
-  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [RIP + 0x{{\w+}}]
+  /// CHECK-NEXT:     adrp
+  /// CHECK-NEXT:     ldr
+  /// CHECK-NEXT:     ldr lr,
+  /// CHECK-NEXT:     blr lr
+  /// CHECK:          ReturnVoid
+  //
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyIntSameSrcDst() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
+  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [{{RIP|ebp}} + {{\w+}}]
   /// CHECK-NEXT:     call [{{\w+}} + {{\d+}}]
   /// CHECK:          ReturnVoid
   public void arraycopyIntSameSrcDst() {

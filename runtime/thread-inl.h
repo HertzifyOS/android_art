@@ -338,7 +338,7 @@ inline void Thread::TransitionFromRunnableToSuspended(ThreadState new_state) {
   // Therefore any code added here (other than debug build assertions) should be gated
   // on some flag being set, so that the JNI stub can take the slow path to get here.
   AssertThreadSuspensionIsAllowable();
-  PoisonObjectPointersIfDebug();
+  PoisonObjectPointersOnCurrentThread();
   DCHECK_EQ(this, Thread::Current());
   // Change to non-runnable state, thereby appearing suspended to the system.
   TransitionToSuspendedAndRunCheckpoints(new_state);
@@ -507,7 +507,13 @@ inline void Thread::RevokeThreadLocalAllocationStack() {
   tlsPtr_.thread_local_alloc_stack_top = nullptr;
 }
 
-inline void Thread::PoisonObjectPointersIfDebug() {
+inline void Thread::PoisonObjectPointers() {
+  if (kObjPtrPoisoning) {
+    ++poison_object_cookie_;
+  }
+}
+
+inline void Thread::PoisonObjectPointersOnCurrentThread() {
   if (kObjPtrPoisoning) {
     Thread::Current()->PoisonObjectPointers();
   }

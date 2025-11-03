@@ -1176,8 +1176,11 @@ void TraceWriter::FinishTracing(int flags, bool flush_entries) {
       DCHECK(trace_output_mode_ == TraceOutputMode::kDDMS);
       std::vector<uint8_t> data;
       data.resize(summary.length() + final_offset);
-      memcpy(data.data(), summary.c_str(), summary.length());
-      memcpy(data.data() + summary.length(), buf_.get(), final_offset);
+      {
+        MutexLock mu(Thread::Current(), trace_writer_lock_);
+        memcpy(data.data(), summary.c_str(), summary.length());
+        memcpy(data.data() + summary.length(), buf_.get(), final_offset);
+      }
       Runtime::Current()->GetRuntimeCallbacks()->DdmPublishChunk(CHUNK_TYPE("MPSE"),
                                                                  ArrayRef<const uint8_t>(data));
     }
@@ -1186,7 +1189,8 @@ void TraceWriter::FinishTracing(int flags, bool flush_entries) {
     DCHECK(trace_output_mode_ != TraceOutputMode::kDDMS);
 
     if (trace_output_mode_ == TraceOutputMode::kFile) {
-      WriteToFile(buf_.get(), final_offset);
+      MutexLock mu(Thread::Current(), trace_writer_lock_);
+      WriteToFileLocked(buf_.get(), final_offset);
     }
 
     // Write the summary packet

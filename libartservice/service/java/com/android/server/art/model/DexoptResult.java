@@ -109,15 +109,17 @@ public abstract class DexoptResult {
 
     /** @hide */
     public static @NonNull DexoptResult create(@NonNull String requestedCompilerFilter,
-            @NonNull String reason, @NonNull List<PackageDexoptResult> packageDexoptResult) {
-        return new AutoValue_DexoptResult(requestedCompilerFilter, reason, packageDexoptResult);
+            @NonNull String reason, @NonNull List<PackageDexoptResult> packageDexoptResult,
+            @Nullable @DexoptResultStatus Integer overallStatus) {
+        return new AutoValue_DexoptResult(
+                requestedCompilerFilter, reason, packageDexoptResult, overallStatus);
     }
 
     /** @hide */
     @VisibleForTesting
     public static @NonNull DexoptResult create() {
-        return new AutoValue_DexoptResult(
-                "compiler-filter", "reason", List.of() /* packageDexoptResult */);
+        return new AutoValue_DexoptResult("compiler-filter", "reason",
+                List.of() /* packageDexoptResult */, null /* overallStatus */);
     }
 
     /**
@@ -152,13 +154,17 @@ public abstract class DexoptResult {
      */
     public abstract @NonNull List<PackageDexoptResult> getPackageDexoptResults();
 
+    /** @hide */
+    @Nullable @DexoptResultStatus public abstract Integer getOverallStatus();
+
     /** The final status. */
     public @DexoptResultStatus int getFinalStatus() {
-        return getPackageDexoptResults()
-                .stream()
-                .mapToInt(result -> result.getStatus())
-                .max()
-                .orElse(DEXOPT_SKIPPED);
+        return getOverallStatus() != null ? getOverallStatus()
+                                          : getPackageDexoptResults()
+                                                    .stream()
+                                                    .mapToInt(result -> result.getStatus())
+                                                    .max()
+                                                    .orElse(DEXOPT_SKIPPED);
     }
 
     /** @hide */

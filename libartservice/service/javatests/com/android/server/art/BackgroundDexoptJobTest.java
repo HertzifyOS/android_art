@@ -414,6 +414,7 @@ public class BackgroundDexoptJobTest {
     private DexoptResult createDexoptResultWithStatus(@DexoptResultStatus int status) {
         return DexoptResult.create("compiler-filter", "reason",
                 List.of(PackageDexoptResult.create(
-                        "package-name", List.of() /* dexContainerFileDexoptResults */, status)));
+                        "package-name", List.of() /* dexContainerFileDexoptResults */, status)),
+                null /* overallStatus */);
     }
 }

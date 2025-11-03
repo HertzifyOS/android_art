@@ -518,13 +518,12 @@ class ImageSpace : public MemMapSpace {
   class BootImageLoader;
   template <typename ReferenceVisitor>
   class ClassTableVisitor;
+  class Relocator;
   class RemapInternedStringsVisitor;
   class Loader;
   template <typename PatchObjectVisitor>
   class PatchArtFieldVisitor;
-  template <PointerSize kPointerSize, typename PatchObjectVisitor, typename PatchCodeVisitor>
-  class PatchArtMethodVisitor;
-  template <PointerSize kPointerSize, typename HeapVisitor, typename NativeVisitor>
+  template <PointerSize kPointerSize, typename Visitor>
   class PatchObjectVisitor;
 
   DISALLOW_COPY_AND_ASSIGN(ImageSpace);

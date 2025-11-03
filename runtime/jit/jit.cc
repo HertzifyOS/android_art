@@ -492,7 +492,7 @@ bool Jit::MaybeDoOnStackReplacement(Thread* thread,
   {
     thread->PopShadowFrame();
     ManagedStack fragment;
-    thread->PushManagedStackFragment(&fragment);
+    ScopedManagedStackFragment smsf(thread, &fragment);
     (*art_quick_osr_stub)(osr_data->memory,
                           osr_data->frame_size,
                           osr_data->native_pc,
@@ -503,7 +503,6 @@ bool Jit::MaybeDoOnStackReplacement(Thread* thread,
     if (UNLIKELY(thread->GetException() == Thread::GetDeoptimizationException())) {
       thread->DeoptimizeWithDeoptimizationException(result);
     }
-    thread->PopManagedStackFragment(fragment);
   }
   free(osr_data);
   thread->PushShadowFrame(shadow_frame);

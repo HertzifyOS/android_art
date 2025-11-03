@@ -686,12 +686,9 @@ void BuildQuickShadowFrameVisitor::Visit() {
   ++cur_reg_;
 }
 
-// Don't inline. See b/65159206.
+// Don't inline for performance reasons. See b/65159206.
 NO_INLINE
-static void HandleDeoptimization(JValue* result,
-                                 ArtMethod* method,
-                                 ShadowFrame* deopt_frame,
-                                 ManagedStack* fragment)
+static void HandleDeoptimization(JValue* result, ArtMethod* method, ShadowFrame* deopt_frame)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   // Coming from partial-fragment deopt.
   Thread* self = Thread::Current();
@@ -721,7 +718,8 @@ static void HandleDeoptimization(JValue* result,
                                  /* out */ &method_type);
 
   // Push a transition back into managed code onto the linked list in thread.
-  self->PushManagedStackFragment(fragment);
+  ManagedStack fragment;
+  ScopedManagedStackFragment smsf(self, &fragment);
 
   // Ensure that the stack is still in order.
   if (kIsDebugBuild) {
@@ -781,10 +779,9 @@ extern "C" uint64_t artQuickToInterpreterBridge(ArtMethod* method, Thread* self,
   DCHECK(non_proxy_method->GetCodeItem() != nullptr) << method->PrettyMethod();
   std::string_view shorty = non_proxy_method->GetShortyView();
 
-  ManagedStack fragment;
   ShadowFrame* deopt_frame = self->MaybePopDeoptimizedStackedShadowFrame();
   if (UNLIKELY(deopt_frame != nullptr)) {
-    HandleDeoptimization(&result, method, deopt_frame, &fragment);
+    HandleDeoptimization(&result, method, deopt_frame);
   } else {
     CodeItemDataAccessor accessor(non_proxy_method->DexInstructionData());
     const char* old_cause = self->StartAssertNoThreadSuspension(
@@ -814,13 +811,11 @@ extern "C" uint64_t artQuickToInterpreterBridge(ArtMethod* method, Thread* self,
     }
 
     // Push a transition back into managed code onto the linked list in thread.
-    self->PushManagedStackFragment(&fragment);
+    ManagedStack fragment;
+    ScopedManagedStackFragment smsf(self, &fragment);
     self->PushShadowFrame(shadow_frame);
     result = interpreter::EnterInterpreterFromEntryPoint(self, accessor, shadow_frame);
   }
-
-  // Pop transition.
-  self->PopManagedStackFragment(fragment);
 
   // Check if caller needs to be deoptimized for instrumentation reasons.
   instrumentation::Instrumentation* instr = Runtime::Current()->GetInstrumentation();
@@ -2491,64 +2486,55 @@ extern "C" uint64_t artInvokePolymorphic(mirror::Object* raw_receiver, Thread* s
                                                     first_arg);
   shadow_frame_builder.VisitArguments();
 
-  // Push a transition back into managed code onto the linked list in thread.
-  ManagedStack fragment;
-  self->PushManagedStackFragment(&fragment);
-
-  // Call DoInvokePolymorphic with |is_range| = true, as shadow frame has argument registers in
-  // consecutive order.
-  RangeInstructionOperands operands(first_arg + 1, num_vregs - 1);
-  Intrinsics intrinsic = resolved_method->GetIntrinsic();
   JValue result;
-  bool success = false;
-  if (resolved_method->GetDeclaringClass() == GetClassRoot<mirror::MethodHandle>(linker)) {
-    Handle<mirror::MethodType> method_type(
-        hs.NewHandle(linker->ResolveMethodType(self, proto_idx, caller_method)));
-    if (UNLIKELY(method_type.IsNull())) {
-      // This implies we couldn't resolve one or more types in this method handle.
-      CHECK(self->IsExceptionPending());
-    } else {
-      Handle<mirror::MethodHandle> method_handle(hs.NewHandle(
-          ObjPtr<mirror::MethodHandle>::DownCast(receiver_handle.Get())));
-      if (intrinsic == Intrinsics::kMethodHandleInvokeExact) {
-        success = MethodHandleInvokeExact(self,
-                                          *shadow_frame,
-                                          method_handle,
-                                          method_type,
-                                          &operands,
-                                          &result);
+  {
+    // Push a transition back into managed code onto the linked list in thread.
+    ManagedStack fragment;
+    ScopedManagedStackFragment smsf(self, &fragment);
+
+    // Call DoInvokePolymorphic with |is_range| = true, as shadow frame has argument registers in
+    // consecutive order.
+    RangeInstructionOperands operands(first_arg + 1, num_vregs - 1);
+    Intrinsics intrinsic = resolved_method->GetIntrinsic();
+    bool success = false;
+    if (resolved_method->GetDeclaringClass() == GetClassRoot<mirror::MethodHandle>(linker)) {
+      Handle<mirror::MethodType> method_type(
+          hs.NewHandle(linker->ResolveMethodType(self, proto_idx, caller_method)));
+      if (UNLIKELY(method_type.IsNull())) {
+        // This implies we couldn't resolve one or more types in this method handle.
+        CHECK(self->IsExceptionPending());
       } else {
-        DCHECK_EQ(static_cast<uint32_t>(intrinsic),
-                  static_cast<uint32_t>(Intrinsics::kMethodHandleInvoke));
-        success = MethodHandleInvoke(self,
-                                     *shadow_frame,
-                                     method_handle,
-                                     method_type,
-                                     &operands,
-                                     &result);
+        Handle<mirror::MethodHandle> method_handle(
+            hs.NewHandle(ObjPtr<mirror::MethodHandle>::DownCast(receiver_handle.Get())));
+        if (intrinsic == Intrinsics::kMethodHandleInvokeExact) {
+          success = MethodHandleInvokeExact(
+              self, *shadow_frame, method_handle, method_type, &operands, &result);
+        } else {
+          DCHECK_EQ(static_cast<uint32_t>(intrinsic),
+                    static_cast<uint32_t>(Intrinsics::kMethodHandleInvoke));
+          success = MethodHandleInvoke(
+              self, *shadow_frame, method_handle, method_type, &operands, &result);
+        }
       }
+    } else {
+      DCHECK_EQ(GetClassRoot<mirror::VarHandle>(linker), resolved_method->GetDeclaringClass());
+      Handle<mirror::VarHandle> var_handle(
+          hs.NewHandle(ObjPtr<mirror::VarHandle>::DownCast(receiver_handle.Get())));
+      mirror::VarHandle::AccessMode access_mode =
+          mirror::VarHandle::GetAccessModeByIntrinsic(intrinsic);
+
+      success = VarHandleInvokeAccessor(self,
+                                        *shadow_frame,
+                                        var_handle,
+                                        caller_method,
+                                        proto_idx,
+                                        access_mode,
+                                        &operands,
+                                        &result);
     }
-  } else {
-    DCHECK_EQ(GetClassRoot<mirror::VarHandle>(linker), resolved_method->GetDeclaringClass());
-    Handle<mirror::VarHandle> var_handle(hs.NewHandle(
-        ObjPtr<mirror::VarHandle>::DownCast(receiver_handle.Get())));
-    mirror::VarHandle::AccessMode access_mode =
-        mirror::VarHandle::GetAccessModeByIntrinsic(intrinsic);
 
-    success = VarHandleInvokeAccessor(self,
-                                      *shadow_frame,
-                                      var_handle,
-                                      caller_method,
-                                      proto_idx,
-                                      access_mode,
-                                      &operands,
-                                      &result);
+    DCHECK(success || self->IsExceptionPending());
   }
-
-  DCHECK(success || self->IsExceptionPending());
-
-  // Pop transition record.
-  self->PopManagedStackFragment(fragment);
 
   bool is_ref = (shorty[0] == 'L');
   Runtime::Current()->GetInstrumentation()->PushDeoptContextIfNeeded(
@@ -2632,23 +2618,18 @@ extern "C" uint64_t artInvokePolymorphicWithHiddenReceiver(mirror::Object* raw_r
   shadow_frame_builder.SetReceiver(method_handle.Get());
   shadow_frame_builder.VisitArguments();
 
-  // Push a transition back into managed code onto the linked list in thread.
-  ManagedStack fragment;
-  self->PushManagedStackFragment(&fragment);
-
-  RangeInstructionOperands operands(first_arg + 1, num_vregs - 1);
   JValue result;
-  bool success = MethodHandleInvokeExact(self,
-                                         *shadow_frame,
-                                         method_handle,
-                                         method_type,
-                                         &operands,
-                                         &result);
+  {
+    // Push a transition back into managed code onto the linked list in thread.
+    ManagedStack fragment;
+    ScopedManagedStackFragment smsf(self, &fragment);
 
-  DCHECK(success || self->IsExceptionPending());
+    RangeInstructionOperands operands(first_arg + 1, num_vregs - 1);
+    bool success = MethodHandleInvokeExact(
+        self, *shadow_frame, method_handle, method_type, &operands, &result);
 
-  // Pop transition record.
-  self->PopManagedStackFragment(fragment);
+    DCHECK(success || self->IsExceptionPending());
+  }
 
   bool is_ref = shorty[0] == 'L';
   Runtime::Current()->GetInstrumentation()->PushDeoptContextIfNeeded(
@@ -2694,20 +2675,19 @@ extern "C" uint64_t artInvokeCustom(uint32_t call_site_idx, Thread* self, ArtMet
                                                     first_arg);
   shadow_frame_builder.VisitArguments();
 
-  // Push a transition back into managed code onto the linked list in thread.
-  ManagedStack fragment;
-  self->PushManagedStackFragment(&fragment);
-  self->EndAssertNoThreadSuspension(old_cause);
-
-  // Perform the invoke-custom operation.
-  RangeInstructionOperands operands(first_arg, num_vregs);
   JValue result;
-  bool success =
-      interpreter::DoInvokeCustom(self, *shadow_frame, call_site_idx, &operands, &result);
-  DCHECK(success || self->IsExceptionPending());
+  {
+    // Push a transition back into managed code onto the linked list in thread.
+    ManagedStack fragment;
+    ScopedManagedStackFragment smsf(self, &fragment);
+    self->EndAssertNoThreadSuspension(old_cause);
 
-  // Pop transition record.
-  self->PopManagedStackFragment(fragment);
+    // Perform the invoke-custom operation.
+    RangeInstructionOperands operands(first_arg, num_vregs);
+    bool success =
+        interpreter::DoInvokeCustom(self, *shadow_frame, call_site_idx, &operands, &result);
+    DCHECK(success || self->IsExceptionPending());
+  }
 
   bool is_ref = (shorty[0] == 'L');
   Runtime::Current()->GetInstrumentation()->PushDeoptContextIfNeeded(

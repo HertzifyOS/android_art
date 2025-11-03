@@ -21,3 +21,10 @@
     invoke-static {p0, p1, v0}, Llibcore/io/Memory;->pokeByte(JB)V
     return-void
 .end method
+
+.method public static pokeShort12345678(JZ)V
+    .registers 4
+    const v0, 0x12345678
+    invoke-static {p0, p1, v0, p2}, Llibcore/io/Memory;->pokeShort(JSZ)V
+    return-void
+.end method

@@ -933,11 +933,9 @@ class EXPORT Thread {
   }
   void Notify() REQUIRES(!wait_mutex_);
 
-  ALWAYS_INLINE void PoisonObjectPointers() {
-    ++poison_object_cookie_;
-  }
+  ALWAYS_INLINE void PoisonObjectPointers();
 
-  ALWAYS_INLINE static void PoisonObjectPointersIfDebug();
+  ALWAYS_INLINE static void PoisonObjectPointersOnCurrentThread();
 
   ALWAYS_INLINE uintptr_t GetPoisonObjectCookie() const {
     return poison_object_cookie_;
@@ -1307,6 +1305,7 @@ class EXPORT Thread {
   }
 
   // Linked list recording fragments of managed stack.
+  // Consider using ScopedManagedStackFragment instead of these methods directly.
   void PushManagedStackFragment(ManagedStack* fragment) {
     tlsPtr_.managed_stack.PushManagedStackFragment(fragment);
   }
@@ -1314,6 +1313,7 @@ class EXPORT Thread {
     tlsPtr_.managed_stack.PopManagedStackFragment(fragment);
   }
 
+  // Consider using ScopedShadowFrame instead of these methods directly.
   ALWAYS_INLINE ShadowFrame* PushShadowFrame(ShadowFrame* new_top_frame);
   ALWAYS_INLINE ShadowFrame* PopShadowFrame();
 

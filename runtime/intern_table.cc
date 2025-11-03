@@ -211,6 +211,11 @@ ObjPtr<mirror::String> InternTable::Insert(ObjPtr<mirror::String> s,
   DCHECK_EQ(hash, static_cast<uint32_t>(s->GetStoredHashCode()));
   DCHECK_IMPLIES(hash == 0u, s->ComputeHashCode() == 0);
   Thread* const self = Thread::Current();
+  if (kObjPtrPoisoning) {
+    StackHandleScope<1> hs(self);
+    HandleWrapperObjPtr<mirror::String> s_wrapper = hs.NewHandleWrapper(&s);
+    self->PoisonObjectPointers();
+  }
   MutexLock mu(self, *Locks::intern_table_lock_);
   if (kDebugLocking) {
     Locks::mutator_lock_->AssertSharedHeld(self);
@@ -258,6 +263,7 @@ ObjPtr<mirror::String> InternTable::Intern(
   DCHECK(utf8_data != nullptr);
   uint32_t hash = Utf8String::Hash(utf16_length, utf8_data);
   Thread* self = Thread::Current();
+  self->PoisonObjectPointers();
   ObjPtr<mirror::String> s;
   size_t num_searched_strong_frozen_tables;
   {

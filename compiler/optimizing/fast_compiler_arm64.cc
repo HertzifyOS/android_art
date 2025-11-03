@@ -272,7 +272,7 @@ class FastCompilerARM64 : public FastCompiler {
   bool EnsureHasFrame();
 
   bool GenerateFrame();
-  void GenerateSuspendCheck();
+  void GenerateSuspendCheck(uint32_t dex_pc);
   void IncrementHotness(Register method);
 
   // Generate code for a frame exit.
@@ -410,6 +410,7 @@ class FastCompilerARM64 : public FastCompiler {
             uint32_t dex_pc,
             DataType::Type type);
   bool BuildSwitch(const Instruction& instruction, uint32_t dex_pc);
+  bool BuildFillArrayData(const Instruction& instruction, uint32_t dex_pc);
 
   void AddToWorkQueue(uint32_t dex_pc) {
     if (!processed_.IsBitSet(dex_pc)) {
@@ -748,7 +749,7 @@ bool FastCompilerARM64::InitializeParameters() {
 
   if (needs_spill) {
     // We can now generate the suspend check.
-    GenerateSuspendCheck();
+    GenerateSuspendCheck(/* dex_pc= */ 0u);
   }
 
   if (loop_header_pcs_.IsAnyBitSet()) {
@@ -779,6 +780,7 @@ bool FastCompilerARM64::InitializeParameters() {
 }
 
 void FastCompilerARM64::MoveConstantsAndFpusToRegisters() {
+  DCHECK(has_frame_);
   for (uint32_t i = 0; i < vreg_locations_.size(); ++i) {
     Location location  = vreg_locations_[i];
     if (location.IsConstant()) {
@@ -798,6 +800,7 @@ void FastCompilerARM64::MoveConstantsAndFpusToRegisters() {
 }
 
 void FastCompilerARM64::ResetLocations() {
+  DCHECK(has_frame_);
   for (uint32_t i = 0; i < vreg_locations_.size(); ++i) {
     vreg_locations_[i] = CreateNewLocation(i, DataType::Type::kInt64);
   }
@@ -886,7 +889,7 @@ bool FastCompilerARM64::ProcessBlock(uint32_t dex_pc) {
     if (is_linked || is_loop_header) {
       __ Bind(label);
       if (is_loop_header) {
-        GenerateSuspendCheck();
+        GenerateSuspendCheck(pair.DexPc());
         UseScratchRegisterScope temps(GetVIXLAssembler());
         Register temp = temps.AcquireX();
         __ Ldr(temp, MemOperand(sp, 0));
@@ -1088,6 +1091,7 @@ bool FastCompilerARM64::MoveLocation(Location destination,
 }
 
 Location FastCompilerARM64::CreateNewLocation(uint32_t reg, DataType::Type type) {
+  DCHECK(has_frame_);
   if (reg >= kMaximumRegisters) {
     return Location::StackSlot(GetStackSlot(reg));
   }
@@ -1299,7 +1303,7 @@ bool FastCompilerARM64::EnsureHasFrame() {
     return false;
   }
 
-  GenerateSuspendCheck();
+  GenerateSuspendCheck(/* dex_pc= */ 0u);
   return true;
 }
 
@@ -1404,12 +1408,12 @@ bool FastCompilerARM64::GenerateFrame() {
   return true;
 }
 
-void FastCompilerARM64::GenerateSuspendCheck() {
+void FastCompilerARM64::GenerateSuspendCheck(uint32_t dex_pc) {
   MacroAssembler* masm = GetVIXLAssembler();
   if (compiler_options_.GetImplicitSuspendChecks()) {
     ExactAssemblyScope eas(masm, kInstructionSize, CodeBufferCheckScope::kExactSize);
     __ ldr(kImplicitSuspendCheckRegister, MemOperand(kImplicitSuspendCheckRegister));
-    RecordPcInfo(0);
+    RecordPcInfo(dex_pc);
   } else {
     UseScratchRegisterScope temps(masm);
     Register temp = temps.AcquireW();
@@ -1423,7 +1427,7 @@ void FastCompilerARM64::GenerateSuspendCheck() {
     {
       ExactAssemblyScope eas(masm, kInstructionSize, CodeBufferCheckScope::kExactSize);
       __ blr(lr);
-      RecordPcInfo(0);
+      RecordPcInfo(dex_pc);
     }
     __ Bind(&continue_label);
   }
@@ -2411,7 +2415,7 @@ bool FastCompilerARM64::BuildArrayAccess(const Instruction& instruction,
   Register temp = calling_convention.GetRegisterAt(1);
   // Fetch the length, and do a null pointer check.
   {
-    // Ensure the pc position is recorded immediately after the store instruction.
+    // Ensure the pc position is recorded immediately after the load instruction.
     EmissionCheckScope guard(GetVIXLAssembler(), kMaxMacroInstructionSizeInBytes);
     __ Ldr(temp, mem);
     if (CanBeNull(array_reg)) {
@@ -2754,8 +2758,7 @@ bool FastCompilerARM64::BuildStaticFieldAccess(const Instruction& instruction,
   ArtField* field = nullptr;
   uint16_t field_index = instruction.VRegB_21c();
   uint32_t source_or_dest_reg = instruction.VRegA_21c();
-  UseScratchRegisterScope temps(GetVIXLAssembler());
-  Register temp = temps.AcquireX();
+  Register temp = vixl::aarch64::XRegister(GetTempCoreRegister());
   bool generate_clinit_check = false;
   {
     ScopedObjectAccess soa(Thread::Current());
@@ -3036,6 +3039,73 @@ bool FastCompilerARM64::BuildSwitch(const Instruction& instruction, uint32_t dex
   return true;
 }
 
+bool FastCompilerARM64::BuildFillArrayData(const Instruction& instruction, uint32_t dex_pc) {
+  if (!EnsureHasFrame()) {
+    return false;
+  }
+
+  uint32_t array_reg = instruction.VRegA_31t();
+  Register array = RegisterFrom(
+      GetExistingRegisterLocation(array_reg, DataType::Type::kReference),
+      DataType::Type::kReference);
+  InvokeRuntimeCallingConvention calling_convention;
+  Register length = calling_convention.GetRegisterAt(1).W();
+  MemOperand mem = HeapOperand(array.W(), mirror::Array::LengthOffset().Uint32Value());
+  // Fetch the length, and do a null pointer check.
+  {
+    // Ensure the pc position is recorded immediately after the load instruction.
+    EmissionCheckScope guard(GetVIXLAssembler(), kMaxMacroInstructionSizeInBytes);
+    __ Ldr(length, mem);
+    if (CanBeNull(array_reg)) {
+      RecordPcInfo(dex_pc);
+    }
+  }
+
+  int32_t payload_offset = instruction.VRegB_31t() + dex_pc;
+  const Instruction::ArrayDataPayload* payload =
+      reinterpret_cast<const Instruction::ArrayDataPayload*>(
+          GetCodeItemAccessor().Insns() + payload_offset);
+  uint32_t element_count = payload->element_count;
+  if (element_count == 0u) {
+    return true;
+  }
+  Register temp = calling_convention.GetRegisterAt(0);
+
+  {
+    __ Mov(temp.W(), element_count - 1);
+    // Bounds check.
+    __ Cmp(temp.W(), length.W());
+    vixl::aarch64::Label cont;
+    __ B(vixl::aarch64::lo, &cont);
+    InvokeRuntime(kQuickThrowArrayBounds, dex_pc);
+    __ Bind(&cont);
+  }
+
+  const uint8_t* data = payload->data;
+  uint16_t element_width = payload->element_width;
+#define STORE(type, data_type, instruction, reg) \
+  { \
+    size_t offset = mirror::Array::DataOffset(DataType::Size(data_type)).Uint32Value(); \
+    for (uint32_t i = 0; i < element_count; ++i) { \
+      __ Mov(reg, reinterpret_cast<const type*>(data)[i]); \
+      __ instruction(reg, HeapOperand(array, offset)); \
+      offset += DataType::Size(data_type); \
+    } \
+    break; \
+  }
+
+  switch (element_width) {
+    case 1: STORE(int8_t, DataType::Type::kInt8, Strb, temp.W())
+    case 2: STORE(int16_t, DataType::Type::kInt16, Strh, temp.W())
+    case 4: STORE(int32_t, DataType::Type::kInt32, Str, temp.W())
+    case 8: STORE(int64_t, DataType::Type::kInt64, Str, temp.X())
+    default:
+      LOG(FATAL) << "Unknown element width for " << element_width;
+  }
+#undef STORE
+  return true;
+}
+
 // Don't error on the stack size of `ProcessDexInstruction`, we know we are not
 // going to stack overflow in the compiler.
 #pragma GCC diagnostic push
@@ -3175,6 +3245,9 @@ bool FastCompilerARM64::ProcessDexInstruction(const Instruction& instruction,
     case Instruction::GOTO:
     case Instruction::GOTO_16:
     case Instruction::GOTO_32: {
+      if (!EnsureHasFrame()) {
+        return false;
+      }
       int32_t target_offset = instruction.GetTargetOffset();
       if (target_offset <= 0 && !CanHandleBackwardsBranch(dex_pc + target_offset)) {
         return false;
@@ -3653,7 +3726,7 @@ bool FastCompilerARM64::ProcessDexInstruction(const Instruction& instruction,
     }
 
     case Instruction::FILL_ARRAY_DATA: {
-      break;
+      return BuildFillArrayData(instruction, dex_pc);
     }
 
     case Instruction::MOVE_RESULT_OBJECT:

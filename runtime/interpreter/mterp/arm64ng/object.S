@@ -1,32 +1,32 @@
 %def op_check_cast():
 %  slow_path = add_slow_path(op_check_cast_slow_path)
    // Fast-path which gets the class from thread-local cache.
-%  fetch_from_thread_cache("x1", miss_label="2f")
-1:
+%  fetch_from_thread_cache("x1", miss_label=slow_path)
+.L${opcode}_resume:
    lsr     w2, wINST, #8               // w2<- A
    GET_VREG w0, w2                     // w0<- vA (object)
-   cbz     w0, .L${opcode}_resume
+   cbz     w0, .L${opcode}_next
    ldr     w2, [x0, #MIRROR_OBJECT_CLASS_OFFSET]
    UNPOISON_HEAP_REF w2
    // Fast path: do a comparison without read barrier.
    cmp     w1, w2
-   bne     ${slow_path}
-.L${opcode}_resume:
+   bne     .L${opcode}_slow_path_check_hierarchy
+.L${opcode}_next:
    FETCH_ADVANCE_INST 2
    GET_INST_OPCODE ip
    GOTO_OPCODE ip
-2:
+
+%def op_check_cast_slow_path():
    EXPORT_PC
    mov     x0, xSELF
    ldr     x1, [sp]
    mov     x2, xPC
    bl      nterp_get_class
    mov     x1, x0
-   b       1b
-
-%def op_check_cast_slow_path():
+   b       .L${opcode}_resume
+.L${opcode}_slow_path_check_hierarchy:
    // We don't do read barriers for simplicity. However, this means that x1
-   // (and all other fetched objects) may be a from-space reference. Tthat's OK as
+   // (and all other fetched objects) may be a from-space reference. That's OK as
    // we only fetch constant information from the references.
    // This also means that some of the comparisons below may lead to false negative,
    // but it will eventually be handled in the runtime.
@@ -39,14 +39,14 @@
    ldr     w2, [x2, #MIRROR_CLASS_SUPER_CLASS_OFFSET]
    UNPOISON_HEAP_REF w2
    cmp     w1, w2
-   beq     .L${opcode}_resume
+   beq     .L${opcode}_next
    cbnz    w2, 1b
 2:
    TEST_IF_MARKING 4f
 3:
    EXPORT_PC
    bl      art_quick_check_instance_of
-   b       .L${opcode}_resume
+   b       .L${opcode}_next
 4:
    bl      art_quick_read_barrier_mark_reg01
    b       3b
@@ -65,7 +65,7 @@
    cbnz    w3, 2b
    // Check if the object is a primitive array.
    ldrh    w2, [x2, #MIRROR_CLASS_OBJECT_PRIMITIVE_TYPE_OFFSET]
-   cbz     w2, .L${opcode}_resume
+   cbz     w2, .L${opcode}_next
    // Go slow path for throwing the exception.
    b 2b
 

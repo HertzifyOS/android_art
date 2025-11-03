@@ -326,7 +326,7 @@ class CodeInfo {
   }
 
   BitMemoryRegion GetStackMask(size_t index) const {
-    return stack_masks_.GetBitMemoryRegion(index);
+    return stack_masks_.GetBitMemoryRegion</*kColumn=*/0>(index);
   }
 
   BitMemoryRegion GetStackMaskOf(const StackMap& stack_map) const {

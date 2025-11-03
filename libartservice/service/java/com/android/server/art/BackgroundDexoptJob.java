@@ -76,6 +76,21 @@ public class BackgroundDexoptJob implements ArtServiceJobInterface {
     @GuardedBy("this") @Nullable private CancellationSignal mCancellationSignal = null;
     @GuardedBy("this") @NonNull private Optional<Integer> mLastStopReason = Optional.empty();
 
+    /**
+     * The time the {@link JobType.BG_DEXOPT} job was scheduled.
+     *
+     * The time is measured in milliseconds, on a monotonic clock including time spent in sleep.
+     */
+    @GuardedBy("this") private long mJobScheduledAtMillis = 0;
+
+    /**
+     * The completion time of the last finished (either completed or failed, not cancelled) run of
+     * the {@link JobType.BG_DEXOPT} job since boot.
+     *
+     * The time is measured in milliseconds, on a monotonic clock including time spent in sleep.
+     */
+    @GuardedBy("this") private long mJobLastFinishedAtMillis = 0;
+
     public BackgroundDexoptJob(@NonNull Context context, @NonNull ArtManagerLocal artManagerLocal,
             @NonNull Config config) {
         this(new Injector(context, artManagerLocal, config));
@@ -92,12 +107,13 @@ public class BackgroundDexoptJob implements ArtServiceJobInterface {
     public boolean onStartJob(
             @NonNull BackgroundDexoptJobService jobService, @NonNull JobParameters params) {
         JobType jobType = JobType.fromJobId(params.getJobId());
+        long jobStartedAtMillis = SystemClock.elapsedRealtime();
         start(jobType).thenAcceptAsync(result -> {
             boolean wantsReschedule = false;
 
             if (jobType == JobType.BG_DEXOPT) {
                 try {
-                    writeStats(result);
+                    writeStats(result, jobStartedAtMillis);
                 } catch (RuntimeException e) {
                     // Not expected. Log wtf to surface it.
                     AsLog.wtf("Failed to write stats", e);
@@ -109,6 +125,12 @@ public class BackgroundDexoptJob implements ArtServiceJobInterface {
                 // the next interval.
                 wantsReschedule = result instanceof CompletedResult
                         && ((CompletedResult) result).isCancelled();
+
+                synchronized (this) {
+                    if (!wantsReschedule) {
+                        mJobLastFinishedAtMillis = SystemClock.elapsedRealtime();
+                    }
+                }
             }
 
             // This call will be ignored if `onStopJob` is called.
@@ -165,6 +187,13 @@ public class BackgroundDexoptJob implements ArtServiceJobInterface {
             // See the javadoc of
             // `ArtManagerLocal.ScheduleBackgroundDexoptJobCallback.onOverrideJobInfo` for details.
             throw new IllegalStateException("'setRequiresStorageNotLow' must not be set");
+        }
+
+        if (jobType == JobType.BG_DEXOPT) {
+            synchronized (this) {
+                mJobScheduledAtMillis = SystemClock.elapsedRealtime();
+                mJobLastFinishedAtMillis = 0;
+            }
         }
 
         return mInjector.getJobScheduler().schedule(info) == JobScheduler.RESULT_SUCCESS
@@ -274,15 +303,26 @@ public class BackgroundDexoptJob implements ArtServiceJobInterface {
         // TODO(b/258223472): Also delete "package-dcl.list" and "package-usage.list".
     }
 
-    private void writeStats(@NonNull Result result) {
+    /**
+     * @param jobStartedAtMillis the time the run was started, measured in milliseconds, on a
+     *         monotonic clock including time spent in sleep.
+     */
+    private void writeStats(@NonNull Result result, long jobStartedAtMillis) {
         Optional<Integer> stopReason;
+        boolean isFirstRun;
+        long jobLatencyMillis;
         synchronized (this) {
             stopReason = mLastStopReason;
+            Utils.check(mJobScheduledAtMillis > 0);
+            isFirstRun = mJobLastFinishedAtMillis == 0;
+            jobLatencyMillis = isFirstRun ? jobStartedAtMillis - mJobScheduledAtMillis
+                                          : jobStartedAtMillis - mJobLastFinishedAtMillis;
         }
         if (result instanceof CompletedResult completedResult) {
-            BackgroundDexoptJobStatsReporter.reportSuccess(completedResult, stopReason);
+            BackgroundDexoptJobStatsReporter.reportSuccess(
+                    completedResult, stopReason, isFirstRun, jobLatencyMillis);
         } else if (result instanceof FatalErrorResult) {
-            BackgroundDexoptJobStatsReporter.reportFailure();
+            BackgroundDexoptJobStatsReporter.reportFailure(isFirstRun, jobLatencyMillis);
         }
     }
 

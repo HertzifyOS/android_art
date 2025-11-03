@@ -776,6 +776,13 @@ static void CreateSystemArrayCopyLocations(HInvoke* invoke) {
     }
   }
 
+  // If source and destination are the same, fallback to native implementation: some overlapping
+  // copy regions must be copied in reverse and we can't know in all cases if it's needed.
+  SystemArrayCopyOptimizations optimizations(invoke);
+  if (optimizations.GetDestinationIsSource()) {
+    return;
+  }
+
   // Okay, it is safe to generate inline code.
   ArenaAllocator* allocator = invoke->GetBlock()->GetGraph()->GetAllocator();
   LocationSummary* locations =
@@ -882,17 +889,26 @@ static void SystemArrayCopyPrimitive(HInvoke* invoke,
   SlowPathCode* slow_path = new (codegen->GetScopedAllocator()) IntrinsicSlowPathX86(invoke);
   codegen->AddSlowPath(slow_path);
 
-  // Bail out if the source and destination are the same (to handle overlap).
+  SystemArrayCopyOptimizations optimizations(invoke);
+
+  // If we know at compile time that source and destination are the same, we should not intrinsify.
+  DCHECK(!optimizations.GetDestinationIsSource());
+  // If source and destination are the same, take the slow path. Overlapping copy regions must be
+  // copied in reverse and we can't know in all cases if it's needed.
   __ cmpl(src, dest);
   __ j(kEqual, slow_path->GetEntryLabel());
 
-  // Bail out if the source is null.
-  __ testl(src, src);
-  __ j(kEqual, slow_path->GetEntryLabel());
+  if (!optimizations.GetSourceIsNotNull()) {
+    // Bail out if the source is null.
+    __ testl(src, src);
+    __ j(kEqual, slow_path->GetEntryLabel());
+  }
 
-  // Bail out if the destination is null.
-  __ testl(dest, dest);
-  __ j(kEqual, slow_path->GetEntryLabel());
+  if (!optimizations.GetDestinationIsNotNull()) {
+    // Bail out if the destination is null.
+    __ testl(dest, dest);
+    __ j(kEqual, slow_path->GetEntryLabel());
+  }
 
   // If the length is negative, bail out.
   // We have already checked in the LocationsBuilder for the constant case.

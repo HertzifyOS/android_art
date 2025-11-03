@@ -2472,11 +2472,9 @@ void UnstartedRuntime::Invoke(Thread* self, const CodeItemDataAccessor& accessor
     result->SetL(nullptr);
 
     // Push the shadow frame. This is so the failing method can be seen in abort dumps.
-    self->PushShadowFrame(shadow_frame);
+    ScopedShadowFrame pusher(self, shadow_frame);
 
     (*iter->second)(self, shadow_frame, result, arg_offset);
-
-    self->PopShadowFrame();
   } else {
     if (!EnsureInitialized(self, shadow_frame)) {
       return;

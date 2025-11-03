@@ -2983,10 +2983,10 @@ ObjPtr<mirror::Class> ClassLinker::EnsureResolved(Thread* self,
                                                   std::string_view descriptor,
                                                   ObjPtr<mirror::Class> klass) {
   DCHECK(klass != nullptr);
-  if (kIsDebugBuild) {
+  if (kObjPtrPoisoning) {
     StackHandleScope<1> hs(self);
     HandleWrapperObjPtr<mirror::Class> h = hs.NewHandleWrapper(&klass);
-    Thread::PoisonObjectPointersIfDebug();
+    Thread::PoisonObjectPointersOnCurrentThread();
   }
 
   // Helper lambda to make sure we wait for a particular status (i.e. retired or resolved) while
@@ -3552,7 +3552,7 @@ struct ScopedDefiningClass {
     CHECK(!returned_);
     self_->DecrDefineClassCount();
     Runtime::Current()->GetRuntimeCallbacks()->EndDefineClass();
-    Thread::PoisonObjectPointersIfDebug();
+    Thread::PoisonObjectPointersOnCurrentThread();
     returned_ = true;
     return h_klass.Get();
   }
@@ -4652,10 +4652,6 @@ void ClassLinker::RegisterExistingDexCache(ObjPtr<mirror::DexCache> dex_cache,
     WriterMutexLock mu(self, *Locks::classlinker_classes_lock_);
     table = InsertClassTableForClassLoader(h_class_loader.Get());
   }
-  // Avoid a deadlock between a garbage collecting thread running a checkpoint,
-  // a thread holding the dex lock and blocking on a condition variable regarding
-  // weak references access, and a thread blocking on the dex lock.
-  gc::ScopedGCCriticalSection gcs(self, gc::kGcCauseClassLinker, gc::kCollectorTypeClassLinker);
   WriterMutexLock mu(self, *Locks::dex_lock_);
   RegisterDexFileLocked(*dex_file, h_dex_cache.Get(), h_class_loader.Get());
   table->InsertStrongRoot(h_dex_cache.Get());
@@ -4738,10 +4734,6 @@ ObjPtr<mirror::DexCache> ClassLinker::RegisterDexFile(const DexFile& dex_file,
   Handle<mirror::ClassLoader> h_class_loader(hs.NewHandle(class_loader));
   Handle<mirror::DexCache> h_dex_cache(hs.NewHandle(AllocDexCache(self, dex_file)));
   {
-    // Avoid a deadlock between a garbage collecting thread running a checkpoint,
-    // a thread holding the dex lock and blocking on a condition variable regarding
-    // weak references access, and a thread blocking on the dex lock.
-    gc::ScopedGCCriticalSection gcs(self, gc::kGcCauseClassLinker, gc::kCollectorTypeClassLinker);
     WriterMutexLock mu(self, *Locks::dex_lock_);
     const DexCacheData* old_data = FindDexCacheDataLocked(dex_file);
     old_dex_cache = DecodeDexCacheLocked(self, old_data);
@@ -10473,8 +10465,8 @@ ArtMethod* ClassLinker::ResolveMethodId(uint32_t method_idx,
                                         Handle<mirror::DexCache> dex_cache,
                                         Handle<mirror::ClassLoader> class_loader) {
   DCHECK(dex_cache->GetClassLoader() == class_loader.Get());
+  Thread::PoisonObjectPointersOnCurrentThread();
   ArtMethod* resolved = dex_cache->GetResolvedMethod(method_idx);
-  Thread::PoisonObjectPointersIfDebug();
   if (resolved != nullptr) {
     DCHECK(!resolved->IsRuntimeMethod());
     DCHECK(resolved->GetDeclaringClassUnchecked() != nullptr) << resolved->GetDexMethodIndex();
@@ -10515,8 +10507,8 @@ ArtField* ClassLinker::ResolveFieldJLS(uint32_t field_idx,
                                        Handle<mirror::ClassLoader> class_loader) {
   DCHECK(dex_cache != nullptr);
   DCHECK(dex_cache->GetClassLoader() == class_loader.Get());
+  Thread::PoisonObjectPointersOnCurrentThread();
   ArtField* resolved = dex_cache->GetResolvedField(field_idx);
-  Thread::PoisonObjectPointersIfDebug();
   if (resolved != nullptr) {
     return resolved;
   }

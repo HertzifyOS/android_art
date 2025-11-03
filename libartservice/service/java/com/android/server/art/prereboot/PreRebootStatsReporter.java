@@ -67,7 +67,7 @@ import java.util.function.Function;
  *
  * @hide
  */
-@RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+@RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
 public class PreRebootStatsReporter {
     // Shorthands for those ultra long names in the stats proto generated code.
     public static final int END_STATUS_UNSPECIFIED =

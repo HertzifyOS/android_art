@@ -682,6 +682,7 @@ void RegisterAllocationResolver::InsertMoveAfter(HInstruction* instruction,
 }
 
 Location RegisterAllocationResolver::GetLocation(LiveInterval* interval) {
+  DCHECK(!interval->IsFixed());
   if (interval->HasRegisters()) {
     uint32_t reg = interval->GetRegisterOrLowRegister();
     if (interval->IsFloatingPoint()) {
@@ -698,6 +699,7 @@ Location RegisterAllocationResolver::GetLocation(LiveInterval* interval) {
       }
     }
   } else {
+    DCHECK(!interval->IsTemp());
     HInstruction* defined_by = interval->GetDefinedBy();
     if (defined_by->IsConstant()) {
       return defined_by->GetLocations()->Out();

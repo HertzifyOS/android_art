@@ -21,22 +21,18 @@
 #
 # This file has been derived for mainline phone (and tablet) usage.
 #
+android.app.AndroidForwardingOs
 android.app.AppOpsManager$$ExternalSyntheticLambda4
 android.compat.Compatibility$1
 android.compat.Compatibility$BehaviorChangeDelegate
 android.compat.Compatibility$ChangeConfig
 android.compat.Compatibility
 android.content.ContentCaptureOptions$ContentProtectionOptions$$ExternalSyntheticLambda0
-android.content.res.AssetManager
-android.content.res.Resources$$ExternalSyntheticLambda1
 android.crypto.hpke.HpkeSpi
-android.graphics.ColorSpace$Rgb$$ExternalSyntheticLambda6
-android.graphics.ColorSpace$Rgb$$ExternalSyntheticLambda9
 android.icu.text.RuleBasedBreakIterator
 android.media.AudioDeviceAttributes
-android.os.HandlerThread
+android.net.http.UrlResponseInfoWrapper$HeaderBlockImpl$$ExternalSyntheticLambda1
 android.os.ParcelFileDescriptor$AutoCloseInputStream
-android.os.StrictMode$1
 android.os.StrictMode$AndroidBlockGuardPolicy
 android.service.notification.StatusBarNotification$$ExternalSyntheticLambda0
 android.system.ErrnoException
@@ -578,6 +574,7 @@ dalvik.annotation.optimization.FastNative
 dalvik.annotation.optimization.NeverCompile
 dalvik.annotation.optimization.NeverInline
 dalvik.system.AppSpecializationHooks
+dalvik.system.ApplicationRuntime
 dalvik.system.BaseDexClassLoader$Reporter
 dalvik.system.BaseDexClassLoader
 dalvik.system.BlockGuard$1
@@ -588,6 +585,7 @@ dalvik.system.BlockGuard$Policy
 dalvik.system.BlockGuard$VmPolicy
 dalvik.system.BlockGuard
 dalvik.system.ClassExt
+dalvik.system.CloseGuard$CloseGuardException
 dalvik.system.CloseGuard$DefaultReporter
 dalvik.system.CloseGuard$Reporter
 dalvik.system.CloseGuard$Tracker
@@ -625,6 +623,7 @@ dalvik.system.ZygoteHooks
 java.awt.font.NumericShaper
 java.awt.font.TextAttribute
 java.io.Bits
+java.io.BufferedInputStream$$ExternalSyntheticBackportWithForwarding0
 java.io.BufferedInputStream
 java.io.BufferedOutputStream
 java.io.BufferedReader
@@ -758,6 +757,7 @@ java.lang.ArrayIndexOutOfBoundsException
 java.lang.ArrayStoreException
 java.lang.AssertionError
 java.lang.AutoCloseable
+java.lang.BaseVirtualThread
 java.lang.Boolean
 java.lang.BootClassLoader
 java.lang.Byte$ByteCache
@@ -769,12 +769,14 @@ java.lang.CharSequence$$ExternalSyntheticLambda1
 java.lang.CharSequence$1CharIterator
 java.lang.CharSequence$1CodePointIterator
 java.lang.CharSequence
+java.lang.Character$$ExternalSyntheticBackport0
 java.lang.Character$CharacterCache
 java.lang.Character$Subset
 java.lang.Character$UnicodeBlock
 java.lang.Character
-java.lang.Class$$ExternalSyntheticLambda0
+java.lang.Class$$ExternalSyntheticBackport0
 java.lang.Class$$ExternalSyntheticLambda1
+java.lang.Class$$ExternalSyntheticLambda2
 java.lang.Class$Caches
 java.lang.Class
 java.lang.ClassCastException
@@ -823,6 +825,7 @@ java.lang.IndexOutOfBoundsException
 java.lang.InheritableThreadLocal
 java.lang.InstantiationError
 java.lang.InstantiationException
+java.lang.Integer$$ExternalSyntheticBackport0
 java.lang.Integer$IntegerCache
 java.lang.Integer
 java.lang.InternalError
@@ -833,6 +836,9 @@ java.lang.LinkageError
 java.lang.Long$LongCache
 java.lang.Long
 java.lang.MatchException
+java.lang.Math$$ExternalSyntheticBackport0
+java.lang.Math$$ExternalSyntheticBackport1
+java.lang.Math$$ExternalSyntheticBackport2
 java.lang.Math$RandomNumberGeneratorHolder
 java.lang.Math
 java.lang.NegativeArraySizeException
@@ -879,11 +885,14 @@ java.lang.StackTraceElement
 java.lang.StackWalker$Option
 java.lang.StackWalker$StackFrame
 java.lang.StackWalker
+java.lang.StrictMath$$ExternalSyntheticBackport4
 java.lang.StrictMath
-java.lang.String$$ExternalSyntheticLambda0
-java.lang.String$$ExternalSyntheticLambda1
+java.lang.String$$ExternalSyntheticBackport0
+java.lang.String$$ExternalSyntheticBackport1
 java.lang.String$$ExternalSyntheticLambda2
 java.lang.String$$ExternalSyntheticLambda3
+java.lang.String$$ExternalSyntheticLambda4
+java.lang.String$$ExternalSyntheticLambda5
 java.lang.String$CaseInsensitiveComparator
 java.lang.String-IA
 java.lang.String
@@ -903,13 +912,19 @@ java.lang.System$PropertiesWithNonOverrideableDefaults
 java.lang.System
 java.lang.Thread$1
 java.lang.Thread$AllThreadsRecord
+java.lang.Thread$Builder$OfPlatform
+java.lang.Thread$Builder$OfVirtual
+java.lang.Thread$Builder
 java.lang.Thread$Caches
 java.lang.Thread$State
-java.lang.Thread$ThreadIdentifiers
 java.lang.Thread$UncaughtExceptionHandler
 java.lang.Thread$WeakClassKey
 java.lang.Thread-IA
 java.lang.Thread
+java.lang.ThreadBuilders$BaseThreadBuilder
+java.lang.ThreadBuilders$PlatformThreadBuilder
+java.lang.ThreadBuilders$VirtualThreadBuilder
+java.lang.ThreadBuilders
 java.lang.ThreadDeath
 java.lang.ThreadGroup
 java.lang.ThreadLocal$SuppliedThreadLocal
@@ -938,7 +953,9 @@ java.lang.UnsupportedOperationException
 java.lang.VMClassLoader
 java.lang.VerifyError
 java.lang.VirtualMachineError
+java.lang.VirtualThread
 java.lang.Void
+java.lang.WrongThreadException
 java.lang.annotation.Annotation
 java.lang.annotation.AnnotationTypeMismatchException
 java.lang.annotation.Documented
@@ -946,6 +963,7 @@ java.lang.annotation.IncompleteAnnotationException
 java.lang.annotation.Inherited
 java.lang.annotation.Retention
 java.lang.annotation.Target
+java.lang.constant.ClassDesc$$ExternalSyntheticBackport0
 java.lang.constant.ClassDesc
 java.lang.constant.Constable
 java.lang.constant.ConstantDesc
@@ -963,6 +981,8 @@ java.lang.constant.MethodTypeDesc
 java.lang.constant.MethodTypeDescImpl
 java.lang.constant.PrimitiveClassDescImpl
 java.lang.constant.ReferenceClassDescImpl
+java.lang.foreign.MemorySegment$Scope
+java.lang.foreign.MemorySegment
 java.lang.invoke.ArrayElementVarHandle
 java.lang.invoke.ByteArrayViewVarHandle
 java.lang.invoke.ByteBufferViewVarHandle
@@ -972,6 +992,7 @@ java.lang.invoke.DirectMethodHandle$Holder
 java.lang.invoke.DirectMethodHandle$MethodKey
 java.lang.invoke.DirectMethodHandle
 java.lang.invoke.FieldVarHandle
+java.lang.invoke.MemorySegmentVarHandle
 java.lang.invoke.MethodHandle
 java.lang.invoke.MethodHandleImpl$HandleInfo
 java.lang.invoke.MethodHandleImpl
@@ -1209,6 +1230,7 @@ java.net.URLStreamHandlerFactory
 java.net.UnknownHostException
 java.net.UnknownServiceException
 java.nio.Bits
+java.nio.Buffer$1
 java.nio.Buffer
 java.nio.BufferMismatch
 java.nio.BufferOverflowException
@@ -1921,6 +1943,7 @@ java.util.NoSuchElementException
 java.util.Objects
 java.util.Observable
 java.util.Observer
+java.util.Optional$$ExternalSyntheticBackport0
 java.util.Optional
 java.util.OptionalDouble
 java.util.OptionalInt
@@ -2042,6 +2065,7 @@ java.util.concurrent.ArrayBlockingQueue$Itrs
 java.util.concurrent.ArrayBlockingQueue
 java.util.concurrent.BlockingDeque
 java.util.concurrent.BlockingQueue
+java.util.concurrent.BrokenBarrierException
 java.util.concurrent.Callable
 java.util.concurrent.CancellationException
 java.util.concurrent.CompletableFuture$AltResult
@@ -2196,6 +2220,7 @@ java.util.concurrent.Semaphore
 java.util.concurrent.SynchronousQueue$Transferer
 java.util.concurrent.SynchronousQueue
 java.util.concurrent.ThreadFactory
+java.util.concurrent.ThreadPoolExecutor$$ExternalSyntheticBackportWithForwarding0
 java.util.concurrent.ThreadPoolExecutor$AbortPolicy
 java.util.concurrent.ThreadPoolExecutor$DiscardPolicy
 java.util.concurrent.ThreadPoolExecutor$Worker
@@ -2355,7 +2380,6 @@ java.util.regex.Matcher
 java.util.regex.Pattern
 java.util.regex.PatternSyntaxException
 java.util.stream.AbstractPipeline$$ExternalSyntheticLambda0
-java.util.stream.AbstractPipeline$$ExternalSyntheticLambda2
 java.util.stream.AbstractPipeline
 java.util.stream.AbstractSpinedBuffer
 java.util.stream.BaseStream
@@ -2530,7 +2554,7 @@ java.util.stream.ReferencePipeline$5$1
 java.util.stream.ReferencePipeline$5
 java.util.stream.ReferencePipeline$6$1
 java.util.stream.ReferencePipeline$6
-java.util.stream.ReferencePipeline$7$1
+java.util.stream.ReferencePipeline$7$1FlatMap
 java.util.stream.ReferencePipeline$7
 java.util.stream.ReferencePipeline$Head
 java.util.stream.ReferencePipeline$StatefulOp
@@ -2576,7 +2600,6 @@ java.util.stream.Streams-IA
 java.util.stream.Streams
 java.util.stream.TerminalOp
 java.util.stream.TerminalSink
-java.util.stream.Tripwire$$ExternalSyntheticLambda0
 java.util.stream.Tripwire
 java.util.zip.Adler32
 java.util.zip.CRC32
@@ -2731,9 +2754,19 @@ javax.xml.parsers.ParserConfigurationException
 javax.xml.parsers.SAXParser
 javax.xml.parsers.SAXParserFactory
 jdk.internal.access.JavaIOFileDescriptorAccess
+jdk.internal.access.JavaNioAccess
 jdk.internal.access.JavaObjectInputStreamAccess
 jdk.internal.access.JavaUtilCollectionAccess
 jdk.internal.access.SharedSecrets
+jdk.internal.event.Event
+jdk.internal.event.ThreadSleepEvent
+jdk.internal.foreign.AbstractMemorySegmentImpl
+jdk.internal.foreign.GlobalSession
+jdk.internal.foreign.MemorySessionImpl$$ExternalSyntheticLambda0
+jdk.internal.foreign.MemorySessionImpl$$ExternalSyntheticLambda1
+jdk.internal.foreign.MemorySessionImpl
+jdk.internal.foreign.NativeMemorySegmentImpl
+jdk.internal.foreign.SegmentFactories
 jdk.internal.math.DoubleToDecimal
 jdk.internal.math.FDBigInteger
 jdk.internal.math.FloatToDecimal
@@ -2752,6 +2785,7 @@ jdk.internal.math.FormattedFloatingDecimal$Form
 jdk.internal.math.FormattedFloatingDecimal
 jdk.internal.math.MathUtils
 jdk.internal.misc.CarrierThreadLocal
+jdk.internal.misc.ScopedMemoryAccess$ScopedAccessError
 jdk.internal.misc.TerminatingThreadLocal$1
 jdk.internal.misc.TerminatingThreadLocal
 jdk.internal.misc.Unsafe
@@ -2778,6 +2812,9 @@ jdk.internal.util.StaticProperty
 jdk.internal.util.StrongReferenceKey
 jdk.internal.util.WeakReferenceKey
 jdk.internal.util.random.RandomSupport
+jdk.internal.vm.Continuation$Pinned
+jdk.internal.vm.Continuation
+jdk.internal.vm.ContinuationScope
 jdk.internal.vm.SharedThreadContainer
 jdk.internal.vm.StackableScope
 jdk.internal.vm.ThreadContainer
@@ -2852,6 +2889,7 @@ libcore.util.CollectionUtils
 libcore.util.EmptyArray
 libcore.util.FP16
 libcore.util.HexEncoding
+libcore.util.LibcoreStatsLog
 libcore.util.NativeAllocationRegistry$CleanerRunner
 libcore.util.NativeAllocationRegistry$CleanerThunk
 libcore.util.NativeAllocationRegistry$Metrics
@@ -2958,6 +2996,7 @@ sun.misc.CompoundEnumeration
 sun.misc.HexDumpEncoder
 sun.misc.IOUtils
 sun.misc.LRUCache
+sun.misc.Unsafe$$ExternalSyntheticBackportWithForwarding0
 sun.misc.Unsafe
 sun.misc.VM
 sun.misc.Version
@@ -3465,6 +3504,7 @@ sun.util.logging.PlatformLogger
 [Ljava.util.concurrent.TimeUnit;
 [Ljava.util.concurrent.atomic.AtomicReference;
 [Ljava.util.concurrent.atomic.Striped64$Cell;
+[Ljava.util.function.Supplier;
 [Ljava.util.logging.Handler;
 [Ljava.util.prefs.AbstractPreferences;
 [Ljava.util.regex.Pattern;
@@ -3484,6 +3524,7 @@ sun.util.logging.PlatformLogger
 [Ljavax.security.cert.X509Certificate;
 [Ljdk.internal.math.FDBigInteger;
 [Ljdk.internal.math.FormattedFloatingDecimal$Form;
+[Ljdk.internal.vm.Continuation$Pinned;
 [Llibcore.io.ClassPathURLStreamHandler;
 [Llibcore.io.IoTracker$Mode;
 [Llibcore.reflect.AnnotationMember$DefaultValues;
