@@ -715,6 +715,18 @@ void TraceProfiler::FlushBufferAndRecordTraceEvent(ArtMethod* method,
   *method_trace_curr_ptr = method_trace_entries + index;
 
   MutexLock mu(Thread::Current(), *Locks::trace_lock_);
+  // When clearing trace_data_, we install a checkpoint to clear per-thread buffer pointer but do
+  // not wait for all threads to run the checkpoint. This allows short pause when stopping the
+  // trace. This means that, there could be cases where the per-thread buffer is still non-null
+  // but we have deleted the trace_data_. So it is required to check if the profile is still in
+  // progress.
+  if (!profile_in_progress_) {
+    // Clear the per-thread buffer. The checkpoint can handle cases where the buffer pointer is
+    // already cleared so it is safe to clear it here.
+    delete[] method_trace_entries;
+    thread->SetMethodTraceBuffer(/* buffer= */ nullptr, /* offset= */ 0);
+    return;
+  }
   trace_data_->AppendToLongRunningMethods(buffer_ptr.get(), num_bytes);
   trace_data_->AddTracedMethods(traced_methods);
   trace_data_->AddTracedThread(thread);
