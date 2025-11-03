@@ -66,18 +66,22 @@ public class Main {
     public static void main(String[] args) throws Throwable {
         System.loadLibrary(args[0]);
 
-        boolean staticFinalAreFinal = getTargetSdkVersion() > 36;
+        boolean specialCasedStaticFinalAreFinal = getTargetSdkVersion() > 36;
+        boolean allStaticFinalAreFinal =
+            getTargetSdkVersion() > 36 && (getSdkVersion() == 0 || getSdkVersion() > 36);
 
-        testFields(staticFinalAreFinal);
-        runTestInASeparateClassLoader(staticFinalAreFinal);
+        testFields(specialCasedStaticFinalAreFinal, allStaticFinalAreFinal);
+        runTestInASeparateClassLoader(specialCasedStaticFinalAreFinal, allStaticFinalAreFinal);
     }
 
-    public static void testFields(boolean staticFinalAreFinal) throws Exception {
+    public static void testFields(boolean specialCasedStaticFinalAreFinal,
+                                  boolean allStaticFinalAreFinal) throws Exception {
         // Following fields are unmodifiable:
         // * Final fields in record classes on all releases.
         // * `value` instance field of box classes on all releases.
-        // * `static final` holding VarHandle, MethodHandle or Atomic*FieldUpdater instances after
-        //    Android C.
+        // * `static final` holding VarHandle, MethodHandle or Atomic*FieldUpdater instances in apps
+        //   targeting Android C or later.
+        // * Other `static final` fields in apps running on and targeting Android C or later.
         Field recordX = getAccessible(MyRecord.class, "x");
         test(/*shouldFail=*/ true, () -> recordX.setInt(new MyRecord(0), 10));
         Field recordNON_FINAL = getAccessible(MyRecord.class, "NON_FINAL");
@@ -115,21 +119,28 @@ public class Main {
         test(/*shouldFail=*/ false, () -> fieldField.set(new Main(), 10));
 
         Field fieldSetterField = getAccessible(Main.class, "FIELD_SETTER");
-        test(/*shouldFail=*/ staticFinalAreFinal, () -> fieldSetterField.set(null, null));
+        test(/*shouldFail=*/ specialCasedStaticFinalAreFinal,
+             () -> fieldSetterField.set(null, null));
         Field fieldVhField = getAccessible(Main.class, "FIELD");
-        test(/*shouldFail=*/ staticFinalAreFinal, () -> fieldVhField.set(null, null));
+        test(/*shouldFail=*/ specialCasedStaticFinalAreFinal,
+             () -> fieldVhField.set(null, null));
         Field integerFieldUpdaterField = getAccessible(Main.class, "INTEGER_FIELD_UPDATER");
-        test(/*shouldFail=*/ staticFinalAreFinal, () -> integerFieldUpdaterField.set(null, null));
+        test(/*shouldFail=*/ specialCasedStaticFinalAreFinal,
+             () -> integerFieldUpdaterField.set(null, null));
         Field longFieldUpdaterField = getAccessible(Main.class, "LONG_FIELD_UPDATER");
-        test(/*shouldFail=*/ staticFinalAreFinal, () -> longFieldUpdaterField.set(null, null));
+        test(/*shouldFail=*/ specialCasedStaticFinalAreFinal,
+             () -> longFieldUpdaterField.set(null, null));
         Field refFieldUpdaterField = getAccessible(Main.class, "REFERENCE_FIELD_UPDATER");
-        test(/*shouldFail=*/ staticFinalAreFinal, () -> refFieldUpdaterField.set(null, null));
+        test(/*shouldFail=*/ specialCasedStaticFinalAreFinal,
+             () -> refFieldUpdaterField.set(null, null));
 
         Field objectField = getAccessible(Main.class, "OBJECT");
-        test(/*shouldFail=*/ staticFinalAreFinal, () -> objectField.set(null, new Object()));
+        test(/*shouldFail=*/ allStaticFinalAreFinal,
+             () -> objectField.set(null, new Object()));
     }
 
-    private static void runTestInASeparateClassLoader(boolean staticFinalAreFinal)
+    private static void runTestInASeparateClassLoader(boolean specialCasedStaticFinalAreFinal,
+                                                      boolean allStaticFinalAreFinal)
             throws Throwable {
         Class<?> pathClassLoader = Class.forName("dalvik.system.PathClassLoader");
         Constructor<?> constructor =
@@ -145,8 +156,8 @@ public class Main {
         MethodHandle runHandle = MethodHandles.lookup()
             .findStatic(mainFromDifferentClassLoader,
                         "testFields",
-                        methodType(void.class, boolean.class));
-        runHandle.invokeExact(staticFinalAreFinal);
+                        methodType(void.class, boolean.class, boolean.class));
+        runHandle.invokeExact(specialCasedStaticFinalAreFinal, allStaticFinalAreFinal);
     }
 
     private interface ThrowingRunnable {
@@ -175,4 +186,5 @@ public class Main {
     }
 
     public static native int getTargetSdkVersion();
+    public static native int getSdkVersion();
 }
