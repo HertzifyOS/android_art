@@ -1813,6 +1813,17 @@ bool Jit::CompileMethod(ArtMethod* method,
                         Thread* self,
                         CompilationKind compilation_kind,
                         bool prejit) {
+  if (compilation_kind == CompilationKind::kBaseline) {
+    // Mark the method as warm for the profile saver.
+    if (method->IsMemorySharedMethod()) {
+      if (!method->IsIntrinsic()) {
+        MutexLock mu(self, lock_);
+        shared_method_info_map_[method].previously_warm = true;
+      }
+    } else {
+      method->SetPreviouslyWarm();
+    }
+  }
   // Fake being in a runtime thread so that class-load behavior will be the same as normal jit.
   ScopedSetRuntimeThread ssrt(self);
   // TODO(ngeoffray): For JIT at first use, use kPreCompile. Currently we don't due to
