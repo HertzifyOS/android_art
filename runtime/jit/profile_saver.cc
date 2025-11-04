@@ -471,7 +471,7 @@ bool ProfileSaver::GetClassesAndMethodsHelper::IsClassLoaderRelevant(
 
   bool is_relevant = false;
   VisitClassLoaderDexFiles(Thread::Current(), class_loader, [&](const DexFile* dex_file) {
-    if (tracked_dex_base_location_set_.contains(dex_file->GetLocation())) {
+    if (dex_file != nullptr && tracked_dex_base_location_set_.contains(dex_file->GetLocation())) {
       is_relevant = true;
       return false;
     }
