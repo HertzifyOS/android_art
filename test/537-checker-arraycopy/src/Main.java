@@ -119,6 +119,14 @@ public class Main {
   /// CHECK-NOT:      cbz <<reg2>>,
   /// CHECK:          ReturnVoid
   //
+  /// CHECK-START-ARM: void Main.arraycopyCharDstNonNull() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
+  /// CHECK:          add <<reg:\w+>>, pc
+  /// CHECK-NEXT:     ldr <<reg>>, [<<reg>>]
+  /// CHECK-NEXT:     ldr lr, [<<reg>>, #{{\d+}}]
+  /// CHECK-NEXT:     blx lr
+  /// CHECK:          ReturnVoid
+  //
   /// CHECK-START-{X86,X86_64}: void Main.arraycopyCharDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
   /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
@@ -150,6 +158,14 @@ public class Main {
   /// CHECK-NEXT:     blr lr
   /// CHECK:          ReturnVoid
   //
+  /// CHECK-START-ARM: void Main.arraycopyCharSameSrcDst() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
+  /// CHECK:          add <<reg:\w+>>, pc
+  /// CHECK-NEXT:     ldr <<reg>>, [<<reg>>]
+  /// CHECK-NEXT:     ldr lr, [<<reg>>, #{{\d+}}]
+  /// CHECK-NEXT:     blx lr
+  /// CHECK:          ReturnVoid
+  //
   /// CHECK-START-{X86,X86_64}: void Main.arraycopyCharSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
   /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [{{RIP|ebp}} + {{\w+}}]
@@ -174,6 +190,14 @@ public class Main {
   /// CHECK-NEXT:     b.eq
   /// CHECK-NEXT:     cbz <<reg1>>,
   /// CHECK-NOT:      cbz <<reg2>>,
+  /// CHECK:          ReturnVoid
+  //
+  /// CHECK-START-ARM: void Main.arraycopyByteDstNonNull() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
+  /// CHECK:          add <<reg:\w+>>, pc
+  /// CHECK-NEXT:     ldr <<reg>>, [<<reg>>]
+  /// CHECK-NEXT:     ldr lr, [<<reg>>, #{{\d+}}]
+  /// CHECK-NEXT:     blx lr
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-{X86,X86_64}: void Main.arraycopyByteDstNonNull() disassembly (after)
@@ -206,6 +230,14 @@ public class Main {
   /// CHECK-NEXT:     blr lr
   /// CHECK:          ReturnVoid
   //
+  /// CHECK-START-ARM: void Main.arraycopyByteSameSrcDst() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
+  /// CHECK:          add <<reg:\w+>>, pc
+  /// CHECK-NEXT:     ldr <<reg>>, [<<reg>>]
+  /// CHECK-NEXT:     ldr lr, [<<reg>>, #{{\d+}}]
+  /// CHECK-NEXT:     blx lr
+  /// CHECK:          ReturnVoid
+  //
   /// CHECK-START-{X86,X86_64}: void Main.arraycopyByteSameSrcDst() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
   /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [{{RIP|ebp}} + {{\w+}}]
@@ -230,6 +262,14 @@ public class Main {
   /// CHECK-NEXT:     b.eq
   /// CHECK-NEXT:     cbz <<reg1>>,
   /// CHECK-NOT:      cbz <<reg2>>,
+  /// CHECK:          ReturnVoid
+  //
+  /// CHECK-START-ARM: void Main.arraycopyIntDstNonNull() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
+  /// CHECK:          add <<reg:\w+>>, pc
+  /// CHECK-NEXT:     ldr <<reg>>, [<<reg>>]
+  /// CHECK-NEXT:     ldr lr, [<<reg>>, #{{\d+}}]
+  /// CHECK-NEXT:     blx lr
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-{X86,X86_64}: void Main.arraycopyIntDstNonNull() disassembly (after)
@@ -260,6 +300,14 @@ public class Main {
   /// CHECK-NEXT:     ldr
   /// CHECK-NEXT:     ldr lr,
   /// CHECK-NEXT:     blr lr
+  /// CHECK:          ReturnVoid
+  //
+  /// CHECK-START-ARM: void Main.arraycopyIntSameSrcDst() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
+  /// CHECK:          add <<reg:\w+>>, pc
+  /// CHECK-NEXT:     ldr <<reg>>, [<<reg>>]
+  /// CHECK-NEXT:     ldr lr, [<<reg>>, #{{\d+}}]
+  /// CHECK-NEXT:     blx lr
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-{X86,X86_64}: void Main.arraycopyIntSameSrcDst() disassembly (after)
