@@ -1239,9 +1239,6 @@ def main():
     build_command += ' ' + ' '.join(build_targets)
     print_text('Build command: %s\n' % build_command)
     if subprocess.call(build_command.split()):
-      # Debugging for b/62653020
-      if env.DIST_DIR:
-        shutil.copyfile(env.SOONG_OUT_DIR + '/build.ninja', env.DIST_DIR + '/soong.ninja')
       sys.exit(1)
 
   run_tests(tests)
