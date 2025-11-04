@@ -15,28 +15,34 @@
     add     x0, x0, w1, uxtw #$shift    // w0<- arrayObj + index*width
     cmp     w1, w3                      // compare unsigned index, length
     bcs     common_errArrayIndex        // index >= length, bail
-    // To fit some handlers in 64B, use the dispatch in the corresponding `iget` slow path.
-%  iget_opcode = re.sub("op_aget", "op_iget", opcode)
     .if $wide
     ldr     x0, [x0, #$data_offset]     // x0<- vBB[vCC]
     FETCH_ADVANCE_INST 2                // advance rPC, load rINST
     SET_VREG_WIDE x0, w2
-    b .L${iget_opcode}_slow_path_dispatch  // Dispatch would not fit in 64B.
     .elseif $is_object
     $load   w0, [x0, #$data_offset]     // w0<- vBB[vCC]
     UNPOISON_HEAP_REF w0
     // Shorten the handler by using the code from `op_iget_object` slow path.
+%  iget_opcode = re.sub("op_aget", "op_iget", opcode)
     TEST_IF_MARKING .L${iget_opcode}_slow_path_mark_and_store_r0_to_vreg_r2_fetch_advance_2_dispatch
     FETCH_ADVANCE_INST 2                // advance rPC, load rINST
     SET_VREG_OBJECT w0, w2              // vAA<- w0
-    b .L${iget_opcode}_slow_path_dispatch  // Dispatch would not fit in 64B.
     .else
     $load   w0, [x0, #$data_offset]     // w0<- vBB[vCC]
     FETCH_ADVANCE_INST 2                // advance rPC, load rINST
     SET_VREG w0, w2                     // vAA<- w0
+    .endif
+#ifdef USE_HEAP_POISONING
+   .if $is_object
+    b .L${iget_opcode}_slow_path_dispatch  // Dispatch would not fit in 64B.
+    .else
     PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
     GOTO_OPCODE                         // jump to next instruction
     .endif
+#else
+    PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
+    GOTO_OPCODE                         // jump to next instruction
+#endif
 
 %def op_aget_boolean():
 %  op_aget(load="ldrb", shift=0, data_offset="MIRROR_BOOLEAN_ARRAY_DATA_OFFSET")

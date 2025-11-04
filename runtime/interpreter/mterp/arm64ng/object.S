@@ -184,12 +184,17 @@
    SET_VREG w0, w2                     // fp[A] <- value
    .endif
    FETCH_ADVANCE_INST 2
-   .if $wide || $is_object
-   b .L${opcode}_slow_path_dispatch
+#ifdef USE_HEAP_POISONING
+   .if $is_object
+   b .L${opcode}_slow_path_dispatch    // Dispatch would not fit in 64B.
    .else
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
    .endif
+#else
+   PREPARE_OPCODE_DISPATCH
+   GOTO_OPCODE
+#endif
 
 %def op_iget_slow_path(volatile_load, maybe_extend, wide, is_object):
    ldr     x0, [sp]
@@ -235,7 +240,7 @@
    SET_VREG w0, w2                     // fp[A] <- value
    .endif
    FETCH_ADVANCE_INST 2
-   // `aget-wide`, `aget-object` and `new-instance` handlers jump here to shorten the code.
+   // `aget-object` handler jumps here to shorten the code for heap poisoning.
 .L${opcode}_slow_path_dispatch:
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
@@ -287,19 +292,9 @@
    .else
    $store  w1, [x2, x0]
    .endif
-#ifdef USE_HEAP_POISONING
-   .if $is_object
-   b .L${opcode}_slow_path_skip_write_barrier  // Dispatch would not fit in 64B.
-   .else
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
-   .endif
-#else
-   FETCH_ADVANCE_INST 2
-   PREPARE_OPCODE_DISPATCH
-   GOTO_OPCODE
-#endif
 
 %def op_iput_slow_path(volatile_store, wide, is_object):
    ldr     x0, [sp]
@@ -396,21 +391,8 @@
    SET_VREG w0, w2                     // fp[A] <- value
    .endif
    FETCH_ADVANCE_INST 2
-#ifdef USE_HEAP_POISONING
-   .if $wide || $is_object
-   b .L${opcode}_slow_path_dispatch    // Dispatch would not fit in 64B.
-   .else
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
-   .endif
-#else
-   .if $wide
-   b .L${opcode}_slow_path_dispatch    // Dispatch would not fit in 64B.
-   .else
-   PREPARE_OPCODE_DISPATCH
-   GOTO_OPCODE
-   .endif
-#endif
 
 %def op_sget_slow_path(load, volatile_load, maybe_extend, wide, is_object):
    ldr     x0, [sp]
@@ -510,19 +492,14 @@
    GET_VREG w2, wINST                  // w2 <- v[A]
    $store  w2, [x0, x1]
    .endif
-#ifdef USE_HEAP_POISONING
-   .if $is_object
-   b .L${opcode}_slow_path_skip_write_barrier  // Dispatch would not fit in 64B.
-   .else
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
+   .if !$wide && !$is_object
+.L${opcode}_read_barrier:
+   bl      art_quick_read_barrier_mark_reg00
+   b       .L${opcode}_resume_after_read_barrier
    .endif
-#else
-   FETCH_ADVANCE_INST 2
-   PREPARE_OPCODE_DISPATCH
-   GOTO_OPCODE
-#endif
 
 %def op_sput_slow_path(volatile_store, wide, is_object):
    ldr     x0, [sp]
@@ -577,9 +554,11 @@
 .L${opcode}_slow_path_read_barrier:
    bl      art_quick_read_barrier_mark_reg00
    b       .L${opcode}_slow_path_resume_after_read_barrier
+   .if $wide || $is_object
 .L${opcode}_read_barrier:
    bl      art_quick_read_barrier_mark_reg00
    b       .L${opcode}_resume_after_read_barrier
+   .endif
 
 %def op_sput_wide():
 %  op_sput(store="str", volatile_store="stlr", wide=True)
@@ -601,9 +580,8 @@
    lsr     w1, wINST, #8               // w1 <- A
    SET_VREG_OBJECT w0, w1              // fp[A] <- value
    FETCH_ADVANCE_INST 2
-   // To fit the handler in 64B, use the instruction dispatch in `iget-char` slow path.
-%  iget_char_opcode = re.sub("op_new_instance", "op_iget_char", opcode)
-   b .L${iget_char_opcode}_slow_path_dispatch
+   PREPARE_OPCODE_DISPATCH
+   GOTO_OPCODE
 
 %def op_new_instance_slow_path():
    mov     x0, xSELF
