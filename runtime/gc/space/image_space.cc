@@ -722,14 +722,9 @@ void ImageSpace::Relocator::RelocateBootImage(
   MainPatchRelocateVisitor main_patch_object_visitor(main_relocate_visitor);
   SimplePatchRelocateVisitor simple_patch_object_visitor(simple_relocate_visitor);
 
-  // Retrieve the `Class`, `Method`, `Constructor`, `FieldVarHadle` and
-  // `StaticFieldVarHandle` classes needed in the loops below.
+  // Retrieve the class roots and `Class.class` needed below.
   ObjPtr<mirror::ObjectArray<mirror::Class>> class_roots;
   ObjPtr<mirror::Class> class_class;
-  ObjPtr<mirror::Class> method_class;
-  ObjPtr<mirror::Class> constructor_class;
-  ObjPtr<mirror::Class> field_var_handle_class;
-  ObjPtr<mirror::Class> static_field_var_handle_class;
   {
     ObjPtr<mirror::ObjectArray<mirror::Object>> image_roots =
         simple_relocate_visitor(first_header.GetImageRoots<kWithoutReadBarrier>().Ptr());
@@ -748,24 +743,10 @@ void ImageSpace::Relocator::RelocateBootImage(
       // Class roots must have been visited if we relocated the primary boot image.
       DCHECK(base_diff == 0 || patched_objects->Test(class_roots.Ptr()));
       class_class = GetClassRoot<mirror::Class, kWithoutReadBarrier>(class_roots);
-      method_class = GetClassRoot<mirror::Method, kWithoutReadBarrier>(class_roots);
-      constructor_class = GetClassRoot<mirror::Constructor, kWithoutReadBarrier>(class_roots);
-      field_var_handle_class =
-          GetClassRoot<mirror::FieldVarHandle, kWithoutReadBarrier>(class_roots);
-      static_field_var_handle_class =
-          GetClassRoot<mirror::StaticFieldVarHandle, kWithoutReadBarrier>(class_roots);
     } else {
       DCHECK(!patched_objects->Test(class_roots.Ptr()));
       class_class = simple_relocate_visitor(
           GetClassRoot<mirror::Class, kWithoutReadBarrier>(class_roots).Ptr());
-      method_class = simple_relocate_visitor(
-          GetClassRoot<mirror::Method, kWithoutReadBarrier>(class_roots).Ptr());
-      constructor_class = simple_relocate_visitor(
-          GetClassRoot<mirror::Constructor, kWithoutReadBarrier>(class_roots).Ptr());
-      field_var_handle_class = simple_relocate_visitor(
-          GetClassRoot<mirror::FieldVarHandle, kWithoutReadBarrier>(class_roots).Ptr());
-      static_field_var_handle_class = simple_relocate_visitor(
-          GetClassRoot<mirror::StaticFieldVarHandle, kWithoutReadBarrier>(class_roots).Ptr());
     }
   }
 
@@ -857,6 +838,23 @@ void ImageSpace::Relocator::RelocateBootImage(
     }
   }
 
+  if (!kExtension) {
+    DCHECK(!patched_objects->Test(class_roots.Ptr()));
+    patched_objects->Set(class_roots.Ptr());
+    main_patch_object_visitor.VisitObject(class_roots.Ptr());
+  }
+
+  // Retrieve the `Method`, `Constructor`, `FieldVarHadle` and `StaticFieldVarHandle` classes
+  // needed for checking if we need to relocate native pointers in their instances.
+  ObjPtr<mirror::Class> method_class =
+      GetClassRoot<mirror::Method, kWithoutReadBarrier>(class_roots);
+  ObjPtr<mirror::Class> constructor_class =
+      GetClassRoot<mirror::Constructor, kWithoutReadBarrier>(class_roots);
+  ObjPtr<mirror::Class> field_var_handle_class =
+      GetClassRoot<mirror::FieldVarHandle, kWithoutReadBarrier>(class_roots);
+  ObjPtr<mirror::Class> static_field_var_handle_class =
+      GetClassRoot<mirror::StaticFieldVarHandle, kWithoutReadBarrier>(class_roots);
+
   for (const std::unique_ptr<ImageSpace>& space : spaces) {
     const ImageHeader& image_header = space->GetImageHeader();
 
@@ -890,12 +888,6 @@ void ImageSpace::Relocator::RelocateBootImage(
       }
       pos += RoundUp(object->SizeOf<kVerifyNone>(), kObjectAlignment);
     }
-  }
-  if (kIsDebugBuild && !kExtension) {
-    // We used just Test() instead of Set() above but we need to use Set()
-    // for class roots to satisfy a DCHECK() for extensions.
-    DCHECK(!patched_objects->Test(class_roots.Ptr()));
-    patched_objects->Set(class_roots.Ptr());
   }
 }
 
