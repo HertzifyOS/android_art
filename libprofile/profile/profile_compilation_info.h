@@ -515,6 +515,16 @@ class ProfileCompilationInfo {
     return data->IsMethodInProfile(method_index);
   }
 
+  uint32_t GetNumberOfStartupMethods(ProfileIndexType dex_profile_index) const {
+    DCHECK_LT(dex_profile_index, info_.size());
+    return info_[dex_profile_index]->CountStartupMethods();
+  }
+
+  uint32_t GetNumberOfStartupClasses(ProfileIndexType dex_profile_index) const {
+    DCHECK_LT(dex_profile_index, info_.size());
+    return info_[dex_profile_index]->CountStartupClasses();
+  }
+
   // Returns the profile method info for a given method reference.
   //
   // Note that if the profile was built with annotations, the same dex file may be
@@ -875,6 +885,7 @@ class ProfileCompilationInfo {
         const dchecked_vector<ExtraDescriptorIndex>& extra_descriptors_remap,
         std::string* error);
     static ProfileLoadStatus SkipClasses(SafeBuffer& buffer, std::string* error);
+    uint32_t CountStartupClasses() const;
 
     uint32_t MethodsDataSize(/*out*/ uint16_t* method_flags = nullptr,
                              /*out*/ size_t* saved_bitmap_bit_size = nullptr) const;
@@ -884,6 +895,7 @@ class ProfileCompilationInfo {
         const dchecked_vector<ExtraDescriptorIndex>& extra_descriptors_remap,
         std::string* error);
     static ProfileLoadStatus SkipMethods(SafeBuffer& buffer, std::string* error);
+    uint32_t CountStartupMethods() const;
 
     // The allocator used to allocate new inline cache maps.
     ArenaAllocator* const allocator_;

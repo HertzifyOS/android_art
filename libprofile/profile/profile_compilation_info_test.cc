@@ -257,11 +257,13 @@ TEST_F(ProfileCompilationInfoTest, AddClasses) {
   for (uint32_t type_index = 0; type_index != num_type_ids1; ++type_index) {
     ASSERT_TRUE(info.AddClass(*dex1, dex::TypeIndex(type_index)));
   }
+  EXPECT_EQ(num_type_ids1, info.GetNumberOfStartupClasses(0));
   // Add classes without `TypeId` in `dex1`.
   for (uint32_t type_index = num_type_ids1; type_index != DexFile::kDexNoIndex16; ++type_index) {
     std::string descriptor = "LX" + std::to_string(type_index) + ";";
     ASSERT_TRUE(info.AddClass(*dex1, descriptor));
   }
+  EXPECT_EQ(DexFile::kDexNoIndex16, info.GetNumberOfStartupClasses(0));
   // Fail to add another class without `TypeId` in `dex1` as we have
   // run out of available artificial type indexes.
   ASSERT_FALSE(info.AddClass(*dex1, "LCannotAddThis;"));
@@ -271,6 +273,7 @@ TEST_F(ProfileCompilationInfoTest, AddClasses) {
   for (uint32_t type_index = 0; type_index != num_type_ids2; ++type_index) {
     ASSERT_TRUE(info.AddClass(*dex2, dex::TypeIndex(type_index)));
   }
+  EXPECT_EQ(num_type_ids2, info.GetNumberOfStartupClasses(1));
   // Fail to add another class without `TypeId` in `dex2` as we have
   // run out of available artificial type indexes when adding types for `dex1`.
   ASSERT_FALSE(info.AddClass(*dex2, "LCannotAddThis;"));
@@ -280,6 +283,7 @@ TEST_F(ProfileCompilationInfoTest, AddClasses) {
     std::string descriptor = "LX" + std::to_string(type_index) + ";";
     ASSERT_TRUE(info.AddClass(*dex2, descriptor));
   }
+  EXPECT_EQ(DexFile::kDexNoIndex16, info.GetNumberOfStartupClasses(1));
 }
 
 TEST_F(ProfileCompilationInfoTest, SaveFd) {
@@ -825,6 +829,8 @@ TEST_F(ProfileCompilationInfoTest, SampledMethodsTest) {
     EXPECT_FALSE(info.GetMethodHotness(MethodReference(dex1, 6)).IsStartup());
     EXPECT_TRUE(info.GetMethodHotness(MethodReference(dex2, 2)).IsStartup());
     EXPECT_TRUE(info.GetMethodHotness(MethodReference(dex2, 4)).IsPostStartup());
+    EXPECT_EQ(1u, info.GetNumberOfStartupMethods(0));
+    EXPECT_EQ(1u, info.GetNumberOfStartupMethods(1));
   };
   run_test(test_info);
 
@@ -885,6 +891,7 @@ TEST_F(ProfileCompilationInfoTest, SampledMethodsTest) {
     EXPECT_FALSE(info.GetMethodHotness(MethodReference(dex.get(), 1)).IsPostStartup());
     EXPECT_FALSE(info.GetMethodHotness(MethodReference(dex.get(), 4)).IsStartup());
     EXPECT_FALSE(info.GetMethodHotness(MethodReference(dex.get(), 6)).IsStartup());
+    EXPECT_EQ(4u, info.GetNumberOfStartupMethods(0));
   }
 }
 
@@ -1264,6 +1271,7 @@ TEST_F(ProfileCompilationInfoTest, FilteredLoadingWithClasses) {
                  checksum == dex2_1000->GetLocationChecksum();
         };
   ASSERT_TRUE(loaded_info.Load(GetFd(profile), true, filter_fn));
+  EXPECT_EQ(1000u, loaded_info.GetNumberOfStartupClasses(0));
 
   // Compute the expectation.
   ProfileCompilationInfo expected_info;
@@ -1476,6 +1484,7 @@ TEST_F(ProfileCompilationInfoTest, AddMethodsProfileMethodInfoBasic) {
       ProfileMethodInfo(hot_startup),
       static_cast<Hotness::Flag>(Hotness::kFlagHot | Hotness::kFlagStartup)));
   ASSERT_TRUE(info.AddMethod(ProfileMethodInfo(startup), Hotness::kFlagStartup));
+  EXPECT_EQ(2u, info.GetNumberOfStartupMethods(0));
 
   // Verify the profile recorded them correctly.
   EXPECT_TRUE(info.GetMethodHotness(hot).IsInProfile());

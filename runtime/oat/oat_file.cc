@@ -1103,17 +1103,18 @@ bool OatFileBase::Setup(int zip_fd,
       return false;
     }
 
-    uint32_t dex_layout_sections_offset;
-    if (UNLIKELY(!ReadOatDexFileData(*this, &oat, &dex_layout_sections_offset))) {
-      *error_msg = ErrorPrintf(
-          "OatDexFile #%zd for '%s' truncated after dex layout sections offset",
-          i,
-          dex_file_location.c_str());
+    uint32_t dex_profile_metadata_offset;
+    if (UNLIKELY(!ReadOatDexFileData(*this, &oat, &dex_profile_metadata_offset))) {
+      *error_msg =
+          ErrorPrintf("OatDexFile #%zd for '%s' truncated after dex profile metadata offset",
+                      i,
+                      dex_file_location.c_str());
       return false;
     }
-    const DexLayoutSections* const dex_layout_sections = dex_layout_sections_offset != 0
-        ? reinterpret_cast<const DexLayoutSections*>(Begin() + dex_layout_sections_offset)
-        : nullptr;
+    const DexProfileMetadata* dex_profile_metadata =
+        dex_profile_metadata_offset != 0
+            ? reinterpret_cast<const DexProfileMetadata*>(Begin() + dex_profile_metadata_offset)
+            : nullptr;
 
     BssMappingInfo bss_mapping_info;
     if (!ReadBssMappingInfo(
@@ -1134,7 +1135,7 @@ bool OatFileBase::Setup(int zip_fd,
                        lookup_table_data,
                        bss_mapping_info,
                        class_offsets_pointer,
-                       dex_layout_sections);
+                       dex_profile_metadata);
     oat_dex_files_storage_.push_back(oat_dex_file);
 
     // Add the location and canonical location (if different) to the oat_dex_files_ table.
@@ -2326,7 +2327,7 @@ OatDexFile::OatDexFile(const OatFile* oat_file,
                        const uint8_t* lookup_table_data,
                        const OatFile::BssMappingInfo& bss_mapping_info,
                        const uint32_t* oat_class_offsets_pointer,
-                       const DexLayoutSections* dex_layout_sections)
+                       const DexProfileMetadata* dex_profile_metadata)
     : oat_file_(oat_file),
       dex_file_location_(dex_file_location),
       canonical_dex_file_location_(canonical_dex_file_location),
@@ -2339,7 +2340,7 @@ OatDexFile::OatDexFile(const OatFile* oat_file,
       bss_mapping_info_(bss_mapping_info),
       oat_class_offsets_pointer_(oat_class_offsets_pointer),
       lookup_table_(),
-      dex_layout_sections_(dex_layout_sections) {
+      dex_profile_metadata_(dex_profile_metadata) {
   InitializeTypeLookupTable();
   DCHECK(!IsBackedByVdexOnly());
 }

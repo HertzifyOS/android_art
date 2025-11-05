@@ -33,7 +33,6 @@
 #include "base/tracking_safe_map.h"
 #include "class_status.h"
 #include "dex/dex_file.h"
-#include "dex/dex_file_layout.h"
 #include "dex/type_lookup_table.h"
 #include "dex/utf.h"
 #include "index_bss_mapping.h"
@@ -44,8 +43,8 @@ namespace art HIDDEN {
 class BitVector;
 class ClassLinker;
 class ClassLoaderContext;
+class DexProfileMetadata;
 class ElfFile;
-class DexLayoutSections;
 template <class MirrorType> class GcRoot;
 class MemMap;
 class OatDexFile;
@@ -649,10 +648,8 @@ class OatDexFile final {
   // Create only with a type lookup table, used by the compiler to speed up compilation.
   EXPORT explicit OatDexFile(TypeLookupTable&& lookup_table);
 
-  // Return the dex layout sections.
-  const DexLayoutSections* GetDexLayoutSections() const {
-    return dex_layout_sections_;
-  }
+  // Optional per-dex startup information.
+  const DexProfileMetadata* GetDexProfileMetadata() const { return dex_profile_metadata_; }
 
  private:
   OatDexFile(const OatFile* oat_file,
@@ -666,7 +663,7 @@ class OatDexFile final {
              const uint8_t* lookup_table_data,
              const OatFile::BssMappingInfo& bss_mapping_info,
              const uint32_t* oat_class_offsets_pointer,
-             const DexLayoutSections* dex_layout_sections);
+             const DexProfileMetadata* dex_profile_metadata);
 
   // Create an OatDexFile wrapping an existing DexFile. Will set the OatDexFile
   // pointer in the DexFile.
@@ -697,7 +694,7 @@ class OatDexFile final {
   const OatFile::BssMappingInfo bss_mapping_info_;
   const uint32_t* const oat_class_offsets_pointer_ = nullptr;
   TypeLookupTable lookup_table_;
-  const DexLayoutSections* const dex_layout_sections_ = nullptr;
+  const DexProfileMetadata* const dex_profile_metadata_ = nullptr;
 
   friend class OatFile;
   friend class OatFileBase;

@@ -31,6 +31,7 @@
 #include "debug/method_debug_info.h"
 #include "dex/class_accessor-inl.h"
 #include "dex/dex_file_loader.h"
+#include "dex/dex_file_profile.h"
 #include "dex/quick_compiler_callbacks.h"
 #include "dex/test_dex_file_builder.h"
 #include "dex/verification_results.h"
@@ -1037,8 +1038,8 @@ TEST_F(OatTest, AlignmentCheck) {
     EXPECT_EQ(method_index, accessor.NumMethods());
   }
 
-  // Check DexLayoutSections alignment.
-  EXPECT_TRUE(IsAligned<alignof(DexLayoutSections)>(oat_dex_file->GetDexLayoutSections()));
+  // Check DexProfileMetadata alignment.
+  EXPECT_TRUE(IsAligned<alignof(DexProfileMetadata)>(oat_dex_file->GetDexProfileMetadata()));
 }
 
 }  // namespace linker

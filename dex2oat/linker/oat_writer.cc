@@ -45,6 +45,7 @@
 #include "dex/class_accessor-inl.h"
 #include "dex/dex_file-inl.h"
 #include "dex/dex_file_loader.h"
+#include "dex/dex_file_profile.h"
 #include "dex/dex_file_types.h"
 #include "dex/dex_file_verifier.h"
 #include "dex/method_reference.h"
@@ -82,9 +83,6 @@ namespace art {
 namespace linker {
 
 namespace {  // anonymous namespace
-
-// If we write dex layout info in the oat file.
-static constexpr bool kWriteDexLayoutInfo = true;
 
 // Force the OAT method layout to be sorted-by-name instead of
 // the default (class_def_idx, method_idx).
@@ -404,16 +402,17 @@ class OatWriter::OatDexFile {
   uint32_t string_bss_mapping_offset_;
   uint32_t method_type_bss_mapping_offset_;
 
-  // Offset of dex sections that will have different runtime madvise states.
-  // Set in WriteDexLayoutSections.
-  uint32_t dex_sections_layout_offset_;
+  // Offset of dex profile metadata used for informing runtime madvise.
+  // Set in WriteDexProfileMetadata.
+  uint32_t dex_profile_metadata_offset_;
 
   // Data to write to a separate section. We set the length
   // of the vector in OpenDexFiles.
   dchecked_vector<uint32_t> class_offsets_;
 
-  // Dex section layout info to serialize.
-  DexLayoutSections dex_sections_layout_;
+  // Dex profile metadata info to serialize.
+  // Set in InitializeDexProfileMetadata.
+  DexProfileMetadata dex_profile_metadata_;
 
   ///// End of data to write to vdex/oat file.
  private:
@@ -632,6 +631,10 @@ bool OatWriter::WriteAndOpenDexFiles(
   *opened_dex_files = std::move(dex_files);
   // Create type lookup tables to speed up lookups during compilation.
   InitializeTypeLookupTables(*opened_dex_files);
+
+  // Flush profile compilation info into the oat dex file metadata.
+  InitializeDexProfileMetadata(*opened_dex_files);
+
   write_state_ = WriteState::kStartRoData;
   return true;
 }
@@ -655,8 +658,8 @@ bool OatWriter::StartRoData(const std::vector<const DexFile*>& dex_files,
 
   ChecksumUpdatingOutputStream checksum_updating_rodata(oat_rodata, this);
 
-  // Write dex layout sections into the oat file.
-  if (!WriteDexLayoutSections(&checksum_updating_rodata, dex_files)) {
+  // Write dex profile metadata into the oat file.
+  if (!WriteDexProfileMetadata(&checksum_updating_rodata, dex_files)) {
     return false;
   }
 
@@ -2779,9 +2782,9 @@ bool OatWriter::CheckOatSize(OutputStream* out, size_t file_offset, size_t relat
     DO_STAT(size_oat_dex_file_offset_);
     DO_STAT(size_oat_dex_file_class_offsets_offset_);
     DO_STAT(size_oat_dex_file_lookup_table_offset_);
-    DO_STAT(size_oat_dex_file_dex_layout_sections_offset_);
-    DO_STAT(size_oat_dex_file_dex_layout_sections_);
-    DO_STAT(size_oat_dex_file_dex_layout_sections_alignment_);
+    DO_STAT(size_oat_dex_file_dex_profile_metadata_offset_);
+    DO_STAT(size_oat_dex_file_dex_profile_metadata_);
+    DO_STAT(size_oat_dex_file_dex_profile_metadata_alignment_);
     DO_STAT(size_oat_dex_file_method_bss_mapping_offset_);
     DO_STAT(size_oat_dex_file_type_bss_mapping_offset_);
     DO_STAT(size_oat_dex_file_public_type_bss_mapping_offset_);
@@ -3620,19 +3623,40 @@ void OatWriter::InitializeTypeLookupTables(
   }
 }
 
-bool OatWriter::WriteDexLayoutSections(OutputStream* oat_rodata,
-                                       const std::vector<const DexFile*>& opened_dex_files) {
-  TimingLogger::ScopedTiming split(__FUNCTION__, timings_);
-
-  if (!kWriteDexLayoutInfo) {
-    return true;
+void OatWriter::InitializeDexProfileMetadata(
+    const std::vector<std::unique_ptr<const DexFile>>& opened_dex_files) {
+  if (profile_compilation_info_ == nullptr) {
+    return;
   }
+
+  TimingLogger::ScopedTiming split("InitializeDexProfileMetadata", timings_);
+  DCHECK_EQ(opened_dex_files.size(), oat_dex_files_.size());
+  for (size_t i = 0, size = opened_dex_files.size(); i != size; ++i) {
+    ProfileCompilationInfo::ProfileIndexType profile_index =
+        profile_compilation_info_->FindDexFile(*opened_dex_files[i]);
+    // It's perfectly valid for the dex to lack any profile data; for associated metadata, that's
+    // functionally equivalent to the profile being empty.
+    DexProfileMetadata metadata;
+    if (profile_index != ProfileCompilationInfo::MaxProfileIndex()) {
+      metadata.num_startup_classes =
+          profile_compilation_info_->GetNumberOfStartupClasses(profile_index);
+      metadata.num_startup_methods =
+          profile_compilation_info_->GetNumberOfStartupMethods(profile_index);
+    }
+    oat_dex_files_[i].dex_profile_metadata_ = metadata;
+  }
+}
+
+bool OatWriter::WriteDexProfileMetadata(OutputStream* oat_rodata,
+                                        const std::vector<const DexFile*>& opened_dex_files) {
+  TimingLogger::ScopedTiming split(__FUNCTION__, timings_);
 
   uint32_t expected_offset = oat_data_offset_ + oat_size_;
   off_t actual_offset = oat_rodata->Seek(expected_offset, kSeekSet);
   if (static_cast<uint32_t>(actual_offset) != expected_offset) {
-    PLOG(ERROR) << "Failed to seek to dex layout section offset section. Actual: " << actual_offset
-                << " Expected: " << expected_offset << " File: " << oat_rodata->GetLocation();
+    PLOG(ERROR) << "Failed to seek to dex profile metadata offset section. Actual: "
+                << actual_offset << " Expected: " << expected_offset
+                << " File: " << oat_rodata->GetLocation();
     return false;
   }
 
@@ -3640,12 +3664,12 @@ bool OatWriter::WriteDexLayoutSections(OutputStream* oat_rodata,
   size_t rodata_offset = oat_size_;
   for (size_t i = 0, size = opened_dex_files.size(); i != size; ++i) {
     OatDexFile* oat_dex_file = &oat_dex_files_[i];
-    DCHECK_EQ(oat_dex_file->dex_sections_layout_offset_, 0u);
+    DCHECK_EQ(oat_dex_file->dex_profile_metadata_offset_, 0u);
 
-    // Write dex layout section alignment bytes.
+    // Write dex profile metadata alignment bytes.
     size_t rodata_file_offset = GetFileOffset(rodata_offset);
     const size_t padding_size =
-        RoundUp(rodata_file_offset, alignof(DexLayoutSections)) - rodata_file_offset;
+        RoundUp(rodata_file_offset, alignof(DexProfileMetadata)) - rodata_file_offset;
     if (padding_size != 0u) {
       std::vector<uint8_t> buffer(padding_size, 0u);
       if (!oat_rodata->WriteFully(buffer.data(), padding_size)) {
@@ -3654,29 +3678,29 @@ bool OatWriter::WriteDexLayoutSections(OutputStream* oat_rodata,
                     << " Output: " << oat_rodata->GetLocation();
         return false;
       }
-      size_oat_dex_file_dex_layout_sections_alignment_ += padding_size;
+      size_oat_dex_file_dex_profile_metadata_alignment_ += padding_size;
       rodata_offset += padding_size;
     }
 
-    DCHECK_ALIGNED(rodata_offset, alignof(DexLayoutSections));
+    DCHECK_ALIGNED(rodata_offset, alignof(DexProfileMetadata));
     DCHECK_EQ(oat_data_offset_ + rodata_offset,
               static_cast<size_t>(oat_rodata->Seek(0u, kSeekCurrent)));
     DCHECK(oat_dex_file != nullptr);
-    if (!oat_rodata->WriteFully(&oat_dex_file->dex_sections_layout_,
-                                sizeof(oat_dex_file->dex_sections_layout_))) {
-      PLOG(ERROR) << "Failed to write dex layout sections."
+    if (!oat_rodata->WriteFully(&oat_dex_file->dex_profile_metadata_,
+                                sizeof(oat_dex_file->dex_profile_metadata_))) {
+      PLOG(ERROR) << "Failed to write dex profile metadata."
                   << " File: " << oat_dex_file->GetLocation()
                   << " Output: " << oat_rodata->GetLocation();
       return false;
     }
-    oat_dex_file->dex_sections_layout_offset_ = rodata_offset;
-    size_oat_dex_file_dex_layout_sections_ += sizeof(oat_dex_file->dex_sections_layout_);
-    rodata_offset += sizeof(oat_dex_file->dex_sections_layout_);
+    oat_dex_file->dex_profile_metadata_offset_ = rodata_offset;
+    size_oat_dex_file_dex_profile_metadata_ += sizeof(oat_dex_file->dex_profile_metadata_);
+    rodata_offset += sizeof(oat_dex_file->dex_profile_metadata_);
   }
   oat_size_ = rodata_offset;
 
   if (!oat_rodata->Flush()) {
-    PLOG(ERROR) << "Failed to flush stream after writing type dex layout sections."
+    PLOG(ERROR) << "Failed to flush stream after writing type dex profile metadata."
                 << " File: " << oat_rodata->GetLocation();
     return false;
   }
@@ -3922,7 +3946,7 @@ OatWriter::OatDexFile::OatDexFile(std::unique_ptr<const DexFile> dex_file)
       package_type_bss_mapping_offset_(0u),
       string_bss_mapping_offset_(0u),
       method_type_bss_mapping_offset_(0u),
-      dex_sections_layout_offset_(0u),
+      dex_profile_metadata_offset_(0u),
       class_offsets_() {}
 
 size_t OatWriter::OatDexFile::SizeOf() const {
@@ -3932,7 +3956,7 @@ size_t OatWriter::OatDexFile::SizeOf() const {
          sizeof(method_bss_mapping_offset_) + sizeof(type_bss_mapping_offset_) +
          sizeof(public_type_bss_mapping_offset_) + sizeof(package_type_bss_mapping_offset_) +
          sizeof(string_bss_mapping_offset_) + sizeof(method_type_bss_mapping_offset_) +
-         sizeof(dex_sections_layout_offset_);
+         sizeof(dex_profile_metadata_offset_);
 }
 
 bool OatWriter::OatDexFile::Write(OatWriter* oat_writer, OutputStream* out) const {
@@ -3987,11 +4011,12 @@ bool OatWriter::OatDexFile::Write(OatWriter* oat_writer, OutputStream* out) cons
   }
   oat_writer->size_oat_dex_file_lookup_table_offset_ += sizeof(lookup_table_offset_);
 
-  if (!out->WriteFully(&dex_sections_layout_offset_, sizeof(dex_sections_layout_offset_))) {
+  if (!out->WriteFully(&dex_profile_metadata_offset_, sizeof(dex_profile_metadata_offset_))) {
     PLOG(ERROR) << "Failed to write dex section layout info to " << out->GetLocation();
     return false;
   }
-  oat_writer->size_oat_dex_file_dex_layout_sections_offset_ += sizeof(dex_sections_layout_offset_);
+  oat_writer->size_oat_dex_file_dex_profile_metadata_offset_ +=
+      sizeof(dex_profile_metadata_offset_);
 
   if (!out->WriteFully(&method_bss_mapping_offset_, sizeof(method_bss_mapping_offset_))) {
     PLOG(ERROR) << "Failed to write method bss mapping offset to " << out->GetLocation();

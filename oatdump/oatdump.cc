@@ -61,6 +61,7 @@
 #include "dex/code_item_accessors-inl.h"
 #include "dex/descriptors_names.h"
 #include "dex/dex_file-inl.h"
+#include "dex/dex_file_profile.h"
 #include "dex/dex_instruction-inl.h"
 #include "dex/string_reference.h"
 #include "dex/type_lookup_table.h"
@@ -544,14 +545,17 @@ class OatDumper {
         continue;
       }
 
-      const DexLayoutSections* const layout_sections = oat_dex_file->GetDexLayoutSections();
-      if (layout_sections != nullptr) {
-        os << "Layout data\n";
-        os << *layout_sections;
-        os << "\n";
+      const DexProfileMetadata* const profile_metadata = oat_dex_file->GetDexProfileMetadata();
+      if (profile_metadata != nullptr) {
+        os << "Profile metadata for dex file " << std::setw(2) << i << " -"
+           << " Classes(startup: " << std::setw(5) << profile_metadata->num_startup_classes
+           << ", total: " << std::setw(5) << dex_file->NumClassDefs() << "),"
+           << " Methods(startup: " << std::setw(5) << profile_metadata->num_startup_methods
+           << ", total: " << std::setw(5) << dex_file->NumMethodIds() << ")\n";
       }
 
       if (!options_.dump_header_only_) {
+        os << "\n";
         DumpBssMappings(os,
                         dex_file,
                         oat_dex_file->GetMethodBssMapping(),
@@ -562,6 +566,7 @@ class OatDumper {
                         oat_dex_file->GetMethodTypeBssMapping());
       }
     }
+    os << "\n";
 
     if (!options_.dump_header_only_) {
       Runtime* const runtime = Runtime::Current();

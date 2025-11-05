@@ -23,6 +23,7 @@
 
 #include <android-base/logging.h>
 
+// TODO(b/358590127): Remove this file as it's not longer referenced or used.
 namespace art {
 
 class DexFile;
