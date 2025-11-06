@@ -1496,6 +1496,9 @@ class MethodVerifierImpl : public ::art::verifier::MethodVerifier {
   // Instead, unset level should correspond to max().
   const uint32_t api_level_;
 
+  // Set of switch payload addresses encountered so far in the current method.
+  std::unordered_set<const uint16_t*> switch_payload_addresses_;
+
   DISALLOW_COPY_AND_ASSIGN(MethodVerifierImpl);
 };
 
@@ -1950,6 +1953,7 @@ bool MethodVerifierImpl::ScanTryCatchBlocks() {
 }
 
 bool MethodVerifierImpl::VerifyInstructions() {
+  DCHECK(switch_payload_addresses_.empty());
   // Flag the start of the method as a branch target.
   GetModifiableInstructionFlags(0).SetBranchTarget();
   const Instruction* inst = Instruction::At(code_item_accessor_.Insns());
@@ -2354,6 +2358,14 @@ bool MethodVerifierImpl::CheckAndMarkSwitchTargets(uint32_t dex_pc,
   DCHECK_EQ(payload, &code_item_accessor_.InstructionAt(switch_payload_dex_pc));
   DCHECK_ALIGNED(payload, 4u);
   const uint16_t* switch_insns = reinterpret_cast<const uint16_t*>(payload);
+
+  // Check for duplicate payload addresses
+  if (switch_payload_addresses_.find(switch_insns) != switch_payload_addresses_.end()) {
+    Fail(VERIFY_ERROR_BAD_CLASS_HARD) << "Duplicate switch payload address " << switch_insns
+                                      << " at instruction offset 0x" << std::hex << dex_pc;
+    return false;
+  }
+  switch_payload_addresses_.insert(switch_insns);
 
   bool is_packed_switch = inst->Opcode(inst_data) == Instruction::PACKED_SWITCH;
   DCHECK_IMPLIES(!is_packed_switch, inst->Opcode(inst_data) == Instruction::SPARSE_SWITCH);
