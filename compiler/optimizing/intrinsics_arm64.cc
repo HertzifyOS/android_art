@@ -3197,20 +3197,15 @@ static void SystemArrayCopyPrimitive(HInvoke* invoke,
   };
 
   auto emitUnrolledTailLoop = [&](const int32_t length_in_bytes) {
-    static constexpr DataType::Type types[] = {DataType::Type::kUint8,
-                                               DataType::Type::kUint16,
-                                               DataType::Type::kInt32,
-                                               DataType::Type::kInt64};
-    const CPURegister tmps[] = {tmp, tmp, tmp, tmp.X()};
     size_t offset = 0;
-
     DCHECK_LT(length_in_bytes, unroll_threshold);
     DCHECK_GE(length_in_bytes, 0);
     for (uint32_t i : HighToLowBits(static_cast<uint32_t>(length_in_bytes))) {
       // Don't use post-index addressing, and instead accumulate a constant offset.
-      codegen->Load(types[i], tmps[i], MemOperand(src_curr_addr, offset));
-      codegen->Store(types[i], tmps[i], MemOperand(dst_curr_addr, offset));
-      DCHECK_EQ(1u << i, DataType::Size(types[i]));
+      DataType::Type t = DataType::SignedIntegralTypeFromSize(1u << i);
+      Register r = (t == DataType::Type::kInt64) ? tmp.X(): tmp;
+      codegen->Load(t, r, MemOperand(src_curr_addr, offset));
+      codegen->Store(t, r, MemOperand(dst_curr_addr, offset));
       offset += 1u << i;
     }
   };
