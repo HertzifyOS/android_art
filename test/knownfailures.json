@@ -1182,6 +1182,7 @@
                   "854-image-inlining",
                   "855-native",
                   "860-vdex-failure",
+                  "869-branches",
                   "999-redefine-hiddenapi",
                   "1000-non-moving-space-stress",
                   "1001-app-image-regions",
