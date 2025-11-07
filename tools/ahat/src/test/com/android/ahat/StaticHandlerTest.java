@@ -16,33 +16,29 @@
 
 package com.android.ahat;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
 import com.android.ahat.heapdump.AhatInstance;
 import com.android.ahat.heapdump.AhatSnapshot;
 
+import org.junit.Test;
+
 import java.io.IOException;
-import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.List;
 
-class ArrayHandler implements AhatDataHandler {
-  private AhatSnapshot mSnapshot;
-
-  public ArrayHandler(AhatSnapshot snapshot) {
-    mSnapshot = snapshot;
+public class StaticHandlerTest {
+  @Test
+  public void noCrashFound() throws IOException {
+    AhatDataHandler handler = new StaticHandler("etc/style.css", "text/css");
+    TestHandler.testNoCrash(handler, "http://localhost:7100/style.css");
   }
 
-  @Override
-  public void handle(Response response, Query query) throws IOException {
-    long id = query.getLong("id", 0);
-    AhatInstance inst = mSnapshot.findInstance(id);
-    byte[] bytes = inst.asByteArray();
-
-    if (bytes == null) {
-      response.error("No byte[] found for the given request.");
-      return;
-    }
-
-    OutputStream os =
-        response.attachment("application/octet-stream", String.format("array-0x%08x.bin", id));
-    os.write(bytes);
-    os.close();
+  @Test
+  public void noCrashNotFound() throws IOException {
+    AhatDataHandler handler = new StaticHandler("etc/noidonotexist.css", "text/css");
+    TestHandler.testNoCrash(handler, "http://localhost:7100/noidonotexist.css");
   }
 }
