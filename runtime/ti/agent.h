@@ -25,6 +25,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "nativebridge/native_bridge.h"
 #include "ti/agent_spec.h"
 
 namespace art HIDDEN {
@@ -42,14 +43,15 @@ using AgentOnUnloadFunction = void (*)(JavaVM*);
 // The agent's Agent_OnUnload function will be called during runtime shutdown.
 //
 // TODO: consider splitting ti::Agent into command line, agent and shared library handler classes
-// TODO Support native-bridge. Currently agents can only be the actual runtime ISA of the device.
 class Agent {
  public:
   const std::string& GetName() const {
     return name_;
   }
 
-  void* FindSymbol(const std::string& name) const;
+  void* FindSymbol(const std::string& name,
+                   const char* shorty,
+                   android::JNICallType jni_call_type) const;
 
   // TODO We need to acquire some locks probably.
   void Unload();
@@ -60,11 +62,13 @@ class Agent {
   ~Agent();
 
  private:
-  Agent(const std::string& name, void* dlopen_handle) : name_(name),
-                                                        dlopen_handle_(dlopen_handle),
-                                                        onload_(nullptr),
-                                                        onattach_(nullptr),
-                                                        onunload_(nullptr) {
+  Agent(const std::string& name, void* dlopen_handle, bool needs_native_bridge)
+      : name_(name),
+        dlopen_handle_(dlopen_handle),
+        needs_native_bridge_{needs_native_bridge},
+        onload_(nullptr),
+        onattach_(nullptr),
+        onunload_(nullptr) {
     DCHECK(dlopen_handle != nullptr);
   }
 
@@ -72,6 +76,7 @@ class Agent {
 
   std::string name_;
   void* dlopen_handle_;
+  bool needs_native_bridge_;
 
   // The entrypoints.
   AgentOnLoadFunction onload_;
