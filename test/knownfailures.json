@@ -1075,6 +1075,7 @@
           "2288-checker-smali-string-builder-wrong-init",
           "2289-smali-invalid-rti",
           "2292-checker-smali-peek-poke-truncation",
+          "2295-smali-duplicate-phis",
           "2397-array-verification-edge-cases"
         ],
         "variant": "jvm",
