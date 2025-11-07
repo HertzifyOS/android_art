@@ -75,8 +75,11 @@ static_assert(IsPowerOfTwo(kFastCompilerFrequencyCheck), "Must be a power of two
 class JitCompilerInterface {
  public:
   virtual ~JitCompilerInterface() {}
-  virtual bool CompileMethod(
-      Thread* self, JitMemoryRegion* region, ArtMethod* method, CompilationKind compilation_kind)
+  virtual bool CompileMethod(Thread* self,
+                             JitMemoryRegion* region,
+                             ArtMethod* method,
+                             CompilationKind compilation_kind,
+                             bool dynamic_instrumentation = false)
       REQUIRES_SHARED(Locks::mutator_lock_) = 0;
   virtual void TypesLoaded(mirror::Class**, size_t count)
       REQUIRES_SHARED(Locks::mutator_lock_) = 0;
@@ -209,7 +212,9 @@ class Jit {
   EXPORT bool CompileMethod(ArtMethod* method,
                             Thread* self,
                             CompilationKind compilation_kind,
-                            bool prejit) REQUIRES_SHARED(Locks::mutator_lock_);
+                            bool prejit,
+                            bool dynamic_instrumentation = false)
+      REQUIRES_SHARED(Locks::mutator_lock_);
 
   void VisitRoots(RootVisitor* visitor);
 
@@ -446,7 +451,8 @@ class Jit {
   bool CompileMethodInternal(ArtMethod* method,
                              Thread* self,
                              CompilationKind compilation_kind,
-                             bool prejit)
+                             bool prejit,
+                             bool dynamic_instrumentation = false)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   // JIT compiler

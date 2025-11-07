@@ -198,8 +198,11 @@ static const char* GetTimingLoggerMessage(CompilationKind compilation_kind) {
   }
 }
 
-bool JitCompiler::CompileMethod(
-    Thread* self, JitMemoryRegion* region, ArtMethod* method, CompilationKind compilation_kind) {
+bool JitCompiler::CompileMethod(Thread* self,
+                                JitMemoryRegion* region,
+                                ArtMethod* method,
+                                CompilationKind compilation_kind,
+                                bool dynamic_instrumentation) {
   SCOPED_TRACE << "JIT compiling "
                << method->PrettyMethod()
                << " (kind=" << compilation_kind << ")"
@@ -220,8 +223,13 @@ bool JitCompiler::CompileMethod(
     TimingLogger::ScopedTiming t2(GetTimingLoggerMessage(compilation_kind), &logger);
     JitCodeCache* const code_cache = jit->GetCodeCache();
     metrics::AutoTimer timer{runtime->GetMetrics()->JitMethodCompileTotalTime()};
-    success = compiler_->JitCompile(
-        self, code_cache, region, method, compilation_kind, jit_logger_.get());
+    success = compiler_->JitCompile(self,
+                                    code_cache,
+                                    region,
+                                    method,
+                                    compilation_kind,
+                                    jit_logger_.get(),
+                                    dynamic_instrumentation);
     uint64_t duration_us = timer.Stop();
     VLOG(jit) << "Compilation of " << method->PrettyMethod() << " took "
               << PrettyDuration(UsToNs(duration_us));

@@ -157,7 +157,8 @@ bool Jit::TryPatternMatch(ArtMethod* method_to_compile, CompilationKind compilat
 bool Jit::CompileMethodInternal(ArtMethod* method,
                                 Thread* self,
                                 CompilationKind compilation_kind,
-                                bool prejit) {
+                                bool prejit,
+                                bool dynamic_instrumentation) {
   DCHECK(Runtime::Current()->UseJitCompilation());
   DCHECK(!method->IsRuntimeMethod());
 
@@ -228,7 +229,8 @@ bool Jit::CompileMethodInternal(ArtMethod* method,
   VLOG(jit) << "Compiling method "
             << ArtMethod::PrettyMethod(method_to_compile)
             << " kind=" << compilation_kind;
-  bool success = jit_compiler_->CompileMethod(self, region, method_to_compile, compilation_kind);
+  bool success = jit_compiler_->CompileMethod(
+      self, region, method_to_compile, compilation_kind, dynamic_instrumentation);
   code_cache_->DoneCompiling(method_to_compile, self);
   if (!success) {
     VLOG(jit) << "Failed to compile method "
@@ -1812,7 +1814,8 @@ void Jit::MaybeEnqueueFastCompilation(ArtMethod* method, Thread* self) {
 bool Jit::CompileMethod(ArtMethod* method,
                         Thread* self,
                         CompilationKind compilation_kind,
-                        bool prejit) {
+                        bool prejit,
+                        bool dynamic_instrumentation) {
   if (compilation_kind == CompilationKind::kBaseline) {
     // Mark the method as warm for the profile saver.
     if (method->IsMemorySharedMethod()) {
@@ -1828,7 +1831,7 @@ bool Jit::CompileMethod(ArtMethod* method,
   ScopedSetRuntimeThread ssrt(self);
   // TODO(ngeoffray): For JIT at first use, use kPreCompile. Currently we don't due to
   // conflicts with jitzygote optimizations.
-  return CompileMethodInternal(method, self, compilation_kind, prejit);
+  return CompileMethodInternal(method, self, compilation_kind, prejit, dynamic_instrumentation);
 }
 
 SharedMethodInfo Jit::GetSharedMethodInfo(ArtMethod* method) {

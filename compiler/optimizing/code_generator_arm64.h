@@ -1118,6 +1118,7 @@ class CodeGeneratorARM64 : public CodeGenerator {
   void MaybeGenerateInlineCacheCheck(HInstruction* instruction, vixl::aarch64::Register klass);
   void MaybeIncrementHotness(HSuspendCheck* suspend_check, bool is_frame_entry);
   void MaybeRecordTraceEvent(bool is_method_entry);
+  void MaybeRecordUprobeEvent();
 
   bool CanUseImplicitSuspendCheck() const;
 

@@ -87,6 +87,7 @@ java_aconfig_library {
     ],
     visibility: [
         "//art:__subpackages__",
+        "//cts/tests/tests/uprobestats:__subpackages__",
         "//cts/tests/libcore/vmdebug:__subpackages__",
         "//libcore:__subpackages__",
     ],
@@ -110,6 +111,7 @@ java_aconfig_library {
     visibility: [
         "//art:__subpackages__",
         "//cts/tests/tests/security",
+        "//cts/tests/tests/uprobestats:__subpackages__",
     ],
 }
 
@@ -120,5 +122,15 @@ java_aconfig_library {
     aconfig_declarations: "art-aconfig-flags",
     visibility: [
         "//cts/hostsidetests/compilation:__subpackages__",
+    ],
+}
+
+java_aconfig_library {
+    name: "art-aconfig-rw-flags-java-lib-test",
+    host_supported: true,
+    mode: "test",
+    aconfig_declarations: "art-aconfig-rw-flags",
+    visibility: [
+        "//packages/modules/UprobeStats:__subpackages__",
     ],
 }
