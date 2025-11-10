@@ -1033,41 +1033,6 @@ void GraphChecker::HandleLoop(HBasicBlock* loop_header) {
   }
 }
 
-static bool IsSameSizeConstant(const HInstruction* insn1, const HInstruction* insn2) {
-  return insn1->IsConstant()
-      && insn2->IsConstant()
-      && DataType::Is64BitType(insn1->GetType()) == DataType::Is64BitType(insn2->GetType());
-}
-
-static bool IsConstantEquivalent(const HInstruction* insn1,
-                                 const HInstruction* insn2,
-                                 BitVector* visited) {
-  if (insn1->IsPhi() && insn1->AsPhi()->IsVRegEquivalentOf(insn2)) {
-    HConstInputsRef insn1_inputs = insn1->GetInputs();
-    HConstInputsRef insn2_inputs = insn2->GetInputs();
-    if (insn1_inputs.size() != insn2_inputs.size()) {
-      return false;
-    }
-
-    // Testing only one of the two inputs for recursion is sufficient.
-    if (visited->IsBitSet(insn1->GetId())) {
-      return true;
-    }
-    visited->SetBit(insn1->GetId());
-
-    for (size_t i = 0; i < insn1_inputs.size(); ++i) {
-      if (!IsConstantEquivalent(insn1_inputs[i], insn2_inputs[i], visited)) {
-        return false;
-      }
-    }
-    return true;
-  } else if (IsSameSizeConstant(insn1, insn2)) {
-    return insn1->AsConstant()->GetValueAsUint64() == insn2->AsConstant()->GetValueAsUint64();
-  } else {
-    return false;
-  }
-}
-
 void GraphChecker::VisitPhi(HPhi* phi) {
   VisitInstruction(phi);
 
@@ -1189,22 +1154,6 @@ void GraphChecker::VisitPhi(HPhi* phi) {
               phi->GetId(),
               phi->GetRegNumber(),
               type_str.str().c_str()));
-        } else {
-          // Use local allocator for allocating memory.
-          ScopedArenaAllocator allocator(GetGraph()->GetArenaStack());
-          // If we get here, make sure we allocate all the necessary storage at once
-          // because the BitVector reallocation strategy has very bad worst-case behavior.
-          ArenaBitVector visited(&allocator,
-                                 GetGraph()->GetCurrentInstructionId(),
-                                 /* expandable= */ false,
-                                 kArenaAllocGraphChecker);
-          if (!IsConstantEquivalent(phi, other_phi, &visited)) {
-            AddError(StringPrintf("Two phis (%d and %d) found for VReg %d but they "
-                                  "are not equivalents of constants.",
-                                  phi->GetId(),
-                                  other_phi->GetId(),
-                                  phi->GetRegNumber()));
-          }
         }
       }
     }

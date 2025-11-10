@@ -19,6 +19,8 @@
 
 #include <android-base/unique_fd.h>
 
+#include <cstdint>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "app_info.h"
@@ -62,6 +64,7 @@ class JitOptions;
 
 static constexpr int16_t kJitCheckForOSR = -1;
 static constexpr int16_t kJitHotnessDisabled = -2;
+static constexpr uint16_t kIndividualSharedMethodHotnessThreshold = 0x3f;
 
 // The frequency at which we are going to check if we want to do fast
 // compilation. Only the main thread will request fast compilations.
@@ -72,8 +75,11 @@ static_assert(IsPowerOfTwo(kFastCompilerFrequencyCheck), "Must be a power of two
 class JitCompilerInterface {
  public:
   virtual ~JitCompilerInterface() {}
-  virtual bool CompileMethod(
-      Thread* self, JitMemoryRegion* region, ArtMethod* method, CompilationKind compilation_kind)
+  virtual bool CompileMethod(Thread* self,
+                             JitMemoryRegion* region,
+                             ArtMethod* method,
+                             CompilationKind compilation_kind,
+                             bool dynamic_instrumentation = false)
       REQUIRES_SHARED(Locks::mutator_lock_) = 0;
   virtual void TypesLoaded(mirror::Class**, size_t count)
       REQUIRES_SHARED(Locks::mutator_lock_) = 0;
@@ -111,6 +117,13 @@ struct OsrData {
   static constexpr MemberOffset MemoryOffset() {
     return MemberOffset(OFFSETOF_MEMBER(OsrData, memory));
   }
+};
+
+// Info about a method that resides in shared memory (shared between zygote and apps).
+// We keep the info here to avoid dirtying the `ArtMethod`'s page.
+struct SharedMethodInfo {
+  uint8_t counter = kIndividualSharedMethodHotnessThreshold;
+  bool previously_warm = false;
 };
 
 /**
@@ -199,7 +212,9 @@ class Jit {
   EXPORT bool CompileMethod(ArtMethod* method,
                             Thread* self,
                             CompilationKind compilation_kind,
-                            bool prejit) REQUIRES_SHARED(Locks::mutator_lock_);
+                            bool prejit,
+                            bool dynamic_instrumentation = false)
+      REQUIRES_SHARED(Locks::mutator_lock_);
 
   void VisitRoots(RootVisitor* visitor);
 
@@ -406,6 +421,9 @@ class Jit {
   EXPORT static bool TryPatternMatch(ArtMethod* method, CompilationKind compilation_kind)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
+  // Get a snapshot of the current info for a shared method. The argument must be a shared method.
+  SharedMethodInfo GetSharedMethodInfo(ArtMethod* method);
+
  private:
   Jit(JitCodeCache* code_cache, JitOptions* options);
 
@@ -433,7 +451,8 @@ class Jit {
   bool CompileMethodInternal(ArtMethod* method,
                              Thread* self,
                              CompilationKind compilation_kind,
-                             bool prejit)
+                             bool prejit,
+                             bool dynamic_instrumentation = false)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   // JIT compiler
@@ -475,9 +494,8 @@ class Jit {
   // recomputing it.
   size_t fd_methods_size_;
 
-  // Map of hotness counters for methods which we want to share the memory
-  // between the zygote and apps.
-  std::map<ArtMethod*, uint16_t> shared_method_counters_;
+  // Map from shared methods to their info.
+  std::unordered_map<ArtMethod*, SharedMethodInfo> shared_method_info_map_;
 
   friend class art::jit::JitCompileTask;
 

@@ -1610,11 +1610,11 @@ class JNI {
     // Android Studio needs to be able to overwrite newly introduced fields in class redefinition
     // process.
     if (Runtime::Current()->IsJavaDebuggableAtInit() &&
-        reflect_field->IsMonotonic() &&
+        reflect_field->IsUnmodifiable() &&
         !f->GetObject(f->GetDeclaringClass()).IsNull()) {
       LOG(FATAL) << "Can't overwrite value of already initialized " << f->PrettyField();
     } else {
-      if (reflect_field->IsMonotonic()) {
+      if (reflect_field->IsUnmodifiable()) {
         LOG(FATAL) << "Can't overwrite value of " << f->PrettyField();
       }
     }
@@ -1686,11 +1686,11 @@ class JNI {
   /* Android Studio needs to be able to overwrite newly introduced fields in class redefinition */ \
   /* process. */ \
   if (Runtime::Current()->IsJavaDebuggableAtInit()) { \
-    if (reflect_field->IsMonotonic() && !IsZero(f)) { \
+    if (reflect_field->IsUnmodifiable() && !IsZero(f)) { \
       LOG(FATAL) << "Can't overwrite value of already initialized " << f->PrettyField(); \
     } \
   } else { \
-    if (reflect_field->IsMonotonic()) { \
+    if (reflect_field->IsUnmodifiable()) { \
       LOG(FATAL) << "Can't overwrite value of " << f->PrettyField(); \
     } \
   } \

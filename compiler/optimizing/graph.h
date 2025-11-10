@@ -75,7 +75,8 @@ class HGraph : public ArenaObject<kArenaAllocGraph> {
          bool dead_reference_safe = false,
          bool debuggable = false,
          CompilationKind compilation_kind = CompilationKind::kOptimized,
-         int start_instruction_id = 0)
+         int start_instruction_id = 0,
+         bool dynamic_instrumentation = false)
       : allocator_(allocator),
         arena_stack_(arena_stack),
         handle_cache_(handles),
@@ -98,6 +99,7 @@ class HGraph : public ArenaObject<kArenaAllocGraph> {
         has_always_throwing_invokes_(false),
         dead_reference_safe_(dead_reference_safe),
         debuggable_(debuggable),
+        dynamic_instrumentation_(dynamic_instrumentation),
         current_instruction_id_(start_instruction_id),
         dex_file_(dex_file),
         method_idx_(method_idx),
@@ -297,6 +299,8 @@ class HGraph : public ArenaObject<kArenaAllocGraph> {
   void MarkDeadReferenceUnsafe() { dead_reference_safe_ = false; }
 
   bool IsDebuggable() const { return debuggable_; }
+
+  bool IsDynamicallyInstrumented() const { return dynamic_instrumentation_; }
 
   // Returns a constant of the given type and value. If it does not exist
   // already, it is created and inserted into the graph. This method is only for
@@ -498,6 +502,10 @@ class HGraph : public ArenaObject<kArenaAllocGraph> {
   // ensures full debuggability. If false, we can apply more
   // aggressive optimizations that may limit the level of debugging.
   const bool debuggable_;
+
+  // Whether the graph should be compiled with extra hooks to attach dynamic
+  // instrumentation.
+  const bool dynamic_instrumentation_;
 
   // The current id to assign to a newly added instruction. See HInstruction.id_.
   int32_t current_instruction_id_;

@@ -131,9 +131,8 @@
     },
     {
         "tests": "154-gc-loop",
-        "variant": "gcstress | jit & debug",
-        "description": ["154-gc-loop depends GC not happening too often"],
-        "bug": "http://b/35917229"
+        "variant": "continuous-gc | gcstress | jit & debug",
+        "description": ["154-gc-loop depends GC not happening too often"]
     },
     {
         "tests": "115-native-bridge",
@@ -693,8 +692,13 @@
         "variant": "gcstress & target & debug"
     },
     {
+        "tests": ["004-NativeAllocations"],
+        "variant": "continuous-gc",
+        "description": [ "The test expects native-allocation GCs to finish within certain time-limit." ]
+    },
+    {
         "tests": ["2040-huge-native-alloc"],
-        "variant": "debuggable | gcstress | interpreter | interp-ac | trace",
+        "variant": "debuggable | gcstress | interpreter | interp-ac | trace | continuous-gc",
         "bug": "b/190148586",
         "description": [ "Checks exact GC timing; fails for many variants that alter that dramatically." ]
     },
@@ -1075,6 +1079,7 @@
           "2288-checker-smali-string-builder-wrong-init",
           "2289-smali-invalid-rti",
           "2292-checker-smali-peek-poke-truncation",
+          "2295-smali-duplicate-phis",
           "2397-array-verification-edge-cases"
         ],
         "variant": "jvm",
@@ -1181,6 +1186,7 @@
                   "854-image-inlining",
                   "855-native",
                   "860-vdex-failure",
+                  "869-branches",
                   "999-redefine-hiddenapi",
                   "1000-non-moving-space-stress",
                   "1001-app-image-regions",

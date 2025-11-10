@@ -355,7 +355,7 @@ ALWAYS_INLINE inline static bool ThrowIAEIfFieldIsNotOverwritable(ObjPtr<mirror:
     if (IsSdkVersionSetAndAtMost(sdk_version, SdkVersion::kB)) {
       return false;
     }
-  } else if (!field->IsMonotonic()) {
+  } else if (!field->IsUnmodifiable()) {
     return false;
   }
   ThrowIllegalAccessException(
@@ -363,7 +363,6 @@ ALWAYS_INLINE inline static bool ThrowIAEIfFieldIsNotOverwritable(ObjPtr<mirror:
               PrettyJavaAccessFlags(field->GetAccessFlags()).c_str(),
               ArtField::PrettyField(field->GetArtField()).c_str(),
               field->GetDeclaringClass()->PrettyClass().c_str()).c_str());
-
   return true;
 }
 
@@ -561,7 +560,7 @@ static jboolean Field_isMonotonic0(JNIEnv* env, jobject javaField) {
   ScopedObjectAccess soa(env);
   ObjPtr<mirror::Field> f = soa.Decode<mirror::Field>(javaField);
 
-  return f->IsMonotonic();
+  return f->IsUnmodifiable();
 }
 
 static JNINativeMethod gMethods[] = {

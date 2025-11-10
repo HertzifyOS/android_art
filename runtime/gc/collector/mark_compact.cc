@@ -1863,9 +1863,21 @@ void MarkCompact::MoveBlackDensePageForUpdate(uint8_t* page) {
             static_cast<uint8_t>(PageState::kProcessedAndMapped));
   if (!success) {
     uint32_t i = 0;
-    while (moving_pages_status_[idx].load(std::memory_order_acquire) !=
-           static_cast<uint8_t>(PageState::kProcessedAndMapped)) {
+    PageState state =
+        GetPageStateFromWord(moving_pages_status_[idx].load(std::memory_order_acquire));
+    while (state != PageState::kProcessedAndMapped) {
+      // The page may have been processed by gc-thread earlier, but not mapped yet.
+      if (state == PageState::kProcessed) {
+        size_t ret = MapMovingSpacePages(idx,
+                                         idx + 1,
+                                         /*from_fault=*/false,
+                                         /*return_on_contention=*/false,
+                                         /*tolerate_enoent=*/false);
+        CHECK_EQ(ret, 1u);
+        break;
+      }
       BackOff</*kYieldMax=*/2, /*kSleepUs=*/5>(i++);
+      state = GetPageStateFromWord(moving_pages_status_[idx].load(std::memory_order_acquire));
     }
   }
 }

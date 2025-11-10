@@ -85,7 +85,7 @@ class VarHandle;
   M(kJavaLangInvokeArrayElementVarHandle,   "Ljava/lang/invoke/ArrayElementVarHandle;",   mirror::ArrayElementVarHandle)                  \
   M(kJavaLangInvokeByteArrayViewVarHandle,  "Ljava/lang/invoke/ByteArrayViewVarHandle;",  mirror::ByteArrayViewVarHandle)                 \
   M(kJavaLangInvokeByteBufferViewVarHandle, "Ljava/lang/invoke/ByteBufferViewVarHandle;", mirror::ByteBufferViewVarHandle)                \
-  M(kJavaLangInvokeMemorySegmentVarHandle, "Ljava/lang/invoke/MemorySegmentVarHandle;",   mirror::MemorySegmentVarHandle)                 \
+  M(kJavaLangInvokeMemorySegmentVarHandle,  "Ljava/lang/invoke/MemorySegmentVarHandle;",  mirror::MemorySegmentVarHandle)                 \
   M(kJavaLangClassLoader,                   "Ljava/lang/ClassLoader;",                    mirror::ClassLoader)                            \
   M(kJavaLangThrowable,                     "Ljava/lang/Throwable;",                      mirror::Throwable)                              \
   M(kJavaLangStackTraceElement,             "Ljava/lang/StackTraceElement;",              mirror::StackTraceElement)                      \

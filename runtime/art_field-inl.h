@@ -473,6 +473,13 @@ inline ObjPtr<mirror::ClassLoader> ArtField::GetClassLoader() {
   return GetDeclaringClass()->GetClassLoader();
 }
 
+inline void ArtField::SetMonotonicField() {
+  DCHECK_EQ(access_flags_ & kAccMonotonic, 0u);
+  DCHECK(IsFinal());
+  uint32_t new_access_flags = access_flags_ | kAccMonotonic;
+  SetAccessFlags(new_access_flags);
+}
+
 }  // namespace art
 
 #endif  // ART_RUNTIME_ART_FIELD_INL_H_

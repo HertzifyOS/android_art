@@ -91,6 +91,10 @@ extern "C" void art_quick_nop_record_exit_trace_event() {
   return;
 }
 
+extern "C" void art_quick_nop_uprobe_method_entry_hook() {
+  return;
+}
+
 void UpdateReadBarrierEntrypoints(QuickEntryPoints* qpoints, bool is_active) {
   // ARM64 is the architecture with the largest number of core
   // registers (32) that supports the read barrier configuration.
@@ -246,6 +250,10 @@ void UpdateLowOverheadTraceEntrypoints(QuickEntryPoints* qpoints, LowOverheadTra
       qpoints->SetRecordExitTraceEvent(art_quick_nop_record_exit_trace_event);
       break;
   }
+}
+
+uintptr_t GetNopUprobeMethodEntryHookAddress() {
+  return reinterpret_cast<uintptr_t>(art_quick_nop_uprobe_method_entry_hook);
 }
 
 }  // namespace art

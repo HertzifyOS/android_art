@@ -68,6 +68,8 @@ namespace art HIDDEN {
 template<class MirrorType>
 class GcRoot;
 
+uintptr_t GetNopUprobeMethodEntryHookAddress();
+
 namespace arm64 {
 
 using helpers::ARM64EncodableConstantOrRegister;
@@ -1381,6 +1383,24 @@ void CodeGeneratorARM64::MaybeRecordTraceEvent(bool is_method_entry) {
   __ Bind(slow_path->GetExitLabel());
 }
 
+void CodeGeneratorARM64::MaybeRecordUprobeEvent() {
+  if (!GetGraph()->IsDynamicallyInstrumented()) {
+    return;
+  }
+  DCHECK(GetCompilerOptions().IsJitCompiler());
+  DCHECK(!HasEmptyFrame());
+
+  // We put the frame size in x0 so that a uprobe-based eBPF handler can get to the original frame.
+  // After the stub call, we will restore x0 to the ArtMethod*.
+  DCHECK_EQ(x0.GetCode(), kArtMethodRegister.GetCode());
+  __ Mov(x0, GetFrameSize());
+  __ Mov(lr, GetNopUprobeMethodEntryHookAddress());
+  __ Blr(lr);
+  // Now restore x0 to ArtMethod* after the call, so that it is in the expected location going
+  // forward.
+  __ Ldr(x0, MemOperand(sp, 0));
+}
+
 void CodeGeneratorARM64::MaybeIncrementHotness(HSuspendCheck* suspend_check, bool is_frame_entry) {
   MacroAssembler* masm = GetVIXLAssembler();
   if (GetCompilerOptions().CountHotnessInCompiledCode()) {
@@ -1548,6 +1568,7 @@ void CodeGeneratorARM64::GenerateFrameEntry() {
       __ Str(wzr, MemOperand(sp, GetStackOffsetOfShouldDeoptimizeFlag()));
     }
 
+    MaybeRecordUprobeEvent();
     MaybeRecordTraceEvent(/* is_method_entry= */ true);
   }
   MaybeIncrementHotness(/* suspend_check= */ nullptr, /* is_frame_entry= */ true);

@@ -1760,6 +1760,9 @@ NterpCommonInvokeInstanceRange:
     COMMON_INVOKE_RANGE suffix="invokeInstance"
 
 NterpCommonInvokeInterface:
+#ifdef USE_HEAP_POISONING
+    ldr x0, [x2, w3, uxtw #3]
+#endif
     COMMON_INVOKE_NON_RANGE is_interface=1, suffix="invokeInterface"
 
 NterpCommonInvokeInterfaceRange:

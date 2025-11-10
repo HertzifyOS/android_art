@@ -156,8 +156,6 @@ vixl::aarch64::Condition ARM64PCondition(HVecPredToBoolean::PCondKind cond);
   V(StringBuilderAppendDouble)                \
   V(StringBuilderLength)                      \
   V(StringBuilderToString)                    \
-  V(SystemArrayCopyByte)                      \
-  V(SystemArrayCopyInt)                       \
   V(UnsafeArrayBaseOffset)                    \
   /* 1.8 */                                   \
   V(MethodHandleInvoke)                       \
@@ -1120,6 +1118,7 @@ class CodeGeneratorARM64 : public CodeGenerator {
   void MaybeGenerateInlineCacheCheck(HInstruction* instruction, vixl::aarch64::Register klass);
   void MaybeIncrementHotness(HSuspendCheck* suspend_check, bool is_frame_entry);
   void MaybeRecordTraceEvent(bool is_method_entry);
+  void MaybeRecordUprobeEvent();
 
   bool CanUseImplicitSuspendCheck() const;
 

@@ -1122,7 +1122,26 @@ ObjPtr<mirror::Object> Monitor::MonitorEnter(Thread* self,
     static constexpr int kMaxInflationAttempts = 100;  // Really > 5 should essentially never
                                                        // happen.
     if (UNLIKELY(inflation_attempt >= kMaxInflationAttempts)) {
-      LOG(FATAL) << "Too many inflation attempts";
+      LockWord lw = h_obj.Get()->GetLockWord(/*as_volatile=*/true);
+      std::ostringstream oss;
+      lw.Dump(oss);
+      uint32_t owner_thread_id = 0;
+      if (lw.GetState() == LockWord::kThinLocked) {
+        owner_thread_id = lw.ThinLockOwner();
+      }
+      if (owner_thread_id != 0) {
+        MutexLock mu(self, *Locks::thread_list_lock_);
+        Thread* t = Runtime::Current()->GetThreadList()->FindThreadByThreadId(owner_thread_id);
+        if (t == nullptr) {
+          oss << "; owner not found!";
+        } else {
+          oss << "; owner: " << *t;
+          if (kill(t->GetTid(), 0) == 0) {
+            oss << " (live)";
+          }
+        }
+      }
+      LOG(FATAL) << "Too many inflation attempts: " << oss.str();
     }
     // We initially read the lockword with ordinary Java/relaxed semantics. When stronger
     // semantics are needed, we address it below. Since GetLockWord bottoms out to a relaxed load,

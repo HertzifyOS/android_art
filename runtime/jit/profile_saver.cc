@@ -471,7 +471,7 @@ bool ProfileSaver::GetClassesAndMethodsHelper::IsClassLoaderRelevant(
 
   bool is_relevant = false;
   VisitClassLoaderDexFiles(Thread::Current(), class_loader, [&](const DexFile* dex_file) {
-    if (tracked_dex_base_location_set_.contains(dex_file->GetLocation())) {
+    if (dex_file != nullptr && tracked_dex_base_location_set_.contains(dex_file->GetLocation())) {
       is_relevant = true;
       return false;
     }
@@ -654,6 +654,17 @@ void ProfileSaver::GetClassesAndMethodsHelper::CollectClasses(Thread* self) {
   }
 }
 
+static bool IsMethodPreviouslyWarm(ArtMethod* method) {
+  if (method->IsMemorySharedMethod()) {
+    jit::Jit* jit = Runtime::Current()->GetJit();
+    if (jit == nullptr) {
+      return false;
+    }
+    return jit->GetSharedMethodInfo(method).previously_warm;
+  }
+  return method->PreviouslyWarm();
+}
+
 void ProfileSaver::GetClassesAndMethodsHelper::UpdateProfile(const std::set<std::string>& locations,
                                                              ProfileCompilationInfo* profile_info) {
   // Move members to local variables to allow the compiler to optimize this properly.
@@ -669,7 +680,7 @@ void ProfileSaver::GetClassesAndMethodsHelper::UpdateProfile(const std::set<std:
   auto get_method_flags = [&](ArtMethod& method) {
     // Mark methods as hot if they are marked as such (warm for the runtime
     // means hot for the profile).
-    if (method.PreviouslyWarm()) {
+    if (IsMethodPreviouslyWarm(&method)) {
       ++number_of_hot_methods;
       return enum_cast<ProfileCompilationInfo::MethodHotness::Flag>(base_flags | Hotness::kFlagHot);
     } else if (method.CounterHasChanged(initial_value)) {

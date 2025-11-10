@@ -17,6 +17,7 @@
 #ifndef ART_RUNTIME_MIRROR_FIELD_INL_H_
 #define ART_RUNTIME_MIRROR_FIELD_INL_H_
 
+#include "class_root.h"
 #include "field.h"
 
 #include "art_field-inl.h"
@@ -35,7 +36,7 @@ inline ObjPtr<mirror::Class> Field::GetDeclaringClass() REQUIRES_SHARED(Locks::m
   return GetFieldObject<Class>(OFFSET_OF_OBJECT_MEMBER(Field, declaring_class_));
 }
 
-inline bool Field::IsMonotonic() REQUIRES_SHARED(Locks::mutator_lock_) {
+inline bool Field::IsUnmodifiable() REQUIRES_SHARED(Locks::mutator_lock_) {
   if (!IsFinal()) {
     return false;
   }
@@ -43,13 +44,13 @@ inline bool Field::IsMonotonic() REQUIRES_SHARED(Locks::mutator_lock_) {
   ObjPtr<mirror::Class> declaring_class = GetDeclaringClass();
   DCHECK(declaring_class != nullptr);
 
-  if (declaring_class->IsRecordClass()) {
-    return true;
-  }
-
   // Write-protected fields are `static final`, but can be modified nevertheless.
   if (IsWriteProtected()) {
     return false;
+  }
+
+  if ((GetAccessFlags() & kAccMonotonic) != 0) {
+    return true;
   }
 
   // Before and on Android B any field could be overwritten using reflection with final fields in
@@ -60,6 +61,24 @@ inline bool Field::IsMonotonic() REQUIRES_SHARED(Locks::mutator_lock_) {
     return false;
   }
 
+  // `static final` fields with declared VarHandle, MethodHandle or Atomic*FieldUpdater types
+  // are unmodifiable on apps targeting C or higher.
+  ObjPtr<mirror::Class> field_type = GetType();
+  if (IsStatic() && field_type->IsBootStrapClassLoaded()) {
+    // These classes are abstract and exact implementations are exposed neither to apps
+    // nor in the platform, hence plain comparison instead of subtype checks.
+    if (field_type == GetClassRoot(ClassRoot::kJavaLangInvokeMethodHandle) ||
+        field_type == GetClassRoot(ClassRoot::kJavaLangInvokeVarHandle) ||
+        field_type == WellKnownClasses::ToClass(
+            WellKnownClasses::java_util_concurrent_atomic_AIFU) ||
+        field_type == WellKnownClasses::ToClass(
+            WellKnownClasses::java_util_concurrent_atomic_ALFU) ||
+        field_type == WellKnownClasses::ToClass(
+            WellKnownClasses::java_util_concurrent_atomic_ARFU)) {
+      return true;
+    }
+  }
+
   // Make sure that OEMs code in bootclasspath won't be affected after ART module update.
   uint32_t sdk_version = Runtime::Current()->GetSdkVersion();
   if (IsSdkVersionSetAndAtMost(sdk_version, SdkVersion::kB)) {
@@ -67,23 +86,7 @@ inline bool Field::IsMonotonic() REQUIRES_SHARED(Locks::mutator_lock_) {
   }
 
   // static final fields can't be modified once initialized.
-  if (IsStatic()) {
-    return true;
-  }
-
-  // Certain instance final fields will also be treated as monotonic. That's not applicable to
-  // app classes, so bailing out early if so.
-  if (!declaring_class->IsBootStrapClassLoaded()) {
-    return false;
-  }
-
-  // Treat instance final fields in java.lang, java.lang.invoke and java.util.concurrent.atomic as
-  // truly final. Write-protected fields (j.l.System.(in, out, err)) are handled early in this
-  // method, so this is safe.
-  return declaring_class->IsInSamePackage(WellKnownClasses::java_lang_invoke_MethodHandle.Get())
-         || declaring_class->IsInSamePackage(
-              WellKnownClasses::ToClass(WellKnownClasses::java_util_concurrent_atomic_ARFU))
-         || declaring_class->IsInSamePackage(WellKnownClasses::java_lang_Boolean.Get());
+  return IsStatic();
 }
 
 inline bool Field::IsWriteProtected() {
