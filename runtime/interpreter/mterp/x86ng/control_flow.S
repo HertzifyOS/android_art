@@ -131,11 +131,11 @@
  */
 %def op_return(is_object=False):
     GET_VREG %eax, rINST                    # eax <- vAA
-    .if !$is_object
-    // In case we're going back to compiled code, put the
-    // result also in a xmm register.
-    movd %eax, %xmm0
-    .endif
+%   if not is_object:
+      // In case we're going back to compiled code, put the
+      // result also in a xmm register.
+      movd %eax, %xmm0
+%   #endif
     CFI_REMEMBER_STATE
     movl -4(rREFS), %esp
     DROP_PARAMETERS_SAVES

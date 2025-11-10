@@ -14,28 +14,28 @@
     je      common_errNullObject            # bail if so
     cmpl    MIRROR_ARRAY_LENGTH_OFFSET(%eax), %ecx
     jae     common_errArrayIndex            # index >= length, bail.
-    .if $wide
-    movq $data_offset(%eax,%ecx,8), %xmm0
-    SET_WIDE_FP_VREG %xmm0, rINST           # vAA <- xmm0
-    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
-    .elseif $is_object
-    testb $$READ_BARRIER_TEST_VALUE, GRAY_BYTE_OFFSET(%eax)
-    $load   $data_offset(%eax,%ecx,$multiplier), %eax
-    jnz 2f
-    UNPOISON_HEAP_REF eax  // Affects flags, so we cannot unpoison before the jnz.
+%   if wide:
+      movq $data_offset(%eax,%ecx,8), %xmm0
+      SET_WIDE_FP_VREG %xmm0, rINST           # vAA <- xmm0
+      ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
+%   elif is_object:
+      testb $$READ_BARRIER_TEST_VALUE, GRAY_BYTE_OFFSET(%eax)
+      $load   $data_offset(%eax,%ecx,$multiplier), %eax
+      jnz 2f
+      UNPOISON_HEAP_REF eax  // Affects flags, so we cannot unpoison before the jnz.
 1:
-    SET_VREG_OBJECT %eax, rINST
-    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
+      SET_VREG_OBJECT %eax, rINST
+      ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-    UNPOISON_HEAP_REF eax
-    // reg00 is eax
-    call art_quick_read_barrier_mark_reg00
-    jmp 1b
-    .else
-    $load   $data_offset(%eax,%ecx,$multiplier), %eax
-    SET_VREG %eax, rINST
-    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
-    .endif
+      UNPOISON_HEAP_REF eax
+      // reg00 is eax
+      call art_quick_read_barrier_mark_reg00
+      jmp 1b
+%   else:
+      $load   $data_offset(%eax,%ecx,$multiplier), %eax
+      SET_VREG %eax, rINST
+      ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
+%   #endif
 
 %def op_aget_boolean():
 %  op_aget(load="movzbl", multiplier=1, data_offset="MIRROR_BOOLEAN_ARRAY_DATA_OFFSET")
@@ -71,13 +71,13 @@
     je      common_errNullObject             # bail if so
     cmpl    MIRROR_ARRAY_LENGTH_OFFSET(%eax), %ecx
     jae     common_errArrayIndex             # index >= length, bail.
-    .if $wide
-    GET_WIDE_FP_VREG %xmm0, rINST            # xmm0 <- vAA
-    movq    %xmm0, $data_offset(%eax,%ecx,8) # vBB[vCC] <- xmm0
-    .else
-    GET_VREG rINST, rINST
-    $store    $rINST_reg, $data_offset(%eax,%ecx,$multiplier)
-    .endif
+%   if wide:
+      GET_WIDE_FP_VREG %xmm0, rINST            # xmm0 <- vAA
+      movq    %xmm0, $data_offset(%eax,%ecx,8) # vBB[vCC] <- xmm0
+%   else:
+      GET_VREG rINST, rINST
+      $store    $rINST_reg, $data_offset(%eax,%ecx,$multiplier)
+%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 
 %def op_aput_boolean():

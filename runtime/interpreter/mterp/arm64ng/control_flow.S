@@ -140,32 +140,32 @@
  * Return a 32-bit value.
  */
 %def op_return(is_object=False, is_void=False, is_wide=False):
-    .if $is_void
+%   if is_void:
       // Thread fence for constructor
       dmb ishst
-    .else
+%   else:
       lsr     w2, wINST, #8               // w2<- AA
-      .if $is_wide
+%     if is_wide:
         GET_VREG_WIDE x0, w2                // x0<- vAA
         // In case we're going back to compiled code, put the
         // result also in d0
         fmov d0, x0
-      .else
+%     else:
         GET_VREG w0, w2                     // r0<- vAA
-        .if $is_object
+%       if is_object:
 .L${opcode}_restore_registers_and_return:  // `return-wide` handler jumps here to shorten the code.
-        .else
-        // In case we're going back to compiled code, put the
-        // result also in s0.
-        fmov s0, w0
-        .endif
-      .endif
-    .endif
-    .if $is_wide
+%       else:
+          // In case we're going back to compiled code, put the
+          // result also in s0.
+          fmov s0, w0
+%       #endif
+%     #endif
+%   #endif
+%   if is_wide:
       // To fit the handler in the 64B, jump to the code in `return-object`.
-%  return_object_opcode = re.sub("return_wide", "return_object", opcode);
+%     return_object_opcode = re.sub("return_wide", "return_object", opcode);
       b .L${return_object_opcode}_restore_registers_and_return
-    .else
+%   else:
       .cfi_remember_state
       ldr ip, [xREFS, #-8]
       mov sp, ip
@@ -174,7 +174,7 @@
       ret
       .cfi_restore_state
       CFI_DEF_CFA_BREG_PLUS_UCONST CFI_REFS, -8, CALLEE_SAVES_SIZE
-    .endif
+%   #endif
 
 %def op_return_object():
 %  op_return(is_object=True)

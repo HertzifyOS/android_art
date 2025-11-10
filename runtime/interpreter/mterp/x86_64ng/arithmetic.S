@@ -5,13 +5,13 @@
     /* div/rem vAA, vBB, vCC */
     movzbq  2(rPC), %rax                    # rax <- BB
     movzbq  3(rPC), %rcx                    # rcx <- CC
-    .if $wide
-    GET_WIDE_VREG %rax, %rax                # eax <- vBB
-    GET_WIDE_VREG $second, %rcx             # ecx <- vCC
-    .else
-    GET_VREG %eax, %rax                     # eax <- vBB
-    GET_VREG $second, %rcx                  # ecx <- vCC
-    .endif
+%   if wide:
+      GET_WIDE_VREG %rax, %rax              # eax <- vBB
+      GET_WIDE_VREG $second, %rcx           # ecx <- vCC
+%   else:
+      GET_VREG %eax, %rax                   # eax <- vBB
+      GET_VREG $second, %rcx                # ecx <- vCC
+%   #endif
     test${suffix}   $second, $second
     jz      common_errDivideByZero
     cmp${suffix}  $$-1, $second
@@ -21,41 +21,41 @@
     $ext                                    # rdx:rax <- sign-extended of rax
     idiv${suffix}   $second
 1:
-    .if $wide
-    SET_WIDE_VREG $result, rINSTq           # eax <- vBB
-    .else
-    SET_VREG $result, rINSTq                # eax <- vBB
-    .endif
+%   if wide:
+      SET_WIDE_VREG $result, rINSTq         # eax <- vBB
+%   else:
+      SET_VREG $result, rINSTq              # eax <- vBB
+%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-    .if $rem
-    xor${suffix} $result, $result
-    .else
-    neg${suffix} $result
-    .endif
+%   if rem:
+      xor${suffix} $result, $result
+%   else:
+      neg${suffix} $result
+%   #endif
     jmp     1b
 3:
-    .if $rem
-    mov${suffix} $tmp, $result
-    .if $wide
-    shr${suffix} $$63, $result
-    .else
-    shr${suffix} $$31, $result
-    .endif
-    add${suffix} $tmp, $result
-    and${suffix} $$-2, $result
-    sub${suffix} $result, $tmp
-    mov${suffix} $tmp, $result
-    .else
-    mov${suffix} $result, $tmp
-    .if $wide
-    shr${suffix} $$63, $tmp
-    .else
-    shr${suffix} $$31, $tmp
-    .endif
-    add${suffix} $tmp, $result
-    sar${suffix} $result
-    .endif
+%   if rem:
+      mov${suffix} $tmp, $result
+%     if wide:
+        shr${suffix} $$63, $result
+%     else:
+        shr${suffix} $$31, $result
+%     #endif
+      add${suffix} $tmp, $result
+      and${suffix} $$-2, $result
+      sub${suffix} $result, $tmp
+      mov${suffix} $tmp, $result
+%   else:
+      mov${suffix} $result, $tmp
+%     if wide:
+        shr${suffix} $$63, $tmp
+%     else:
+        shr${suffix} $$31, $tmp
+%     #endif
+      add${suffix} $tmp, $result
+      sar${suffix} $result
+%   #endif
     jmp     1b
 
 %def bindiv2addr(result="", second="", tmp="", wide=False, suffix="", rem=False, ext="cdq"):
@@ -66,13 +66,13 @@
     movl    rINST, %ecx                     # rcx <- BA
     sarl    $$4, %ecx                       # rcx <- B
     andb    $$0xf, rINSTbl                  # rINST <- A
-    .if $wide
-    GET_WIDE_VREG %rax, rINSTq              # eax <- vA
-    GET_WIDE_VREG $second, %rcx             # ecx <- vB
-    .else
-    GET_VREG %eax, rINSTq                   # eax <- vA
-    GET_VREG $second, %rcx                  # ecx <- vB
-    .endif
+%   if wide:
+      GET_WIDE_VREG %rax, rINSTq            # eax <- vA
+      GET_WIDE_VREG $second, %rcx           # ecx <- vB
+%   else:
+      GET_VREG %eax, rINSTq                 # eax <- vA
+      GET_VREG $second, %rcx                # ecx <- vB
+%   #endif
     test${suffix}   $second, $second
     jz      common_errDivideByZero
     cmp${suffix}  $$-1, $second
@@ -82,41 +82,41 @@
     $ext                                    # rdx:rax <- sign-extended of rax
     idiv${suffix}   $second
 1:
-    .if $wide
-    SET_WIDE_VREG $result, rINSTq           # vA <- result
-    .else
-    SET_VREG $result, rINSTq                # vA <- result
-    .endif
+%   if wide:
+      SET_WIDE_VREG $result, rINSTq         # vA <- result
+%   else:
+      SET_VREG $result, rINSTq              # vA <- result
+%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 2:
-    .if $rem
-    xor${suffix} $result, $result
-    .else
-    neg${suffix} $result
-    .endif
+%   if rem:
+      xor${suffix} $result, $result
+%   else:
+      neg${suffix} $result
+%   #endif
     jmp     1b
 3:
-    .if $rem
-    mov${suffix} $tmp, $result
-    .if $wide
-    shr${suffix} $$63, $result
-    .else
-    shr${suffix} $$31, $result
-    .endif
-    add${suffix} $tmp, $result
-    and${suffix} $$-2, $result
-    sub${suffix} $result, $tmp
-    mov${suffix} $tmp, $result
-    .else
-    mov${suffix} $result, $tmp
-    .if $wide
-    shr${suffix} $$63, $tmp
-    .else
-    shr${suffix} $$31, $tmp
-    .endif
-    add${suffix} $tmp, $result
-    sar${suffix} $result
-    .endif
+%   if rem:
+      mov${suffix} $tmp, $result
+%     if wide:
+        shr${suffix} $$63, $result
+%     else:
+        shr${suffix} $$31, $result
+%     #endif
+      add${suffix} $tmp, $result
+      and${suffix} $$-2, $result
+      sub${suffix} $result, $tmp
+      mov${suffix} $tmp, $result
+%   else:
+      mov${suffix} $result, $tmp
+%     if wide:
+        shr${suffix} $$63, $tmp
+%     else:
+        shr${suffix} $$31, $tmp
+%     #endif
+      add${suffix} $tmp, $result
+      sar${suffix} $result
+%   #endif
     jmp     1b
 
 %def bindivLit16(result="", rem=False):
@@ -140,11 +140,11 @@
     SET_VREG $result, rINSTq                # vA <- result
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-    .if $rem
-    xorl    $result, $result
-    .else
-    negl    $result
-    .endif
+%   if rem:
+      xorl    $result, $result
+%   else:
+      negl    $result
+%   #endif
     jmp     1b
 
 %def bindivLit8(result="", rem=False):
@@ -166,11 +166,11 @@
     SET_VREG $result, rINSTq                # vA <- result
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-    .if $rem
-    xorl    $result, $result
-    .else
-    negl    $result
-    .endif
+%   if rem:
+      xorl    $result, $result
+%   else:
+      negl    $result
+%   #endif
     jmp     1b
 
 %def binop(result="%eax", instr=""):
@@ -200,15 +200,15 @@
     movzbq  2(rPC), %rax                    # eax <- BB
     movzbq  3(rPC), %rcx                    # ecx <- CC
     GET_VREG %ecx, %rcx                     # eax <- vCC
-    .if $wide
-    GET_WIDE_VREG %rax, %rax                # rax <- vBB
-    $instr                                  # ex: addl    %ecx,%eax
-    SET_WIDE_VREG %rax, rINSTq
-    .else
-    GET_VREG %eax, %rax                     # eax <- vBB
-    $instr                                  # ex: addl    %ecx,%eax
-    SET_VREG %eax, rINSTq
-    .endif
+%   if wide:
+      GET_WIDE_VREG %rax, %rax              # rax <- vBB
+      $instr                                # ex: addl    %ecx,%eax
+      SET_WIDE_VREG %rax, rINSTq
+%   else:
+      GET_VREG %eax, %rax                   # eax <- vBB
+      $instr                                # ex: addl    %ecx,%eax
+      SET_VREG %eax, rINSTq
+%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 
 %def binop2addr(result="%eax", instr=""):
@@ -316,11 +316,11 @@
 2:
     xor${i_suffix}    ${result_reg}, ${result_reg}
 1:
-    .if $wide
-    SET_WIDE_VREG ${result_reg}, %rcx
-    .else
-    SET_VREG ${result_reg}, %rcx
-    .endif
+%   if wide:
+      SET_WIDE_VREG ${result_reg}, %rcx
+%   else:
+      SET_VREG ${result_reg}, %rcx
+%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
 %def shop2addr(wide=False, instr=""):
@@ -332,15 +332,15 @@
     sarl    $$4, %ecx                       # ecx <- B
     GET_VREG %ecx, %rcx                     # ecx <- vBB
     andb    $$0xf, rINSTbl                  # rINST <- A
-    .if $wide
-    GET_WIDE_VREG %rax, rINSTq              # rax <- vAA
-    $instr                                  # ex: sarl %cl, %eax
-    SET_WIDE_VREG %rax, rINSTq
-    .else
-    GET_VREG %eax, rINSTq                   # eax <- vAA
-    $instr                                  # ex: sarl %cl, %eax
-    SET_VREG %eax, rINSTq
-    .endif
+%   if wide:
+      GET_WIDE_VREG %rax, rINSTq            # rax <- vAA
+      $instr                                # ex: sarl %cl, %eax
+      SET_WIDE_VREG %rax, rINSTq
+%   else:
+      GET_VREG %eax, rINSTq                 # eax <- vAA
+      $instr                                # ex: sarl %cl, %eax
+      SET_VREG %eax, rINSTq
+%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
 %def unop(preinstr="", instr="", wide=False):
@@ -351,19 +351,19 @@
     /* unop vA, vB */
     movl    rINST, %ecx                     # rcx <- A+
     sarl    $$4,rINST                       # rINST <- B
-    .if ${wide}
-    GET_WIDE_VREG %rax, rINSTq              # rax <- vB
-    .else
-    GET_VREG %eax, rINSTq                   # eax <- vB
-    .endif
+%   if wide:
+      GET_WIDE_VREG %rax, rINSTq            # rax <- vB
+%   else:
+      GET_VREG %eax, rINSTq                 # eax <- vB
+%   #endif
     andb    $$0xf,%cl                       # ecx <- A
 $preinstr
 $instr
-    .if ${wide}
-    SET_WIDE_VREG %rax, %rcx
-    .else
-    SET_VREG %eax, %rcx
-    .endif
+%   if wide:
+      SET_WIDE_VREG %rax, %rcx
+%   else:
+      SET_VREG %eax, %rcx
+%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
 %def op_add_int():

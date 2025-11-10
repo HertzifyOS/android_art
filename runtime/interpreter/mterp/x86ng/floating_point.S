@@ -45,11 +45,11 @@
     andb    $$0xf, %cl                      # ecx <- A
     $instr
     $store  VREG_ADDRESS(%ecx)              # vA <- %st0
-    .if $wide
-    CLEAR_WIDE_REF %ecx
-    .else
-    CLEAR_REF %ecx
-    .endif
+%   if wide:
+      CLEAR_WIDE_REF %ecx
+%   else:
+      CLEAR_REF %ecx
+%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
 %def sseBinop(instr="", suff=""):

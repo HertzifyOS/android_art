@@ -47,11 +47,11 @@
    TEST_IF_MARKING 1f
 .L${opcode}_resume:
    lsr     w1, wINST, #8               // w1<- AA
-   .if $jumbo
-   FETCH_ADVANCE_INST 3                // advance rPC, load wINST
-   .else
-   FETCH_ADVANCE_INST 2                // advance rPC, load wINST
-   .endif
+%  if jumbo:
+     FETCH_ADVANCE_INST 3              // advance rPC, load wINST
+%  else:
+     FETCH_ADVANCE_INST 2              // advance rPC, load wINST
+%  #endif
    PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
    SET_VREG_OBJECT w0, w1              // vAA <- value
    GOTO_OPCODE                         // jump to next instruction
@@ -167,11 +167,11 @@
     FETCH_ADVANCE_INST 1                // advance rPC, load wINST
     GET_VREG w2, w1                     // x2<- fp[B]
     PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
-    .if $is_object
-    SET_VREG_OBJECT w2, w0              // fp[A]<- x2
-    .else
-    SET_VREG w2, w0                     // fp[A]<- x2
-    .endif
+%   if is_object:
+      SET_VREG_OBJECT w2, w0            // fp[A]<- x2
+%   else:
+      SET_VREG w2, w0                   // fp[A]<- x2
+%   #endif
     GOTO_OPCODE                         // jump to next instruction
 
 %def op_move_16(is_object=False):
@@ -182,11 +182,11 @@
     FETCH_ADVANCE_INST 3                // advance xPC, load xINST
     GET_VREG w2, w1                     // w2<- fp[BBBB]
     PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
-    .if $is_object
-    SET_VREG_OBJECT w2, w0              // fp[AAAA]<- w2
-    .else
-    SET_VREG w2, w0                     // fp[AAAA]<- w2
-    .endif
+%   if is_object:
+      SET_VREG_OBJECT w2, w0            // fp[AAAA]<- w2
+%   else:
+      SET_VREG w2, w0                   // fp[AAAA]<- w2
+%   #endif
     GOTO_OPCODE                         // jump to next instruction
 
 %def op_move_exception():
@@ -207,11 +207,11 @@
     FETCH_ADVANCE_INST 2                // advance rPC, load wINST
     GET_VREG w2, w1                     // r2<- fp[BBBB]
     PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
-    .if $is_object
-    SET_VREG_OBJECT w2, w0              // fp[AA]<- r2
-    .else
-    SET_VREG w2, w0                     // fp[AA]<- r2
-    .endif
+%   if is_object:
+      SET_VREG_OBJECT w2, w0            // fp[AA]<- r2
+%   else:
+      SET_VREG w2, w0                   // fp[AA]<- r2
+%   #endif
     GOTO_OPCODE                         // jump to next instruction
 
 %def op_move_object():
@@ -229,11 +229,11 @@
     lsr     w2, wINST, #8               // r2<- AA
     FETCH_ADVANCE_INST 1                // advance rPC, load wINST
     PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
-    .if $is_object
-    SET_VREG_OBJECT w0, w2              // fp[AA]<- r0
-    .else
-    SET_VREG w0, w2                     // fp[AA]<- r0
-    .endif
+%   if is_object:
+      SET_VREG_OBJECT w0, w2            // fp[AA]<- r0
+%   else:
+      SET_VREG w0, w2                   // fp[AA]<- r0
+%   #endif
     GOTO_OPCODE                         // jump to next instruction
 
 %def op_move_result_object():

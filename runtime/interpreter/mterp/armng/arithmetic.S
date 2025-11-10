@@ -21,10 +21,10 @@
     and     r2, r0, #255                @ r2<- BB
     GET_VREG r1, r3                     @ r1<- vCC
     GET_VREG r0, r2                     @ r0<- vBB
-    .if $chkzero
-    cmp     r1, #0                      @ is second operand zero?
-    beq     common_errDivideByZero
-    .endif
+%   if chkzero:
+      cmp     r1, #0                    @ is second operand zero?
+      beq     common_errDivideByZero
+%   #endif
 
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     $preinstr                           @ optional op; may set condition codes
@@ -54,10 +54,10 @@
     ubfx    r4, rINST, #8, #4           @ r4<- A
     GET_VREG r1, r3                     @ r1<- vB
     GET_VREG r0, r4                     @ r0<- vA
-    .if $chkzero
-    cmp     r1, #0                      @ is second operand zero?
-    beq     common_errDivideByZero
-    .endif
+%   if chkzero:
+      cmp     r1, #0                    @ is second operand zero?
+      beq     common_errDivideByZero
+%   #endif
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
 
     $preinstr                           @ optional op; may set condition codes
@@ -85,10 +85,10 @@
     mov     r2, rINST, lsr #12          @ r2<- B
     ubfx    r4, rINST, #8, #4           @ r4<- A
     GET_VREG r0, r2                     @ r0<- vB
-    .if $chkzero
-    cmp     r1, #0                      @ is second operand zero?
-    beq     common_errDivideByZero
-    .endif
+%   if chkzero:
+      cmp     r1, #0                    @ is second operand zero?
+      beq     common_errDivideByZero
+%   #endif
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
 
     $instr                              @ $result<- op, r0-r3 changed
@@ -121,10 +121,10 @@
     and     r2, r3, #255                @ r2<- BB
     GET_VREG r0, r2                     @ r0<- vBB
     $extract                            @ optional; typically r1<- ssssssCC (sign extended)
-    .if $chkzero
-    @cmp     r1, #0                     @ is second operand zero?
-    beq     common_errDivideByZero
-    .endif
+%   if chkzero:
+      @cmp     r1, #0                   @ is second operand zero?
+      beq     common_errDivideByZero
+%   #endif
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
 
     $instr                              @ $result<- op, r0-r3 changed
@@ -159,10 +159,10 @@
     VREG_INDEX_TO_ADDR r3, r3           @ r3<- &fp[CC]
     GET_VREG_WIDE_BY_ADDR r0, r1, r2    @ r0/r1<- vBB/vBB+1
     GET_VREG_WIDE_BY_ADDR r2, r3, r3    @ r2/r3<- vCC/vCC+1
-    .if $chkzero
-    orrs    ip, r2, r3                  @ second arg (r2-r3) is zero?
-    beq     common_errDivideByZero
-    .endif
+%   if chkzero:
+      orrs    ip, r2, r3                @ second arg (r2-r3) is zero?
+      beq     common_errDivideByZero
+%   #endif
     CLEAR_SHADOW_PAIR rINST, lr, ip     @ Zero out the shadow regs
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     $preinstr                           @ optional op; may set condition codes
@@ -194,10 +194,10 @@
     VREG_INDEX_TO_ADDR r4, rINST        @ r4<- &fp[A]
     GET_VREG_WIDE_BY_ADDR r2, r3, r1    @ r2/r3<- vBB/vBB+1
     GET_VREG_WIDE_BY_ADDR r0, r1, r4    @ r0/r1<- vAA/vAA+1
-    .if $chkzero
-    orrs    ip, r2, r3                  @ second arg (r2-r3) is zero?
-    beq     common_errDivideByZero
-    .endif
+%   if chkzero:
+      orrs    ip, r2, r3                @ second arg (r2-r3) is zero?
+      beq     common_errDivideByZero
+%   #endif
     CLEAR_SHADOW_PAIR rINST, ip, lr     @ Zero shadow regs
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     $preinstr                           @ optional op; may set condition codes

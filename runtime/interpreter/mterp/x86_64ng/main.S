@@ -1804,13 +1804,13 @@ OAT_ENTRY ExecuteNterpImpl
    movl ART_METHOD_DECLARING_CLASS_OFFSET(%rdi), %edi
    movq rPC, %rsi
    call ${get_local}
-   .if ${is_static}
-   testq %rax, %rax
-   jne ${success_label}
-   .else
-   testl %eax, %eax
-   jns ${success_label}
-   .endif
+%  if is_static:
+     testq %rax, %rax
+     jne ${success_label}
+%  else:
+     testl %eax, %eax
+     jns ${success_label}
+%  #endif
 
 %def footer():
 /*

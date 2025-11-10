@@ -43,13 +43,13 @@
     sarl    $$4, rINST                      # rINST <- B
     andb    $$0xf, %cl                      # ecx <- A
     cvts${source_suffix}2s${dest_suffix}    VREG_ADDRESS(rINSTq), %xmm0
-    .if $wide
-    SET_VREG_XMMd %xmm0, %rcx
-    CLEAR_WIDE_REF %rcx
-    .else
-    SET_VREG_XMMs %xmm0, %rcx
-    CLEAR_REF %rcx
-    .endif
+%   if wide:
+      SET_VREG_XMMd %xmm0, %rcx
+      CLEAR_WIDE_REF %rcx
+%   else:
+      SET_VREG_XMMs %xmm0, %rcx
+      CLEAR_REF %rcx
+%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
 %def sseBinop(instr="", suff=""):

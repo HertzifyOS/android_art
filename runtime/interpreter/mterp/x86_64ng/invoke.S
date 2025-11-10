@@ -18,9 +18,9 @@
 1:
    // Load the first argument (the 'this' pointer).
    movzwl 4(rPC), %r11d // arguments
-   .if !$range
-   andq $$0xf, %r11
-   .endif
+%  if not range:
+     andq $$0xf, %r11
+%  #endif
    movl (rFP, %r11, 4), %esi
    // NullPointerException check.
    movl (%esi), %eax
@@ -32,18 +32,18 @@
    movq rFP, %rcx
    call nterp_get_method
    movq %rax, %rdi
-   .if $is_super
-   jmp 1b
-   .else
-   testl MACRO_LITERAL(1), %eax
-   je 1b
-   andq $$-2, %rdi  // Remove the extra bit that marks it's a String.<init> method.
-   .if $range
-   jmp NterpHandleStringInitRange
-   .else
-   jmp NterpHandleStringInit
-   .endif
-   .endif
+%  if is_super:
+     jmp 1b
+%  else:
+     testl MACRO_LITERAL(1), %eax
+     je 1b
+     andq $$-2, %rdi  // Remove the extra bit that marks it's a String.<init> method.
+%    if range:
+       jmp NterpHandleStringInitRange
+%    else:
+       jmp NterpHandleStringInit
+%    #endif
+%  #endif
 
 %def op_invoke_direct():
 %  invoke_direct_or_super(helper="NterpCommonInvokeInstance")
@@ -80,9 +80,9 @@
 .L${opcode}_resume:
    // First argument is the 'this' pointer.
    movzwl 4(rPC), %r11d // arguments
-   .if !$range
-   andq $$0xf, %r11
-   .endif
+%  if not range:
+     andq $$0xf, %r11
+%  #endif
    movl (rFP, %r11, 4), %esi
    movl MIRROR_OBJECT_CLASS_OFFSET(%esi), %edx
    UNPOISON_HEAP_REF edx
@@ -98,11 +98,11 @@
    jmp $helper
 2:
    testl $$1, %eax
-   .if $range
-   jne NterpHandleInvokeInterfaceOnObjectMethodRange
-   .else
-   jne NterpHandleInvokeInterfaceOnObjectMethod
-   .endif
+%  if range:
+     jne NterpHandleInvokeInterfaceOnObjectMethodRange
+%  else:
+     jne NterpHandleInvokeInterfaceOnObjectMethod
+%  #endif
    // Default method
    andq $$-4, %rax
    movzw ART_METHOD_METHOD_INDEX_OFFSET(%rax), %ecx
@@ -156,9 +156,9 @@
 1:
    // First argument is the 'this' pointer.
    movzwl 4(rPC), %r11d // arguments
-   .if !$range
-   andq $$0xf, %r11
-   .endif
+%  if not range:
+     andq $$0xf, %r11
+%  #endif
    movl (rFP, %r11, 4), %esi
    // Note: if esi is null, this will be handled by our SIGSEGV handler.
    movl MIRROR_OBJECT_CLASS_OFFSET(%esi), %edx

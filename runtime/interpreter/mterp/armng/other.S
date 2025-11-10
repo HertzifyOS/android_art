@@ -48,11 +48,11 @@
    bne 1f
 .L${opcode}_resume:
    mov     r1, rINST, lsr #8           @ r1<- AA
-   .if $jumbo
-   FETCH_ADVANCE_INST 3                // advance rPC, load rINST
-   .else
-   FETCH_ADVANCE_INST 2                // advance rPC, load rINST
-   .endif
+%  if jumbo:
+     FETCH_ADVANCE_INST 3              // advance rPC, load rINST
+%  else:
+     FETCH_ADVANCE_INST 2              // advance rPC, load rINST
+%  #endif
    GET_INST_OPCODE ip                  // extract opcode from rINST
    SET_VREG_OBJECT r0, r1              // vAA <- value
    GOTO_OPCODE ip                      // jump to next instruction
@@ -178,11 +178,11 @@
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     GET_VREG r2, r1                     @ r2<- fp[B]
     GET_INST_OPCODE ip                  @ ip<- opcode from rINST
-    .if $is_object
-    SET_VREG_OBJECT r2, r0              @ fp[A]<- r2
-    .else
-    SET_VREG r2, r0                     @ fp[A]<- r2
-    .endif
+%   if is_object:
+      SET_VREG_OBJECT r2, r0            @ fp[A]<- r2
+%   else:
+      SET_VREG r2, r0                   @ fp[A]<- r2
+%   #endif
     GOTO_OPCODE ip                      @ execute next instruction
 
 %def op_move_16(is_object=False):
@@ -193,11 +193,11 @@
     FETCH_ADVANCE_INST 3                @ advance rPC, load rINST
     GET_VREG r2, r1                     @ r2<- fp[BBBB]
     GET_INST_OPCODE ip                  @ extract opcode from rINST
-    .if $is_object
-    SET_VREG_OBJECT r2, r0              @ fp[AAAA]<- r2
-    .else
-    SET_VREG r2, r0                     @ fp[AAAA]<- r2
-    .endif
+%   if is_object:
+      SET_VREG_OBJECT r2, r0            @ fp[AAAA]<- r2
+%   else:
+      SET_VREG r2, r0                   @ fp[AAAA]<- r2
+%   #endif
     GOTO_OPCODE ip                      @ jump to next instruction
 
 %def op_move_exception():
@@ -219,11 +219,11 @@
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     GET_VREG r2, r1                     @ r2<- fp[BBBB]
     GET_INST_OPCODE ip                  @ extract opcode from rINST
-    .if $is_object
-    SET_VREG_OBJECT r2, r0              @ fp[AA]<- r2
-    .else
-    SET_VREG r2, r0                     @ fp[AA]<- r2
-    .endif
+%   if is_object:
+      SET_VREG_OBJECT r2, r0            @ fp[AA]<- r2
+%   else:
+      SET_VREG r2, r0                   @ fp[AA]<- r2
+%   #endif
     GOTO_OPCODE ip                      @ jump to next instruction
 
 %def op_move_object():
@@ -241,11 +241,11 @@
     mov     r2, rINST, lsr #8           @ r2<- AA
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     GET_INST_OPCODE ip                  @ extract opcode from rINST
-    .if $is_object
-    SET_VREG_OBJECT r0, r2              @ fp[AA]<- r0
-    .else
-    SET_VREG r0, r2                     @ fp[AA]<- r0
-    .endif
+%   if is_object:
+      SET_VREG_OBJECT r0, r2            @ fp[AA]<- r0
+%   else:
+      SET_VREG r0, r2                   @ fp[AA]<- r0
+%   #endif
     GOTO_OPCODE ip                      @ jump to next instruction
 
 %def op_move_result_object():

@@ -142,26 +142,26 @@
  * Return a 32-bit value.
  */
 %def op_return(is_object=False, is_void=False, is_wide=False):
-    .if $is_void
+%   if is_void:
       // Thread fence for constructor
       dmb ishst
-    .else
+%   else:
       mov     r2, rINST, lsr #8           @ r2<- AA
-      .if $is_wide
+%     if is_wide:
         VREG_INDEX_TO_ADDR r2, r2
         GET_VREG_WIDE_BY_ADDR r0, r1, r2 // r0,r1 <- vAA
         // In case we're going back to compiled code, put the
         // result also in d0.
         vmov d0, r0, r1
-      .else
+%     else:
         GET_VREG r0, r2                     // r0<- vAA
-        .if !$is_object
-        // In case we're going back to compiled code, put the
-        // result also in s0.
-        vmov s0, r0
-        .endif
-      .endif
-    .endif
+%       if not is_object:
+          // In case we're going back to compiled code, put the
+          // result also in s0.
+          vmov s0, r0
+%       #endif
+%     #endif
+%   #endif
     .cfi_remember_state
     ldr ip, [rREFS, #-4]
     mov sp, ip

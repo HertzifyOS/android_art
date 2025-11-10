@@ -17,30 +17,30 @@
     cmp     r1, r3                      @ compare unsigned index, length
     bcs     common_errArrayIndex        @ index >= length, bail
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
-    .if $wide
-    CLEAR_SHADOW_PAIR r4, lr, ip        @ Zero out the shadow regs
-    ldrd    r2, [r0, #$data_offset]     @ r2/r3<- vBB[vCC]
-    VREG_INDEX_TO_ADDR r4, r4           @ r4<- &fp[AA]
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
-    SET_VREG_WIDE_BY_ADDR r2, r3, r4    @ vAA/vAA+1<- r2/r3
-    GOTO_OPCODE ip                      @ jump to next instruction
-    .elseif $is_object
-    $load   r2, [r0, #$data_offset]     @ w2<- vBB[vCC]
-    UNPOISON_HEAP_REF r2
-    TEST_IF_MARKING 2f
+%   if wide:
+      CLEAR_SHADOW_PAIR r4, lr, ip      @ Zero out the shadow regs
+      ldrd    r2, [r0, #$data_offset]   @ r2/r3<- vBB[vCC]
+      VREG_INDEX_TO_ADDR r4, r4         @ r4<- &fp[AA]
+      GET_INST_OPCODE ip                @ extract opcode from rINST
+      SET_VREG_WIDE_BY_ADDR r2, r3, r4  @ vAA/vAA+1<- r2/r3
+      GOTO_OPCODE ip                    @ jump to next instruction
+%   elif is_object:
+      $load   r2, [r0, #$data_offset]   @ w2<- vBB[vCC]
+      UNPOISON_HEAP_REF r2
+      TEST_IF_MARKING 2f
 1:
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
-    SET_VREG_OBJECT r2, r4              @ vAA<- w2
-    GOTO_OPCODE ip                      @ jump to next instruction
+      GET_INST_OPCODE ip                @ extract opcode from rINST
+      SET_VREG_OBJECT r2, r4            @ vAA<- w2
+      GOTO_OPCODE ip                    @ jump to next instruction
 2:
-    bl art_quick_read_barrier_mark_reg02
-    b 1b
-    .else
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
-    $load   r2, [r0, #$data_offset]     @ r2<- vBB[vCC]
-    SET_VREG r2, r4                     @ vAA<- r2
-    GOTO_OPCODE ip                      @ jump to next instruction
-    .endif
+      bl art_quick_read_barrier_mark_reg02
+      b 1b
+%   else:
+      GET_INST_OPCODE ip                @ extract opcode from rINST
+      $load   r2, [r0, #$data_offset]   @ r2<- vBB[vCC]
+      SET_VREG r2, r4                   @ vAA<- r2
+      GOTO_OPCODE ip                    @ jump to next instruction
+%   #endif
 
 %def op_aget_boolean():
 %  op_aget(load="ldrb", shift=0, data_offset="MIRROR_BOOLEAN_ARRAY_DATA_OFFSET")
@@ -77,26 +77,26 @@
     ldr     r3, [r0, #MIRROR_ARRAY_LENGTH_OFFSET]     @ r3<- arrayObj->length
     cmp     r1, r3                      @ compare unsigned index, length
     bcs     common_errArrayIndex        @ index >= length, bail
-    .if $is_object
-    EXPORT_PC                           // Export PC before overwriting it.
-    FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
-    GET_VREG r2, r4                     @ r2<- vAA
-    bl art_quick_aput_obj
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
-    .elseif $wide
-    add     r0, r0, r1, lsl #$shift     @ r0<- arrayObj + index*width
-    VREG_INDEX_TO_ADDR r4, r4           @ r4<- &fp[AA]
-    FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
-    GET_VREG_WIDE_BY_ADDR r2, r3, r4    @ r2/r3<- vAA/vAA+1
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
-    strd    r2, [r0, #$data_offset]     @ r2/r3<- vBB[vCC]
-    .else
-    add     r0, r0, r1, lsl #$shift     @ r0<- arrayObj + index*width
-    FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
-    GET_VREG r2, r4                     @ r2<- vAA
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
-    $store  r2, [r0, #$data_offset]     @ vBB[vCC]<- r2
-    .endif
+%   if is_object:
+      EXPORT_PC                         // Export PC before overwriting it.
+      FETCH_ADVANCE_INST 2              @ advance rPC, load rINST
+      GET_VREG r2, r4                   @ r2<- vAA
+      bl art_quick_aput_obj
+      GET_INST_OPCODE ip                @ extract opcode from rINST
+%   elif wide:
+      add     r0, r0, r1, lsl #$shift   @ r0<- arrayObj + index*width
+      VREG_INDEX_TO_ADDR r4, r4         @ r4<- &fp[AA]
+      FETCH_ADVANCE_INST 2              @ advance rPC, load rINST
+      GET_VREG_WIDE_BY_ADDR r2, r3, r4  @ r2/r3<- vAA/vAA+1
+      GET_INST_OPCODE ip                @ extract opcode from rINST
+      strd    r2, [r0, #$data_offset]   @ r2/r3<- vBB[vCC]
+%   else:
+      add     r0, r0, r1, lsl #$shift   @ r0<- arrayObj + index*width
+      FETCH_ADVANCE_INST 2              @ advance rPC, load rINST
+      GET_VREG r2, r4                   @ r2<- vAA
+      GET_INST_OPCODE ip                @ extract opcode from rINST
+      $store  r2, [r0, #$data_offset]   @ vBB[vCC]<- r2
+%   #endif
     GOTO_OPCODE ip                      @ jump to next instruction
 
 %def op_aput_boolean():

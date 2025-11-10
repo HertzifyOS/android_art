@@ -35,12 +35,12 @@
 .L${opcode}_8:
     div     %cl                             # 8-bit divide otherwise.
                                             # Remainder in %ah, quotient in %al
-    .if $rem
-    movl    %eax, %edx
-    shr     $$8, %edx
-    .else
-    andl    $$0x000000FF, %eax
-    .endif
+%   if rem:
+      movl    %eax, %edx
+      shr     $$8, %edx
+%   else:
+      andl    $$0x000000FF, %eax
+%   #endif
     jmp     .L${opcode}_finish
 .L${opcode}_16:
     xorl    %edx, %edx                      # Clear %edx before divide
@@ -273,11 +273,11 @@
     /* float/double to int/long vA, vB */
     movzbl  rINSTbl, %ecx                   # ecx <- A+
     sarl    $$4, rINST                      # rINST <- B
-    .if $srcdouble
-    fldl    VREG_ADDRESS(rINST)             # %st0 <- vB
-    .else
-    flds    VREG_ADDRESS(rINST)             # %st0 <- vB
-    .endif
+%   if srcdouble:
+      fldl    VREG_ADDRESS(rINST)           # %st0 <- vB
+%   else:
+      flds    VREG_ADDRESS(rINST)           # %st0 <- vB
+%   #endif
     ftst
     fnstcw  LOCAL0(%esp)                    # remember original rounding mode
     movzwl  LOCAL0(%esp), %eax
@@ -285,27 +285,27 @@
     movw    %ax, LOCAL0+2(%esp)
     fldcw   LOCAL0+2(%esp)                  # set "to zero" rounding mode
     andb    $$0xf, %cl                      # ecx <- A
-    .if $tgtlong
-    fistpll VREG_ADDRESS(%ecx)              # convert and store
-    .else
-    fistpl  VREG_ADDRESS(%ecx)              # convert and store
-    .endif
+%   if tgtlong:
+      fistpll VREG_ADDRESS(%ecx)            # convert and store
+%   else:
+      fistpl  VREG_ADDRESS(%ecx)            # convert and store
+%   #endif
     fldcw   LOCAL0(%esp)                    # restore previous rounding mode
-    .if $tgtlong
-    movl    $$0x80000000, %eax
-    xorl    VREG_HIGH_ADDRESS(%ecx), %eax
-    orl     VREG_ADDRESS(%ecx), %eax
-    .else
-    cmpl    $$0x80000000, VREG_ADDRESS(%ecx)
-    .endif
+%   if tgtlong:
+      movl    $$0x80000000, %eax
+      xorl    VREG_HIGH_ADDRESS(%ecx), %eax
+      orl     VREG_ADDRESS(%ecx), %eax
+%   else:
+      cmpl    $$0x80000000, VREG_ADDRESS(%ecx)
+%   #endif
     je      .L${opcode}_special_case # fix up result
 
 .L${opcode}_finish:
     xor     %eax, %eax
     mov     %eax, VREG_REF_ADDRESS(%ecx)
-    .if $tgtlong
-    mov     %eax, VREG_REF_HIGH_ADDRESS(%ecx)
-    .endif
+%   if tgtlong:
+      mov     %eax, VREG_REF_HIGH_ADDRESS(%ecx)
+%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 %  add_slow_path(cvtfp_int_helper, tgtlong)
 
@@ -315,15 +315,15 @@
     sahf
     jp      .L${opcode}_isNaN
     adcl    $$-1, VREG_ADDRESS(%ecx)
-    .if $tgtlong
-    adcl    $$-1, VREG_HIGH_ADDRESS(%ecx)
-    .endif
+%   if tgtlong:
+      adcl    $$-1, VREG_HIGH_ADDRESS(%ecx)
+%   #endif
    jmp      .L${opcode}_finish
 .L${opcode}_isNaN:
     movl    $$0, VREG_ADDRESS(%ecx)
-    .if $tgtlong
-    movl    $$0, VREG_HIGH_ADDRESS(%ecx)
-    .endif
+%   if tgtlong:
+      movl    $$0, VREG_HIGH_ADDRESS(%ecx)
+%   #endif
     jmp     .L${opcode}_finish
 
 %def shop2addr(result="%eax", instr=""):

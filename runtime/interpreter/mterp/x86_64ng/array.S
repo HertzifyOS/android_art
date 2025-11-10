@@ -14,28 +14,28 @@
     je      common_errNullObject            # bail if so
     cmpl    MIRROR_ARRAY_LENGTH_OFFSET(%edi), %esi
     jae     common_errArrayIndex            # index >= length, bail.
-    .if $wide
-    movq    $data_offset(%rdi,%rsi,8), %rax
-    SET_WIDE_VREG %rax, rINSTq
-    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
-    .elseif $is_object
-    testb $$READ_BARRIER_TEST_VALUE, GRAY_BYTE_OFFSET(%edi)
-    $load   $data_offset(%rdi,%rsi,$shift), %eax
-    jnz 2f
-    UNPOISON_HEAP_REF eax  // Affects flags, so we cannot unpoison before the jnz.
+%   if wide:
+      movq    $data_offset(%rdi,%rsi,8), %rax
+      SET_WIDE_VREG %rax, rINSTq
+      ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
+%   elif is_object:
+      testb $$READ_BARRIER_TEST_VALUE, GRAY_BYTE_OFFSET(%edi)
+      $load   $data_offset(%rdi,%rsi,$shift), %eax
+      jnz 2f
+      UNPOISON_HEAP_REF eax  // Affects flags, so we cannot unpoison before the jnz.
 1:
-    SET_VREG_OBJECT %eax, rINSTq
-    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
+      SET_VREG_OBJECT %eax, rINSTq
+      ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-    UNPOISON_HEAP_REF eax
+      UNPOISON_HEAP_REF eax
     // reg00 is eax
-    call art_quick_read_barrier_mark_reg00
-    jmp 1b
-    .else
-    $load   $data_offset(%rdi,%rsi,$shift), %eax
-    SET_VREG %eax, rINSTq
-    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
-    .endif
+      call art_quick_read_barrier_mark_reg00
+      jmp 1b
+%   else:
+      $load   $data_offset(%rdi,%rsi,$shift), %eax
+      SET_VREG %eax, rINSTq
+      ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
+%   #endif
 
 %def op_aget_boolean():
 %  op_aget(load="movzbl", shift=1, data_offset="MIRROR_BOOLEAN_ARRAY_DATA_OFFSET")
@@ -71,11 +71,11 @@
     je      common_errNullObject            # bail if so
     cmpl    MIRROR_ARRAY_LENGTH_OFFSET(%edi), %esi
     jae     common_errArrayIndex            # index >= length, bail.
-    .if $wide
-    GET_WIDE_VREG rINSTq, rINSTq
-    .else
-    GET_VREG rINST, rINSTq
-    .endif
+%   if wide:
+      GET_WIDE_VREG rINSTq, rINSTq
+%   else:
+      GET_VREG rINST, rINSTq
+%   #endif
     $store    $rINST_reg, $data_offset(%rdi,%rsi,$shift)
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 

@@ -1882,11 +1882,11 @@ OAT_ENTRY ExecuteNterpImpl
    RESTORE_IBASE
    FETCH_INST_CLEAR_OPCODE
    cmpl MACRO_LITERAL(0), %eax
-   .if ${is_static}
-   jne ${success_label}
-   .else
-   jge ${success_label}
-   .endif
+%  if is_static:
+     jne ${success_label}
+%  else:
+     jge ${success_label}
+%  #endif
 
 %def footer():
 /*

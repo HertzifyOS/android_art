@@ -21,9 +21,9 @@
     and     w2, w0, #255                // w2<- BB
     GET_VREG w1, w3                     // w1<- vCC
     GET_VREG w0, w2                     // w0<- vBB
-    .if $chkzero
-    cbz     w1, common_errDivideByZero  // is second operand zero?
-    .endif
+%   if chkzero:
+      cbz     w1, common_errDivideByZero  // is second operand zero?
+%   #endif
     FETCH_ADVANCE_INST 2                // advance rPC, load rINST
     $preinstr                           // optional op; may set condition codes
     $instr                              // $result<- op, w0-w3 changed
@@ -52,9 +52,9 @@
     ubfx    w9, wINST, #8, #4           // w9<- A
     GET_VREG w1, w3                     // w1<- vB
     GET_VREG w0, w9                     // w0<- vA
-    .if $chkzero
-    cbz     w1, common_errDivideByZero
-    .endif
+%   if chkzero:
+      cbz     w1, common_errDivideByZero
+%   #endif
     FETCH_ADVANCE_INST 1                // advance rPC, load rINST
     $preinstr                           // optional op; may set condition codes
     $instr                              // $result<- op, w0-w3 changed
@@ -81,9 +81,9 @@
     lsr     w2, wINST, #12              // w2<- B
     ubfx    w9, wINST, #8, #4           // w9<- A
     GET_VREG w0, w2                     // w0<- vB
-    .if $chkzero
-    cbz     w1, common_errDivideByZero
-    .endif
+%   if chkzero:
+      cbz     w1, common_errDivideByZero
+%   #endif
     FETCH_ADVANCE_INST 2                // advance rPC, load rINST
     $preinstr
     $instr                              // $result<- op, w0-w3 changed
@@ -116,9 +116,9 @@
     and     w2, w3, #255                // w2<- BB
     GET_VREG w0, w2                     // w0<- vBB
     $extract                            // optional; typically w1<- ssssssCC (sign extended)
-    .if $chkzero
-    cbz     w1, common_errDivideByZero
-    .endif
+%   if chkzero:
+      cbz     w1, common_errDivideByZero
+%   #endif
     FETCH_ADVANCE_INST 2                // advance rPC, load rINST
     $preinstr                           // optional op; may set condition codes
     $instr                              // $result<- op, w0-w3 changed
@@ -148,9 +148,9 @@
     EXTRACT_SCALED_VREG w1, w5, w0, 0     // w1<- BB * sizeof(vreg)
     GET_VREG_WIDE_PRESCALED $r2, w2       // w2<- vCC
     GET_VREG_WIDE_PRESCALED $r1, w1       // w1<- vBB
-    .if $chkzero
-    cbz     $r2, common_errDivideByZero   // is second operand zero?
-    .endif
+%   if chkzero:
+      cbz     $r2, common_errDivideByZero // is second operand zero?
+%   #endif
     FETCH_ADVANCE_INST 2                  // advance rPC, load rINST
     $preinstr
     $instr                                // $result<- op, w0-w4 changed
@@ -178,9 +178,9 @@
     ubfx    w2, wINST, #8, #4           // w2<- A
     GET_VREG_WIDE $r1, w1               // x1<- vB
     GET_VREG_WIDE $r0, w2               // x0<- vA
-    .if $chkzero
-    cbz     $r1, common_errDivideByZero
-    .endif
+%   if chkzero:
+      cbz     $r1, common_errDivideByZero
+%   #endif
     FETCH_ADVANCE_INST 1                // advance rPC, load rINST
     $preinstr
     $instr                              // result<- op

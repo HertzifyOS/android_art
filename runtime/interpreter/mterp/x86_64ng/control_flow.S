@@ -129,11 +129,11 @@
  */
 %def op_return(is_object=False):
     GET_VREG %eax, rINSTq                   # eax <- vAA
-    .if !$is_object
-    // In case we're going back to compiled code, put the
-    // result also in a xmm register.
-    movd %eax, %xmm0
-    .endif
+%   if not is_object:
+      // In case we're going back to compiled code, put the
+      // result also in a xmm register.
+      movd %eax, %xmm0
+%   #endif
     CFI_REMEMBER_STATE
     movq -8(rREFS), %rsp
     CFI_DEF_CFA(rsp, CALLEE_SAVES_SIZE)

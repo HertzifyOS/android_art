@@ -36,11 +36,11 @@
    jne 1f
 .L${opcode}_resume:
    SET_VREG_OBJECT %eax, rINSTq            # vAA <- value
-   .if $jumbo
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 3
-   .else
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
-   .endif
+%  if jumbo:
+     ADVANCE_PC_FETCH_AND_GOTO_NEXT 3
+%  else:
+     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
+%  #endif
 1:
    // 00 is %rax
    call art_quick_read_barrier_mark_reg00
@@ -127,11 +127,11 @@
     andb    $$0xf, %al                      # eax <- A
     shrl    $$4, rINST                      # rINST <- B
     GET_VREG %edx, rINSTq
-    .if $is_object
-    SET_VREG_OBJECT %edx, %rax              # fp[A] <- fp[B]
-    .else
-    SET_VREG %edx, %rax                     # fp[A] <- fp[B]
-    .endif
+%   if is_object:
+      SET_VREG_OBJECT %edx, %rax            # fp[A] <- fp[B]
+%   else:
+      SET_VREG %edx, %rax                   # fp[A] <- fp[B]
+%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
 %def op_move_16(is_object=False):
@@ -140,11 +140,11 @@
     movzwq  4(rPC), %rcx                    # ecx <- BBBB
     movzwq  2(rPC), %rax                    # eax <- AAAA
     GET_VREG %edx, %rcx
-    .if $is_object
-    SET_VREG_OBJECT %edx, %rax              # fp[A] <- fp[B]
-    .else
-    SET_VREG %edx, %rax                     # fp[A] <- fp[B]
-    .endif
+%   if is_object:
+      SET_VREG_OBJECT %edx, %rax            # fp[A] <- fp[B]
+%   else:
+      SET_VREG %edx, %rax                   # fp[A] <- fp[B]
+%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 3
 
 %def op_move_exception():
@@ -159,11 +159,11 @@
     /* op vAA, vBBBB */
     movzwq  2(rPC), %rax                    # eax <- BBBB
     GET_VREG %edx, %rax                     # edx <- fp[BBBB]
-    .if $is_object
-    SET_VREG_OBJECT %edx, rINSTq            # fp[A] <- fp[B]
-    .else
-    SET_VREG %edx, rINSTq                   # fp[A] <- fp[B]
-    .endif
+%   if is_object:
+      SET_VREG_OBJECT %edx, rINSTq          # fp[A] <- fp[B]
+%   else:
+      SET_VREG %edx, rINSTq                 # fp[A] <- fp[B]
+%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 
 %def op_move_object():
@@ -178,11 +178,11 @@
 %def op_move_result(is_object=False):
     /* for: move-result, move-result-object */
     /* op vAA */
-    .if $is_object
-    SET_VREG_OBJECT %eax, rINSTq            # fp[A] <- fp[B]
-    .else
-    SET_VREG %eax, rINSTq                   # fp[A] <- fp[B]
-    .endif
+%   if is_object:
+      SET_VREG_OBJECT %eax, rINSTq          # fp[A] <- fp[B]
+%   else:
+      SET_VREG %eax, rINSTq                 # fp[A] <- fp[B]
+%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
 %def op_move_result_object():

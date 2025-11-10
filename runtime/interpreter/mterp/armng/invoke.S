@@ -15,9 +15,9 @@
 1:
    // Load the first argument (the 'this' pointer).
    FETCH r1, 2
-   .if !$range
-   and r1, r1, #0xf
-   .endif
+%  if not range:
+     and r1, r1, #0xf
+%  #endif
    GET_VREG r1, r1
    cmp r1, #0
    beq common_errNullObject    // bail if null
@@ -28,18 +28,18 @@
    mov r2, rPC
    mov r3, rFP
    bl nterp_get_method
-   .if $is_super
-   b 1b
-   .else
-   tst r0, #1
-   beq 1b
-   and r0, r0, #-2 // Remove the extra bit that marks it's a String.<init> method.
-   .if $range
-   b NterpHandleStringInitRange
-   .else
-   b NterpHandleStringInit
-   .endif
-   .endif
+%  if is_super:
+     b 1b
+%  else:
+     tst r0, #1
+     beq 1b
+     and r0, r0, #-2 // Remove the extra bit that marks it's a String.<init> method.
+%    if range:
+       b NterpHandleStringInitRange
+%    else:
+       b NterpHandleStringInit
+%    #endif
+%  #endif
 
 %def op_invoke_direct():
 %  invoke_direct_or_super(helper="NterpCommonInvokeInstance")
@@ -82,9 +82,9 @@
 .L${opcode}_resume:
    // First argument is the 'this' pointer.
    FETCH r1, 2
-   .if !$range
-   and r1, r1, #0xf
-   .endif
+%  if not range:
+     and r1, r1, #0xf
+%  #endif
    GET_VREG r1, r1
    // Note: if r1 is null, this will be handled by our SIGSEGV handler.
    ldr r2, [r1, #MIRROR_OBJECT_CLASS_OFFSET]
@@ -98,11 +98,11 @@
 1:
    ldr r2, [r2, #MIRROR_CLASS_IMT_PTR_OFFSET_32]
    ldr r0, [r2, r3, lsl #2]
-   .if $range
-   b NterpCommonInvokeInterfaceRange
-   .else
-   b NterpCommonInvokeInterface
-   .endif
+%  if range:
+     b NterpCommonInvokeInterfaceRange
+%  else:
+     b NterpCommonInvokeInterface
+%  #endif
 2:
    tst r4, #1
    bne 3f
@@ -114,11 +114,11 @@
    lsr r4, r4, #16
    add r2, r2, #MIRROR_CLASS_VTABLE_OFFSET_32
    ldr r0, [r2, r4, lsl #2]
-   .if $range
-   b NterpCommonInvokeInstanceRange
-   .else
-   b NterpCommonInvokeInstance
-   .endif
+%  if range:
+     b NterpCommonInvokeInstanceRange
+%  else:
+     b NterpCommonInvokeInstance
+%  #endif
 
 %def op_invoke_interface_slow_path():
    mov r0, rSELF
@@ -160,9 +160,9 @@
 %  fetch_from_thread_cache("r2", miss_label="2f")
 1:
    FETCH r1, 2
-   .if !$range
-   and r1, r1, #0xf
-   .endif
+%  if not range:
+     and r1, r1, #0xf
+%  #endif
    GET_VREG r1, r1
    // Note: if r1 is null, this will be handled by our SIGSEGV handler.
    ldr r0, [r1, #MIRROR_OBJECT_CLASS_OFFSET]
