@@ -121,10 +121,11 @@ public class Main {
   //
   /// CHECK-START-ARM: void Main.arraycopyCharDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
-  /// CHECK:          add <<reg:\w+>>, pc
-  /// CHECK-NEXT:     ldr <<reg>>, [<<reg>>]
-  /// CHECK-NEXT:     ldr lr, [<<reg>>, #{{\d+}}]
-  /// CHECK-NEXT:     blx lr
+  /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
+  /// CHECK-NEXT:     beq{{\.w?}}
+  /// CHECK-NEXT:     cmp <<reg1>>, #0
+  /// CHECK-NEXT:     bne{{\.w?}}
+  /// CHECK-NOT:      cmp <<reg2>>, #0
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-{X86,X86_64}: void Main.arraycopyCharDstNonNull() disassembly (after)
@@ -194,10 +195,11 @@ public class Main {
   //
   /// CHECK-START-ARM: void Main.arraycopyByteDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
-  /// CHECK:          add <<reg:\w+>>, pc
-  /// CHECK-NEXT:     ldr <<reg>>, [<<reg>>]
-  /// CHECK-NEXT:     ldr lr, [<<reg>>, #{{\d+}}]
-  /// CHECK-NEXT:     blx lr
+  /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
+  /// CHECK-NEXT:     beq{{\.w?}}
+  /// CHECK-NEXT:     cmp <<reg1>>, #0
+  /// CHECK-NEXT:     bne{{\.w?}}
+  /// CHECK-NOT:      cmp <<reg2>>, #0
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-{X86,X86_64}: void Main.arraycopyByteDstNonNull() disassembly (after)
@@ -266,10 +268,11 @@ public class Main {
   //
   /// CHECK-START-ARM: void Main.arraycopyIntDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
-  /// CHECK:          add <<reg:\w+>>, pc
-  /// CHECK-NEXT:     ldr <<reg>>, [<<reg>>]
-  /// CHECK-NEXT:     ldr lr, [<<reg>>, #{{\d+}}]
-  /// CHECK-NEXT:     blx lr
+  /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
+  /// CHECK-NEXT:     beq{{\.w?}}
+  /// CHECK-NEXT:     cmp <<reg1>>, #0
+  /// CHECK-NEXT:     bne{{\.w?}}
+  /// CHECK-NOT:      cmp <<reg2>>, #0
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-{X86,X86_64}: void Main.arraycopyIntDstNonNull() disassembly (after)
