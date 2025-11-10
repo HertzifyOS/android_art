@@ -632,56 +632,6 @@ class ImageSpace::Relocator {
                                 int64_t base_diff64,
                                 gc::accounting::ContinuousSpaceBitmap* patched_objects)
       REQUIRES_SHARED(Locks::mutator_lock_);
-
-  template <typename Forward>
-  class FixupObjectVisitor {
-   public:
-    explicit FixupObjectVisitor(gc::accounting::ContinuousSpaceBitmap* visited,
-                                const Forward& forward)
-        : visited_(visited), forward_(forward) {}
-
-    // Fix up separately since we also need to fix up method entrypoints.
-    ALWAYS_INLINE void VisitRootIfNonNull(
-        [[maybe_unused]] mirror::CompressedReference<mirror::Object>* root) const {}
-
-    ALWAYS_INLINE void VisitRoot(
-        [[maybe_unused]] mirror::CompressedReference<mirror::Object>* root) const {}
-
-    ALWAYS_INLINE void operator()(ObjPtr<mirror::Object> obj,
-                                  MemberOffset offset,
-                                  [[maybe_unused]] bool is_static) const NO_THREAD_SAFETY_ANALYSIS {
-      // Space is not yet added to the heap, don't do a read barrier.
-      mirror::Object* ref = obj->GetFieldObject<mirror::Object, kVerifyNone, kWithoutReadBarrier>(
-          offset);
-      if (ref != nullptr) {
-        // Use SetFieldObjectWithoutWriteBarrier to avoid card marking since we are writing to the
-        // image.
-        obj->SetFieldObjectWithoutWriteBarrier<false, true, kVerifyNone>(offset, forward_(ref));
-      }
-    }
-
-    // java.lang.ref.Reference visitor.
-    ALWAYS_INLINE void operator()(ObjPtr<mirror::Class> klass, ObjPtr<mirror::Reference> ref) const
-        REQUIRES_SHARED(Locks::mutator_lock_) REQUIRES(Locks::heap_bitmap_lock_) {
-      DCHECK(klass->IsTypeOfReferenceClass());
-      this->operator()(ref, mirror::Reference::ReferentOffset(), /*is_static=*/ false);
-    }
-
-    void operator()(mirror::Object* obj) const
-        NO_THREAD_SAFETY_ANALYSIS {
-      if (!visited_->Set(obj)) {
-        // Not already visited.
-        obj->VisitReferences</*visit native roots*/false, kVerifyNone, kWithoutReadBarrier>(
-            *this,
-            *this);
-        CHECK(!obj->IsClass());
-      }
-    }
-
-   private:
-    gc::accounting::ContinuousSpaceBitmap* const visited_;
-    Forward forward_;
-  };
 };
 
 template <PointerSize kPointerSize, bool kExtension>
@@ -852,38 +802,36 @@ void ImageSpace::Relocator::RelocateBootImage(
       GetClassRoot<mirror::StaticFieldVarHandle, kWithoutReadBarrier>(class_roots);
 
   for (const std::unique_ptr<ImageSpace>& space : spaces) {
-    const ImageHeader& image_header = space->GetImageHeader();
-
-    static_assert(IsAligned<kObjectAlignment>(sizeof(ImageHeader)), "Header alignment check");
-    uint32_t objects_end = image_header.GetObjectsSection().Size();
-    DCHECK_ALIGNED(objects_end, kObjectAlignment);
-    for (uint32_t pos = sizeof(ImageHeader); pos != objects_end; ) {
-      mirror::Object* object = reinterpret_cast<mirror::Object*>(space->Begin() + pos);
-      // Note: use Test() rather than Set() as this is the last time we're checking this object.
-      if (!patched_objects->Test(object)) {
-        // This is the last pass over objects, so we do not need to Set().
-        main_patch_object_visitor.VisitObject(object);
-        ObjPtr<mirror::Class> klass = object->GetClass<kVerifyNone, kWithoutReadBarrier>();
-        if (klass == method_class || klass == constructor_class) {
-          // Patch the ArtMethod* in the mirror::Executable subobject.
-          ObjPtr<mirror::Executable> as_executable =
-              ObjPtr<mirror::Executable>::DownCast(object);
-          ArtMethod* unpatched_method = as_executable->GetArtMethod<kVerifyNone>();
-          ArtMethod* patched_method = main_relocate_visitor(unpatched_method);
-          as_executable->SetArtMethod</*kTransactionActive=*/ false,
-                                      /*kCheckTransaction=*/ true,
-                                      kVerifyNone>(patched_method);
-        } else if (klass == field_var_handle_class || klass == static_field_var_handle_class) {
-          // Patch the ArtField* in the mirror::FieldVarHandle subobject.
-          ObjPtr<mirror::FieldVarHandle> as_field_var_handle =
-              ObjPtr<mirror::FieldVarHandle>::DownCast(object);
-          ArtField* unpatched_field = as_field_var_handle->GetArtField<kVerifyNone>();
-          ArtField* patched_field = main_relocate_visitor(unpatched_field);
-          as_field_var_handle->SetArtField<kVerifyNone>(patched_field);
-        }
-      }
-      pos += RoundUp(object->SizeOf<kVerifyNone>(), kObjectAlignment);
-    }
+    accounting::ContinuousSpaceBitmap* bitmap = space->GetLiveBitmap();
+    DCHECK(bitmap != nullptr);
+    const ImageSection& objects_section = space->GetImageHeader().GetObjectsSection();
+    bitmap->VisitMarkedRange(
+        reinterpret_cast<uintptr_t>(space->Begin() + objects_section.Offset()),
+        reinterpret_cast<uintptr_t>(space->Begin() + objects_section.End()),
+        [&](mirror::Object* object) NO_THREAD_SAFETY_ANALYSIS ALWAYS_INLINE {
+          // Note: Use Test() rather than Set() as this is the last time we're checking this object.
+          if (!patched_objects->Test(object)) {
+            main_patch_object_visitor.VisitObject(object);
+            ObjPtr<mirror::Class> klass = object->GetClass<kVerifyNone, kWithoutReadBarrier>();
+            if (klass == method_class || klass == constructor_class) {
+              // Patch the ArtMethod* in the mirror::Executable subobject.
+              ObjPtr<mirror::Executable> as_executable =
+                  ObjPtr<mirror::Executable>::DownCast(object);
+              ArtMethod* unpatched_method = as_executable->GetArtMethod<kVerifyNone>();
+              ArtMethod* patched_method = main_relocate_visitor(unpatched_method);
+              as_executable->SetArtMethod</*kTransactionActive=*/ false,
+                                          /*kCheckTransaction=*/ true,
+                                          kVerifyNone>(patched_method);
+            } else if (klass == field_var_handle_class || klass == static_field_var_handle_class) {
+              // Patch the ArtField* in the mirror::FieldVarHandle subobject.
+              ObjPtr<mirror::FieldVarHandle> as_field_var_handle =
+                  ObjPtr<mirror::FieldVarHandle>::DownCast(object);
+              ArtField* unpatched_field = as_field_var_handle->GetArtField<kVerifyNone>();
+              ArtField* patched_field = main_relocate_visitor(unpatched_field);
+              as_field_var_handle->SetArtField<kVerifyNone>(patched_field);
+            }
+          }
+        });
   }
 }
 
@@ -1097,11 +1045,15 @@ bool ImageSpace::Relocator::RelocateAppImage(uint32_t boot_image_begin,
     ScopedDebugDisallowReadBarriers sddrb(Thread::Current());
     // Need to update the image to be at the target base.
     const ImageSection& objects_section = image_header->GetObjectsSection();
-    uintptr_t objects_begin = reinterpret_cast<uintptr_t>(target_base + objects_section.Offset());
-    uintptr_t objects_end = reinterpret_cast<uintptr_t>(target_base + objects_section.End());
-    FixupObjectVisitor<SplitRangeRelocateVisitor> fixup_object_visitor(&visited_bitmap,
-                                                                       forward_image);
-    bitmap->VisitMarkedRange(objects_begin, objects_end, fixup_object_visitor);
+    bitmap->VisitMarkedRange(
+        reinterpret_cast<uintptr_t>(target_base + objects_section.Offset()),
+        reinterpret_cast<uintptr_t>(target_base + objects_section.End()),
+        [&](mirror::Object* object) NO_THREAD_SAFETY_ANALYSIS ALWAYS_INLINE {
+          // Note: Use Test() rather than Set() as this is the last time we're checking this object.
+          if (!visited_bitmap.Test(object)) {
+            patch_object_visitor.VisitObject(object);
+          }
+        });
 
     // Fix up dex cache arrays.
     ObjPtr<mirror::ObjectArray<mirror::DexCache>> dex_caches =
