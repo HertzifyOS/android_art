@@ -29,9 +29,9 @@
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     $preinstr                           @ optional op; may set condition codes
     $instr                              @ $result<- op, r0-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG $result, r4                @ vAA<- $result
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 11-14 instructions */
 
 %def binop2addr(preinstr="", result="r0", chkzero=False, instr=""):
@@ -62,9 +62,9 @@
 
     $preinstr                           @ optional op; may set condition codes
     $instr                              @ $result<- op, r0-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG $result, r4                @ vAA<- $result
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-13 instructions */
 
 %def binopLit16(result="r0", chkzero=False, instr=""):
@@ -92,9 +92,9 @@
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
 
     $instr                              @ $result<- op, r0-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG $result, r4                @ vAA<- $result
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-13 instructions */
 
 %def binopLit8(extract="asr     r1, r3, #8", result="r0", chkzero=False, instr=""):
@@ -128,9 +128,9 @@
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
 
     $instr                              @ $result<- op, r0-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG $result, r4                @ vAA<- $result
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-12 instructions */
 
 %def binopWide(preinstr="", result0="r0", result1="r1", chkzero=False, instr=""):
@@ -167,9 +167,9 @@
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     $preinstr                           @ optional op; may set condition codes
     $instr                              @ result<- op, r0-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR $result0,$result1,r4  @ vAA/vAA+1<,  $result0/$result1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 14-17 instructions */
 
 %def binopWide2addr(preinstr="", result0="r0", result1="r1", chkzero=False, instr=""):
@@ -202,9 +202,9 @@
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     $preinstr                           @ optional op; may set condition codes
     $instr                              @ result<- op, r0-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR $result0,$result1,r4  @ vAA/vAA+1<- $result0/$result1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 12-15 instructions */
 
 %def unop(preinstr="", instr=""):
@@ -223,9 +223,9 @@
     $preinstr                           @ optional op; may set condition codes
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     $instr                              @ r0<- op, r0-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r0, r4                     @ vAA<- r0
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 8-9 instructions */
 
 %def unopNarrower(preinstr="", instr=""):
@@ -247,9 +247,9 @@
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     $preinstr                           @ optional op; may set condition codes
     $instr                              @ r0<- op, r0-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r0, r4                     @ vA<- r0
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 9-10 instructions */
 
 %def unopWide(preinstr="", instr=""):
@@ -270,9 +270,9 @@
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     $preinstr                           @ optional op; may set condition codes
     $instr                              @ r0/r1<- op, r2-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-11 instructions */
 
 %def unopWider(preinstr="", instr=""):
@@ -292,9 +292,9 @@
     CLEAR_SHADOW_PAIR rINST, ip, lr     @ Zero shadow regs
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     $instr                              @ r0<- op, r0-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vA/vA+1<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 9-10 instructions */
 
 %def op_add_int():
@@ -358,8 +358,8 @@
     moveq   r3, #0
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     SET_VREG r3, r4                     @ vAA<- ip
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
-    GOTO_OPCODE ip                      @ jump to next instruction
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_div_int():
     /*
@@ -387,9 +387,9 @@
 #else
     bl    __aeabi_idiv                  @ r0<- op, r0-r3 changed
 #endif
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r0, r4                     @ vAA<- r0
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 11-14 instructions */
 
 %def op_div_int_2addr():
@@ -416,9 +416,9 @@
 #else
     bl       __aeabi_idiv               @ r0<- op, r0-r3 changed
 #endif
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r0, r4                     @ vAA<- r0
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-13 instructions */
 
 
@@ -446,9 +446,9 @@
 #else
     bl       __aeabi_idiv               @ r0<- op, r0-r3 changed
 #endif
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r0, r4                     @ vAA<- r0
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-13 instructions */
 
 %def op_div_int_lit8():
@@ -476,9 +476,9 @@
 #else
     bl   __aeabi_idiv                   @ r0<- op, r0-r3 changed
 #endif
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r0, r4                     @ vAA<- r0
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-12 instructions */
 
 %def op_div_long():
@@ -556,9 +556,9 @@
     CLEAR_SHADOW_PAIR r4, lr, ip        @ Zero out the shadow regs
     VREG_INDEX_TO_ADDR r4, r4           @ r2<- &fp[AA]
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1 , r4   @ vAA/vAA+1<- r1/r2
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_mul_long_2addr():
     /*
@@ -582,9 +582,9 @@
     mov     r4, rINST                   @ Save vAA before FETCH_ADVANCE_INST
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     add     r1, r3, lr                  @ r1<- lr + low(ZxW + (YxX))
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_neg_int():
 %  unop(instr="rsb     r0, r0, #0")
@@ -645,9 +645,9 @@
 #else
     bl      __aeabi_idivmod                @ r1<- op, r0-r3 changed
 #endif
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r1, r4                     @ vAA<- r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 11-14 instructions */
 
 %def op_rem_int_2addr():
@@ -677,9 +677,9 @@
 #else
     bl      __aeabi_idivmod             @ r1<- op, r0-r3 changed
 #endif
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r1, r4                     @ vAA<- r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-13 instructions */
 
 
@@ -710,9 +710,9 @@
 #else
     bl     __aeabi_idivmod              @ r1<- op, r0-r3 changed
 #endif
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r1, r4                     @ vAA<- r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-13 instructions */
 
 %def op_rem_int_lit8():
@@ -743,9 +743,9 @@
 #else
     bl       __aeabi_idivmod            @ r1<- op, r0-r3 changed
 #endif
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r1, r4                     @ vAA<- r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-12 instructions */
 
 %def op_rem_long():
@@ -798,9 +798,9 @@
     movpl   r1, r0, asl ip              @ if r2 >= 32, r1<- r0 << (r2-32)
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     mov     r0, r0, asl r2              @ r0<- r0 << r2
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_shl_long_2addr():
     /*
@@ -823,9 +823,9 @@
     it      pl
     movpl   r1, r0, asl ip              @ if r2 >= 32, r1<- r0 << (r2-32)
     mov     r0, r0, asl r2              @ r0<- r0 << r2
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_shr_int():
 %  binop(preinstr="and     r1, r1, #31", instr="mov     r0, r0, asr r1")
@@ -862,9 +862,9 @@
     movpl   r0, r1, asr ip              @ if r2 >= 32, r0<-r1 >> (r2-32)
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     mov     r1, r1, asr r2              @ r1<- r1 >> r2
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_shr_long_2addr():
     /*
@@ -887,9 +887,9 @@
     it      pl
     movpl   r0, r1, asr ip              @ if r2 >= 32, r0<-r1 >> (r2-32)
     mov     r1, r1, asr r2              @ r1<- r1 >> r2
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_sub_int():
 %  binop(instr="sub     r0, r0, r1")
@@ -938,9 +938,9 @@
     movpl   r0, r1, lsr ip              @ if r2 >= 32, r0<-r1 >>> (r2-32)
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     mov     r1, r1, lsr r2              @ r1<- r1 >>> r2
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_ushr_long_2addr():
     /*
@@ -963,9 +963,9 @@
     it      pl
     movpl   r0, r1, lsr ip              @ if r2 >= 32, r0<-r1 >>> (r2-32)
     mov     r1, r1, lsr r2              @ r1<- r1 >>> r2
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_xor_int():
 %  binop(instr="eor     r0, r0, r1")

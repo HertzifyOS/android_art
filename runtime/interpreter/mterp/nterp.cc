@@ -121,9 +121,11 @@ void CheckNterpAsmConstants() {
   // 16KiB alignment for quick opcode dispatch. Each handler set is 16KiB and the 4KiB gaps
   // hold slow paths for the handler sets. Slow paths for the last handler set are located
   // after the `artNterpAsmInstructionEnd`.
-  static constexpr size_t kExpectedSize = (kRuntimeISA == InstructionSet::kArm64)
-      ? 4 * kNumPackedOpcodes * width + 3 * 4 * KB
-      : kNumPackedOpcodes * width;
+  // For arm, we have eight sets of opcode handlers, 36KiB apart, as we need 32KiB alignment.
+  static constexpr size_t kNumHandlerSets =
+      (kRuntimeISA == InstructionSet::kArm64) ? 4 : (kRuntimeISA == InstructionSet::kArm) ? 8 : 1;
+  static constexpr size_t kExpectedSize =
+      kNumHandlerSets * kNumPackedOpcodes * width + (kNumHandlerSets - 1) * 4 * KB;
   if (interp_size != kExpectedSize) {
     LOG(FATAL) << "ERROR: unexpected asm interp size " << interp_size
                << "(did an instruction handler exceed " << width << " bytes?)";

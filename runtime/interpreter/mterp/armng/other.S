@@ -8,9 +8,9 @@
     FETCH r1, 2                         @ r1<- BBBB (high)
     FETCH_ADVANCE_INST 3                @ advance rPC, load rINST
     orr     r0, r0, r1, lsl #16         @ r0<- BBBBbbbb
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r0, r3                     @ vAA<- r0
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_const_16():
     /* const/16 vAA, #+BBBB */
@@ -18,17 +18,17 @@
     mov     r3, rINST, lsr #8           @ r3<- AA
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     SET_VREG r0, r3                     @ vAA<- r0
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
-    GOTO_OPCODE ip                      @ jump to next instruction
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_const_4():
     /* const/4 vA, #+B */
     sbfx    r1, rINST, #12, #4          @ r1<- sssssssB (sign-extended)
     ubfx    r0, rINST, #8, #4           @ r0<- A
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
-    GET_INST_OPCODE ip                  @ ip<- opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r1, r0                     @ fp[A]<- r1
-    GOTO_OPCODE ip                      @ execute next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_const_high16():
     /* const/high16 vAA, #+BBBB0000 */
@@ -37,8 +37,8 @@
     mov     r0, r0, lsl #16             @ r0<- BBBB0000
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     SET_VREG r0, r3                     @ vAA<- r0
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
-    GOTO_OPCODE ip                      @ jump to next instruction
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_const_object(jumbo=False, helper="nterp_load_object"):
 %  slow_path = add_slow_path(op_const_object_slow_path, helper)
@@ -53,9 +53,9 @@
 %  else:
      FETCH_ADVANCE_INST 2              // advance rPC, load rINST
 %  #endif
-   GET_INST_OPCODE ip                  // extract opcode from rINST
+   PREPARE_OPCODE_DISPATCH             // insert opcode to rIBASE
    SET_VREG_OBJECT r0, r1              // vAA <- value
-   GOTO_OPCODE ip                      // jump to next instruction
+   GOTO_OPCODE                         // jump to next instruction
 1:
    bl art_quick_read_barrier_mark_reg00
    b .L${opcode}_resume
@@ -97,9 +97,9 @@
     CLEAR_SHADOW_PAIR r4, r2, r3        @ Zero out the shadow regs
     FETCH_ADVANCE_INST 5                @ advance rPC, load rINST
     VREG_INDEX_TO_ADDR r4, r4           @ r4<- &fp[AA]
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_const_wide_16():
     /* const-wide/16 vAA, #+BBBB */
@@ -109,9 +109,9 @@
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     CLEAR_SHADOW_PAIR r3, r2, lr        @ Zero out the shadow regs
     VREG_INDEX_TO_ADDR r3, r3           @ r3<- &fp[AA]
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r3    @ vAA<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_const_wide_32():
     /* const-wide/32 vAA, #+BBBBbbbb */
@@ -123,9 +123,9 @@
     CLEAR_SHADOW_PAIR r3, r2, lr        @ Zero out the shadow regs
     VREG_INDEX_TO_ADDR r3, r3           @ r3<- &fp[AA]
     mov     r1, r0, asr #31             @ r1<- ssssssss
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r3    @ vAA<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_const_wide_high16():
     /* const-wide/high16 vAA, #+BBBB000000000000 */
@@ -136,9 +136,9 @@
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     CLEAR_SHADOW_PAIR r3, r0, r2        @ Zero shadow regs
     VREG_INDEX_TO_ADDR r3, r3           @ r3<- &fp[AA]
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r3    @ vAA<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_monitor_enter():
     /*
@@ -150,8 +150,8 @@
     GET_VREG r0, r2                      @ r0<- vAA (object)
     bl       art_quick_lock_object
     FETCH_ADVANCE_INST 1
-    GET_INST_OPCODE ip                   @ extract opcode from rINST
-    GOTO_OPCODE ip                       @ jump to next instruction
+    PREPARE_OPCODE_DISPATCH              @ insert opcode to rIBASE
+    GOTO_OPCODE                          @ jump to next instruction
 
 %def op_monitor_exit():
     /*
@@ -167,8 +167,8 @@
     GET_VREG r0, r2                     @ r0<- vAA (object)
     bl       art_quick_unlock_object
     FETCH_ADVANCE_INST 1                @ before throw: advance rPC, load rINST
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
-    GOTO_OPCODE ip                      @ jump to next instruction
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_move(is_object=False):
     /* for move, move-object, long-to-int */
@@ -177,13 +177,13 @@
     ubfx    r0, rINST, #8, #4           @ r0<- A from 11:8
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     GET_VREG r2, r1                     @ r2<- fp[B]
-    GET_INST_OPCODE ip                  @ ip<- opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
 %   if is_object:
       SET_VREG_OBJECT r2, r0            @ fp[A]<- r2
 %   else:
       SET_VREG r2, r0                   @ fp[A]<- r2
 %   #endif
-    GOTO_OPCODE ip                      @ execute next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_move_16(is_object=False):
     /* for: move/16, move-object/16 */
@@ -192,13 +192,13 @@
     FETCH r0, 1                         @ r0<- AAAA
     FETCH_ADVANCE_INST 3                @ advance rPC, load rINST
     GET_VREG r2, r1                     @ r2<- fp[BBBB]
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
 %   if is_object:
       SET_VREG_OBJECT r2, r0            @ fp[AAAA]<- r2
 %   else:
       SET_VREG r2, r0                   @ fp[AAAA]<- r2
 %   #endif
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_move_exception():
     /* move-exception vAA */
@@ -207,9 +207,9 @@
     mov     r1, #0                      @ r1<- 0
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     SET_VREG_OBJECT r3, r2              @ fp[AA]<- exception obj
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     str     r1, [rSELF, #THREAD_EXCEPTION_OFFSET]  @ clear exception
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_move_from16(is_object=False):
     /* for: move/from16, move-object/from16 */
@@ -218,13 +218,13 @@
     mov     r0, rINST, lsr #8           @ r0<- AA
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     GET_VREG r2, r1                     @ r2<- fp[BBBB]
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
 %   if is_object:
       SET_VREG_OBJECT r2, r0            @ fp[AA]<- r2
 %   else:
       SET_VREG r2, r0                   @ fp[AA]<- r2
 %   #endif
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_move_object():
 %  op_move(is_object=True)
@@ -240,13 +240,13 @@
     /* op vAA */
     mov     r2, rINST, lsr #8           @ r2<- AA
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
 %   if is_object:
       SET_VREG_OBJECT r0, r2            @ fp[AA]<- r0
 %   else:
       SET_VREG r0, r2                   @ fp[AA]<- r0
 %   #endif
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_move_result_object():
 %  op_move_result(is_object=True)
@@ -258,8 +258,8 @@
     CLEAR_SHADOW_PAIR rINST, ip, lr     @ Zero out the shadow regs
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     SET_VREG_WIDE_BY_ADDR r0, r1, r2    @ fp[AA]<- r0/r1
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
-    GOTO_OPCODE ip                      @ jump to next instruction
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_move_wide():
     /* move-wide vA, vB */
@@ -271,9 +271,9 @@
     GET_VREG_WIDE_BY_ADDR r0, r1, r3    @ r0/r1<- fp[B]
     CLEAR_SHADOW_PAIR rINST, ip, lr     @ Zero out the shadow regs
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r2    @ fp[A]<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_move_wide_16():
     /* move-wide/16 vAAAA, vBBBB */
@@ -286,8 +286,8 @@
     FETCH_ADVANCE_INST 3                @ advance rPC, load rINST
     CLEAR_SHADOW_PAIR r2, r3, ip        @ Zero out the shadow regs
     SET_VREG_WIDE_BY_ADDR r0, r1, lr    @ fp[AAAA]<- r0/r1
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
-    GOTO_OPCODE ip                      @ jump to next instruction
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_move_wide_from16():
     /* move-wide/from16 vAA, vBBBB */
@@ -299,14 +299,14 @@
     GET_VREG_WIDE_BY_ADDR r0, r1, r3    @ r0/r1<- fp[BBBB]
     CLEAR_SHADOW_PAIR rINST, ip, lr     @ Zero out the shadow regs
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r2    @ fp[AA]<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_nop():
     FETCH_ADVANCE_INST 1                @ advance to next instr, load rINST
-    GET_INST_OPCODE ip                  @ ip<- opcode from rINST
-    GOTO_OPCODE ip                      @ execute it
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_unused_3e():
 %  unused()

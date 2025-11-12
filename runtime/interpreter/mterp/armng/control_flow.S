@@ -14,8 +14,8 @@
     cmp     r0, r3                      @ compare (vA, vB)
     b${condition} 1f
     FETCH_ADVANCE_INST 2
-    GET_INST_OPCODE ip                  // extract opcode from rINST
-    GOTO_OPCODE ip                      // jump to next instruction
+    PREPARE_OPCODE_DISPATCH             // insert opcode to rIBASE
+    GOTO_OPCODE                         // jump to next instruction
 1:
     FETCH_S rINST, 1                    // rINST<- branch offset, in code units
     BRANCH
@@ -34,8 +34,8 @@
     cmp     r0, #0                      // compare (vA, 0)
     b${condition} 1f
     FETCH_ADVANCE_INST 2
-    GET_INST_OPCODE ip                  // extract opcode from rINST
-    GOTO_OPCODE ip                      // jump to next instruction
+    PREPARE_OPCODE_DISPATCH             // insert opcode to rIBASE
+    GOTO_OPCODE                         // jump to next instruction
 1:
     FETCH_S rINST, 1                    // rINST<- branch offset, in code units
     BRANCH

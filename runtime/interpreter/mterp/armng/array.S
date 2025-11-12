@@ -21,25 +21,25 @@
       CLEAR_SHADOW_PAIR r4, lr, ip      @ Zero out the shadow regs
       ldrd    r2, [r0, #$data_offset]   @ r2/r3<- vBB[vCC]
       VREG_INDEX_TO_ADDR r4, r4         @ r4<- &fp[AA]
-      GET_INST_OPCODE ip                @ extract opcode from rINST
+      PREPARE_OPCODE_DISPATCH           @ insert opcode to rIBASE
       SET_VREG_WIDE_BY_ADDR r2, r3, r4  @ vAA/vAA+1<- r2/r3
-      GOTO_OPCODE ip                    @ jump to next instruction
+      GOTO_OPCODE                       @ jump to next instruction
 %   elif is_object:
       $load   r2, [r0, #$data_offset]   @ w2<- vBB[vCC]
       UNPOISON_HEAP_REF r2
       TEST_IF_MARKING 2f
 1:
-      GET_INST_OPCODE ip                @ extract opcode from rINST
+      PREPARE_OPCODE_DISPATCH           @ insert opcode to rIBASE
       SET_VREG_OBJECT r2, r4            @ vAA<- w2
-      GOTO_OPCODE ip                    @ jump to next instruction
+      GOTO_OPCODE                       @ jump to next instruction
 2:
       bl art_quick_read_barrier_mark_reg02
       b 1b
 %   else:
-      GET_INST_OPCODE ip                @ extract opcode from rINST
+      PREPARE_OPCODE_DISPATCH           @ insert opcode to rIBASE
       $load   r2, [r0, #$data_offset]   @ r2<- vBB[vCC]
       SET_VREG r2, r4                   @ vAA<- r2
-      GOTO_OPCODE ip                    @ jump to next instruction
+      GOTO_OPCODE                       @ jump to next instruction
 %   #endif
 
 %def op_aget_boolean():
@@ -82,22 +82,22 @@
       FETCH_ADVANCE_INST 2              @ advance rPC, load rINST
       GET_VREG r2, r4                   @ r2<- vAA
       bl art_quick_aput_obj
-      GET_INST_OPCODE ip                @ extract opcode from rINST
+      PREPARE_OPCODE_DISPATCH           @ insert opcode to rIBASE
 %   elif wide:
       add     r0, r0, r1, lsl #$shift   @ r0<- arrayObj + index*width
       VREG_INDEX_TO_ADDR r4, r4         @ r4<- &fp[AA]
       FETCH_ADVANCE_INST 2              @ advance rPC, load rINST
       GET_VREG_WIDE_BY_ADDR r2, r3, r4  @ r2/r3<- vAA/vAA+1
-      GET_INST_OPCODE ip                @ extract opcode from rINST
+      PREPARE_OPCODE_DISPATCH           @ insert opcode to rIBASE
       strd    r2, [r0, #$data_offset]   @ r2/r3<- vBB[vCC]
 %   else:
       add     r0, r0, r1, lsl #$shift   @ r0<- arrayObj + index*width
       FETCH_ADVANCE_INST 2              @ advance rPC, load rINST
       GET_VREG r2, r4                   @ r2<- vAA
-      GET_INST_OPCODE ip                @ extract opcode from rINST
+      PREPARE_OPCODE_DISPATCH           @ insert opcode to rIBASE
       $store  r2, [r0, #$data_offset]   @ vBB[vCC]<- r2
 %   #endif
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_aput_boolean():
 %  op_aput(store="strb", shift=0, data_offset="MIRROR_BOOLEAN_ARRAY_DATA_OFFSET")
@@ -128,9 +128,9 @@
     beq     common_errNullObject        @ yup, fail
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     ldr     r3, [r0, #MIRROR_ARRAY_LENGTH_OFFSET]    @ r3<- array length
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r3, r2                     @ vB<- length
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_fill_array_data():
     /* fill-array-data vAA, +BBBBBBBB */
@@ -143,8 +143,8 @@
     add     r0, rPC, r0, lsl #1         @ r1<- PC + BBBBbbbb*2 (array data off.)
     bl      art_quick_handle_fill_data  @ (payload, object)
     FETCH_ADVANCE_INST 3                @ advance rPC, load rINST
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
-    GOTO_OPCODE ip                      @ jump to next instruction
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_filled_new_array(helper="nterp_filled_new_array"):
 /*
@@ -161,8 +161,8 @@
     mov     r3, rPC
     bl      $helper
     FETCH_ADVANCE_INST 3                // advance rPC, load rINST
-    GET_INST_OPCODE ip                  // extract opcode from rINST
-    GOTO_OPCODE ip                      // jump to next instruction
+    PREPARE_OPCODE_DISPATCH             // insert opcode to rIBASE
+    GOTO_OPCODE                         // jump to next instruction
 
 %def op_filled_new_array_range():
 %  op_filled_new_array(helper="nterp_filled_new_array_range")
@@ -182,8 +182,8 @@
    ubfx    r1, rINST, #8, #4           // r1<- A
    SET_VREG_OBJECT r0, r1
    FETCH_ADVANCE_INST 2
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
+   PREPARE_OPCODE_DISPATCH
+   GOTO_OPCODE
 2:
    mov r0, rSELF
    ldr r1, [sp]
