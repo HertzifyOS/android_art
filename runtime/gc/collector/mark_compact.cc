@@ -1119,22 +1119,12 @@ bool MarkCompact::MoveIoctlKernelCheck() {
       if (kIsTargetAndroid) {
         if (std::make_pair(major, minor) <= std::make_pair(6, 6)) {
           // Special mode added in 6.1 and 6.6 kernels to confirm that MOVE
-          // ioctl bug-fixes are in the kernel. On these kernels on devices, the
-          // ioctl should succeed with this additional mode. If it fails then we
-          // don't use MOVE ioctl (See: https://r.android.com/3533441 and
-          // https://r.android.com/413428616).
-          size_t bit_shift;
-          switch (minor) {
-            case 1:
-              bit_shift = 62;
-              break;
-            case 6:
-              bit_shift = 63;
-              break;
-            default:
-              UNREACHABLE();
-          }
-          bool success = move_ioctl(1ull << bit_shift);
+          // ioctl stability bugs and critical performance issues (anon_vma lock
+          // is removed from MOVE) are resolved in the kernel. In these kernels
+          // on devices, the ioctl should succeed with this additional mode. If
+          // it fails then we don't use MOVE ioctl (See:
+          // https://r.android.com/3834622 and https://r.android.com/3834623).
+          bool success = move_ioctl(1ull << 61);
           if (!success) {
             // The ioctl should fail only because the kernel doesn't have the
             // bug-fixes and therefore the additional mode is not recognized.
