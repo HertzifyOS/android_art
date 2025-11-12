@@ -35,12 +35,11 @@ def to_string(value):
   return str(int(value)) if isinstance(value, bool) else str(value)
 
 def balign():
-  write_line("    .balign {}".format(handler_size_bytes))
+  write_line(".balign {}".format(handler_size_bytes))
 
 def write_opcode(num, name, write_method):
   global opnum, opcode
   opnum, opcode = str(num), opcode_name_prefix + name
-  write_line("/* ------------------------------ */")
   balign()
   opcode_start()
   opcode_pre()
@@ -89,8 +88,7 @@ def generate(output_filename):
   footer()
 
   out.seek(0)
-  # Squash consequtive empty lines.
-  text = re.sub(r"(\n\n)(\n)+", r"\1", out.read())
+  text = re.sub(r"(\n)(\n)+", r"\1", out.read())  # Remove empty lines.
   with open(output_filename, 'w') as output_file:
     output_file.write(text)
 

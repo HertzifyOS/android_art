@@ -65,7 +65,15 @@ def generate_script(output_filename, input_filenames):
 
   # Read all template files and translate them into python code.
   for input_filename in sorted(input_filenames):
-    lines = open(input_filename, "r").readlines()
+    # Remove all C++ style comments to simplify further processing
+    input = open(input_filename, "r").read()
+    copy = StringIO(input)
+    for comment in re.finditer(r"//[^\n]*|/\*.*?\*/", input, re.DOTALL):
+      copy.seek(comment.start())
+      copy.write("".join(("\n" if c == "\n" else " ") for c in comment.group()))
+
+    copy.seek(0)
+    lines = copy.readlines()
     indents: List[Optional[str]] = [""]
     for line_number, line in enumerate(lines, 1):
       file_line = "{}:{}".format("/".join(input_filename.split("/")[-2:]), line_number)
@@ -81,10 +89,10 @@ def generate_script(output_filename, input_filenames):
         if line.endswith(":"):
           indents.append(None)
       else:
-        line = escape_re.sub(r"''' + to_string(\g<name>) + '''", line)
-        line = line.replace("\\", "\\\\")
+        line = line.replace("\\", "\\\\").replace("'", "\\'").strip()
+        line = escape_re.sub(r"' + to_string(\g<name>) + '", line)
         line = line.replace("$$", "$")
-        script.write("  " * (len(indents)-1) + "write_line('''" + line + "''')\n")
+        script.write("  " * (len(indents)-1) + "write_line('" + line + "')\n")
     script.write("\n")
 
   script.write("generate('''" + output_filename + "''')\n")
