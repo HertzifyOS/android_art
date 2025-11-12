@@ -61,6 +61,7 @@
 #include "nativehelper/scoped_local_ref.h"
 #include "nth_caller_visitor.h"
 #include "reflection.h"
+#include "runtime.h"
 #include "thread-inl.h"
 #include "unstarted_runtime_list.h"
 #include "well_known_classes-inl.h"
@@ -2207,7 +2208,7 @@ void UnstartedRuntime::UnstartedJNIJdkUnsafeAddressSize([[maybe_unused]] Thread*
                                                         [[maybe_unused]] mirror::Object* receiver,
                                                         [[maybe_unused]] uint32_t* args,
                                                         JValue* result) {
-  result->SetI(sizeof(void*));
+  result->SetI(static_cast<jint>(Runtime::Current()->GetClassLinker()->GetImagePointerSize()));
 }
 
 void UnstartedRuntime::UnstartedJNIJdkUnsafeCompareAndSwapInt(
