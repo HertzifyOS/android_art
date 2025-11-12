@@ -284,16 +284,6 @@ class Jit {
   ALWAYS_INLINE void AddSamples(Thread* self, ArtMethod* method)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
-  void NotifyInterpreterToCompiledCodeTransition(Thread* self, ArtMethod* caller)
-      REQUIRES_SHARED(Locks::mutator_lock_) {
-    AddSamples(self, caller);
-  }
-
-  void NotifyCompiledCodeToInterpreterTransition(Thread* self, ArtMethod* callee)
-      REQUIRES_SHARED(Locks::mutator_lock_) {
-    AddSamples(self, callee);
-  }
-
   // Starts the profile saver if the config options allow profile recording.
   // The profile will be stored in the specified `profile_filename` and will contain
   // information collected from the given `code_paths` (a set of dex locations).

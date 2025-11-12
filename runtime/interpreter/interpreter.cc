@@ -294,7 +294,7 @@ static inline JValue Execute(
           // It's ok to access the code item here since JIT code will have been touched by the
           // interpreter and compiler already.
           uint16_t arg_offset = accessor.RegistersSize() - accessor.InsSize();
-          ArtInterpreterToCompiledCodeBridge(self, nullptr, &shadow_frame, arg_offset, &result);
+          ArtInterpreterToCompiledCodeBridge(self, &shadow_frame, arg_offset, &result);
           // Push the shadow frame back as the caller will expect it.
           self->PushShadowFrame(&shadow_frame);
 
@@ -585,10 +585,6 @@ JValue EnterInterpreterFromEntryPoint(Thread* self, const CodeItemDataAccessor& 
     return JValue();
   }
 
-  jit::Jit* jit = Runtime::Current()->GetJit();
-  if (jit != nullptr) {
-    jit->NotifyCompiledCodeToInterpreterTransition(self, shadow_frame->GetMethod());
-  }
   return Execute(self, accessor, *shadow_frame, JValue());
 }
 
