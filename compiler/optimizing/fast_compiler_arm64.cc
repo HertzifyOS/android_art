@@ -823,6 +823,13 @@ bool FastCompilerARM64::ProcessBlock(uint32_t dex_pc) {
   do {
     DexInstructionPcPair pair = *it;
     if (processed_.IsBitSet(pair.DexPc())) {
+      if (flow_continues) {
+        // If the previous instruction was flowing into its following
+        // instruction, we need to branch where this following instruction
+        // has been emitted.
+        PrepareToBranch(pair.DexPc());
+        __ B(GetLabelOf(pair.DexPc()));
+      }
       break;
     }
     processed_.SetBit(pair.DexPc());
