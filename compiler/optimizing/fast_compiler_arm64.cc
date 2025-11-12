@@ -1815,6 +1815,10 @@ bool FastCompilerARM64::BuildFilledNewArray(uint32_t dex_pc,
   }
   const char* descriptor = GetDexFile().GetTypeDescriptor(type_index);
   char primitive = descriptor[1];
+  if (primitive != 'I' && primitive != 'L' && primitive != '[') {
+    unimplemented_reason_ = "BogusFilledNewArray";
+    return false;
+  }
   bool is_reference_array = (primitive == 'L') || (primitive == '[');
   DataType::Type type = is_reference_array ? DataType::Type::kReference : DataType::Type::kInt32;
 
