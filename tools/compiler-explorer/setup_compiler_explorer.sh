@@ -28,6 +28,15 @@ if [[ -z "$ANDROID_BUILD_TOP" ]]; then
     exit 1
 fi
 
+# Prerequisite check for Node.js
+if ! command -v node &> /dev/null; then
+    echo "ERROR: Node.js not found. Compiler Explorer requires Node.js." >&2
+    echo "Please install it, for example using Node Version Manager (nvm)," >&2
+    echo "or ensure that the 'node' executable is in your PATH." >&2
+    echo "Refer to art/tools/compiler-explorer/compiler-explorer.md for more details." >&2
+    exit 1
+fi
+
 # The script should be run from the root of the Android source tree.
 cd "$ANDROID_BUILD_TOP"
 echo "Running from Android source tree: $PWD"
