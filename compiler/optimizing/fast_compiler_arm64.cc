@@ -4390,6 +4390,7 @@ std::unique_ptr<FastCompiler> FastCompiler::CompileARM64(
     const DexCompilationUnit& dex_compilation_unit) {
   if (!compiler_options.GetImplicitNullChecks() ||
       !compiler_options.GetImplicitStackOverflowChecks() ||
+      compiler_options.IsJitCompilerForSharedCode() ||
       kUseTableLookupReadBarrier ||
       !kReserveMarkingRegister ||
       kPoisonHeapReferences) {

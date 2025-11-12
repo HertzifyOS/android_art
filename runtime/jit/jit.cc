@@ -1837,6 +1837,11 @@ void Jit::MaybeEnqueueFastCompilation(ArtMethod* method, Thread* self) {
     return;
   }
 
+  // Fast compiler doesn't support generating shared code for the zygote.
+  if (!GetCodeCache()->CanAllocateProfilingInfo()) {
+    return;
+  }
+
   DCHECK(!method->IsMemorySharedMethod());
   DCHECK(!method->IsNative());
   AddCompileTask(self, method, CompilationKind::kFast);
