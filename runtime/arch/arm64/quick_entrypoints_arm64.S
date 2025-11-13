@@ -2620,7 +2620,7 @@ ENTRY art_quick_record_entry_trace_event_with_flush
     // x0 already has method*
     mov x1, xSELF                             // pass Thread::Current
     mov x2, 1                                 // set to true for entry events
-    bl  artRecordMethodTraceEvent             // (ArtMethod*, Thread*, is_entry)
+    CALL_SYMBOL artRecordMethodTraceEvent     // (ArtMethod*, Thread*, is_entry)
     RESTORE_SAVE_EVERYTHING_FRAME             // Note: will restore xSELF
     REFRESH_MARKING_REGISTER
     ret
@@ -2646,7 +2646,7 @@ ENTRY art_quick_record_exit_trace_event_with_flush
     ldr x0, [sp, #FRAME_SIZE_SAVE_EVERYTHING] // pass ArtMethod*
     mov x1, xSELF                             // pass Thread::Current
     mov x2, 0                                 // set to true for exit events
-    bl  artRecordMethodTraceEvent             // (ArtMethod*, Thread*, is_entry)
+    CALL_SYMBOL artRecordMethodTraceEvent     // (ArtMethod*, Thread*, is_entry)
     RESTORE_SAVE_EVERYTHING_FRAME             // Note: will restore xSELF
     REFRESH_MARKING_REGISTER
     ret
@@ -2671,11 +2671,11 @@ ENTRY art_quick_record_long_running_entry_trace_event
     // Call runtime to flush buffer. We expect the frequency of this case to be low. For ANR it
     // might be interesting to record the past data instead of overwriting with new entries.
     SETUP_SAVE_EVERYTHING_FRAME
-    ldr x0, [sp, #FRAME_SIZE_SAVE_EVERYTHING] // pass ArtMethod*
-    mov x1, xSELF                             // pass Thread::Current
-    mov x2, 1                                 // set to true for entry events
-    bl  artRecordLongRunningMethodTraceEvent // (ArtMethod*, Thread*, is_entry)
-    RESTORE_SAVE_EVERYTHING_FRAME             // Note: will restore xSELF
+    ldr x0, [sp, #FRAME_SIZE_SAVE_EVERYTHING]         // pass ArtMethod*
+    mov x1, xSELF                                     // pass Thread::Current
+    mov x2, 1                                         // set to true for entry events
+    CALL_SYMBOL  artRecordLongRunningMethodTraceEvent // (ArtMethod*, Thread*, is_entry)
+    RESTORE_SAVE_EVERYTHING_FRAME                     // Note: will restore xSELF
     REFRESH_MARKING_REGISTER
     ret
 END art_quick_record_long_running_entry_trace_event
@@ -2726,7 +2726,7 @@ ENTRY art_quick_record_long_running_exit_trace_event
     ldr xzr, [sp, #FRAME_SIZE_SAVE_EVERYTHING] // pass nullptr. ArtMethod* isn't required for exits
     mov x1, xSELF                              // pass Thread::Current
     mov x2, 0                                  // set to false for exit events
-    bl  artRecordLongRunningMethodTraceEvent   // (ArtMethod*, Thread*, is_entry)
+    CALL_SYMBOL artRecordLongRunningMethodTraceEvent // (ArtMethod*, Thread*, is_entry)
     RESTORE_SAVE_EVERYTHING_FRAME              // Note: will restore xSELF
     REFRESH_MARKING_REGISTER
     ret

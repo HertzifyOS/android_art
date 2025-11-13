@@ -232,6 +232,7 @@ known_failing_tests = frozenset([
   "2262-default-conflict-methods",
   # 2275-pthread-name: Dependency on `libarttest`.
   "2275-pthread-name",
+  "2237-checker-simulator",
 ])
 
 # These ART run-tests are new and have not had enough post-submit runs

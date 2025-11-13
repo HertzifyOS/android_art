@@ -62,11 +62,6 @@ func globalFlags(ctx android.LoadHookContext) ([]string, []string) {
 		gcType = "MS"
 	}
 
-	if ctx.Config().IsEnvTrue("ART_USE_SIMULATOR") {
-		cflags = append(cflags, "-DART_USE_SIMULATOR=1")
-		asflags = append(asflags, "-DART_USE_SIMULATOR=1")
-	}
-
 	cflags = append(cflags, "-DART_DEFAULT_GC_TYPE_IS_"+gcType)
 
 	if ctx.Config().IsEnvTrue("ART_HEAP_POISONING") {
@@ -228,6 +223,12 @@ func globalDefaults(ctx android.LoadHookContext) {
 				Cflags []string
 			}
 		}
+		Multilib struct {
+			Lib64 struct {
+				Cflags []string
+				Asflags []string
+			}
+		}
 		Cflags   []string
 		Asflags  []string
 		Sanitize struct {
@@ -239,6 +240,16 @@ func globalDefaults(ctx android.LoadHookContext) {
 	p.Cflags, p.Asflags = globalFlags(ctx)
 	p.Target.Android.Cflags = deviceFlags(ctx)
 	p.Target.Host.Cflags = hostFlags(ctx)
+
+	if ctx.Config().IsEnvTrue("ART_USE_SIMULATOR") {
+		if !ctx.Config().IsEnvTrue("ART_USE_RESTRICTED_MODE") {
+			panic("ART_USE_SIMULATOR requires ART_USE_RESTRICTED_MODE")
+		}
+
+		// The simulator does not support 32 bit architectures.
+		p.Multilib.Lib64.Cflags = []string{"-DART_USE_SIMULATOR=1"}
+		p.Multilib.Lib64.Asflags = []string{"-DART_USE_SIMULATOR=1"}
+	}
 
 	if ctx.Config().IsEnvTrue("ART_DEX_FILE_ACCESS_TRACKING") {
 		p.Cflags = append(p.Cflags, "-DART_DEX_FILE_ACCESS_TRACKING")

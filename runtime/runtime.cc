@@ -189,6 +189,9 @@
 namespace apex = com::android::apex;
 
 #endif
+#ifdef ART_USE_SIMULATOR
+#include "code_simulator_container.h"
+#endif
 
 // Static asserts to check the values of generated assembly-support macros.
 #define ASM_DEFINE(NAME, EXPR) static_assert((NAME) == (EXPR), "Unexpected value of " #NAME);
@@ -1835,6 +1838,13 @@ bool Runtime::Init(RuntimeArgumentMap&& runtime_options_in) {
       runtime_options.GetOrDefault(Opt::EnableTimeBasedGcTrigger) &&
       !GetBoolProperty(
           "persist.device_config.runtime_native_boot.force_disable_time_based_gc_trigger", false);
+
+#ifdef ART_USE_SIMULATOR
+  if (IsSimulatorMode()) {
+    instruction_set_ = kRuntimeQuickCodeISA;
+    simulator_container_.reset(new CodeSimulatorContainer(kRuntimeQuickCodeISA));
+  }
+#endif
 
   heap_ = new gc::Heap(runtime_options.GetOrDefault(Opt::MemoryInitialSize),
                        runtime_options.GetOrDefault(Opt::HeapGrowthLimit),
