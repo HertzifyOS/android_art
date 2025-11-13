@@ -29,9 +29,9 @@
     /* if-cmp vAA, +BBBB */
     lsr     w0, wINST, #8               // w0<- AA
     GET_VREG w2, w0                     // w2<- vAA
-    .if ${compare}
-    cmp     w2, #0                      // compare (vA, 0)
-    .endif
+%   if compare:
+      cmp     w2, #0                    // compare (vA, 0)
+%   #endif
     ${branch} 1f
     FETCH_ADVANCE_INST 2
     PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE

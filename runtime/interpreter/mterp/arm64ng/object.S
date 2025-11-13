@@ -185,12 +185,12 @@
 %  #endif
    FETCH_ADVANCE_INST 2
 #ifdef USE_HEAP_POISONING
-   .if $is_object
-   b .L${opcode}_slow_path_dispatch    // Dispatch would not fit in 64B.
-   .else
-   PREPARE_OPCODE_DISPATCH
-   GOTO_OPCODE
-   .endif
+%  if is_object:
+     b .L${opcode}_slow_path_dispatch  // Dispatch would not fit in 64B.
+%  else:
+     PREPARE_OPCODE_DISPATCH
+     GOTO_OPCODE
+%  #endif
 #else
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
@@ -283,15 +283,15 @@
      GET_VREG w1, w1                   // w1 <- v[A]
 %  #endif
    cbz w2, common_errNullObject
-   .if $wide
-   $store  x1, [x2, x0]
-   .elseif $is_object
-   POISON_HEAP_REF w1
-   $store  w1, [x2, x0]
-   cbnz w1, .L${opcode}_slow_path_write_barrier  // Write barrier would not fit in 64B.
-   .else
-   $store  w1, [x2, x0]
-   .endif
+%  if wide:
+     $store  x1, [x2, x0]
+%  elif is_object:
+     POISON_HEAP_REF w1
+     $store  w1, [x2, x0]
+     cbnz w1, .L${opcode}_slow_path_write_barrier  // Write barrier would not fit in 64B.
+%  else:
+     $store  w1, [x2, x0]
+%  #endif
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
@@ -480,26 +480,26 @@
    ldr     w0, [x0, #ART_FIELD_DECLARING_CLASS_OFFSET]
    TEST_IF_MARKING .L${opcode}_read_barrier
 .L${opcode}_resume_after_read_barrier:
-   .if $wide
-   GET_VREG_WIDE x2, wINST             // x2 <- v[A]
-   $store  x2, [x0, x1]
-   .elseif $is_object
-   GET_VREG w2, wINST                  // w2 <- v[A]
-   POISON_HEAP_REF w2
-   $store  w2, [x0, x1]
-   cbnz    w2, .L${opcode}_slow_path_write_barrier  // Write barrier would not fit in 64B.
-   .else
-   GET_VREG w2, wINST                  // w2 <- v[A]
-   $store  w2, [x0, x1]
-   .endif
+%  if wide:
+     GET_VREG_WIDE x2, wINST           // x2 <- v[A]
+     $store  x2, [x0, x1]
+%  elif is_object:
+     GET_VREG w2, wINST                // w2 <- v[A]
+     POISON_HEAP_REF w2
+     $store  w2, [x0, x1]
+     cbnz    w2, .L${opcode}_slow_path_write_barrier  // Write barrier would not fit in 64B.
+%  else:
+     GET_VREG w2, wINST                // w2 <- v[A]
+     $store  w2, [x0, x1]
+%  #endif
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
-   .if !$wide && !$is_object
+%  if not wide and not is_object:
 .L${opcode}_read_barrier:
-   bl      art_quick_read_barrier_mark_reg00
-   b       .L${opcode}_resume_after_read_barrier
-   .endif
+     bl      art_quick_read_barrier_mark_reg00
+     b       .L${opcode}_resume_after_read_barrier
+%  #endif
 
 %def op_sput_slow_path(volatile_store, wide, is_object):
    ldr     x0, [sp]
@@ -554,11 +554,11 @@
 .L${opcode}_slow_path_read_barrier:
    bl      art_quick_read_barrier_mark_reg00
    b       .L${opcode}_slow_path_resume_after_read_barrier
-   .if $wide || $is_object
+%  if wide or is_object:
 .L${opcode}_read_barrier:
-   bl      art_quick_read_barrier_mark_reg00
-   b       .L${opcode}_resume_after_read_barrier
-   .endif
+     bl      art_quick_read_barrier_mark_reg00
+     b       .L${opcode}_resume_after_read_barrier
+%  #endif
 
 %def op_sput_wide():
 %  op_sput(store="str", volatile_store="stlr", wide=True)

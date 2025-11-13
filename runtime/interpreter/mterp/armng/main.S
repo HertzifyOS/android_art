@@ -1985,31 +1985,31 @@ END nterp_deliver_pending_exception
 // gen_mterp.py will inline the following definitions
 // within [ExecuteNterpImpl, EndExecuteNterpImpl).
 %def instruction_end():
-%   prefix_number = re.sub(r"nterp([0-7])_", r"\1", opcode_name_prefix)
-    .if ${prefix_number} == 7
-    .type artNterpAsmInstructionEnd, #function
-    .hidden artNterpAsmInstructionEnd
-    .global artNterpAsmInstructionEnd
+%   prefix_number = int(re.sub(r"nterp([0-7])_", r"\1", opcode_name_prefix))
+%   if prefix_number == 7:
+      .type artNterpAsmInstructionEnd, #function
+      .hidden artNterpAsmInstructionEnd
+      .global artNterpAsmInstructionEnd
 artNterpAsmInstructionEnd:
-    // artNterpAsmInstructionEnd is used as landing pad for exception handling.
-    FETCH_INST
-    PREPARE_OPCODE_DISPATCH
-    GOTO_OPCODE
-    .endif
+      // artNterpAsmInstructionEnd is used as landing pad for exception handling.
+      FETCH_INST
+      PREPARE_OPCODE_DISPATCH
+      GOTO_OPCODE
+%   #endif
 
 %def instruction_start():
-%   prefix_number = re.sub(r"nterp([0-7])_", r"\1", opcode_name_prefix)
-    .if ${prefix_number} == 0
-    .type artNterpAsmInstructionStart, #function
-    .hidden artNterpAsmInstructionStart
-    .global artNterpAsmInstructionStart
+%   prefix_number = int(re.sub(r"nterp([0-7])_", r"\1", opcode_name_prefix))
+%   if prefix_number == 0:
+      .type artNterpAsmInstructionStart, #function
+      .hidden artNterpAsmInstructionStart
+      .global artNterpAsmInstructionStart
 artNterpAsmInstructionStart = nterp0_op_nop
-    .text
-    .balign 4096
-    .else
-%   prev_op_nop = "nterp{}_op_nop".format(int(prefix_number) - 1)
-    .org ${prev_op_nop} + 36864
-    .endif
+      .text
+      .balign 4096
+%   else:
+%     prev_op_nop = "nterp{}_op_nop".format(int(prefix_number) - 1)
+      .org ${prev_op_nop} + 36864
+%   #endif
 
 %def add_slow_path_for_last_prefix(write_fn, *write_args, suffix="_slow_path"):
 %   if opcode_name_prefix != "nterp7_":
