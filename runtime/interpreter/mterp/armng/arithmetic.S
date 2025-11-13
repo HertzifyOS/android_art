@@ -252,7 +252,7 @@
     GOTO_OPCODE                         @ jump to next instruction
     /* 9-10 instructions */
 
-%def unopWide(preinstr="", instr=""):
+%def unopWide(preinstr="", instr="", postinstr=""):
     /*
      * Generic 64-bit unary operation.  Provide an "instr" line that
      * specifies an instruction that performs "result = op r0/r1".
@@ -270,6 +270,7 @@
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     $preinstr                           @ optional op; may set condition codes
     $instr                              @ r0/r1<- op, r2-r3 changed
+    $postinstr                          @ optional op
     PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA<- r0/r1
     GOTO_OPCODE                         @ jump to next instruction
@@ -590,7 +591,7 @@
 %  unop(instr="rsb     r0, r0, #0")
 
 %def op_neg_long():
-%  unopWide(preinstr="rsbs    r0, r0, #0", instr="rsc     r1, r1, #0")
+%  unopWide(preinstr="rsbs    r0, r0, #0", instr="mov     ip, #0", postinstr="sbc     r1, ip, r1")
 
 %def op_not_int():
 %  unop(instr="mvn     r0, r0")
@@ -792,7 +793,8 @@
     VREG_INDEX_TO_ADDR r4, r4           @ r4<- &fp[AA]
     mov     r1, r1, asl r2              @ r1<- r1 << r2
     rsb     r3, r2, #32                 @ r3<- 32 - r2
-    orr     r1, r1, r0, lsr r3          @ r1<- r1 | (r0 << (32-r2))
+    lsr     r3, r0, r3                  @ r3<- r0 << (32-r2)
+    orr     r1, r1,  r3                 @ r1<- r1 | (r0 << (32-r2))
     subs    ip, r2, #32                 @ ip<- r2 - 32
     it      pl
     movpl   r1, r0, asl ip              @ if r2 >= 32, r1<- r0 << (r2-32)
@@ -817,7 +819,8 @@
     GET_VREG_WIDE_BY_ADDR r0, r1, r4    @ r0/r1<- vAA/vAA+1
     mov     r1, r1, asl r2              @ r1<- r1 << r2
     rsb     r3, r2, #32                 @ r3<- 32 - r2
-    orr     r1, r1, r0, lsr r3          @ r1<- r1 | (r0 << (32-r2))
+    lsr     r3, r0, r3                  @ r3<- r0 << (32-r2)
+    orr     r1, r1, r3                  @ r1<- r1 | (r0 << (32-r2))
     subs    ip, r2, #32                 @ ip<- r2 - 32
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     it      pl
@@ -856,7 +859,8 @@
     VREG_INDEX_TO_ADDR r4, r4           @ r4<- &fp[AA]
     mov     r0, r0, lsr r2              @ r0<- r2 >> r2
     rsb     r3, r2, #32                 @ r3<- 32 - r2
-    orr     r0, r0, r1, lsl r3          @ r0<- r0 | (r1 << (32-r2))
+    lsl     r3, r1, r3                  @ r3<- r1 << (32-r2)
+    orr     r0, r0, r3                  @ r0<- r0 | (r1 << (32-r2))
     subs    ip, r2, #32                 @ ip<- r2 - 32
     it      pl
     movpl   r0, r1, asr ip              @ if r2 >= 32, r0<-r1 >> (r2-32)
@@ -881,7 +885,8 @@
     GET_VREG_WIDE_BY_ADDR r0, r1, r4    @ r0/r1<- vAA/vAA+1
     mov     r0, r0, lsr r2              @ r0<- r2 >> r2
     rsb     r3, r2, #32                 @ r3<- 32 - r2
-    orr     r0, r0, r1, lsl r3          @ r0<- r0 | (r1 << (32-r2))
+    lsl     r3, r1, r3                  @ r3<- r1 << (32-r2)
+    orr     r0, r0, r3                  @ r0<- r0 | (r1 << (32-r2))
     subs    ip, r2, #32                 @ ip<- r2 - 32
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     it      pl
@@ -932,7 +937,8 @@
     VREG_INDEX_TO_ADDR r4, r4           @ r4<- &fp[AA]
     mov     r0, r0, lsr r2              @ r0<- r2 >> r2
     rsb     r3, r2, #32                 @ r3<- 32 - r2
-    orr     r0, r0, r1, lsl r3          @ r0<- r0 | (r1 << (32-r2))
+    lsl     r3, r1, r3                  @ r3<- r1 << (32-r2)
+    orr     r0, r0, r3                  @ r0<- r0 | (r1 << (32-r2))
     subs    ip, r2, #32                 @ ip<- r2 - 32
     it      pl
     movpl   r0, r1, lsr ip              @ if r2 >= 32, r0<-r1 >>> (r2-32)
@@ -957,7 +963,8 @@
     GET_VREG_WIDE_BY_ADDR r0, r1, r4    @ r0/r1<- vAA/vAA+1
     mov     r0, r0, lsr r2              @ r0<- r2 >> r2
     rsb     r3, r2, #32                 @ r3<- 32 - r2
-    orr     r0, r0, r1, lsl r3          @ r0<- r0 | (r1 << (32-r2))
+    lsl     r3, r1, r3                  @ r3<- r1 << (32-r2)
+    orr     r0, r0, r3                  @ r0<- r0 | (r1 << (32-r2))
     subs    ip, r2, #32                 @ ip<- r2 - 32
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     it      pl

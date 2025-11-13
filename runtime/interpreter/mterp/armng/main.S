@@ -245,7 +245,7 @@
 
 // An assembly entry for nterp.
 .macro OAT_ENTRY name
-    .arm
+    .thumb
     .type \name, #function
     .hidden \name
     .global \name
@@ -258,7 +258,7 @@
 .endm
 
 .macro NAME_START name
-    .arm
+    .thumb
     .type \name, #function
     .hidden \name  // Hide this as a global symbol, so we do not incur plt calls.
     .global \name
@@ -648,8 +648,7 @@ END \name
    // On entry, the method is r0, the instance is r1
    ldr r2, .Lfetch_nterp_\name
 .Lfetch_location_\name:
-   // Note that this won't work for thumb.
-   sub r2, pc, r2
+   add r2, r2, pc
    ldr r3, [r0, #ART_METHOD_QUICK_CODE_OFFSET_32]
    cmp r2, r3
    bne  \call_compiled_code
@@ -895,7 +894,7 @@ END \name
      .endif
      b .Ldone_return_\suffix
 .Lfetch_nterp_\suffix:
-    .word   (.Lfetch_location_\suffix+8) - ExecuteNterpImpl
+    .word   (ExecuteNterpImpl + /* thumb mode */ 1) - (.Lfetch_location_\suffix + 4)
    .endif
 
 .Lcall_compiled_code_\suffix:
@@ -1695,7 +1694,7 @@ OAT_ENTRY ExecuteNterpImpl
     START_EXECUTING_INSTRUCTIONS
     /* NOTE: no fallthrough */
 .LrIBASE_init_diff:
-    .word nterp7_op_nop - (.LrIBASE_init_add_pc + 8)
+    .word (nterp7_op_nop + /* thumb mode */ 1) - (.LrIBASE_init_add_pc + 4)
     // cfi info continues, and covers the whole nterp implementation.
     SIZE ExecuteNterpImpl
 

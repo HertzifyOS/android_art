@@ -192,6 +192,7 @@
     fmstat
     it      hi
     movhi   r0, #1                      @ (greater than, or unordered) r0<- 1
+    it      eq
     moveq   r0, #0                      @ (equal) r0<- 0
     SET_VREG r0, r4                     @ vAA<- r0
     GOTO_OPCODE                         @ jump to next instruction
@@ -229,6 +230,7 @@
     fmstat
     it      hi
     movhi   r0, #1                      @ (greater than, or unordered) r0<- 1
+    it      eq
     moveq   r0, #0                      @ (equal) r0<- 0
     SET_VREG r0, r4                     @ vAA<- r0
     GOTO_OPCODE                         @ jump to next instruction
@@ -371,6 +373,7 @@
     GOTO_OPCODE                         @ jump to next instruction
 
     /* literal pool helper */
+    .balign 8
 constval${opcode}:
     .8byte          0x41f0000000000000
 
