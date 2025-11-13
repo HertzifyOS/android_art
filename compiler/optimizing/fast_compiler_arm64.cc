@@ -4077,11 +4077,6 @@ bool FastCompilerARM64::ProcessDexInstructionForMasks(const Instruction& instruc
     case Instruction::INVOKE_CUSTOM:
     case Instruction::INVOKE_CUSTOM_RANGE:
     case Instruction::RETURN_VOID:
-    case Instruction::CMP_LONG:
-    case Instruction::CMPG_DOUBLE:
-    case Instruction::CMPL_DOUBLE:
-    case Instruction::CMPG_FLOAT:
-    case Instruction::CMPL_FLOAT:
     case Instruction::NOP:
     case Instruction::IPUT_OBJECT:
     case Instruction::IPUT:
@@ -4135,6 +4130,11 @@ bool FastCompilerARM64::ProcessDexInstructionForMasks(const Instruction& instruc
     OP_CASE(SHR)
     OP_CASE(USHR)
 #undef OP_CASE
+    case Instruction::CMP_LONG:
+    case Instruction::CMPG_DOUBLE:
+    case Instruction::CMPL_DOUBLE:
+    case Instruction::CMPG_FLOAT:
+    case Instruction::CMPL_FLOAT:
     case Instruction::NEG_INT:
     case Instruction::NEG_FLOAT:
     case Instruction::NOT_INT:
