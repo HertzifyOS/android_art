@@ -358,8 +358,6 @@ class FastCompilerARM64 : public FastCompiler {
   void DoWriteBarrierOn(Register holder,
                         UseScratchRegisterScope& temps,
                         bool overwrite_holder = false);
-  bool CanGenerateCodeFor(ArtField* field, bool can_receiver_be_null)
-      REQUIRES_SHARED(Locks::mutator_lock_);
   bool DoGet(const MemOperand& mem,
              uint16_t field_index,
              Instruction::Code opcode,
@@ -2021,22 +2019,6 @@ void FastCompilerARM64::DoWriteBarrierOn(Register holder,
   __ Strb(card, MemOperand(card, temp.X()));
 }
 
-bool FastCompilerARM64::CanGenerateCodeFor(ArtField* field, bool can_receiver_be_null) {
-  if (field == nullptr) {
-    // Clear potential resolution exception.
-    Thread::Current()->ClearException();
-    unimplemented_reason_ = "UnresolvedField";
-    return false;
-  }
-  if (can_receiver_be_null) {
-    if (!CanDoImplicitNullCheckOn(field->GetOffset().Uint32Value())) {
-      unimplemented_reason_ = "TooLargeFieldOffset";
-      return false;
-    }
-  }
-  return true;
-}
-
 #define DO_CASE(arm_op, op, other) \
     case arm_op: { \
       if (constant op other) { \
@@ -2159,6 +2141,15 @@ bool FastCompilerARM64::DoGet(const MemOperand& base,
   UseScratchRegisterScope temps(GetVIXLAssembler());
   MemOperand mem = base;
   Register holder = mem.GetBaseRegister();
+
+  if (can_receiver_be_null && !CanDoImplicitNullCheckOn(mem.GetOffset())) {
+    vixl::aarch64::Label is_not_null;
+    __ Cbnz(holder, &is_not_null);
+    InvokeRuntime(kQuickThrowNullPointer, dex_pc);
+    __ Bind(&is_not_null);
+  }
+
+  bool record_pc_info = (can_receiver_be_null && CanDoImplicitNullCheckOn(mem.GetOffset()));
   if (is_volatile) {
     Register temp = temps.AcquireX();
     __ Add(temp, holder, helpers::OperandFromMemOperand(mem));
@@ -2178,7 +2169,7 @@ bool FastCompilerARM64::DoGet(const MemOperand& base,
       } else {
         __ Ldr(dst, mem);
       }
-      if (can_receiver_be_null) {
+      if (record_pc_info) {
         RecordPcInfo(dex_pc);
       }
     }
@@ -2190,7 +2181,6 @@ bool FastCompilerARM64::DoGet(const MemOperand& base,
   // Ensure the pc position is recorded immediately after the load instruction.
   EmissionCheckScope guard(GetVIXLAssembler(), kMaxMacroInstructionSizeInBytes);
   bool is_wide = false;
-  bool record_pc_info = can_receiver_be_null;
   switch (opcode) {
     case Instruction::SGET_BOOLEAN:
     case Instruction::IGET_BOOLEAN: {
@@ -2502,7 +2492,10 @@ bool FastCompilerARM64::BuildInstanceFieldGet(const Instruction& instruction,
                                          /* is_static= */ false,
                                          /* is_put= */ false,
                                          /* resolve_field_type= */ 0u);
-    if (!CanGenerateCodeFor(field, can_receiver_be_null)) {
+    if (field == nullptr) {
+      // Clear potential resolution exception.
+      Thread::Current()->ClearException();
+      unimplemented_reason_ = "UnresolvedField";
       return false;
     }
   }
@@ -2552,7 +2545,10 @@ bool FastCompilerARM64::BuildInstanceFieldSet(const Instruction& instruction,
                                          /* is_static= */ false,
                                          /* is_put= */ true,
                                          /* resolve_field_type= */ is_object);
-    if (!CanGenerateCodeFor(field, can_receiver_be_null)) {
+    if (field == nullptr) {
+      // Clear potential resolution exception.
+      Thread::Current()->ClearException();
+      unimplemented_reason_ = "UnresolvedField";
       return false;
     }
   }
@@ -2592,6 +2588,14 @@ bool FastCompilerARM64::DoPut(const MemOperand& base,
                               bool is_object,
                               bool is_volatile,
                               uint32_t dex_pc) {
+  if (can_receiver_be_null && !CanDoImplicitNullCheckOn(field->GetOffset().Uint32Value())) {
+    vixl::aarch64::Label is_not_null;
+    __ Cbnz(holder, &is_not_null);
+    InvokeRuntime(kQuickThrowNullPointer, dex_pc);
+    __ Bind(&is_not_null);
+  }
+  bool record_pc_info =
+      (can_receiver_be_null && CanDoImplicitNullCheckOn(field->GetOffset().Uint32Value()));
   UseScratchRegisterScope temps(GetVIXLAssembler());
   Location src = vreg_locations_[source_reg];
   bool assigning_constant = false;
@@ -2621,7 +2625,7 @@ bool FastCompilerARM64::DoPut(const MemOperand& base,
     } else {
       __ Str(reg, mem);
     }
-    if (can_receiver_be_null) {
+    if (record_pc_info) {
       RecordPcInfo(dex_pc);
     }
     // If we assign a constant (only null for iput-object), no need for the write
@@ -2721,7 +2725,7 @@ bool FastCompilerARM64::DoPut(const MemOperand& base,
   if (HitUnimplemented()) {
     return false;
   }
-  if (can_receiver_be_null) {
+  if (record_pc_info) {
     RecordPcInfo(dex_pc);
   }
   return true;
@@ -2750,7 +2754,10 @@ bool FastCompilerARM64::BuildStaticFieldAccess(const Instruction& instruction,
                                          /* is_static= */ true,
                                          is_put,
                                          /* resolve_field_type= */ 0u);
-    if (!CanGenerateCodeFor(field, /* can_receiver_be_null= */ false)) {
+    if (field == nullptr) {
+      // Clear potential resolution exception.
+      Thread::Current()->ClearException();
+      unimplemented_reason_ = "UnresolvedField";
       return false;
     }
     Handle<mirror::Class> h_klass = handles_->NewHandle(field->GetDeclaringClass());
