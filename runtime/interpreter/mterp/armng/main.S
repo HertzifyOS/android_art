@@ -1707,9 +1707,7 @@ OAT_ENTRY ExecuteNterpImpl
    ubfx     lr, rPC, #THREAD_INTERPRETER_CACHE_KEY_LOW_BIT, #THREAD_INTERPRETER_CACHE_SIZE_LOG2
                                            // entry index
    add      ip, ip, lr, lsl #3             // entry address within the cache
-   // In T32, we would use `ldrd ip, \dest_reg, [ip]`
-   ldr      ${dest_reg}, [ip, #4]          // value (offset)
-   ldr      ip, [ip]                       // entry key (pc)
+   ldrd     ip, ${dest_reg}, [ip]          // entry key (pc), value (field/method/etc.)
    cmp      ip, rPC
    bne      ${miss_label}
 
