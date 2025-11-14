@@ -2032,7 +2032,7 @@ void FastCompilerARM64::DoWriteBarrierOn(Register holder,
       if (constant op other) { \
         __ B(label); \
       } \
-      return true; \
+      break; \
     } \
 
 template<vixl::aarch64::Condition kCond, bool kCompareWithZero>
