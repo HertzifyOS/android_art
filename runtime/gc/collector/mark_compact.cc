@@ -506,6 +506,7 @@ MarkCompact::MarkCompact(Heap* heap)
       sigbus_in_progress_count_{kSigbusCounterCompactionDoneMask, kSigbusCounterCompactionDoneMask},
       mid_to_old_promo_bit_vec_(nullptr),
       bump_pointer_space_(heap->GetBumpPointerSpace()),
+      large_object_space_bitmap_(nullptr),
       post_compact_end_(nullptr),
       young_gen_(false),
       use_generational_(heap->GetUseGenerational()),
@@ -776,6 +777,9 @@ void MarkCompact::PrepareForMarking(bool pre_marking) {
       CHECK(space->IsLargeObjectSpace());
       space->AsLargeObjectSpace()->CopyLiveToMarked();
     }
+  }
+  if (heap_->GetLargeObjectsSpace() != nullptr) {
+    large_object_space_bitmap_ = heap_->GetLargeObjectsSpace()->GetMarkBitmap();
   }
 }
 
@@ -1709,9 +1713,12 @@ void MarkCompact::ReclaimPhase(ScopedPriorityChange* spc) {
     // Unbind the live and mark bitmaps.
     GetHeap()->UnBindBitmaps();
   }
-  // After sweeping and unbinding, we will need to use non-moving space'
-  // live-bitmap, instead of mark-bitmap.
+  // After sweeping and unbinding, we will need to use live-bitmap, instead of mark-bitmap.
   non_moving_space_bitmap_ = non_moving_space_->GetLiveBitmap();
+  if (heap_->GetLargeObjectsSpace() != nullptr) {
+    DCHECK_EQ(large_object_space_bitmap_, heap_->GetLargeObjectsSpace()->GetMarkBitmap());
+    large_object_space_bitmap_ = heap_->GetLargeObjectsSpace()->GetLiveBitmap();
+  }
 }
 
 // We want to avoid checking for every reference if it's within the page or
@@ -5949,12 +5956,11 @@ inline bool MarkCompact::MarkObjectNonNullNoPush(mirror::Object* obj,
     DCHECK_NE(heap_->GetLargeObjectsSpace(), nullptr)
         << "ref=" << obj
         << " doesn't belong to any of the spaces and large object space doesn't exist";
-    accounting::LargeObjectBitmap* los_bitmap = heap_->GetLargeObjectsSpace()->GetMarkBitmap();
-    DCHECK(los_bitmap->HasAddress(obj));
+    DCHECK(large_object_space_bitmap_->HasAddress(obj));
     if (kParallel) {
-      los_bitmap->AtomicTestAndSet(obj);
+      large_object_space_bitmap_->AtomicTestAndSet(obj);
     } else {
-      los_bitmap->Set(obj);
+      large_object_space_bitmap_->Set(obj);
     }
     // We only have primitive arrays in large object space. So there is no
     // reason to push into mark-stack.
@@ -6051,10 +6057,9 @@ mirror::Object* MarkCompact::IsMarked(mirror::Object* obj) {
     DCHECK(heap_->GetLargeObjectsSpace())
         << "ref=" << obj
         << " doesn't belong to any of the spaces and large object space doesn't exist";
-    accounting::LargeObjectBitmap* los_bitmap = heap_->GetLargeObjectsSpace()->GetMarkBitmap();
-    if (los_bitmap->HasAddress(obj)) {
+    if (large_object_space_bitmap_->HasAddress(obj)) {
       DCHECK(IsAlignedParam(obj, space::LargeObjectSpace::ObjectAlignment()));
-      if (los_bitmap->Test(obj)) {
+      if (large_object_space_bitmap_->Test(obj)) {
         return obj;
       }
     } else {
