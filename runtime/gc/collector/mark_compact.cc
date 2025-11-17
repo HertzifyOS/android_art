@@ -1135,6 +1135,7 @@ bool MarkCompact::MoveIoctlKernelCheck() {
             // The ioctl should fail only because the kernel doesn't have the
             // bug-fixes and therefore the additional mode is not recognized.
             CHECK_EQ(errno, EINVAL);
+            LOG(WARNING) << "userfaultfd: MOVE is not supported on the device: " << strerror(errno);
           }
           return success;
         }
@@ -1154,7 +1155,13 @@ bool MarkCompact::MoveIoctlKernelCheck() {
         // GC after fork.
         // TODO (b/398036867): remove this code once we are sure that app-compat
         // issues are taken care of.
-        return move_ioctl(/*additional_mode=*/0);
+        bool ret = move_ioctl(/*additional_mode=*/0);
+        if (!ret) {
+          // TODO: add logic to also get reported on pitot as the below log
+          // message will get lost in the logcat.
+          LOG(WARNING) << "userfaultfd: MOVE is not supported: " << strerror(errno);
+        }
+        return ret;
       }
     } else {
       return false;
@@ -1461,11 +1468,6 @@ bool MarkCompact::PrepareForCompaction() {
   if (!uffd_initialized_ && CreateUserfaultfd(/*post_fork=*/false)) {
     // Can we use MOVE ioctl from kernel bug-fixe and app seccomp pov.
     use_move_ioctl_ = MoveIoctlKernelCheck();
-    if (!use_move_ioctl_) {
-      // TODO: add logic to also get reported on pitot as the below log
-      // message will get lost in the logcat.
-      LOG(WARNING) << "userfaultfd: MOVE ioctl seems unsupported: " << strerror(errno);
-    }
   }
   return true;
 }
