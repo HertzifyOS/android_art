@@ -180,13 +180,7 @@ struct EXPORT WellKnownClasses {
   static ArtField* dalvik_system_DexPathList_dexElements;
   static ArtField* dalvik_system_DexPathList__Element_dexFile;
   static ArtField* dalvik_system_VMRuntime_nonSdkApiUsageConsumer;
-  static ArtField* dalvik_system_VirtualThreadContext_parkedStates;
-  static ArtField* dalvik_system_VirtualThreadContext_pinnedCarrierThread;
   static ArtField* dalvik_system_VirtualThreadParkedStates_frames;
-  // TODO: Consider using a mirror class for VirtualThreadFrame.
-  static ArtField* dalvik_system_VirtualThreadFrame_frame;
-  static ArtField* dalvik_system_VirtualThreadFrame_refs;
-  static ArtField* dalvik_system_VirtualThreadFrame_declaringClass;
   static ArtField* java_io_FileDescriptor_descriptor;
   static ArtField* java_lang_ref_Reference_disableIntrinsic;
   static ArtField* java_lang_ref_Reference_slowPathEnabled;
@@ -270,12 +264,8 @@ struct EXPORT WellKnownClasses {
       dalvik_system_InMemoryDexClassLoader;
   static constexpr ClassFromMethod<&dalvik_system_PathClassLoader_init>
       dalvik_system_PathClassLoader;
-  static constexpr ClassFromField<&dalvik_system_VirtualThreadContext_parkedStates>
-      dalvik_system_VirtualThreadContext;
   static constexpr ClassFromField<&dalvik_system_VirtualThreadParkedStates_frames>
       dalvik_system_VirtualThreadParkedStates;
-  static constexpr ClassFromField<&dalvik_system_VirtualThreadFrame_frame>
-      dalvik_system_VirtualThreadFrame;
   static constexpr ClassFromMethod<&java_lang_BootClassLoader_init> java_lang_BootClassLoader;
   static constexpr ClassFromField<&java_lang_ClassLoader_parent> java_lang_ClassLoader;
   static constexpr ClassFromMethod<&java_lang_Daemons_start> java_lang_Daemons;

@@ -86,6 +86,8 @@
 #include "mirror/object_array-inl.h"
 #include "mirror/stack_frame_info.h"
 #include "mirror/stack_trace_element.h"
+#include "mirror/virtual_thread_context-inl.h"
+#include "mirror/virtual_thread_context.h"
 #include "monitor.h"
 #include "monitor_objects_stack_visitor.h"
 #include "native_stack_dump.h"
@@ -690,13 +692,12 @@ void* Thread::CreateCallback(void* arg) {
     // When the runnable is a VirtualThreadContext, don't run thread.run() and treat it as a virtual
     // thread.
     if (kIsVirtualThreadEnabled &&
-        UNLIKELY(
-            !runnable.IsNull() &&
-            runnable->InstanceOf(WellKnownClasses::dalvik_system_VirtualThreadContext.Get()))) {
+        UNLIKELY(!runnable.IsNull() &&
+                 runnable->InstanceOf(GetClassRoot<mirror::VirtualThreadContext>()))) {
       self->SetVirtualThreadFlags(VirtualThreadFlag::kIsVirtual, true);
-      ObjPtr<mirror::Object> parked_states =
-          WellKnownClasses::dalvik_system_VirtualThreadContext_parkedStates->GetObject(runnable);
-      if (parked_states != nullptr) {
+      ObjPtr<mirror::VirtualThreadContext> v_context =
+          ObjPtr<mirror::VirtualThreadContext>::DownCast(runnable);
+      if (v_context->GetParkedStates() != nullptr) {
         self->SetVirtualThreadFlags(VirtualThreadFlag::kUnparking, true);
       }
 
