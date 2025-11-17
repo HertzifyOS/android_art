@@ -318,7 +318,7 @@ END_FUNCTION \name
     // Fetch outs size.
     movzwl CODE_ITEM_OUTS_SIZE_OFFSET(\code_item), \outs
     .if \load_ins
-    movzwl CODE_ITEM_INS_SIZE_OFFSET(\code_item), \ins
+      movzwl CODE_ITEM_INS_SIZE_OFFSET(\code_item), \ins
     .endif
     addl $$CODE_ITEM_INSNS_OFFSET, \code_item
 .endm
@@ -483,9 +483,9 @@ END_FUNCTION \name
     jmp 5f
 2:  // FOUND_LONG
     .if \is_ebx
-    // Put back shorty and exit
-    subl MACRO_LITERAL(1), REG_VAR(shorty)
-    jmp 5f
+      // Put back shorty and exit
+      subl MACRO_LITERAL(1), REG_VAR(shorty)
+      jmp 5f
     .else
     movl REG_VAR(inst), %eax
     andl MACRO_LITERAL(0xf), %eax
@@ -536,9 +536,9 @@ END_FUNCTION \name
     cmpb MACRO_LITERAL(68), %al   // if (al == 'D') goto SKIP_DOUBLE
     je 4f
     .if \is_string_init
-    cmpl MACRO_LITERAL(3), REG_VAR(arg_index)
+      cmpl MACRO_LITERAL(3), REG_VAR(arg_index)
     .else
-    cmpl MACRO_LITERAL(4), REG_VAR(arg_index)
+      cmpl MACRO_LITERAL(4), REG_VAR(arg_index)
     .endif
     je 7f
     movl REG_VAR(inst), %eax
@@ -566,9 +566,9 @@ END_FUNCTION \name
     shrl MACRO_LITERAL(4), REG_VAR(inst)
     addl MACRO_LITERAL(1), REG_VAR(arg_index)
     .if \is_string_init
-    cmpl MACRO_LITERAL(3), REG_VAR(arg_index)
+      cmpl MACRO_LITERAL(3), REG_VAR(arg_index)
     .else
-    cmpl MACRO_LITERAL(4), REG_VAR(arg_index)
+      cmpl MACRO_LITERAL(4), REG_VAR(arg_index)
     .endif
     je 9f
     movl REG_VAR(inst), %eax
@@ -692,13 +692,13 @@ END_FUNCTION \name
     jmp 5f
 2:  // FOUND_LONG
     .if \is_ebx
-    // Put back shorty and exit
-    subl MACRO_LITERAL(1), REG_VAR(shorty)
+      // Put back shorty and exit
+      subl MACRO_LITERAL(1), REG_VAR(shorty)
     .else
-    movl (rFP, REG_VAR(arg_index), 4), REG_VAR(gpr_reg)
-    movl 4(rFP, REG_VAR(arg_index), 4), REG_VAR(gpr_long_reg)
-    addl MACRO_LITERAL(2), REG_VAR(arg_index)
-    addl MACRO_LITERAL(2), REG_VAR(stack_index)
+      movl (rFP, REG_VAR(arg_index), 4), REG_VAR(gpr_reg)
+      movl 4(rFP, REG_VAR(arg_index), 4), REG_VAR(gpr_long_reg)
+      addl MACRO_LITERAL(2), REG_VAR(arg_index)
+      addl MACRO_LITERAL(2), REG_VAR(stack_index)
     .endif
     jmp \if_long
 3:  // SKIP_FLOAT
@@ -801,14 +801,14 @@ END_FUNCTION \name
     jmp 5f
 2:  // FOUND_LONG
     .if \is_ebx
-    // Put back shorty and jump to \if_long
-    subl MACRO_LITERAL(1), REG_VAR(shorty)
+      // Put back shorty and jump to \if_long
+      subl MACRO_LITERAL(1), REG_VAR(shorty)
     .else
-    movl \offset(REG_VAR(stack_ptr)), %eax
-    movl %eax, (REG_VAR(regs), REG_VAR(arg_index), 4)
-    movl \offset_long(REG_VAR(stack_ptr)), %eax
-    movl %eax, 4(REG_VAR(regs), REG_VAR(arg_index), 4)
-    addl MACRO_LITERAL(2), REG_VAR(arg_index)
+      movl \offset(REG_VAR(stack_ptr)), %eax
+      movl %eax, (REG_VAR(regs), REG_VAR(arg_index), 4)
+      movl \offset_long(REG_VAR(stack_ptr)), %eax
+      movl %eax, 4(REG_VAR(regs), REG_VAR(arg_index), 4)
+      addl MACRO_LITERAL(2), REG_VAR(arg_index)
     .endif
     jmp \if_long
 3:  // SKIP_FLOAT
@@ -947,32 +947,32 @@ END_FUNCTION \name
    push %eax
    push %ecx
    .if \is_polymorphic
-   push rPC
-   push 12(%esp)
-   call SYMBOL(NterpGetShortyFromInvokePolymorphic)
-   addl MACRO_LITERAL(8), %esp
+     push rPC
+     push 12(%esp)
+     call SYMBOL(NterpGetShortyFromInvokePolymorphic)
+     addl MACRO_LITERAL(8), %esp
    .elseif \is_custom
-   push rPC
-   push 12(%esp)
-   call SYMBOL(NterpGetShortyFromInvokeCustom)
-   addl MACRO_LITERAL(8), %esp
+     push rPC
+     push 12(%esp)
+     call SYMBOL(NterpGetShortyFromInvokeCustom)
+     addl MACRO_LITERAL(8), %esp
    .elseif \is_interface
-   subl MACRO_LITERAL(16), %esp
-   // Save interface method.
-   movss %xmm7, (%esp)
-   movzwl 2(rPC), %eax
-   pushl %eax
-   // Caller is at 8 (saved ArtMethod + ecx) + 16 + 4 (second argument)
-   pushl 28(%esp)
-   call SYMBOL(NterpGetShortyFromMethodId)
-   // Restore interface method.
-   movss 8(%esp), %xmm7
-   addl MACRO_LITERAL(24), %esp
+     subl MACRO_LITERAL(16), %esp
+     // Save interface method.
+     movss %xmm7, (%esp)
+     movzwl 2(rPC), %eax
+     pushl %eax
+     // Caller is at 8 (saved ArtMethod + ecx) + 16 + 4 (second argument)
+     pushl 28(%esp)
+     call SYMBOL(NterpGetShortyFromMethodId)
+     // Restore interface method.
+     movss 8(%esp), %xmm7
+     addl MACRO_LITERAL(24), %esp
    .else
-   subl MACRO_LITERAL(4), %esp  // Alignment
-   push %eax
-   call SYMBOL(NterpGetShorty)
-   addl MACRO_LITERAL(8), %esp
+     subl MACRO_LITERAL(4), %esp  // Alignment
+     push %eax
+     call SYMBOL(NterpGetShorty)
+     addl MACRO_LITERAL(8), %esp
    .endif
    movl %eax, \dest
    pop %ecx
@@ -987,24 +987,24 @@ END_FUNCTION \name
    subl MACRO_LITERAL(4), %esp
    movss %xmm0, (%esp)
    .if \is_interface
-   // Alignment.
-   subl MACRO_LITERAL(8), %esp
-   movzwl 2(rPC), %eax
-   pushl %eax
-   // Caller is at 16 (parameters) + 8 (alignment) + 4 (second argument).
-   pushl 28(%esp)
-   call SYMBOL(NterpGetShortyFromMethodId)
-   movl %eax, \dest
-   movss 16(%esp), %xmm0
-   addl MACRO_LITERAL(20), %esp
+     // Alignment.
+     subl MACRO_LITERAL(8), %esp
+     movzwl 2(rPC), %eax
+     pushl %eax
+     // Caller is at 16 (parameters) + 8 (alignment) + 4 (second argument).
+     pushl 28(%esp)
+     call SYMBOL(NterpGetShortyFromMethodId)
+     movl %eax, \dest
+     movss 16(%esp), %xmm0
+     addl MACRO_LITERAL(20), %esp
    .else
-   // Alignment.
-   subl MACRO_LITERAL(12), %esp
-   pushl %eax
-   call SYMBOL(NterpGetShorty)
-   movl %eax, \dest
-   movss 16(%esp), %xmm0
-   addl MACRO_LITERAL(20), %esp
+     // Alignment.
+     subl MACRO_LITERAL(12), %esp
+     pushl %eax
+     call SYMBOL(NterpGetShorty)
+     movl %eax, \dest
+     movss 16(%esp), %xmm0
+     addl MACRO_LITERAL(20), %esp
    .endif
    popl %edx
    popl %ecx
@@ -1029,21 +1029,21 @@ END_FUNCTION \name
 
 .macro DO_CALL is_polymorphic, is_custom
    .if \is_polymorphic
-   call SYMBOL(art_quick_invoke_polymorphic)
+     call SYMBOL(art_quick_invoke_polymorphic)
    .elseif \is_custom
-   call SYMBOL(art_quick_invoke_custom)
+     call SYMBOL(art_quick_invoke_custom)
    .else
-   call *ART_METHOD_QUICK_CODE_OFFSET_32(%eax)
+     call *ART_METHOD_QUICK_CODE_OFFSET_32(%eax)
    .endif
 .endm
 
 .macro COMMON_INVOKE_NON_RANGE is_static=0, is_interface=0, suffix="", is_string_init=0, is_polymorphic=0, is_custom=0
    .if \is_polymorphic
-   // No fast path for polymorphic calls.
+     // No fast path for polymorphic calls.
    .elseif \is_custom
-   // No fast path for custom calls.
+     // No fast path for custom calls.
    .elseif \is_string_init
-   // No fast path for string.init.
+     // No fast path for string.init.
    .else
      testl $$ART_METHOD_NTERP_INVOKE_FAST_PATH_FLAG, ART_METHOD_ACCESS_FLAGS_OFFSET(%eax)
      je .Lfast_path_with_few_args_\suffix
@@ -1051,15 +1051,15 @@ END_FUNCTION \name
      movl %edx, %ebx
      shrl MACRO_LITERAL(4), %ebx # Number of arguments
      .if \is_static
-     jz .Linvoke_fast_path_\suffix  # shl sets the Z flag
+       jz .Linvoke_fast_path_\suffix  # shl sets the Z flag
      .else
-     cmpl MACRO_LITERAL(1), %ebx
-     je .Linvoke_fast_path_\suffix
+       cmpl MACRO_LITERAL(1), %ebx
+       je .Linvoke_fast_path_\suffix
      .endif
      movzwl 4(rPC), %esi
      cmpl MACRO_LITERAL(2), %ebx
      .if \is_static
-     jl .Lone_arg_fast_path_\suffix
+       jl .Lone_arg_fast_path_\suffix
      .endif
      je .Ltwo_args_fast_path_\suffix
      cmpl MACRO_LITERAL(4), %ebx
@@ -1086,10 +1086,10 @@ END_FUNCTION \name
      GET_VREG    %edx, %edx
 .Lone_arg_fast_path_\suffix:
      .if \is_static
-     andl        MACRO_LITERAL(0xf), %esi
-     GET_VREG    %ecx, %esi
+       andl        MACRO_LITERAL(0xf), %esi
+       GET_VREG    %ecx, %esi
      .else
-     // First argument already in %ecx.
+       // First argument already in %ecx.
      .endif
 .Linvoke_fast_path_\suffix:
      // Fetch PC before calling for proper stack unwinding.
@@ -1106,22 +1106,22 @@ END_FUNCTION \name
      movzbl 1(rPC), %edx
      shrl MACRO_LITERAL(4), %edx # Number of arguments
      .if \is_static
-     cmpl MACRO_LITERAL(1), %edx
-     jl .Linvoke_with_few_args_\suffix
-     jne .Lget_shorty_\suffix
-     movzwl 4(rPC), %ecx
-     andl MACRO_LITERAL(0xf), %ecx  // dex register of first argument
-     GET_VREG %ecx, %ecx
-     movd %ecx, %xmm0
+       cmpl MACRO_LITERAL(1), %edx
+       jl .Linvoke_with_few_args_\suffix
+       jne .Lget_shorty_\suffix
+       movzwl 4(rPC), %ecx
+       andl MACRO_LITERAL(0xf), %ecx  // dex register of first argument
+       GET_VREG %ecx, %ecx
+       movd %ecx, %xmm0
      .else
-     cmpl MACRO_LITERAL(2), %edx
-     jl .Linvoke_with_few_args_\suffix
-     jne .Lget_shorty_\suffix
-     movzwl 4(rPC), %edx
-     shrl MACRO_LITERAL(4), %edx
-     andl MACRO_LITERAL(0xf), %edx  // dex register of second argument
-     GET_VREG %edx, %edx
-     movd %edx, %xmm0
+       cmpl MACRO_LITERAL(2), %edx
+       jl .Linvoke_with_few_args_\suffix
+       jne .Lget_shorty_\suffix
+       movzwl 4(rPC), %edx
+       shrl MACRO_LITERAL(4), %edx
+       andl MACRO_LITERAL(0xf), %edx  // dex register of second argument
+       GET_VREG %edx, %edx
+       movd %edx, %xmm0
      .endif
 .Linvoke_with_few_args_\suffix:
      // Check if the next instruction is move-result or move-result-wide.
@@ -1151,13 +1151,13 @@ END_FUNCTION \name
    leal 1(%ebx), %edx  // shorty + 1  ; ie skip return arg character
    movzwl 4(rPC), %ebx // arguments
    .if \is_string_init
-   shrl MACRO_LITERAL(4), %ebx
-   movl $$1, %ebp       // ignore first argument
+     shrl MACRO_LITERAL(4), %ebx
+     movl $$1, %ebp       // ignore first argument
    .elseif \is_static
-   movl $$0, %ebp       // arg_index
+     movl $$0, %ebp       // arg_index
    .else
-   shrl MACRO_LITERAL(4), %ebx
-   movl $$1, %ebp       // arg_index
+     shrl MACRO_LITERAL(4), %ebx
+     movl $$1, %ebp       // arg_index
    .endif
    LOOP_OVER_SHORTY_LOADING_XMMS xmm0, ebx, edx, ebp, .Lxmm_setup_finished_\suffix
    LOOP_OVER_SHORTY_LOADING_XMMS xmm1, ebx, edx, ebp, .Lxmm_setup_finished_\suffix
@@ -1183,15 +1183,15 @@ END_FUNCTION \name
    leal 1(%ebx), %ebx  // shorty + 1  ; ie skip return arg character
    movzwl 4(rPC), %esi // arguments
    .if \is_string_init
-   movl $$0, %ebp       // arg_index
-   shrl MACRO_LITERAL(4), %esi
-   LOOP_OVER_SHORTY_LOADING_GPRS ecx, edx, esi, ebx, ebp, .Lrestore_saved_values_\suffix, .Lif_long_ebx_\suffix, is_ebx=0
+     movl $$0, %ebp       // arg_index
+     shrl MACRO_LITERAL(4), %esi
+     LOOP_OVER_SHORTY_LOADING_GPRS ecx, edx, esi, ebx, ebp, .Lrestore_saved_values_\suffix, .Lif_long_ebx_\suffix, is_ebx=0
    .elseif \is_static
-   movl $$0, %ebp       // arg_index
-   LOOP_OVER_SHORTY_LOADING_GPRS ecx, edx, esi, ebx, ebp, .Lrestore_saved_values_\suffix, .Lif_long_ebx_\suffix, is_ebx=0
+     movl $$0, %ebp       // arg_index
+     LOOP_OVER_SHORTY_LOADING_GPRS ecx, edx, esi, ebx, ebp, .Lrestore_saved_values_\suffix, .Lif_long_ebx_\suffix, is_ebx=0
    .else
-   shrl MACRO_LITERAL(4), %esi
-   movl $$1, %ebp       // arg_index
+     shrl MACRO_LITERAL(4), %esi
+     movl $$1, %ebp       // arg_index
    .endif
    // For long argument, store second half in eax to not overwrite the shorty.
    LOOP_OVER_SHORTY_LOADING_GPRS edx, eax, esi, ebx, ebp, .Lrestore_saved_values_\suffix, .Lif_long_\suffix, is_ebx=0
@@ -1226,17 +1226,17 @@ END_FUNCTION \name
 .Ldone_return_\suffix:
    /* resume execution of caller */
    .if \is_string_init
-   movzwl 4(rPC), %ecx // arguments
-   andl $$0xf, %ecx
-   GET_VREG rINST, %ecx
-   UPDATE_REGISTERS_FOR_STRING_INIT rINST, %eax
+     movzwl 4(rPC), %ecx // arguments
+     andl $$0xf, %ecx
+     GET_VREG rINST, %ecx
+     UPDATE_REGISTERS_FOR_STRING_INIT rINST, %eax
    .endif
    RESTORE_IBASE
 
    .if \is_polymorphic
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 4
+     ADVANCE_PC_FETCH_AND_GOTO_NEXT 4
    .else
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 3
+     ADVANCE_PC_FETCH_AND_GOTO_NEXT 3
    .endif
 
 .Linvoke_double_\suffix:
@@ -1254,27 +1254,27 @@ END_FUNCTION \name
 
 .macro COMMON_INVOKE_RANGE is_static=0, is_interface=0, suffix="", is_string_init=0, is_polymorphic=0, is_custom=0
    .if \is_polymorphic
-   // No fast path for polymorphic calls.
+     // No fast path for polymorphic calls.
    .elseif \is_custom
-   // No fast path for custom calls.
+     // No fast path for custom calls.
    .elseif \is_string_init
-   // No fast path for string.init.
+     // No fast path for string.init.
    .else
      testl $$ART_METHOD_NTERP_INVOKE_FAST_PATH_FLAG, ART_METHOD_ACCESS_FLAGS_OFFSET(%eax)
      je .Lfast_path_with_few_args_range_\suffix
      movzbl 1(rPC), %edx  // number of arguments
      .if \is_static
-     testl %edx, %edx
-     je .Linvoke_fast_path_range_\suffix
+       testl %edx, %edx
+       je .Linvoke_fast_path_range_\suffix
      .else
-     cmpl MACRO_LITERAL(1), %edx
-     je .Linvoke_fast_path_range_\suffix
+       cmpl MACRO_LITERAL(1), %edx
+       je .Linvoke_fast_path_range_\suffix
      .endif
      movzwl 4(rPC), %ebx  // dex register of first argument
      leal (rFP, %ebx, 4), %esi  // location of first dex register value
      cmpl MACRO_LITERAL(2), %edx
      .if \is_static
-     jl .Lone_arg_fast_path_range_\suffix
+       jl .Lone_arg_fast_path_range_\suffix
      .endif
      je .Ltwo_args_fast_path_range_\suffix
      cmp MACRO_LITERAL(4), %edx
@@ -1293,9 +1293,9 @@ END_FUNCTION \name
      movl 4(%esi), %edx
 .Lone_arg_fast_path_range_\suffix:
      .if \is_static
-     movl 0(%esi), %ecx
+       movl 0(%esi), %ecx
      .else
-     // First argument already in %ecx.
+       // First argument already in %ecx.
      .endif
 .Linvoke_fast_path_range_\suffix:
      FETCH_PC
@@ -1309,20 +1309,20 @@ END_FUNCTION \name
      // is one argument, we can put it in both floating point and core register.
      movzbl 1(rPC), %ebx # Number of arguments
      .if \is_static
-     cmpl MACRO_LITERAL(1), %ebx
-     jl .Linvoke_with_few_args_range_\suffix
-     jne .Lget_shorty_range_\suffix
-     movzwl 4(rPC), %ebx  // Dex register of first argument
-     GET_VREG %ecx, %ebx
-     movd %ecx, %xmm0
+       cmpl MACRO_LITERAL(1), %ebx
+       jl .Linvoke_with_few_args_range_\suffix
+       jne .Lget_shorty_range_\suffix
+       movzwl 4(rPC), %ebx  // Dex register of first argument
+       GET_VREG %ecx, %ebx
+       movd %ecx, %xmm0
      .else
-     cmpl MACRO_LITERAL(2), %ebx
-     jl .Linvoke_with_few_args_range_\suffix
-     jne .Lget_shorty_range_\suffix
-     movzwl 4(rPC), %ebx
-     addl MACRO_LITERAL(1), %ebx  // dex register of second argument
-     GET_VREG %edx, %ebx
-     movd %edx, %xmm0
+       cmpl MACRO_LITERAL(2), %ebx
+       jl .Linvoke_with_few_args_range_\suffix
+       jne .Lget_shorty_range_\suffix
+       movzwl 4(rPC), %ebx
+       addl MACRO_LITERAL(1), %ebx  // dex register of second argument
+       GET_VREG %edx, %ebx
+       movd %edx, %xmm0
      .endif
 .Linvoke_with_few_args_range_\suffix:
      // Check if the next instruction is move-result or move-result-wide.
@@ -1352,13 +1352,13 @@ END_FUNCTION \name
    leal 1(%ebx), %edx  // shorty + 1  ; ie skip return arg character
    movzwl 4(rPC), %ebx // arg start index
    .if \is_string_init
-   addl $$1, %ebx       // arg start index
-   movl $$0, %ebp       // index in stack
+     addl $$1, %ebx       // arg start index
+     movl $$0, %ebp       // index in stack
    .elseif \is_static
-   movl $$0, %ebp       // index in stack
+     movl $$0, %ebp       // index in stack
    .else
-   addl $$1, %ebx       // arg start index
-   movl $$1, %ebp       // index in stack
+     addl $$1, %ebx       // arg start index
+     movl $$1, %ebp       // index in stack
    .endif
    LOOP_RANGE_OVER_SHORTY_LOADING_XMMS xmm0, edx, ebx, ebp, .Lxmm_setup_finished_range_\suffix
    LOOP_RANGE_OVER_SHORTY_LOADING_XMMS xmm1, edx, ebx, ebp, .Lxmm_setup_finished_range_\suffix
@@ -1379,15 +1379,15 @@ END_FUNCTION \name
    movzwl 4(rPC), %ebp // arg start index
    // rPC (esi) is now available
    .if \is_string_init
-   addl $$1, %ebp       // arg start index
-   movl $$0, %esi       // index in stack
-   LOOP_RANGE_OVER_SHORTY_LOADING_GPRS ecx, edx, ebx, ebp, esi, .Lrestore_saved_values_range_\suffix, .Lif_long_ebx_range_\suffix, is_ebx=0
+     addl $$1, %ebp       // arg start index
+     movl $$0, %esi       // index in stack
+     LOOP_RANGE_OVER_SHORTY_LOADING_GPRS ecx, edx, ebx, ebp, esi, .Lrestore_saved_values_range_\suffix, .Lif_long_ebx_range_\suffix, is_ebx=0
    .elseif \is_static
-   movl $$0, %esi // index in stack
-   LOOP_RANGE_OVER_SHORTY_LOADING_GPRS ecx, edx, ebx, ebp, esi, .Lrestore_saved_values_range_\suffix, .Lif_long_ebx_range_\suffix, is_ebx=0
+     movl $$0, %esi // index in stack
+     LOOP_RANGE_OVER_SHORTY_LOADING_GPRS ecx, edx, ebx, ebp, esi, .Lrestore_saved_values_range_\suffix, .Lif_long_ebx_range_\suffix, is_ebx=0
    .else
-   addl $$1, %ebp // arg start index
-   movl $$1, %esi // index in stack
+     addl $$1, %ebp // arg start index
+     movl $$1, %esi // index in stack
    .endif
    // For long argument, store second half in eax to not overwrite the shorty.
    LOOP_RANGE_OVER_SHORTY_LOADING_GPRS edx, eax, ebx, ebp, esi, .Lrestore_saved_values_range_\suffix, .Lif_long_range_\suffix, is_ebx=0
@@ -1424,15 +1424,15 @@ END_FUNCTION \name
 .Ldone_return_range_\suffix:
    /* resume execution of caller */
    .if \is_string_init
-   movzwl 4(rPC), %ecx // arguments
-   GET_VREG rINST, %ecx
-   UPDATE_REGISTERS_FOR_STRING_INIT rINST, %eax
+     movzwl 4(rPC), %ecx // arguments
+     GET_VREG rINST, %ecx
+     UPDATE_REGISTERS_FOR_STRING_INIT rINST, %eax
    .endif
    RESTORE_IBASE
    .if \is_polymorphic
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 4
+     ADVANCE_PC_FETCH_AND_GOTO_NEXT 4
    .else
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 3
+     ADVANCE_PC_FETCH_AND_GOTO_NEXT 3
    .endif
 .Lreturn_range_double_\suffix:
    FETCH_PC
@@ -1458,14 +1458,14 @@ END_FUNCTION \name
    jne 3f
 4:
    .if \wide
-   addl %ecx, %eax
-   \load (%eax), %ecx
-   SET_VREG %ecx, rINST            # fp[A] <- value
-   \load 4(%eax), %ecx
-   SET_VREG_HIGH %ecx, rINST
+     addl %ecx, %eax
+     \load (%eax), %ecx
+     SET_VREG %ecx, rINST            # fp[A] <- value
+     \load 4(%eax), %ecx
+     SET_VREG_HIGH %ecx, rINST
    .else
-   \load (%eax, %ecx, 1), %eax
-   SET_VREG %eax, rINST            # fp[A] <- value
+     \load (%eax, %ecx, 1), %eax
+     SET_VREG %eax, rINST            # fp[A] <- value
    .endif
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
@@ -1478,8 +1478,8 @@ END_FUNCTION \name
    movl $$0, ARG3
    call nterp_get_static_field
    .if !\wide
-   CLEAR_VOLATILE_MARKER %eax
-   jmp 1b
+     CLEAR_VOLATILE_MARKER %eax
+     jmp 1b
    .else
    testl MACRO_LITERAL(1), %eax
    je 1b
@@ -1512,14 +1512,14 @@ END_FUNCTION \name
    jne 3f
 4:
    .if \wide
-   addl %ecx, %eax
-   GET_VREG %ecx, rINST                  # rINST <- v[A]
-   movl %ecx, (%eax)
-   GET_VREG_HIGH %ecx, rINST
-   movl %ecx, 4(%eax)
+     addl %ecx, %eax
+     GET_VREG %ecx, rINST                  # rINST <- v[A]
+     movl %ecx, (%eax)
+     GET_VREG_HIGH %ecx, rINST
+     movl %ecx, 4(%eax)
    .else
-   GET_VREG rINST, rINST                  # rINST <- v[A]
-   \store    \rINST_reg, (%eax,%ecx,1)
+     GET_VREG rINST, rINST                  # rINST <- v[A]
+     \store    \rINST_reg, (%eax,%ecx,1)
    .endif
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
@@ -1541,12 +1541,12 @@ END_FUNCTION \name
    jne 6f
 5:
    .if \wide
-   addl %ecx, %eax
-   GET_WIDE_FP_VREG %xmm0, rINST
-   movsd %xmm0, (%eax)
+     addl %ecx, %eax
+     GET_WIDE_FP_VREG %xmm0, rINST
+     movsd %xmm0, (%eax)
    .else
-   GET_VREG rINST, rINST                  # rINST <- v[A]
-   \store    \rINST_reg, (%eax,%ecx,1)
+     GET_VREG rINST, rINST                  # rINST <- v[A]
+     \store    \rINST_reg, (%eax,%ecx,1)
    .endif
    lock addl $$0, (%esp)
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
@@ -1567,12 +1567,12 @@ END_FUNCTION \name
    je      common_errNullObject
    andb    $$0xf, rINSTbl                  # rINST <- A
    .if \wide
-   addl %ecx, %eax
-   GET_WIDE_FP_VREG %xmm0, rINST
-   movsd %xmm0, (%eax)
+     addl %ecx, %eax
+     GET_WIDE_FP_VREG %xmm0, rINST
+     movsd %xmm0, (%eax)
    .else
-   GET_VREG rINST, rINST                  # rINST <- v[A]
-   \store \rINST_reg, (%ecx,%eax,1)
+     GET_VREG rINST, rINST                  # rINST <- v[A]
+     \store \rINST_reg, (%ecx,%eax,1)
    .endif
 .endm
 
@@ -1612,14 +1612,14 @@ END_FUNCTION \name
    je      common_errNullObject
    andb    $$0xf,rINSTbl                   # rINST <- A
    .if \wide
-   addl %ecx, %eax
-   \load (%eax), %ecx
-   SET_VREG %ecx, rINST
-   \load 4(%eax), %ecx
-   SET_VREG_HIGH %ecx, rINST
+     addl %ecx, %eax
+     \load (%eax), %ecx
+     SET_VREG %ecx, rINST
+     \load 4(%eax), %ecx
+     SET_VREG_HIGH %ecx, rINST
    .else
-   \load (%ecx,%eax,1), %eax
-   SET_VREG %eax, rINST                    # fp[A] <- value
+     \load (%ecx,%eax,1), %eax
+     SET_VREG %eax, rINST                    # fp[A] <- value
    .endif
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
@@ -1635,17 +1635,17 @@ END_FUNCTION \name
    jns 1b
    negl %eax
    .if !\wide
-   jmp 1b
+     jmp 1b
    .else
-   movl    rINST, %ecx                     # ecx <- BA
-   sarl    $$4, %ecx                       # ecx <- B
-   GET_VREG %ecx, %ecx                     # vB (object we're operating on)
-   testl   %ecx, %ecx                      # is object null?
-   je      common_errNullObject
-   andb    $$0xf,rINSTbl                   # rINST <- A
-   movsd (%eax, %ecx, 1), %xmm0
-   SET_WIDE_FP_VREG %xmm0, rINST
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
+     movl    rINST, %ecx                     # ecx <- BA
+     sarl    $$4, %ecx                       # ecx <- B
+     GET_VREG %ecx, %ecx                     # vB (object we're operating on)
+     testl   %ecx, %ecx                      # is object null?
+     je      common_errNullObject
+     andb    $$0xf,rINSTbl                   # rINST <- A
+     movsd (%eax, %ecx, 1), %xmm0
+     SET_WIDE_FP_VREG %xmm0, rINST
+     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
    .endif
 .endm
 

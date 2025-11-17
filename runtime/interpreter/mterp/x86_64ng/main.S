@@ -268,7 +268,7 @@ END_FUNCTION \name
     // Fetch outs size.
     movzwl CODE_ITEM_OUTS_SIZE_OFFSET(\code_item), \outs
     .if \load_ins
-    movzwl CODE_ITEM_INS_SIZE_OFFSET(\code_item), \ins
+      movzwl CODE_ITEM_INS_SIZE_OFFSET(\code_item), \ins
     .endif
     addq $$CODE_ITEM_INSNS_OFFSET, \code_item
 .endm
@@ -889,17 +889,17 @@ END_FUNCTION \name
    subq        MACRO_LITERAL(1), %r10
 1:
    .if \is_string_init
-   // Ignore the first argument
+     // Ignore the first argument
    .elseif \is_static
-   movl        %ecx, %eax
-   andq        MACRO_LITERAL(0x000f), %rax
-   GET_VREG_OBJECT %edx, %rax
-   movl        %edx, (rNEW_FP, %r10, 4)
-   GET_VREG    %edx, %rax
-   movl        %edx, (%r11, %r10, 4)
+     movl        %ecx, %eax
+     andq        MACRO_LITERAL(0x000f), %rax
+     GET_VREG_OBJECT %edx, %rax
+     movl        %edx, (rNEW_FP, %r10, 4)
+     GET_VREG    %edx, %rax
+     movl        %edx, (%r11, %r10, 4)
    .else
-   movl        %esi, (rNEW_FP, %r10, 4)
-   movl        %esi, (%r11, %r10, 4)
+     movl        %esi, (rNEW_FP, %r10, 4)
+     movl        %esi, (%r11, %r10, 4)
    .endif
 
 6:
@@ -917,12 +917,12 @@ END_FUNCTION \name
    // ecx is first register
    movq MACRO_LITERAL(-4), %r10
    .if \is_string_init
-   // Ignore the first argument
-   subl $$1, %edi
-   addl $$1, %ecx
+     // Ignore the first argument
+     subl $$1, %edi
+     addl $$1, %ecx
    .elseif !\is_static
-   subl $$1, %edi
-   addl $$1, %ecx
+     subl $$1, %edi
+     addl $$1, %ecx
    .endif
 
    testl %edi, %edi
@@ -945,10 +945,10 @@ END_FUNCTION \name
 
 2:
    .if \is_string_init
-   // Ignore first argument
+     // Ignore first argument
    .elseif !\is_static
-   movl        %esi, (rNEW_FP, %r10, 1)
-   movl        %esi, (%r11, %r10, 1)
+     movl        %esi, (rNEW_FP, %r10, 1)
+     movl        %esi, (%r11, %r10, 1)
    .endif
    movq rNEW_FP, rFP
    movq rNEW_REFS, rREFS
@@ -960,19 +960,19 @@ END_FUNCTION \name
    push %rdi
    push %rsi
    .if \is_polymorphic
-   movq 16(%rsp), %rdi
-   movq rPC, %rsi
-   call SYMBOL(NterpGetShortyFromInvokePolymorphic)
+     movq 16(%rsp), %rdi
+     movq rPC, %rsi
+     call SYMBOL(NterpGetShortyFromInvokePolymorphic)
    .elseif \is_custom
-   movq 16(%rsp), %rdi
-   movq rPC, %rsi
-   call SYMBOL(NterpGetShortyFromInvokeCustom)
+     movq 16(%rsp), %rdi
+     movq rPC, %rsi
+     call SYMBOL(NterpGetShortyFromInvokeCustom)
    .elseif \is_interface
-   movq 16(%rsp), %rdi
-   movzwl 2(rPC), %esi
-   call SYMBOL(NterpGetShortyFromMethodId)
+     movq 16(%rsp), %rdi
+     movzwl 2(rPC), %esi
+     call SYMBOL(NterpGetShortyFromMethodId)
    .else
-   call SYMBOL(NterpGetShorty)
+     call SYMBOL(NterpGetShorty)
    .endif
    pop %rsi
    pop %rdi
@@ -987,11 +987,11 @@ END_FUNCTION \name
    subq MACRO_LITERAL(8), %rsp
    mov %xmm0, (%rsp)
    .if \is_interface
-   movq 32(%rsp), %rdi
-   movzwl 2(rPC), %esi
-   call SYMBOL(NterpGetShortyFromMethodId)
+     movq 32(%rsp), %rdi
+     movzwl 2(rPC), %esi
+     call SYMBOL(NterpGetShortyFromMethodId)
    .else
-   call SYMBOL(NterpGetShorty)
+     call SYMBOL(NterpGetShorty)
    .endif
    mov (%rsp), %xmm0
    addq MACRO_LITERAL(8), %rsp
@@ -1029,28 +1029,28 @@ END_FUNCTION \name
 
 .macro COMMON_INVOKE_NON_RANGE is_static=0, is_interface=0, suffix="", is_string_init=0, is_polymorphic=0, is_custom=0
    .if \is_polymorphic
-   // We always go to compiled code for polymorphic calls.
+     // We always go to compiled code for polymorphic calls.
    .elseif \is_custom
-   // We always go to compiled code for custom calls.
+     // We always go to compiled code for custom calls.
    .else
      DO_ENTRY_POINT_CHECK .Lcall_compiled_code_\suffix
      .if \is_string_init
-     call nterp_to_nterp_string_init_non_range
+       call nterp_to_nterp_string_init_non_range
      .elseif \is_static
-     call nterp_to_nterp_static_non_range
+       call nterp_to_nterp_static_non_range
      .else
-     call nterp_to_nterp_instance_non_range
+       call nterp_to_nterp_instance_non_range
      .endif
      jmp .Ldone_return_\suffix
    .endif
 
 .Lcall_compiled_code_\suffix:
    .if \is_polymorphic
-   // No fast path for polymorphic calls.
+     // No fast path for polymorphic calls.
    .elseif \is_custom
-   // No fast path for custom calls.
+     // No fast path for custom calls.
    .elseif \is_string_init
-   // No fast path for string.init.
+     // No fast path for string.init.
    .else
      testl $$ART_METHOD_NTERP_INVOKE_FAST_PATH_FLAG, ART_METHOD_ACCESS_FLAGS_OFFSET(%rdi)
      je .Lfast_path_with_few_args_\suffix
@@ -1058,15 +1058,15 @@ END_FUNCTION \name
      movl %r9d, %ebp
      shrl MACRO_LITERAL(4), %ebp # Number of arguments
      .if \is_static
-     jz .Linvoke_fast_path_\suffix  # shl sets the Z flag
+       jz .Linvoke_fast_path_\suffix  # shl sets the Z flag
      .else
-     cmpl MACRO_LITERAL(1), %ebp
-     je .Linvoke_fast_path_\suffix
+       cmpl MACRO_LITERAL(1), %ebp
+       je .Linvoke_fast_path_\suffix
      .endif
      movzwl 4(rPC), %r11d
      cmpl MACRO_LITERAL(2), %ebp
      .if \is_static
-     jl .Lone_arg_fast_path_\suffix
+       jl .Lone_arg_fast_path_\suffix
      .endif
      je .Ltwo_args_fast_path_\suffix
      cmpl MACRO_LITERAL(4), %ebp
@@ -1091,10 +1091,10 @@ END_FUNCTION \name
      GET_VREG    %edx, %rdx
 .Lone_arg_fast_path_\suffix:
      .if \is_static
-     andl        MACRO_LITERAL(0xf), %r11d
-     GET_VREG    %esi, %r11
+       andl        MACRO_LITERAL(0xf), %r11d
+       GET_VREG    %esi, %r11
      .else
-     // First argument already in %esi.
+       // First argument already in %esi.
      .endif
 .Linvoke_fast_path_\suffix:
      call *ART_METHOD_QUICK_CODE_OFFSET_64(%rdi) // Call the method.
@@ -1106,22 +1106,22 @@ END_FUNCTION \name
      movzbl 1(rPC), %r9d
      shrl MACRO_LITERAL(4), %r9d # Number of arguments
      .if \is_static
-     cmpl MACRO_LITERAL(1), %r9d
-     jl .Linvoke_with_few_args_\suffix
-     jne .Lget_shorty_\suffix
-     movzwl 4(rPC), %r9d
-     andl MACRO_LITERAL(0xf), %r9d  // dex register of first argument
-     GET_VREG %esi, %r9
-     movd %esi, %xmm0
+       cmpl MACRO_LITERAL(1), %r9d
+       jl .Linvoke_with_few_args_\suffix
+       jne .Lget_shorty_\suffix
+       movzwl 4(rPC), %r9d
+       andl MACRO_LITERAL(0xf), %r9d  // dex register of first argument
+       GET_VREG %esi, %r9
+       movd %esi, %xmm0
      .else
-     cmpl MACRO_LITERAL(2), %r9d
-     jl .Linvoke_with_few_args_\suffix
-     jne .Lget_shorty_\suffix
-     movzwl 4(rPC), %r9d
-     shrl MACRO_LITERAL(4), %r9d
-     andl MACRO_LITERAL(0xf), %r9d  // dex register of second argument
-     GET_VREG %edx, %r9
-     movd %edx, %xmm0
+       cmpl MACRO_LITERAL(2), %r9d
+       jl .Linvoke_with_few_args_\suffix
+       jne .Lget_shorty_\suffix
+       movzwl 4(rPC), %r9d
+       shrl MACRO_LITERAL(4), %r9d
+       andl MACRO_LITERAL(0xf), %r9d  // dex register of second argument
+       GET_VREG %edx, %r9
+       movd %edx, %xmm0
      .endif
 .Linvoke_with_few_args_\suffix:
      // Check if the next instruction is move-result or move-result-wide.
@@ -1134,8 +1134,8 @@ END_FUNCTION \name
      ADVANCE_PC_FETCH_AND_GOTO_NEXT 3
 .Lget_shorty_and_invoke_\suffix:
      .if \is_interface
-     // Save interface method, used for conflict resolution, in a callee-save register.
-     movq %rax, %xmm12
+       // Save interface method, used for conflict resolution, in a callee-save register.
+       movq %rax, %xmm12
      .endif
      GET_SHORTY_SLOW_PATH rINSTq, \is_interface
      jmp .Lgpr_setup_finished_\suffix
@@ -1143,8 +1143,8 @@ END_FUNCTION \name
 
 .Lget_shorty_\suffix:
    .if \is_interface
-   // Save interface method, used for conflict resolution, in a callee-save register.
-   movq %rax, %xmm12
+     // Save interface method, used for conflict resolution, in a callee-save register.
+     movq %rax, %xmm12
    .endif
    GET_SHORTY rINSTq, \is_interface, \is_polymorphic, \is_custom
    // From this point:
@@ -1154,13 +1154,13 @@ END_FUNCTION \name
    leaq 1(rINSTq), %r9  // shorty + 1  ; ie skip return arg character
    movzwl 4(rPC), %r11d // arguments
    .if \is_string_init
-   shrq MACRO_LITERAL(4), %r11
-   movq $$1, %r10       // ignore first argument
+     shrq MACRO_LITERAL(4), %r11
+     movq $$1, %r10       // ignore first argument
    .elseif \is_static
-   movq $$0, %r10       // arg_index
+     movq $$0, %r10       // arg_index
    .else
-   shrq MACRO_LITERAL(4), %r11
-   movq $$1, %r10       // arg_index
+     shrq MACRO_LITERAL(4), %r11
+     movq $$1, %r10       // arg_index
    .endif
    LOOP_OVER_SHORTY_LOADING_XMMS xmm0, r11, r9, r10, .Lxmm_setup_finished_\suffix
    LOOP_OVER_SHORTY_LOADING_XMMS xmm1, r11, r9, r10, .Lxmm_setup_finished_\suffix
@@ -1171,15 +1171,15 @@ END_FUNCTION \name
    leaq 1(rINSTq), %r9  // shorty + 1  ; ie skip return arg character
    movzwl 4(rPC), %r11d // arguments
    .if \is_string_init
-   movq $$1, %r10       // ignore first argument
-   shrq MACRO_LITERAL(4), %r11
-   LOOP_OVER_SHORTY_LOADING_GPRS rsi, esi, r11, r9, r10, .Lgpr_setup_finished_\suffix
+     movq $$1, %r10       // ignore first argument
+     shrq MACRO_LITERAL(4), %r11
+     LOOP_OVER_SHORTY_LOADING_GPRS rsi, esi, r11, r9, r10, .Lgpr_setup_finished_\suffix
    .elseif \is_static
-   movq $$0, %r10       // arg_index
-   LOOP_OVER_SHORTY_LOADING_GPRS rsi, esi, r11, r9, r10, .Lgpr_setup_finished_\suffix
+     movq $$0, %r10       // arg_index
+     LOOP_OVER_SHORTY_LOADING_GPRS rsi, esi, r11, r9, r10, .Lgpr_setup_finished_\suffix
    .else
-   shrq MACRO_LITERAL(4), %r11
-   movq $$1, %r10       // arg_index
+     shrq MACRO_LITERAL(4), %r11
+     movq $$1, %r10       // arg_index
    .endif
    LOOP_OVER_SHORTY_LOADING_GPRS rdx, edx, r11, r9, r10, .Lgpr_setup_finished_\suffix
    LOOP_OVER_SHORTY_LOADING_GPRS rcx, ecx, r11, r9, r10, .Lgpr_setup_finished_\suffix
@@ -1187,12 +1187,12 @@ END_FUNCTION \name
    LOOP_OVER_SHORTY_LOADING_GPRS r9, r9d, r11, r9, r10, .Lgpr_setup_finished_\suffix
 .Lgpr_setup_finished_\suffix:
    .if \is_polymorphic
-   call SYMBOL(art_quick_invoke_polymorphic)
+     call SYMBOL(art_quick_invoke_polymorphic)
    .elseif \is_custom
-   call SYMBOL(art_quick_invoke_custom)
+     call SYMBOL(art_quick_invoke_custom)
    .else
       .if \is_interface
-      movq %xmm12, %rax
+        movq %xmm12, %rax
       .endif
       call *ART_METHOD_QUICK_CODE_OFFSET_64(%rdi) // Call the method.
    .endif
@@ -1208,59 +1208,59 @@ END_FUNCTION \name
 .Ldone_return_\suffix:
    /* resume execution of caller */
    .if \is_string_init
-   movzwl 4(rPC), %r11d // arguments
-   andq $$0xf, %r11
-   GET_VREG %esi, %r11
-   UPDATE_REGISTERS_FOR_STRING_INIT %esi, %eax
+     movzwl 4(rPC), %r11d // arguments
+     andq $$0xf, %r11
+     GET_VREG %esi, %r11
+     UPDATE_REGISTERS_FOR_STRING_INIT %esi, %eax
    .endif
 
    .if \is_polymorphic
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 4
+     ADVANCE_PC_FETCH_AND_GOTO_NEXT 4
    .else
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 3
+     ADVANCE_PC_FETCH_AND_GOTO_NEXT 3
    .endif
 .endm
 
 .macro COMMON_INVOKE_RANGE is_static=0, is_interface=0, suffix="", is_string_init=0, is_polymorphic=0, is_custom=0
    .if \is_polymorphic
-   // We always go to compiled code for polymorphic calls.
+     // We always go to compiled code for polymorphic calls.
    .elseif \is_custom
-   // We always go to compiled code for custom calls.
+     // We always go to compiled code for custom calls.
    .else
      DO_ENTRY_POINT_CHECK .Lcall_compiled_code_range_\suffix
      .if \is_string_init
-     call nterp_to_nterp_string_init_range
+       call nterp_to_nterp_string_init_range
      .elseif \is_static
-     call nterp_to_nterp_static_range
+       call nterp_to_nterp_static_range
      .else
-     call nterp_to_nterp_instance_range
+       call nterp_to_nterp_instance_range
      .endif
      jmp .Ldone_return_range_\suffix
    .endif
 
 .Lcall_compiled_code_range_\suffix:
    .if \is_polymorphic
-   // No fast path for polymorphic calls.
+     // No fast path for polymorphic calls.
    .elseif \is_custom
-   // No fast path for custom calls.
+     // No fast path for custom calls.
    .elseif \is_string_init
-   // No fast path for string.init.
+     // No fast path for string.init.
    .else
      testl $$ART_METHOD_NTERP_INVOKE_FAST_PATH_FLAG, ART_METHOD_ACCESS_FLAGS_OFFSET(%rdi)
      je .Lfast_path_with_few_args_range_\suffix
      movzbl 1(rPC), %r9d  // number of arguments
      .if \is_static
-     testl %r9d, %r9d
-     je .Linvoke_fast_path_range_\suffix
+       testl %r9d, %r9d
+       je .Linvoke_fast_path_range_\suffix
      .else
-     cmpl MACRO_LITERAL(1), %r9d
-     je .Linvoke_fast_path_range_\suffix
+       cmpl MACRO_LITERAL(1), %r9d
+       je .Linvoke_fast_path_range_\suffix
      .endif
      movzwl 4(rPC), %r11d  // dex register of first argument
      leaq (rFP, %r11, 4), %r11  // location of first dex register value
      cmpl MACRO_LITERAL(2), %r9d
      .if \is_static
-     jl .Lone_arg_fast_path_range_\suffix
+       jl .Lone_arg_fast_path_range_\suffix
      .endif
      je .Ltwo_args_fast_path_range_\suffix
      cmp MACRO_LITERAL(4), %r9d
@@ -1286,9 +1286,9 @@ END_FUNCTION \name
      movl 4(%r11), %edx
 .Lone_arg_fast_path_range_\suffix:
      .if \is_static
-     movl 0(%r11), %esi
+       movl 0(%r11), %esi
      .else
-     // First argument already in %esi.
+       // First argument already in %esi.
      .endif
 .Linvoke_fast_path_range_\suffix:
      call *ART_METHOD_QUICK_CODE_OFFSET_64(%rdi) // Call the method.
@@ -1299,20 +1299,20 @@ END_FUNCTION \name
      // is one argument, we can put it in both floating point and core register.
      movzbl 1(rPC), %r9d # Number of arguments
      .if \is_static
-     cmpl MACRO_LITERAL(1), %r9d
-     jl .Linvoke_with_few_args_range_\suffix
-     jne .Lget_shorty_range_\suffix
-     movzwl 4(rPC), %r9d  // Dex register of first argument
-     GET_VREG %esi, %r9
-     movd %esi, %xmm0
+       cmpl MACRO_LITERAL(1), %r9d
+       jl .Linvoke_with_few_args_range_\suffix
+       jne .Lget_shorty_range_\suffix
+       movzwl 4(rPC), %r9d  // Dex register of first argument
+       GET_VREG %esi, %r9
+       movd %esi, %xmm0
      .else
-     cmpl MACRO_LITERAL(2), %r9d
-     jl .Linvoke_with_few_args_range_\suffix
-     jne .Lget_shorty_range_\suffix
-     movzwl 4(rPC), %r9d
-     addl MACRO_LITERAL(1), %r9d  // dex register of second argument
-     GET_VREG %edx, %r9
-     movd %edx, %xmm0
+       cmpl MACRO_LITERAL(2), %r9d
+       jl .Linvoke_with_few_args_range_\suffix
+       jne .Lget_shorty_range_\suffix
+       movzwl 4(rPC), %r9d
+       addl MACRO_LITERAL(1), %r9d  // dex register of second argument
+       GET_VREG %edx, %r9
+       movd %edx, %xmm0
      .endif
 .Linvoke_with_few_args_range_\suffix:
      // Check if the next instruction is move-result or move-result-wide.
@@ -1325,8 +1325,8 @@ END_FUNCTION \name
      ADVANCE_PC_FETCH_AND_GOTO_NEXT 3
 .Lget_shorty_and_invoke_range_\suffix:
      .if \is_interface
-     // Save interface method, used for conflict resolution, in a callee-save register.
-     movq %rax, %xmm12
+       // Save interface method, used for conflict resolution, in a callee-save register.
+       movq %rax, %xmm12
      .endif
      GET_SHORTY_SLOW_PATH rINSTq, \is_interface
      jmp .Lgpr_setup_finished_range_\suffix
@@ -1334,8 +1334,8 @@ END_FUNCTION \name
 
 .Lget_shorty_range_\suffix:
    .if \is_interface
-   // Save interface method, used for conflict resolution, in a callee-saved register.
-   movq %rax, %xmm12
+     // Save interface method, used for conflict resolution, in a callee-saved register.
+     movq %rax, %xmm12
    .endif
    GET_SHORTY rINSTq, \is_interface, \is_polymorphic, \is_custom
    // From this point:
@@ -1345,13 +1345,13 @@ END_FUNCTION \name
    leaq 1(rINSTq), %r9  // shorty + 1  ; ie skip return arg character
    movzwl 4(rPC), %r10d // arg start index
    .if \is_string_init
-   addq $$1, %r10       // arg start index
-   movq $$1, %rbp       // index in stack
+     addq $$1, %r10       // arg start index
+     movq $$1, %rbp       // index in stack
    .elseif \is_static
-   movq $$0, %rbp       // index in stack
+     movq $$0, %rbp       // index in stack
    .else
-   addq $$1, %r10       // arg start index
-   movq $$1, %rbp       // index in stack
+     addq $$1, %r10       // arg start index
+     movq $$1, %rbp       // index in stack
    .endif
    LOOP_RANGE_OVER_SHORTY_LOADING_XMMS xmm0, r9, r10, rbp, .Lxmm_setup_finished_range_\suffix
    LOOP_RANGE_OVER_SHORTY_LOADING_XMMS xmm1, r9, r10, rbp, .Lxmm_setup_finished_range_\suffix
@@ -1366,15 +1366,15 @@ END_FUNCTION \name
    leaq 1(%rbx), %r11  // shorty + 1  ; ie skip return arg character
    movzwl 4(rPC), %r10d // arg start index
    .if \is_string_init
-   addq $$1, %r10       // arg start index
-   movq $$1, %rbp       // index in stack
-   LOOP_RANGE_OVER_SHORTY_LOADING_GPRS rsi, esi, r11, r10, rbp, .Lgpr_setup_finished_range_\suffix
+     addq $$1, %r10       // arg start index
+     movq $$1, %rbp       // index in stack
+     LOOP_RANGE_OVER_SHORTY_LOADING_GPRS rsi, esi, r11, r10, rbp, .Lgpr_setup_finished_range_\suffix
    .elseif \is_static
-   movq $$0, %rbp // index in stack
-   LOOP_RANGE_OVER_SHORTY_LOADING_GPRS rsi, esi, r11, r10, rbp, .Lgpr_setup_finished_range_\suffix
+     movq $$0, %rbp // index in stack
+     LOOP_RANGE_OVER_SHORTY_LOADING_GPRS rsi, esi, r11, r10, rbp, .Lgpr_setup_finished_range_\suffix
    .else
-   addq $$1, %r10       // arg start index
-   movq $$1, %rbp // index in stack
+     addq $$1, %r10       // arg start index
+     movq $$1, %rbp // index in stack
    .endif
    LOOP_RANGE_OVER_SHORTY_LOADING_GPRS rdx, edx, r11, r10, rbp, .Lgpr_setup_finished_range_\suffix
    LOOP_RANGE_OVER_SHORTY_LOADING_GPRS rcx, ecx, r11, r10, rbp, .Lgpr_setup_finished_range_\suffix
@@ -1384,13 +1384,13 @@ END_FUNCTION \name
 
 .Lgpr_setup_finished_range_\suffix:
    .if \is_polymorphic
-   call SYMBOL(art_quick_invoke_polymorphic)
+     call SYMBOL(art_quick_invoke_polymorphic)
    .elseif \is_custom
-   call SYMBOL(art_quick_invoke_custom)
+     call SYMBOL(art_quick_invoke_custom)
    .else
      .if \is_interface
-     // Set the hidden argument for conflict resolution.
-     movq %xmm12, %rax
+       // Set the hidden argument for conflict resolution.
+       movq %xmm12, %rax
      .endif
      call *ART_METHOD_QUICK_CODE_OFFSET_64(%rdi) // Call the method.
    .endif
@@ -1401,15 +1401,15 @@ END_FUNCTION \name
    /* resume execution of caller */
 .Ldone_return_range_\suffix:
    .if \is_string_init
-   movzwl 4(rPC), %r11d // arguments
-   GET_VREG %esi, %r11
-   UPDATE_REGISTERS_FOR_STRING_INIT %esi, %eax
+     movzwl 4(rPC), %r11d // arguments
+     GET_VREG %esi, %r11
+     UPDATE_REGISTERS_FOR_STRING_INIT %esi, %eax
    .endif
 
    .if \is_polymorphic
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 4
+     ADVANCE_PC_FETCH_AND_GOTO_NEXT 4
    .else
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 3
+     ADVANCE_PC_FETCH_AND_GOTO_NEXT 3
    .endif
 .Lreturn_range_double_\suffix:
     movq %xmm0, %rax
@@ -1430,11 +1430,11 @@ END_FUNCTION \name
    jne 3f
 4:
    .if \wide
-   movq (%eax,%edx,1), %rax
-   SET_WIDE_VREG %rax, rINSTq              # fp[A] <- value
+     movq (%eax,%edx,1), %rax
+     SET_WIDE_VREG %rax, rINSTq              # fp[A] <- value
    .else
-   \load (%eax, %edx, 1), %eax
-   SET_VREG %eax, rINSTq            # fp[A] <- value
+     \load (%eax, %edx, 1), %eax
+     SET_VREG %eax, rINSTq            # fp[A] <- value
    .endif
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
@@ -1466,9 +1466,9 @@ END_FUNCTION \name
    jne 3f
 4:
    .if \wide
-   GET_WIDE_VREG rINSTq, rINSTq           # rINST <- v[A]
+     GET_WIDE_VREG rINSTq, rINSTq           # rINST <- v[A]
    .else
-   GET_VREG rINST, rINSTq                  # rINST <- v[A]
+     GET_VREG rINST, rINSTq                  # rINST <- v[A]
    .endif
    \store    \rINST_reg, (%rax,%rdx,1)
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
@@ -1492,9 +1492,9 @@ END_FUNCTION \name
    jne 6f
 5:
    .if \wide
-   GET_WIDE_VREG rINSTq, rINSTq           # rINST <- v[A]
+     GET_WIDE_VREG rINSTq, rINSTq           # rINST <- v[A]
    .else
-   GET_VREG rINST, rINSTq                  # rINST <- v[A]
+     GET_VREG rINST, rINSTq                  # rINST <- v[A]
    .endif
    \store    \rINST_reg, (%rax,%rdx,1)
    lock addl $$0, (%rsp)
@@ -1516,9 +1516,9 @@ END_FUNCTION \name
    je      common_errNullObject
    andb    $$0xf, rINSTbl                  # rINST <- A
    .if \wide
-   GET_WIDE_VREG rINSTq, rINSTq              # rax<- fp[A]/fp[A+1]
+     GET_WIDE_VREG rINSTq, rINSTq              # rax<- fp[A]/fp[A+1]
    .else
-   GET_VREG rINST, rINSTq                  # rINST <- v[A]
+     GET_VREG rINST, rINSTq                  # rINST <- v[A]
    .endif
    \store \rINST_reg, (%rcx,%rax,1)
 .endm
@@ -1559,11 +1559,11 @@ END_FUNCTION \name
    je      common_errNullObject
    andb    $$0xf,rINSTbl                   # rINST <- A
    .if \wide
-   movq (%rcx,%rax,1), %rax
-   SET_WIDE_VREG %rax, rINSTq              # fp[A] <- value
+     movq (%rcx,%rax,1), %rax
+     SET_WIDE_VREG %rax, rINSTq              # fp[A] <- value
    .else
-   \load (%rcx,%rax,1), %eax
-   SET_VREG %eax, rINSTq                   # fp[A] <- value
+     \load (%rcx,%rax,1), %eax
+     SET_VREG %eax, rINSTq                   # fp[A] <- value
    .endif
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
