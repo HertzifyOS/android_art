@@ -1664,6 +1664,7 @@
                 "2392-virtual-thread-pinning-jni",
                 "2393-virtual-thread-pinning-monitor",
                 "2394-continuation-yields",
+                "2395-virtual-thread-class-initializer",
                 "2395-virtual-thread-reentrantlock",
                 "2395-virtual-thread-sleep-api"],
       "variant": "jvm",

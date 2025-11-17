@@ -18,9 +18,9 @@
 
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     $instr                              @ s2<- op
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_FLOAT s2, r4, lr           @ vAA<- s2
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def fbinop2addr(instr=""):
     /*
@@ -39,9 +39,9 @@
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     GET_VREG_FLOAT_BY_ADDR s0, r4       @ s0<- vA
     $instr                              @ s2<- op
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_FLOAT_BY_ADDR s2, r4       @ vAA<- s2 No need to clear as it's 2addr
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def fbinopWide(instr=""):
     /*
@@ -63,10 +63,10 @@
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     $instr                              @ d2<- op
     CLEAR_SHADOW_PAIR r4, ip, lr        @ Zero shadow regs
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     VREG_INDEX_TO_ADDR r4, r4           @ r4<- &vAA
     SET_VREG_DOUBLE_BY_ADDR d2, r4      @ vAA<- d2
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def fbinopWide2addr(instr=""):
     /*
@@ -87,9 +87,9 @@
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     GET_VREG_DOUBLE_BY_ADDR d0, r4      @ d0<- vA
     $instr                              @ d2<- op
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_DOUBLE_BY_ADDR d2, r4      @ vAA<- d2
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def funop(instr=""):
     /*
@@ -105,9 +105,9 @@
     ubfx    r4, rINST, #8, #4           @ r4<- A
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     $instr                              @ s1<- op
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_FLOAT s1, r4, lr           @ vA<- s1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def funopNarrower(instr=""):
     /*
@@ -123,9 +123,9 @@
     ubfx    r4, rINST, #8, #4           @ r4<- A
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     $instr                              @ s0<- op
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_FLOAT s0, r4, lr           @ vA<- s0
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def funopWider(instr=""):
     /*
@@ -142,10 +142,10 @@
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     $instr                              @ d0<- op
     CLEAR_SHADOW_PAIR r4, ip, lr        @ Zero shadow regs
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     VREG_INDEX_TO_ADDR r4, r4           @ r4<- &vA
     SET_VREG_DOUBLE_BY_ADDR d0, r4      @ vA<- d0
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_add_double():
 %  fbinopWide(instr="faddd   d2, d0, d1")
@@ -188,13 +188,14 @@
     vcmpe.f64 d0, d1                    @ compare (vBB, vCC)
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     mvn     r0, #0                      @ r0<- -1 (default)
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     fmstat
     it      hi
     movhi   r0, #1                      @ (greater than, or unordered) r0<- 1
+    it      eq
     moveq   r0, #0                      @ (equal) r0<- 0
     SET_VREG r0, r4                     @ vAA<- r0
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_cmpg_float():
     /*
@@ -225,13 +226,14 @@
     vcmpe.f32 s0, s1                    @ compare (vBB, vCC)
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     mvn     r0, #0                      @ r0<- -1 (default)
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     fmstat
     it      hi
     movhi   r0, #1                      @ (greater than, or unordered) r0<- 1
+    it      eq
     moveq   r0, #0                      @ (equal) r0<- 0
     SET_VREG r0, r4                     @ vAA<- r0
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_cmpl_double():
     /*
@@ -262,14 +264,14 @@
     vcmpe.f64 d0, d1                    @ compare (vBB, vCC)
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     mvn     r0, #0                      @ r0<- -1 (default)
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     fmstat                              @ export status flags
     it gt
     movgt   r0, #1                      @ (greater than) r1<- 1
     it eq
     moveq   r0, #0                      @ (equal) r1<- 0
     SET_VREG r0, r4                     @ vAA<- r0
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_cmpl_float():
     /*
@@ -300,14 +302,14 @@
     vcmpe.f32  s0, s1                   @ compare (vBB, vCC)
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     mvn     r0, #0                      @ r0<- -1 (default)
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     fmstat                              @ export status flags
     it gt
     movgt   r0, #1                      @ (greater than) r1<- 1
     it eq
     moveq   r0, #0                      @ (equal) r1<- 0
     SET_VREG r0, r4                     @ vAA<- r0
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_div_double():
 %  fbinopWide(instr="fdivd   d2, d0, d1")
@@ -366,11 +368,12 @@
     vldr            d3, constval$opcode
     vmla.f64        d2, d1, d3          @ d2<- vAAh*2^32 + vAAl
 
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_DOUBLE_BY_ADDR d2, r4      @ vAA<- d2
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
     /* literal pool helper */
+    .balign 8
 constval${opcode}:
     .8byte          0x41f0000000000000
 

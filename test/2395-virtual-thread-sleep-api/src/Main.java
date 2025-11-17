@@ -201,7 +201,7 @@ public class Main {
     private static class UnmountListener implements VirtualThread.JvmtiEventsListener {
 
         private static final int STATE_NOT_UNMOUNTED = 0;
-        // When the virtual thread is pinned or terminates.
+        // Likely when the virtual thread terminates.
         private static final int STATE_UNMOUNTED = 1;
         // When the virtual thread is parked, not pinned.
         private static final int STATE_PARKED_AND_UNMOUNTED = 2;

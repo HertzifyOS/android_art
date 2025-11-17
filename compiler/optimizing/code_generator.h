@@ -206,7 +206,7 @@ class CodeGenerator : public DeletableArenaObject<kArenaAllocCodeGenerator> {
     // Note that this follows the current calling convention.
     return GetFrameSize()
         + static_cast<size_t>(InstructionSetPointerSize(GetInstructionSet()))  // Art method
-        + parameter->GetIndex() * kVRegSize;
+        + parameter->GetInputVRegIndex() * kVRegSize;
   }
 
   virtual void Initialize() = 0;

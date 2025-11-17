@@ -5,7 +5,10 @@ package art
 import (
 	"android/soong/android"
 	"bytes"
+	"fmt"
 	"github.com/google/blueprint/gobtools"
+	"github.com/google/blueprint/proptools"
+	"reflect"
 )
 
 // begin of art.go
@@ -63,6 +66,65 @@ func (r testInstallInfo) Encode(ctx gobtools.EncContext, buf *bytes.Buffer) erro
 		}
 	}
 	return err
+}
+
+func (r testInstallInfo) CustomHash(hasher *proptools.Hasher) error {
+	hasher.WriteString(":art.testInstallInfo")
+	hasher.WriteInt(2)
+	hasher.WriteString(":.map[string]android.Path")
+	hasher.WriteInt(len(r.Testcases))
+	val1 := make([]string, 0, len(r.Testcases))
+	for val3 := range r.Testcases {
+		val1 = append(val1, val3)
+	}
+	proptools.SortOrdered(val1)
+	for _, val2 := range val1 {
+		hasher.WriteString(":.string")
+		hasher.WriteString(val2)
+		hasher.WriteString(":art.android.Path")
+		val4 := r.Testcases[val2] == nil
+		if val4 {
+			hasher.WriteByte(0)
+		} else {
+			if v := reflect.ValueOf(r.Testcases[val2]); v.Kind() == reflect.Ptr {
+				if v.IsNil() {
+					panic(fmt.Errorf("nil pointer is not supported in interface"))
+				} else {
+					val5 := r.Testcases[val2] == nil
+					if val5 {
+						hasher.WriteByte(0)
+					} else {
+						val6 := func(hasher *proptools.Hasher) error {
+							return r.Testcases[val2].(proptools.CustomHash).CustomHash(hasher)
+						}
+						if err := proptools.HashReference(hasher, uintptr(v.Pointer()), val6); err != nil {
+							return err
+						}
+					}
+				}
+			} else {
+				r.Testcases[val2].(proptools.CustomHash).CustomHash(hasher)
+			}
+		}
+	}
+	hasher.WriteString(":.map[string][]string")
+	hasher.WriteInt(len(r.TestMap))
+	val7 := make([]string, 0, len(r.TestMap))
+	for val9 := range r.TestMap {
+		val7 = append(val7, val9)
+	}
+	proptools.SortOrdered(val7)
+	for _, val8 := range val7 {
+		hasher.WriteString(":.string")
+		hasher.WriteString(val8)
+		hasher.WriteString(":.[]string")
+		hasher.WriteInt(len(r.TestMap[val8]))
+		for val10 := 0; val10 < len(r.TestMap[val8]); val10++ {
+			hasher.WriteString(":.string")
+			hasher.WriteString(r.TestMap[val8][val10])
+		}
+	}
+	return nil
 }
 
 func (r *testInstallInfo) Decode(ctx gobtools.EncContext, buf *bytes.Reader) error {

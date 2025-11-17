@@ -994,7 +994,11 @@ class OptimizingUnitTestHelper {
   // Creates a parameter. The instruction is automatically added to the entry-block.
   HParameterValue* MakeParam(DataType::Type type, std::optional<dex::TypeIndex> ti = std::nullopt) {
     HParameterValue* val = new (GetAllocator()) HParameterValue(
-        graph_->GetDexFile(), ti ? *ti : DefaultTypeIndexForType(type), param_count_++, type);
+        graph_->GetDexFile(),
+        ti ? *ti : DefaultTypeIndexForType(type),
+        param_input_vreg_index_,
+        type);
+    param_input_vreg_index_ += DataType::Is64BitType(type) ? 2u : 1u;
     AddOrInsertInstruction(graph_->GetEntryBlock(), val);
     return val;
   }
@@ -1042,7 +1046,7 @@ class OptimizingUnitTestHelper {
   HBasicBlock* entry_block_;
   HBasicBlock* exit_block_;
 
-  size_t param_count_ = 0;
+  size_t param_input_vreg_index_ = 0;
   size_t class_idx_ = 42;
   uint32_t method_idx_ = 100;
 

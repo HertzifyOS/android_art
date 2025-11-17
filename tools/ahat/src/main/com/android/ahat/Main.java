@@ -187,9 +187,10 @@ public class Main {
     server.createContext("/object", new AhatHttpHandler(new ObjectHandler(ahat)));
     server.createContext("/objects", new AhatHttpHandler(new ObjectsHandler(ahat)));
     server.createContext("/site", new AhatHttpHandler(new SiteHandler(ahat)));
-    server.createContext("/bitmap", new BitmapHandler(ahat));
-    server.createContext("/array", new ArrayHandler(ahat));
-    server.createContext("/style.css", new StaticHandler("etc/style.css", "text/css"));
+    server.createContext("/bitmap", new AhatHttpHandler(new BitmapHandler(ahat)));
+    server.createContext("/array", new AhatHttpHandler(new ArrayHandler(ahat)));
+    server.createContext(
+        "/style.css", new AhatHttpHandler(new StaticHandler("etc/style.css", "text/css")));
     server.setExecutor(Executors.newFixedThreadPool(1));
     System.out.println("Server started on http://localhost:" + port);
 

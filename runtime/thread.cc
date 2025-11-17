@@ -3302,13 +3302,18 @@ static ObjPtr<mirror::StackTraceElement> CreateStackTraceElement(
       soa.Self()->AssertPendingOOMException();
       return nullptr;
     }
+    char source_file_buffer[64];
     const char* source_file = method->GetDeclaringClassSourceFile();
-    if (source_file != nullptr) {
-      source_name_object.Assign(mirror::String::AllocFromModifiedUtf8(soa.Self(), source_file));
-      if (source_name_object == nullptr) {
-        soa.Self()->AssertPendingOOMException();
-        return nullptr;
-      }
+    if (source_file == nullptr) {
+      // Create artificial filename based on SHA1 of the dex file.
+      DexFile::Sha1 hash = method->GetDeclaringClass()->GetDexFile().GetSha1();
+      snprintf(source_file_buffer, sizeof(source_file_buffer), "dex-id-%s", hash.ToHex().data());
+      source_file = source_file_buffer;
+    }
+    source_name_object.Assign(mirror::String::AllocFromModifiedUtf8(soa.Self(), source_file));
+    if (source_name_object == nullptr) {
+      soa.Self()->AssertPendingOOMException();
+      return nullptr;
     }
     if (line_number == -1) {
       // Make the line_number field of StackTraceElement hold the dex pc.

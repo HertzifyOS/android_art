@@ -127,7 +127,6 @@ using VIXLUInt32Literal = vixl::aarch32::Literal<uint32_t>;
   V(MathCopySignDouble)                                                    \
   V(MathRoundDouble) /* Could be done by changing rounding mode, maybe? */ \
   V(UnsafeCASLong)   /* High register pressure */                          \
-  V(SystemArrayCopyChar)                                                   \
   V(LongDivideUnsigned)                                                    \
   V(IntegerRemainderUnsigned)                                              \
   V(LongRemainderUnsigned)                                                 \
@@ -164,8 +163,6 @@ using VIXLUInt32Literal = vixl::aarch32::Literal<uint32_t>;
   V(StringBuilderAppendDouble)                                             \
   V(StringBuilderLength)                                                   \
   V(StringBuilderToString)                                                 \
-  V(SystemArrayCopyByte)                                                   \
-  V(SystemArrayCopyInt)                                                    \
   V(UnsafeArrayBaseOffset)                                                 \
   /* 1.8 */                                                                \
   V(MathFmaDouble)                                                         \
@@ -602,16 +599,25 @@ class CodeGeneratorARMVIXL : public CodeGenerator {
   // Helper method to move a 32-bit value between two locations.
   void Move32(Location destination, Location source);
 
+  void Load(DataType::Type type,
+            vixl32::Register dst,
+            const vixl32::MemOperand& src,
+            vixl::aarch32::Condition cond = vixl::aarch32::al);
+  void Store(DataType::Type type,
+             vixl32::Register src,
+             const vixl32::MemOperand& dst,
+             vixl::aarch32::Condition cond = vixl::aarch32::al);
+
   void LoadFromShiftedRegOffset(DataType::Type type,
                                 Location out_loc,
-                                vixl::aarch32::Register base,
-                                vixl::aarch32::Register reg_index,
-                                vixl::aarch32::Condition cond = vixl::aarch32::al);
+                                vixl32::Register base,
+                                vixl32::Register reg_index,
+                                vixl32::Condition cond = vixl::aarch32::al);
   void StoreToShiftedRegOffset(DataType::Type type,
                                Location out_loc,
-                               vixl::aarch32::Register base,
-                               vixl::aarch32::Register reg_index,
-                               vixl::aarch32::Condition cond = vixl::aarch32::al);
+                               vixl32::Register base,
+                               vixl32::Register reg_index,
+                               vixl32::Condition cond = vixl::aarch32::al);
 
   // Generate code to invoke a runtime entry point.
   void InvokeRuntime(QuickEntrypointEnum entrypoint,

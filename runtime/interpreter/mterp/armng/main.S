@@ -62,7 +62,10 @@
  *   r7  rINST     first 16-bit code unit of current instruction
  *   r8  rMR       marking register
  *   r9  rSELF     self (Thread) pointer
- *   r10 rIBASE    interpreted instruction base pointer, used for computed goto
+ *   r10 rIBASE    interpreted instruction handler pointer, used for computed goto;
+ *                 we initialize this register roughly (except the replacable bits) with
+ *                 the 32-KiB aligned address of one of the `nterp*_op_nop` symbols and
+ *                 then keep inserting opcodes to bits 14:7 to form the handler address.
  *   r11 rPC       interpreted program counter, used for fetching instructions
  *
  *   r4, ip, and lr can be used as temporary
@@ -168,18 +171,17 @@
 .endm
 
 /*
- * Put the instruction's opcode field into the specified register.
+ * Insert the instruction's opcode field into the rIBASE register.
  */
-.macro GET_INST_OPCODE reg
-    and     \reg, rINST, #255
+.macro PREPARE_OPCODE_DISPATCH
+    bfi     rIBASE, rINST, #7, #8
 .endm
 
 /*
- * Begin executing the opcode in _reg.  Clobbers reg
+ * Begin executing the opcode.
  */
-
-.macro GOTO_OPCODE reg
-    add     pc, rIBASE, \reg, lsl #${handler_size_bits}
+.macro GOTO_OPCODE
+    bx      rIBASE
 .endm
 
 /*
@@ -243,7 +245,7 @@
 
 // An assembly entry for nterp.
 .macro OAT_ENTRY name
-    .arm
+    .thumb
     .type \name, #function
     .hidden \name
     .global \name
@@ -256,7 +258,7 @@
 .endm
 
 .macro NAME_START name
-    .arm
+    .thumb
     .type \name, #function
     .hidden \name  // Hide this as a global symbol, so we do not incur plt calls.
     .global \name
@@ -303,8 +305,8 @@ END \name
     cmp rINST, #0
     ble NterpHotnessCheck
     FETCH_INST                          // load rINST
-    GET_INST_OPCODE ip                  // extract opcode from rINST
-    GOTO_OPCODE ip                      // jump to next instruction
+    PREPARE_OPCODE_DISPATCH             // insert opcode to rIBASE
+    GOTO_OPCODE                         // jump to next instruction
 .endm
 
 .macro TEST_IF_MARKING label
@@ -395,8 +397,8 @@ END \name
     DO_SUSPEND_CHECK continue_label=2f
 2:
     FETCH_INST
-    GET_INST_OPCODE ip
-    GOTO_OPCODE ip
+    PREPARE_OPCODE_DISPATCH
+    GOTO_OPCODE
 3:
     CHECK_AND_UPDATE_SHARED_MEMORY_METHOD if_hot=4f, if_not_hot=1b
 4:
@@ -646,8 +648,7 @@ END \name
    // On entry, the method is r0, the instance is r1
    ldr r2, .Lfetch_nterp_\name
 .Lfetch_location_\name:
-   // Note that this won't work for thumb.
-   sub r2, pc, r2
+   add r2, r2, pc
    ldr r3, [r0, #ART_METHOD_QUICK_CODE_OFFSET_32]
    cmp r2, r3
    bne  \call_compiled_code
@@ -893,7 +894,7 @@ END \name
      .endif
      b .Ldone_return_\suffix
 .Lfetch_nterp_\suffix:
-    .word   (.Lfetch_location_\suffix+8) - ExecuteNterpImpl
+    .word   (ExecuteNterpImpl + /* thumb mode */ 1) - (.Lfetch_location_\suffix + 4)
    .endif
 
 .Lcall_compiled_code_\suffix:
@@ -953,8 +954,8 @@ END \name
      ldr lr, [r0, #ART_METHOD_QUICK_CODE_OFFSET_32]
      blx lr
      FETCH_ADVANCE_INST 3
-     GET_INST_OPCODE ip
-     GOTO_OPCODE ip
+     PREPARE_OPCODE_DISPATCH
+     GOTO_OPCODE
 
 .Lfast_path_with_few_args_\suffix:
      // Fast path when we have zero or one argument (modulo 'this'). If there
@@ -992,8 +993,8 @@ END \name
      ldr lr, [r0, #ART_METHOD_QUICK_CODE_OFFSET_32]
      blx lr
      FETCH_ADVANCE_INST 3
-     GET_INST_OPCODE ip
-     GOTO_OPCODE ip
+     PREPARE_OPCODE_DISPATCH
+     GOTO_OPCODE
 .Lget_shorty_and_invoke_\suffix:
      .if \is_interface
      // Save hidden argument.
@@ -1090,8 +1091,8 @@ END \name
    .else
    FETCH_ADVANCE_INST 3
    .endif
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
+   PREPARE_OPCODE_DISPATCH
+   GOTO_OPCODE
 .endm
 
 // Puts the next int/long/object argument in the expected register,
@@ -1252,8 +1253,8 @@ END \name
      ldr lr, [r0, #ART_METHOD_QUICK_CODE_OFFSET_32]
      blx lr
      FETCH_ADVANCE_INST 3
-     GET_INST_OPCODE ip
-     GOTO_OPCODE ip
+     PREPARE_OPCODE_DISPATCH
+     GOTO_OPCODE
 
 .Lfast_path_with_few_args_range_\suffix:
      // Fast path when we have zero or one argument (modulo 'this'). If there
@@ -1289,8 +1290,8 @@ END \name
      ldr lr, [r0, #ART_METHOD_QUICK_CODE_OFFSET_32]
      blx lr
      FETCH_ADVANCE_INST 3
-     GET_INST_OPCODE ip
-     GOTO_OPCODE ip
+     PREPARE_OPCODE_DISPATCH
+     GOTO_OPCODE
 .Lget_shorty_and_invoke_range_\suffix:
      .if \is_interface
      // Save hidden argument.
@@ -1382,8 +1383,8 @@ END \name
    .else
    FETCH_ADVANCE_INST 3
    .endif
-   GET_INST_OPCODE ip
-   GOTO_OPCODE ip
+   PREPARE_OPCODE_DISPATCH
+   GOTO_OPCODE
 .endm
 
 .macro POISON_HEAP_REF_IF_OBJECT is_object, rRef
@@ -1669,11 +1670,31 @@ OAT_ENTRY ExecuteNterpImpl
     // r8 was used for setting up the frame, restore it now.
     REFRESH_MARKING_REGISTER
 .Lexecute_instructions:
-    // Set rIBASE
-    adr rIBASE, artNterpAsmInstructionStart
+    // Prepare rIBASE.
+    //
+    // A full set of opcode handlers has 32KiB. We can quickly construct the handler address by
+    // inserting the opcode from the low 8 bits of the 16-bit instruction into bits 14:7 of a
+    // register holding a 32KiB-aligned start of the handlers. However, with 4KiB pages,
+    // `libart.so` is loaded only on a 4KiB-aligned address. Therefore we emit eight sets of nterp
+    // handlers, 36KiB apart, and one of them starts at a 32KiB-aligned address. We fill the 4KiB
+    // gaps with slow-path code. The bits 14:12 of the last hander set address tell us how many
+    // times we need to subtract the 36KiB distance to get the address of the aligned handler set,
+    //     nterp7_op_nop - ((nterp7_op_nop >> 12) & 7) * 36KiB .
+    // To shorten the initialization sequence, we subtract only 32KiB per handler set as the
+    // remaining 4KiB only clears bits 14:12 which shall be replaced by the opcode anyway.
+#if NTERP_HANDLER_SIZE_LOG2 != 7
+#error "Unexpected handler size."
+#endif
+    ldr rIBASE, #.LrIBASE_init_diff
+.LrIBASE_init_add_pc:
+    add rIBASE, pc
+    and ip, rIBASE, #0x7000
+    sub rIBASE, rIBASE, ip, lsl #3
     /* start executing the instruction at rPC */
     START_EXECUTING_INSTRUCTIONS
     /* NOTE: no fallthrough */
+.LrIBASE_init_diff:
+    .word (nterp7_op_nop + /* thumb mode */ 1) - (.LrIBASE_init_add_pc + 4)
     // cfi info continues, and covers the whole nterp implementation.
     SIZE ExecuteNterpImpl
 
@@ -1686,9 +1707,7 @@ OAT_ENTRY ExecuteNterpImpl
    ubfx     lr, rPC, #THREAD_INTERPRETER_CACHE_KEY_LOW_BIT, #THREAD_INTERPRETER_CACHE_SIZE_LOG2
                                            // entry index
    add      ip, ip, lr, lsl #3             // entry address within the cache
-   // In T32, we would use `ldrd ip, \dest_reg, [ip]`
-   ldr      ${dest_reg}, [ip, #4]          // value (offset)
-   ldr      ip, [ip]                       // entry key (pc)
+   ldrd     ip, ${dest_reg}, [ip]          // entry key (pc), value (field/method/etc.)
    cmp      ip, rPC
    bne      ${miss_label}
 
@@ -1770,8 +1789,8 @@ NterpHotnessCheck:
     DO_SUSPEND_CHECK continue_label=2f
 2:
     FETCH_INST                          // load rINST
-    GET_INST_OPCODE ip                  // extract opcode from rINST
-    GOTO_OPCODE ip                      // jump to next instruction
+    PREPARE_OPCODE_DISPATCH             // insert opcode to rIBASE
+    GOTO_OPCODE                         // jump to next instruction
 
 3:
     CHECK_AND_UPDATE_SHARED_MEMORY_METHOD if_hot=4f, if_not_hot=1b
@@ -1964,34 +1983,48 @@ END nterp_deliver_pending_exception
 // gen_mterp.py will inline the following definitions
 // within [ExecuteNterpImpl, EndExecuteNterpImpl).
 %def instruction_end():
-
-    .type artNterpAsmInstructionEnd, #function
-    .hidden artNterpAsmInstructionEnd
-    .global artNterpAsmInstructionEnd
+%   prefix_number = int(re.sub(r"nterp([0-7])_", r"\1", opcode_name_prefix))
+%   if prefix_number == 7:
+      .type artNterpAsmInstructionEnd, #function
+      .hidden artNterpAsmInstructionEnd
+      .global artNterpAsmInstructionEnd
 artNterpAsmInstructionEnd:
-    // artNterpAsmInstructionEnd is used as landing pad for exception handling.
-    FETCH_INST
-    GET_INST_OPCODE ip
-    GOTO_OPCODE ip
+      // artNterpAsmInstructionEnd is used as landing pad for exception handling.
+      FETCH_INST
+      PREPARE_OPCODE_DISPATCH
+      GOTO_OPCODE
+%   #endif
 
 %def instruction_start():
+%   prefix_number = int(re.sub(r"nterp([0-7])_", r"\1", opcode_name_prefix))
+%   if prefix_number == 0:
+      .type artNterpAsmInstructionStart, #function
+      .hidden artNterpAsmInstructionStart
+      .global artNterpAsmInstructionStart
+artNterpAsmInstructionStart = nterp0_op_nop
+      .text
+      .balign 4096
+%   else:
+%     prev_op_nop = "nterp{}_op_nop".format(int(prefix_number) - 1)
+      .org ${prev_op_nop} + 36864
+%   #endif
 
-    .type artNterpAsmInstructionStart, #function
-    .hidden artNterpAsmInstructionStart
-    .global artNterpAsmInstructionStart
-artNterpAsmInstructionStart = .L_op_nop
-    .text
+%def add_slow_path_for_last_prefix(write_fn, *write_args, suffix="_slow_path"):
+%   if opcode_name_prefix != "nterp7_":
+%     return re.sub(r"nterp._", r"nterp7_", opcode) + suffix
+%   else:
+%     return add_slow_path(write_fn=write_fn, *write_args, suffix=suffix)
 
-%def opcode_name_prefix():
-%   return "nterp_"
+%def opcode_name_prefixes():
+%   return ["nterp0_", "nterp1_", "nterp2_", "nterp3_", "nterp4_", "nterp5_", "nterp6_", "nterp7_"]
 %def opcode_start():
-    NAME_START nterp_${opcode}
+    NAME_START ${opcode}
     # Explicitly restore CFA, just in case the previous opcode clobbered it (by .cfi_def_*).
     CFI_DEF_CFA_BREG_PLUS_UCONST CFI_REFS, -4, CALLEE_SAVES_SIZE
 %def opcode_end():
-    NAME_END nterp_${opcode}
+    NAME_END ${opcode}
     // Advance to the end of this handler. Causes error if we are past that point.
-    .org nterp_${opcode} + NTERP_HANDLER_SIZE  // ${opcode} handler is too big!
+    .org ${opcode} + NTERP_HANDLER_SIZE  // ${opcode} handler is too big!
 %def opcode_slow_path_start(name):
     NAME_START ${name}
 %def opcode_slow_path_end(name):

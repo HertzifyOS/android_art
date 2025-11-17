@@ -21,6 +21,7 @@
 #include "arch/arm/callee_save_frame_arm.h"
 #include "arch/arm/instruction_set_features_arm.h"
 #include "art_method.h"
+#include "base/bit_utils_iterator.h"
 #include "code_generator_arm_vixl.h"
 #include "common_arm.h"
 #include "heap_poisoning.h"
@@ -1184,24 +1185,6 @@ void IntrinsicCodeGeneratorARMVIXL::VisitStringNewStringFromString(HInvoke* invo
   __ Bind(slow_path->GetExitLabel());
 }
 
-static void GenArrayAddress(ArmVIXLAssembler* assembler,
-                            vixl32::Register dest,
-                            vixl32::Register base,
-                            Location pos,
-                            DataType::Type type,
-                            int32_t data_offset) {
-  if (pos.IsConstant()) {
-    int32_t constant = pos.GetConstant()->AsIntConstant()->GetValue();
-    __ Add(dest, base, static_cast<int32_t>(DataType::Size(type)) * constant + data_offset);
-  } else {
-    if (data_offset != 0) {
-      __ Add(dest, base, data_offset);
-      base = dest;
-    }
-    __ Add(dest, base, Operand(RegisterFrom(pos), LSL, DataType::SizeShift(type)));
-  }
-}
-
 static Location LocationForSystemArrayCopyInput(ArmVIXLAssembler* assembler, HInstruction* input) {
   HIntConstant* const_input = input->AsIntConstantOrNull();
   if (const_input != nullptr && assembler->ShifterOperandCanAlwaysHold(const_input->GetValue())) {
@@ -1211,31 +1194,69 @@ static Location LocationForSystemArrayCopyInput(ArmVIXLAssembler* assembler, HIn
   }
 }
 
-// We choose to use the native implementation for longer copy lengths.
-static constexpr int32_t kSystemArrayCopyThreshold = 128;
+// This value is in bytes and greater than ARRAYCOPY_SHORT_XXX_ARRAY_THRESHOLD
+// in libcore, so if we choose to jump to the slow path we will end up
+// in the native implementation.
+static constexpr int32_t kSystemArrayCopyPrimThreshold = 384;
 
-void IntrinsicLocationsBuilderARMVIXL::VisitSystemArrayCopy(HInvoke* invoke) {
-  // The only read barrier implementation supporting the
-  // SystemArrayCopy intrinsic is the Baker-style read barriers.
-  if (codegen_->EmitNonBakerReadBarrier()) {
+static void CreateSystemArrayCopyLocations(ArmVIXLAssembler* assembler,
+                                           HInvoke* invoke,
+                                           DataType::Type type) {
+  int32_t copy_threshold = kSystemArrayCopyPrimThreshold / DataType::Size(type);
+
+  // Check to see if we have known failures that will cause us to have to bail out
+  // to the runtime, and just generate the runtime call directly.
+  HIntConstant* src_pos = invoke->InputAt(1)->AsIntConstantOrNull();
+  HIntConstant* dst_pos = invoke->InputAt(3)->AsIntConstantOrNull();
+
+  // The positions must be non-negative.
+  if ((src_pos != nullptr && src_pos->GetValue() < 0) ||
+      (dst_pos != nullptr && dst_pos->GetValue() < 0)) {
+    // We will have to fail anyways.
     return;
   }
 
-  constexpr size_t kInitialNumTemps = 3u;  // We need at least three temps.
-  LocationSummary* locations = CodeGenerator::CreateSystemArrayCopyLocationSummary(
-      invoke, kSystemArrayCopyThreshold, kInitialNumTemps);
-  if (locations != nullptr) {
-    locations->SetInAt(1, LocationForSystemArrayCopyInput(assembler_, invoke->InputAt(1)));
-    locations->SetInAt(3, LocationForSystemArrayCopyInput(assembler_, invoke->InputAt(3)));
-    locations->SetInAt(4, LocationForSystemArrayCopyInput(assembler_, invoke->InputAt(4)));
-    if (codegen_->EmitBakerReadBarrier()) {
-      // Temporary register IP cannot be used in
-      // ReadBarrierSystemArrayCopySlowPathARM (because that register
-      // is clobbered by ReadBarrierMarkRegX entry points). Get an extra
-      // temporary register from the register allocator.
-      locations->AddTemp(Location::RequiresCoreRegister());
+  // The length must be >= 0 and not so long that we would (currently) prefer libcore's
+  // native implementation.
+  HIntConstant* length = invoke->InputAt(4)->AsIntConstantOrNull();
+  if (length != nullptr) {
+    int32_t len = length->GetValue();
+    if (len < 0 || len > copy_threshold) {
+      // Just call as normal.
+      return;
     }
   }
+
+  // If source and destination are the same, take the slow path. Overlapping copy regions must be
+  // copied in reverse and we can't know in all cases if it's needed.
+  SystemArrayCopyOptimizations optimizations(invoke);
+  if (optimizations.GetDestinationIsSource()) {
+    return;
+  }
+
+  ArenaAllocator* allocator = invoke->GetBlock()->GetGraph()->GetAllocator();
+  LocationSummary* locations =
+      LocationSummary::Create(allocator, invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
+  // arraycopy(char[] src, int src_pos, char[] dst, int dst_pos, int length).
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetInAt(1, LocationForSystemArrayCopyInput(assembler, invoke->InputAt(1)));
+  locations->SetInAt(2, Location::RequiresCoreRegister());
+  locations->SetInAt(3, LocationForSystemArrayCopyInput(assembler, invoke->InputAt(3)));
+  locations->SetInAt(4, LocationForSystemArrayCopyInput(assembler, invoke->InputAt(4)));
+
+  locations->AddRegisterTemps(4);
+}
+
+void IntrinsicLocationsBuilderARMVIXL::VisitSystemArrayCopyByte(HInvoke* invoke) {
+  CreateSystemArrayCopyLocations(assembler_, invoke, DataType::Type::kInt8);
+}
+
+void IntrinsicLocationsBuilderARMVIXL::VisitSystemArrayCopyChar(HInvoke* invoke) {
+  CreateSystemArrayCopyLocations(assembler_, invoke, DataType::Type::kUint16);
+}
+
+void IntrinsicLocationsBuilderARMVIXL::VisitSystemArrayCopyInt(HInvoke* invoke) {
+  CreateSystemArrayCopyLocations(assembler_, invoke, DataType::Type::kInt32);
 }
 
 static void CheckSystemArrayCopyPosition(ArmVIXLAssembler* assembler,
@@ -1290,6 +1311,276 @@ static void CheckSystemArrayCopyPosition(ArmVIXLAssembler* assembler,
     // Check that (length(array) - pos) >= length.
     __ Cmp(temp, OperandFrom(length, DataType::Type::kInt32));
     __ B(lt, slow_path->GetEntryLabel());
+  }
+}
+
+static void GenArrayAddress(ArmVIXLAssembler* assembler,
+                            vixl32::Register dest,
+                            vixl32::Register base,
+                            Location pos,
+                            DataType::Type type,
+                            int32_t data_offset) {
+  if (pos.IsConstant()) {
+    int32_t constant = pos.GetConstant()->AsIntConstant()->GetValue();
+    __ Add(dest, base, static_cast<int32_t>(DataType::Size(type)) * constant + data_offset);
+  } else {
+    if (data_offset != 0) {
+      __ Add(dest, base, data_offset);
+      base = dest;
+    }
+    __ Add(dest, base, Operand(RegisterFrom(pos), LSL, DataType::SizeShift(type)));
+  }
+}
+
+// Compute base source address, base destination address, and end
+// source address for System.arraycopy* intrinsics in `src_base`,
+// `dst_base` and `src_end` respectively.
+static void GenSystemArrayCopyAddresses(ArmVIXLAssembler* assembler,
+                                        DataType::Type type,
+                                        vixl32::Register src,
+                                        Location src_pos,
+                                        vixl32::Register dst,
+                                        Location dst_pos,
+                                        Location copy_length,
+                                        vixl32::Register src_base,
+                                        vixl32::Register dst_base,
+                                        vixl32::Register src_end) {
+  // This routine is used by the SystemArrayCopy* intrinsics.
+  DCHECK(type == DataType::Type::kReference || type == DataType::Type::kInt8 ||
+         type == DataType::Type::kUint16 || type == DataType::Type::kInt32)
+      << "Unexpected element type: " << type;
+  const int32_t element_size = DataType::Size(type);
+  const uint32_t data_offset = mirror::Array::DataOffset(element_size).Uint32Value();
+
+  GenArrayAddress(assembler, src_base, src, src_pos, type, data_offset);
+  GenArrayAddress(assembler, dst_base, dst, dst_pos, type, data_offset);
+  if (src_end.IsValid()) {
+    GenArrayAddress(assembler, src_end, src_base, copy_length, type, /*data_offset=*/ 0);
+  }
+}
+
+static void SystemArrayCopyPrimitive(HInvoke* invoke,
+                                     CodeGeneratorARMVIXL* codegen,
+                                     DataType::Type type) {
+  ArmVIXLAssembler* assembler = codegen->GetAssembler();
+  LocationSummary* locations = invoke->GetLocations();
+  vixl32::Register src = RegisterFrom(locations->InAt(0));
+  Location src_pos = locations->InAt(1);
+  vixl32::Register dst = RegisterFrom(locations->InAt(2));
+  Location dst_pos = locations->InAt(3);
+  Location length = locations->InAt(4);
+
+  SlowPathCodeARMVIXL* slow_path =
+      new (codegen->GetScopedAllocator()) IntrinsicSlowPathARMVIXL(invoke);
+  codegen->AddSlowPath(slow_path);
+
+  SystemArrayCopyOptimizations optimizations(invoke);
+
+  // If source and destination are the same, take the slow path. Overlapping copy regions must be
+  // copied in reverse and we can't know in all cases if it's needed.
+  DCHECK(!optimizations.GetDestinationIsSource());  // already handled in location builder
+  __ Cmp(src, dst);
+  __ B(eq, slow_path->GetEntryLabel());
+
+  if (!optimizations.GetSourceIsNotNull()) {
+    // Bail out if the source is null.
+    __ CompareAndBranchIfNonZero(src, slow_path->GetEntryLabel());
+  }
+
+  if (!optimizations.GetDestinationIsNotNull()) {
+    // Bail out if the destination is null.
+    __ CompareAndBranchIfNonZero(dst, slow_path->GetEntryLabel());
+  }
+
+  int32_t copy_threshold = kSystemArrayCopyPrimThreshold / DataType::Size(type);
+  if (!length.IsConstant()) {
+    // Merge the following two comparisons into one:
+    //   If the length is negative, bail out (delegate to libcore's native implementation).
+    //   If the length > copy_threshold then (currently) prefer libcore's native implementation.
+    __ Cmp(RegisterFrom(length), copy_threshold);
+    __ B(hi, slow_path->GetEntryLabel());
+  } else {
+    // We have already checked in the LocationsBuilder for the constant case.
+    DCHECK_GE(length.GetConstant()->AsIntConstant()->GetValue(), 0);
+    DCHECK_LE(length.GetConstant()->AsIntConstant()->GetValue(), copy_threshold);
+  }
+
+  vixl32::Register src_curr_addr = RegisterFrom(locations->GetTemp(0));
+  vixl32::Register dst_curr_addr = RegisterFrom(locations->GetTemp(1));
+  vixl32::Register src_stop_addr = RegisterFrom(locations->GetTemp(2));
+
+  CheckSystemArrayCopyPosition(assembler,
+                               src,
+                               src_pos,
+                               length,
+                               slow_path,
+                               src_curr_addr,
+                               /*length_is_array_length=*/ false,
+                               /*position_sign_checked=*/ false);
+
+  CheckSystemArrayCopyPosition(assembler,
+                               dst,
+                               dst_pos,
+                               length,
+                               slow_path,
+                               src_curr_addr,
+                               /*length_is_array_length=*/ false,
+                               /*position_sign_checked=*/ false);
+
+  GenSystemArrayCopyAddresses(assembler,
+                              type,
+                              src,
+                              src_pos,
+                              dst,
+                              dst_pos,
+                              length,
+                              src_curr_addr,
+                              dst_curr_addr,
+                              vixl32::Register());
+
+  // Iterate over the arrays and do a raw copy of the chars.
+  const int32_t element_size = DataType::Size(type);
+  UseScratchRegisterScope temps(assembler->GetVIXLAssembler());
+
+  // We split processing of the array in two parts: head and tail.
+  // A first loop handles the head by copying a block of characters per
+  // iteration (see: chars_per_block).
+  // A second loop handles the tail by copying the remaining characters.
+  // If the copy length is not constant, we copy them one-by-one.
+  // If the copy length is constant, we optimize by always unrolling the tail
+  // loop, and also unrolling the head loop when the copy length is small (see:
+  // unroll_threshold).
+  //
+  // Both loops are inverted for better performance, meaning they are
+  // implemented as conditional do-while loops.
+  // Here, the loop condition is first checked to determine if there are
+  // sufficient chars to run an iteration, then we enter the do-while: an
+  // iteration is performed followed by a conditional branch only if another
+  // iteration is necessary. As opposed to a standard while-loop, this inversion
+  // can save some branching (e.g. we don't branch back to the initial condition
+  // at the end of every iteration only to potentially immediately branch
+  // again).
+  //
+  // A full block of chars is subtracted and added before and after the head
+  // loop, respectively. This ensures that any remaining length after each
+  // head loop iteration means there is a full block remaining, reducing the
+  // number of conditional checks required on every iteration.
+  constexpr int32_t max_stride_in_bytes = 8;
+  constexpr int32_t unroll_threshold = 2 * max_stride_in_bytes;
+  DCHECK_EQ(max_stride_in_bytes % element_size, 0);
+  int32_t elements_per_block = max_stride_in_bytes / element_size;
+  vixl::aarch32::Label loop1, loop2, pre_loop2, done;
+
+  vixl32::Register length_tmp = src_stop_addr;
+  vixl32::Register tmp = temps.Acquire();
+  vixl32::Register tmp2 = RegisterFrom(locations->GetTemp(3));
+
+  auto emitHeadLoop = [&]() {
+    __ Bind(&loop1);
+    // Don't use post-index addressing to avoid dependencies between subsequent LRD/STR.
+    __ Ldr(tmp, MemOperand(src_curr_addr));
+    __ Ldr(tmp2, MemOperand(src_curr_addr, max_stride_in_bytes / 2));
+    // Schedule arithmetic instructions that update addresses and length between dependent LDR/STR.
+    __ Add(src_curr_addr, src_curr_addr, max_stride_in_bytes);
+    __ Add(dst_curr_addr, dst_curr_addr, max_stride_in_bytes);
+    __ Subs(length_tmp, length_tmp, elements_per_block);
+    __ Str(tmp, MemOperand(dst_curr_addr, -max_stride_in_bytes));
+    __ Str(tmp2, MemOperand(dst_curr_addr, -max_stride_in_bytes / 2));
+    __ B(ge, &loop1);
+  };
+
+  auto emitTailLoop = [&]() {
+    __ Bind(&loop2);
+    codegen->Load(type, tmp, MemOperand(src_curr_addr, element_size, PostIndex));
+    __ Subs(length_tmp, length_tmp, 1);
+    codegen->Store(type, tmp, MemOperand(dst_curr_addr, element_size, PostIndex));
+    __ B(gt, &loop2);
+  };
+
+  auto emitUnrolledTailLoop = [&](const int32_t length_in_bytes) {
+    size_t offset = 0;
+    DCHECK_LT(length_in_bytes, unroll_threshold);
+    DCHECK_GE(length_in_bytes, 0);
+    for (uint32_t i : HighToLowBits(static_cast<uint32_t>(length_in_bytes))) {
+      // Don't use post-index addressing, and instead accumulate a constant offset.
+      DataType::Type t = DataType::SignedIntegralTypeFromSize(1u << i);
+      if (t == DataType::Type::kInt64) {
+        __ Ldr(tmp, MemOperand(src_curr_addr, offset));
+        __ Ldr(tmp2, MemOperand(src_curr_addr, offset + 4));
+        __ Str(tmp, MemOperand(dst_curr_addr, offset));
+        __ Str(tmp2, MemOperand(dst_curr_addr, offset + 4));
+      } else {
+        codegen->Load(t, tmp, MemOperand(src_curr_addr, offset));
+        codegen->Store(t, tmp, MemOperand(dst_curr_addr, offset));
+      }
+      offset += 1u << i;
+    }
+  };
+
+  if (length.IsConstant()) {
+    int32_t length_in_elems = length.GetConstant()->AsIntConstant()->GetValue();
+    int32_t length_in_bytes = length_in_elems * element_size;
+    if (length_in_bytes >= unroll_threshold) {
+      length_in_bytes %= max_stride_in_bytes;
+      length_in_elems -= length_in_bytes / element_size;
+      __ Mov(length_tmp, length_in_elems - elements_per_block);
+      emitHeadLoop();
+    }
+    emitUnrolledTailLoop(length_in_bytes);
+  } else {
+    vixl32::Register length_reg = RegisterFrom(length);
+    __ Subs(length_tmp, length_reg, elements_per_block);
+    __ B(lt, &pre_loop2);
+
+    emitHeadLoop();
+
+    __ Bind(&pre_loop2);
+    __ Adds(length_tmp, length_tmp, elements_per_block);
+    __ B(eq, &done);
+
+    emitTailLoop();
+  }
+
+  __ Bind(&done);
+  __ Bind(slow_path->GetExitLabel());
+}
+
+void IntrinsicCodeGeneratorARMVIXL::VisitSystemArrayCopyByte(HInvoke* invoke) {
+  SystemArrayCopyPrimitive(invoke, codegen_, DataType::Type::kInt8);
+}
+
+void IntrinsicCodeGeneratorARMVIXL::VisitSystemArrayCopyChar(HInvoke* invoke) {
+  SystemArrayCopyPrimitive(invoke, codegen_, DataType::Type::kUint16);
+}
+
+void IntrinsicCodeGeneratorARMVIXL::VisitSystemArrayCopyInt(HInvoke* invoke) {
+  SystemArrayCopyPrimitive(invoke, codegen_, DataType::Type::kInt32);
+}
+
+// We choose to use the native implementation for longer copy lengths.
+static constexpr int32_t kSystemArrayCopyThreshold = 128;
+
+void IntrinsicLocationsBuilderARMVIXL::VisitSystemArrayCopy(HInvoke* invoke) {
+  // The only read barrier implementation supporting the
+  // SystemArrayCopy intrinsic is the Baker-style read barriers.
+  if (codegen_->EmitNonBakerReadBarrier()) {
+    return;
+  }
+
+  constexpr size_t kInitialNumTemps = 3u;  // We need at least three temps.
+  LocationSummary* locations = CodeGenerator::CreateSystemArrayCopyLocationSummary(
+      invoke, kSystemArrayCopyThreshold, kInitialNumTemps);
+  if (locations != nullptr) {
+    locations->SetInAt(1, LocationForSystemArrayCopyInput(assembler_, invoke->InputAt(1)));
+    locations->SetInAt(3, LocationForSystemArrayCopyInput(assembler_, invoke->InputAt(3)));
+    locations->SetInAt(4, LocationForSystemArrayCopyInput(assembler_, invoke->InputAt(4)));
+    if (codegen_->EmitBakerReadBarrier()) {
+      // Temporary register IP cannot be used in
+      // ReadBarrierSystemArrayCopySlowPathARM (because that register
+      // is clobbered by ReadBarrierMarkRegX entry points). Get an extra
+      // temporary register from the register allocator.
+      locations->AddTemp(Location::RequiresCoreRegister());
+    }
   }
 }
 
@@ -1495,7 +1786,6 @@ void IntrinsicCodeGeneratorARMVIXL::VisitSystemArrayCopy(HInvoke* invoke) {
 
     const DataType::Type type = DataType::Type::kReference;
     const int32_t element_size = DataType::Size(type);
-    const int32_t data_offset = mirror::Array::DataOffset(element_size).Uint32Value();
 
     SlowPathCodeARMVIXL* read_barrier_slow_path = nullptr;
     vixl32::Register rb_tmp;
@@ -1543,14 +1833,20 @@ void IntrinsicCodeGeneratorARMVIXL::VisitSystemArrayCopy(HInvoke* invoke) {
       codegen_->AddSlowPath(read_barrier_slow_path);
     }
 
-    // Compute the base source address in `temp1`.
+    // Compute the base source address, base destination address and end source address in
+    // `temp1`, `temp2` and `temp3` respectively.
     // Note that for read barrier, `temp1` (the base source address) is computed from `src`
     // (and `src_pos`) here, and thus honors the artificial dependency of `src` on `rb_tmp`.
-    GenArrayAddress(GetAssembler(), temp1, src, src_pos, type, data_offset);
-    // Compute the base destination address in `temp2`.
-    GenArrayAddress(GetAssembler(), temp2, dest, dest_pos, type, data_offset);
-    // Compute the end source address in `temp3`.
-    GenArrayAddress(GetAssembler(), temp3, temp1, length, type, /*data_offset=*/ 0);
+    GenSystemArrayCopyAddresses(assembler,
+                                type,
+                                src,
+                                src_pos,
+                                dest,
+                                dest_pos,
+                                length,
+                                temp1,
+                                temp2,
+                                temp3);
 
     if (emit_rb) {
       // Given the numeric representation, it's enough to check the low bit of the

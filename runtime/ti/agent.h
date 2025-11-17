@@ -17,72 +17,18 @@
 #ifndef ART_RUNTIME_TI_AGENT_H_
 #define ART_RUNTIME_TI_AGENT_H_
 
+#include <android-base/logging.h>
+#include <android-base/macros.h>
 #include <dlfcn.h>
 #include <jni.h>  // for jint, JavaVM* etc declarations
 
 #include <memory>
 
-#include <android-base/logging.h>
-#include <android-base/macros.h>
-
 #include "base/macros.h"
+#include "ti/agent_spec.h"
 
 namespace art HIDDEN {
 namespace ti {
-
-class Agent;
-
-enum LoadError {
-  kNoError,              // No error occurred..
-  kLoadingError,         // dlopen or dlsym returned an error.
-  kInitializationError,  // The entrypoint did not return 0. This might require an abort.
-};
-
-class AgentSpec {
- public:
-  explicit AgentSpec(const std::string& arg);
-
-  const std::string& GetName() const {
-    return name_;
-  }
-
-  const std::string& GetArgs() const {
-    return args_;
-  }
-
-  bool HasArgs() const {
-    return !GetArgs().empty();
-  }
-
-  std::unique_ptr<Agent> Load(/*out*/jint* call_res,
-                              /*out*/LoadError* error,
-                              /*out*/std::string* error_msg);
-
-  // Tries to attach the agent using its OnAttach method. Returns true on success.
-  std::unique_ptr<Agent> Attach(JNIEnv* env,
-                                jobject class_loader,
-                                /*out*/jint* call_res,
-                                /*out*/LoadError* error,
-                                /*out*/std::string* error_msg);
-
- private:
-  std::unique_ptr<Agent> DoDlOpen(JNIEnv* env,
-                                  jobject class_loader,
-                                  /*out*/LoadError* error,
-                                  /*out*/std::string* error_msg);
-
-  std::unique_ptr<Agent> DoLoadHelper(JNIEnv* env,
-                                      bool attaching,
-                                      jobject class_loader,
-                                      /*out*/jint* call_res,
-                                      /*out*/LoadError* error,
-                                      /*out*/std::string* error_msg);
-
-  std::string name_;
-  std::string args_;
-
-  friend std::ostream& operator<<(std::ostream &os, AgentSpec const& m);
-};
 
 std::ostream& operator<<(std::ostream &os, AgentSpec const& m);
 

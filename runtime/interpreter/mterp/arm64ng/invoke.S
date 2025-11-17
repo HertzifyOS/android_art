@@ -8,9 +8,9 @@
    FETCH w0, 1 // call_site index, first argument of runtime call.
    b NterpCommonInvokeCustomRange
 
-%def invoke_direct_or_super(helper="", range="", is_super=""):
+%def invoke_direct_or_super(helper="", range=False, is_super=False):
    // The slow path fits in the handler for `invoke-super/range`.
-%  slow_path = '1f' if is_super == "1" and range == "1" else add_slow_path(
+%  slow_path = '1f' if is_super and range else add_slow_path(
 %      invoke_direct_or_super_slow_path, range, is_super)
 %  # Reset python indentation.
    EXPORT_PC
@@ -19,16 +19,16 @@
 .L${opcode}_resume:
    // Load the first argument (the 'this' pointer).
    FETCH w1, 2
-   .if !$range
-   and w1, w1, #0xf
-   .endif
+%  if not range:
+     and w1, w1, #0xf
+%  #endif
    GET_VREG w1, w1
    cbz w1, common_errNullObject    // bail if null
    b $helper
-   .if $is_super && $range
+%  if is_super and range:
 1:
-%  invoke_direct_or_super_slow_path(range, is_super)
-   .endif
+%    invoke_direct_or_super_slow_path(range, is_super)
+%  #endif
 
 %def invoke_direct_or_super_slow_path(range, is_super):
    mov x0, xSELF
@@ -36,29 +36,29 @@
    mov x2, xPC
    mov x3, xFP
    bl nterp_get_method
-   .if $is_super
-   b .L${opcode}_resume
-   .else
-   tbz x0, #0, .L${opcode}_resume
-   and x0, x0, #-2 // Remove the extra bit that marks it's a String.<init> method.
-   .if $range
-   b NterpHandleStringInitRange
-   .else
-   b NterpHandleStringInit
-   .endif
-   .endif
+%  if is_super:
+     b .L${opcode}_resume
+%  else:
+     tbz x0, #0, .L${opcode}_resume
+     and x0, x0, #-2 // Remove the extra bit that marks it's a String.<init> method.
+%    if range:
+       b NterpHandleStringInitRange
+%    else:
+       b NterpHandleStringInit
+%    #endif
+%  #endif
 
 %def op_invoke_direct():
-%  invoke_direct_or_super(helper="NterpCommonInvokeInstance", range="0", is_super="0")
+%  invoke_direct_or_super(helper="NterpCommonInvokeInstance")
 
 %def op_invoke_direct_range():
-%  invoke_direct_or_super(helper="NterpCommonInvokeInstanceRange", range="1", is_super="0")
+%  invoke_direct_or_super(helper="NterpCommonInvokeInstanceRange", range=True)
 
 %def op_invoke_super():
-%  invoke_direct_or_super(helper="NterpCommonInvokeInstance", range="0", is_super="1")
+%  invoke_direct_or_super(helper="NterpCommonInvokeInstance", is_super=True)
 
 %def op_invoke_super_range():
-%  invoke_direct_or_super(helper="NterpCommonInvokeInstanceRange", range="1", is_super="1")
+%  invoke_direct_or_super(helper="NterpCommonInvokeInstanceRange", range=True, is_super=True)
 
 %def op_invoke_polymorphic():
    EXPORT_PC
@@ -79,7 +79,7 @@
    cbz w1, common_errNullObject    // bail if null
    b NterpCommonInvokePolymorphicRange
 
-%def invoke_interface(range=""):
+%def invoke_interface(range=False):
 %  slow_path = add_slow_path(invoke_interface_slow_path, range)
    EXPORT_PC
    // Fast-path which gets the method from thread-local cache.
@@ -87,9 +87,9 @@
 .L${opcode}_resume:
    // First argument is the 'this' pointer.
    FETCH w1, 2
-   .if !$range
-   and w1, w1, #0xf
-   .endif
+%  if not range:
+     and w1, w1, #0xf
+%  #endif
    GET_VREG w1, w1
    // Note: if w1 is null, this will be handled by our SIGSEGV handler.
    ldr w2, [x1, #MIRROR_OBJECT_CLASS_OFFSET]
@@ -102,10 +102,10 @@
    ldrh w3, [xCSTMP, #ART_METHOD_IMT_INDEX_OFFSET]
 .L${opcode}_resume_with_imt_index:
    ldr x2, [x2, #MIRROR_CLASS_IMT_PTR_OFFSET_64]
-   .if $range
-   ldr x0, [x2, w3, uxtw #3]
-   b NterpCommonInvokeInterfaceRange
-   .else
+%  if range:
+     ldr x0, [x2, w3, uxtw #3]
+     b NterpCommonInvokeInterfaceRange
+%  else:
 #ifdef USE_HEAP_POISONING
    // The unpoisoning above means we need to move the LDR to the
    // `NterpCommonInvokeInterface` to keep the handler size 64B.
@@ -113,7 +113,7 @@
    ldr x0, [x2, w3, uxtw #3]
 #endif
    b NterpCommonInvokeInterface
-   .endif
+%  #endif
 
 %def invoke_interface_slow_path(range):
    mov x0, xSELF
@@ -133,17 +133,17 @@
    lsr xCSTMP, xCSTMP, #16
    add w2, w2, #MIRROR_CLASS_VTABLE_OFFSET_64
    ldr x0, [x2, xCSTMP, lsl #3]
-   .if $range
-   b NterpCommonInvokeInstanceRange
-   .else
-   b NterpCommonInvokeInstance
-   .endif
+%  if range:
+     b NterpCommonInvokeInstanceRange
+%  else:
+     b NterpCommonInvokeInstance
+%  #endif
 
 %def op_invoke_interface():
-%  invoke_interface(range="0")
+%  invoke_interface()
 
 %def op_invoke_interface_range():
-%  invoke_interface(range="1")
+%  invoke_interface(range=True)
 
 %def invoke_static(helper=""):
    EXPORT_PC
@@ -164,16 +164,16 @@
 %def op_invoke_static_range():
 %  invoke_static(helper="NterpCommonInvokeStaticRange")
 
-%def invoke_virtual(helper="", range=""):
+%def invoke_virtual(helper="", range=False):
 %  slow_path = add_slow_path(invoke_virtual_slow_path)
    EXPORT_PC
    // Fast-path which gets the method from thread-local cache.
 %  fetch_from_thread_cache("x2", miss_label=slow_path)
 .L${opcode}_resume:
    FETCH w1, 2
-   .if !$range
-   and w1, w1, #0xf
-   .endif
+%  if not range:
+     and w1, w1, #0xf
+%  #endif
    GET_VREG w1, w1
    // Note: if w1 is null, this will be handled by our SIGSEGV handler.
    ldr w0, [x1, #MIRROR_OBJECT_CLASS_OFFSET]
@@ -192,7 +192,7 @@
    b .L${opcode}_resume
 
 %def op_invoke_virtual():
-%  invoke_virtual(helper="NterpCommonInvokeInstance", range="0")
+%  invoke_virtual(helper="NterpCommonInvokeInstance")
 
 %def op_invoke_virtual_range():
-%  invoke_virtual(helper="NterpCommonInvokeInstanceRange", range="1")
+%  invoke_virtual(helper="NterpCommonInvokeInstanceRange", range=True)

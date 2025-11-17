@@ -218,11 +218,42 @@ bool Jit::CompileMethodInternal(ArtMethod* method,
   // of that proxy method, as the compiler does not expect a proxy method.
   ArtMethod* method_to_compile = method->GetInterfaceMethodIfProxy(kRuntimePointerSize);
 
+  if (method_to_compile->NeedsClinitCheckBeforeCall() &&
+      !prejit &&
+      compilation_kind != CompilationKind::kOsr) {
+    // We do not need a synchronization barrier for checking the visibly initialized status
+    // or checking the initialized status just for requesting visible initialization.
+    ClassStatus status = method_to_compile->GetDeclaringClass()
+        ->GetStatus<kDefaultVerifyFlags, /*kWithSynchronizationBarrier=*/ false>();
+    if (status != ClassStatus::kVisiblyInitialized) {
+      // Unless we're pre-jitting, we currently don't save the JIT compiled code if we cannot
+      // update the entrypoint due to needing an initialization check.
+      if (status == ClassStatus::kInitialized) {
+        // Request visible initialization but do not block to allow compiling other methods.
+        // Hopefully, this will complete by the time the method becomes hot again.
+        Runtime::Current()->GetClassLinker()->MakeInitializedClassesVisiblyInitialized(
+            self, /*wait=*/ false);
+      }
+      // If the status is now visibly initialized, we can proceed.
+      status = method_to_compile->GetDeclaringClass()
+          ->GetStatus<kDefaultVerifyFlags, /*kWithSynchronizationBarrier=*/ false>();
+      if (status != ClassStatus::kVisiblyInitialized) {
+        VLOG(jit) << "Not compiling "
+                  << method->PrettyMethod()
+                  << " because it has the resolution stub";
+        return false;
+      }
+    }
+  }
+
   if (TryPatternMatch(method_to_compile, compilation_kind)) {
     return true;
   }
 
-  if (!code_cache_->NotifyCompilationOf(method_to_compile, self, compilation_kind, prejit)) {
+  if (code_cache_->HasCompiledCodeFor(method_to_compile, self, compilation_kind)) {
+    VLOG(jit) << "Not compiling "
+              << method->PrettyMethod() << " " << compilation_kind
+              << " because it has already been compiled";
     return false;
   }
 
@@ -1803,6 +1834,11 @@ void Jit::MaybeEnqueueFastCompilation(ArtMethod* method, Thread* self) {
         Runtime::Current()->GetInstrumentation()->UpdateMethodsCode(method, entry_point);
       }
     }
+    return;
+  }
+
+  // Fast compiler doesn't support generating shared code for the zygote.
+  if (!GetCodeCache()->CanAllocateProfilingInfo()) {
     return;
   }
 

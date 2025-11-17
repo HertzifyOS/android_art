@@ -27,7 +27,7 @@ import (
 	"android/soong/cc/config"
 )
 
-//go:generate go run ../../build/blueprint/gobtools/codegen/gob_gen.go
+//go:generate go run ../../build/blueprint/gobtools/codegen
 
 var supportedArches = []string{"arm", "arm64", "riscv64", "x86", "x86_64"}
 

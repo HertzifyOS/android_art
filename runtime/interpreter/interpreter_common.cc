@@ -246,7 +246,6 @@ ALWAYS_INLINE void CopyRegisters(ShadowFrame& caller_frame,
 
 NO_STACK_PROTECTOR
 void ArtInterpreterToCompiledCodeBridge(Thread* self,
-                                        ArtMethod* caller,
                                         ShadowFrame* shadow_frame,
                                         uint16_t arg_offset,
                                         JValue* result)
@@ -262,10 +261,6 @@ void ArtInterpreterToCompiledCodeBridge(Thread* self,
     } else {
       DCHECK_LE(arg_offset, shadow_frame->NumberOfVRegs());
     }
-  }
-  jit::Jit* jit = Runtime::Current()->GetJit();
-  if (jit != nullptr && caller != nullptr) {
-    jit->NotifyInterpreterToCompiledCodeTransition(self, caller);
   }
   method->Invoke(self, shadow_frame->GetVRegArgs(arg_offset),
                  (shadow_frame->NumberOfVRegs() - arg_offset) * sizeof(uint32_t),
@@ -1356,7 +1351,6 @@ static inline bool DoCallCommon(ArtMethod* called_method,
 
   PerformCall(self,
               accessor,
-              shadow_frame.GetMethod(),
               first_dest_reg,
               new_shadow_frame,
               result,

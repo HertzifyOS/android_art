@@ -127,8 +127,7 @@ class FastCompilerARM64 : public FastCompiler {
                     ArenaStack* arena_stack,
                     VariableSizedHandleScope* handles,
                     const CompilerOptions& compiler_options,
-                    const DexCompilationUnit& dex_compilation_unit,
-                    bool with_loop_support = false)
+                    const DexCompilationUnit& dex_compilation_unit)
       : method_(method),
         allocator_(allocator),
         handles_(handles),
@@ -172,9 +171,6 @@ class FastCompilerARM64 : public FastCompiler {
     memset(object_register_masks_.data(), ~0, object_register_masks_.size() * sizeof(uint64_t));
     memset(object_stack_masks_.data(), 0, object_stack_masks_.size() * sizeof(ArenaBitVector*));
     GetAssembler()->cfi().SetEnabled(compiler_options.GenerateAnyDebugInfo());
-    if (with_loop_support) {
-      MarkBranchTargets();
-    }
   }
 
   void ResetTempRegisters() {
@@ -203,7 +199,7 @@ class FastCompilerARM64 : public FastCompiler {
   }
 
   // Top-level method to generate code for `method_`.
-  bool Compile();
+  bool Compile(bool with_loop_support = false);
 
   ArrayRef<const uint8_t> GetCode() const override {
     return ArrayRef<const uint8_t>(assembler_.CodeBufferBaseAddress(), assembler_.CodeSize());
@@ -362,8 +358,6 @@ class FastCompilerARM64 : public FastCompiler {
   void DoWriteBarrierOn(Register holder,
                         UseScratchRegisterScope& temps,
                         bool overwrite_holder = false);
-  bool CanGenerateCodeFor(ArtField* field, bool can_receiver_be_null)
-      REQUIRES_SHARED(Locks::mutator_lock_);
   bool DoGet(const MemOperand& mem,
              uint16_t field_index,
              Instruction::Code opcode,
@@ -412,6 +406,12 @@ class FastCompilerARM64 : public FastCompiler {
             DataType::Type type);
   bool BuildSwitch(const Instruction& instruction, uint32_t dex_pc);
   bool BuildFillArrayData(const Instruction& instruction, uint32_t dex_pc);
+
+  // Loop support
+  bool ProcessDexInstructionForMasks(const Instruction& instruction);
+  bool ProcessBlockForMasks(uint32_t dex_pc);
+  bool UpdateObjectMasks(uint32_t dex_pc);
+  bool AnalyzeBranches();
 
   void AddToWorkQueue(uint32_t dex_pc) {
     if (!processed_.IsBitSet(dex_pc)) {
@@ -535,58 +535,23 @@ class FastCompilerARM64 : public FastCompiler {
     return CPURegList(CPURegister::kVRegister, kDRegSize, fpu_spill_mask_);
   }
 
-  // Loop support
-  //
-  void MarkBranchTargets() {
-    for (const DexInstructionPcPair& pair : GetCodeItemAccessor()) {
-      const uint32_t dex_pc = pair.DexPc();
-      const Instruction& instruction = pair.Inst();
-
-      if (instruction.IsBranch()) {
-        int32_t target_offset = instruction.GetTargetOffset();
-        branch_pcs_.SetBit(dex_pc + target_offset);
-      } else if (instruction.IsSwitch()) {
-        DexSwitchTable table(instruction, dex_pc);
-        for (DexSwitchTableIterator s_it(table); !s_it.Done(); s_it.Advance()) {
-          int32_t target_offset = s_it.CurrentTargetOffset();
-          branch_pcs_.SetBit(dex_pc + target_offset);
-        }
-      }
-    }
-  }
-
-  bool CanBeLoopHeader(uint32_t dex_pc) const {
+  bool IsBranchTarget(uint32_t dex_pc) const {
     return branch_pcs_.IsBitSet(dex_pc);
   }
 
-  bool CanHandleBackwardsBranch(uint32_t dex_pc, bool is_catch = false) {
-    if (!CanBeLoopHeader(dex_pc) && !is_catch) {
+  bool CanHandleBackwardsBranch(uint32_t dex_pc) {
+    if (!IsBranchTarget(dex_pc)) {
       DCHECK(!branch_pcs_.IsAnyBitSet());
       unimplemented_reason_ = "Loop retry";
       recompile_with_loop_support_ = true;
       return false;
     }
 
-    // No need to check if the non-null masks match, as we disable the
-    // optimization at loop header.
-
-    if (object_register_masks_[dex_pc] == std::numeric_limits<uint64_t>::max()) {
-      // If the "loop" header isn't initialized, this means this is just a
-      // backwards branch to a dex pc that hasn't been visited yet.
-      return true;
-    }
-
-    if (object_register_masks_[dex_pc] !=
-            (object_register_masks_[dex_pc] & object_register_mask_)) {
-      unimplemented_reason_ = "Different register mask for loop";
-      return false;
-    }
-
-    if (!object_stack_masks_[dex_pc]->IsSubsetOf(&object_stack_mask_)) {
-      unimplemented_reason_ = "Different stack mask for loop";
-      return false;
-    }
-
+    // Our loop analysis has already computed the object masks at this dex pc.
+    DCHECK_NE(object_register_masks_[dex_pc], std::numeric_limits<uint64_t>::max()) << dex_pc;
+    DCHECK_EQ(object_register_masks_[dex_pc],
+              (object_register_masks_[dex_pc] & object_register_mask_)) << dex_pc;
+    DCHECK(object_stack_masks_[dex_pc]->IsSubsetOf(&object_stack_mask_)) << dex_pc;
     return true;
   }
 
@@ -831,20 +796,15 @@ void FastCompilerARM64::StartBranchTarget(bool flow_continues, uint32_t dex_pc) 
     // Emulate a branch to this pc.
     PrepareToBranch(dex_pc);
   } else {
-    if (!BranchTargetIsInitialized(dex_pc)) {
-      // Update masks based on what we currently have. This is rather arbitrary,
-      // but a better approximation at this point than setting all masks to 0 or 1.
-      UpdateMasks(dex_pc);
-    }
+    DCHECK(BranchTargetIsInitialized(dex_pc));
     // Otherwise reset locations to known locations.
     ResetLocations();
   }
 
   // Set new masks based on all incoming edges.
-  if (CanBeLoopHeader(dex_pc)) {
-    // Disable non-null optimizations at loop header. It's preferable to perform
-    // the compilation rather than bailing out because the back edge has a
-    // different null mask.
+  if (IsBranchTarget(dex_pc)) {
+    // Disable non-null optimizations at potential loop headers. This can avoid
+    // the need to re-iterate for finding a fixed point for non-null masks.
     is_non_null_mask_ = 0u;
   } else {
     is_non_null_mask_ = is_non_null_masks_[dex_pc];
@@ -861,6 +821,13 @@ bool FastCompilerARM64::ProcessBlock(uint32_t dex_pc) {
   do {
     DexInstructionPcPair pair = *it;
     if (processed_.IsBitSet(pair.DexPc())) {
+      if (flow_continues) {
+        // If the previous instruction was flowing into its following
+        // instruction, we need to branch where this following instruction
+        // has been emitted.
+        PrepareToBranch(pair.DexPc());
+        __ B(GetLabelOf(pair.DexPc()));
+      }
       break;
     }
     processed_.SetBit(pair.DexPc());
@@ -872,7 +839,7 @@ bool FastCompilerARM64::ProcessBlock(uint32_t dex_pc) {
     if (it != end) {
       const DexInstructionPcPair& next_pair = *it;
       if (GetLabelOf(next_pair.DexPc())->IsLinked() ||
-          CanBeLoopHeader(next_pair.DexPc()) ||
+          IsBranchTarget(next_pair.DexPc()) ||
           catch_pcs_.IsBitSet(next_pair.DexPc())) {
         // Disable the micro-optimization, as the next instruction is a branch
         // target.
@@ -884,19 +851,19 @@ bool FastCompilerARM64::ProcessBlock(uint32_t dex_pc) {
 
     vixl::aarch64::Label* label = GetLabelOf(pair.DexPc());
     bool is_catch = catch_pcs_.IsBitSet(pair.DexPc());
-    bool can_be_loop_header = CanBeLoopHeader(pair.DexPc());
+    bool is_branch_target = IsBranchTarget(pair.DexPc());
     bool is_linked = label->IsLinked();
-    if (is_linked || can_be_loop_header || is_catch) {
+    if (is_linked || is_branch_target || is_catch) {
       StartBranchTarget(flow_continues, pair.DexPc());
     }
-    if (is_linked || can_be_loop_header) {
+    if (is_linked || is_branch_target) {
       __ Bind(label);
     }
     if (is_catch) {
       catch_stack_maps_.push_back(std::make_pair(pair.DexPc(), GetAssembler()->CodePosition()));
     }
 
-    // If the instruction can throw, emulate a branch to the catch handler by
+    // If the instruction can throw, emulate a branch to each catch handler by
     // updating dex register masks.
     if (GetCodeItemAccessor().TriesSize() != 0 &&
         (Instruction::FlagsOf(pair.Inst().Opcode()) & Instruction::kThrow) != 0) {
@@ -906,7 +873,7 @@ bool FastCompilerARM64::ProcessBlock(uint32_t dex_pc) {
              iterator.HasNext();
              iterator.Next()) {
           if (iterator.GetHandlerAddress() <= pair.DexPc() &&
-              !CanHandleBackwardsBranch(iterator.GetHandlerAddress(), /* is_catch= */ true)) {
+              !CanHandleBackwardsBranch(iterator.GetHandlerAddress())) {
             return false;
           }
           UpdateMasks(iterator.GetHandlerAddress());
@@ -1853,6 +1820,10 @@ bool FastCompilerARM64::BuildFilledNewArray(uint32_t dex_pc,
   }
   const char* descriptor = GetDexFile().GetTypeDescriptor(type_index);
   char primitive = descriptor[1];
+  if (primitive != 'I' && primitive != 'L' && primitive != '[') {
+    unimplemented_reason_ = "BogusFilledNewArray";
+    return false;
+  }
   bool is_reference_array = (primitive == 'L') || (primitive == '[');
   DataType::Type type = is_reference_array ? DataType::Type::kReference : DataType::Type::kInt32;
 
@@ -2048,22 +2019,6 @@ void FastCompilerARM64::DoWriteBarrierOn(Register holder,
   __ Strb(card, MemOperand(card, temp.X()));
 }
 
-bool FastCompilerARM64::CanGenerateCodeFor(ArtField* field, bool can_receiver_be_null) {
-  if (field == nullptr) {
-    // Clear potential resolution exception.
-    Thread::Current()->ClearException();
-    unimplemented_reason_ = "UnresolvedField";
-    return false;
-  }
-  if (can_receiver_be_null) {
-    if (!CanDoImplicitNullCheckOn(field->GetOffset().Uint32Value())) {
-      unimplemented_reason_ = "TooLargeFieldOffset";
-      return false;
-    }
-  }
-  return true;
-}
-
 #define DO_CASE(arm_op, op, other) \
     case arm_op: { \
       if (constant op other) { \
@@ -2186,6 +2141,15 @@ bool FastCompilerARM64::DoGet(const MemOperand& base,
   UseScratchRegisterScope temps(GetVIXLAssembler());
   MemOperand mem = base;
   Register holder = mem.GetBaseRegister();
+
+  if (can_receiver_be_null && !CanDoImplicitNullCheckOn(mem.GetOffset())) {
+    vixl::aarch64::Label is_not_null;
+    __ Cbnz(holder, &is_not_null);
+    InvokeRuntime(kQuickThrowNullPointer, dex_pc);
+    __ Bind(&is_not_null);
+  }
+
+  bool record_pc_info = (can_receiver_be_null && CanDoImplicitNullCheckOn(mem.GetOffset()));
   if (is_volatile) {
     Register temp = temps.AcquireX();
     __ Add(temp, holder, helpers::OperandFromMemOperand(mem));
@@ -2205,7 +2169,7 @@ bool FastCompilerARM64::DoGet(const MemOperand& base,
       } else {
         __ Ldr(dst, mem);
       }
-      if (can_receiver_be_null) {
+      if (record_pc_info) {
         RecordPcInfo(dex_pc);
       }
     }
@@ -2217,7 +2181,6 @@ bool FastCompilerARM64::DoGet(const MemOperand& base,
   // Ensure the pc position is recorded immediately after the load instruction.
   EmissionCheckScope guard(GetVIXLAssembler(), kMaxMacroInstructionSizeInBytes);
   bool is_wide = false;
-  bool record_pc_info = can_receiver_be_null;
   switch (opcode) {
     case Instruction::SGET_BOOLEAN:
     case Instruction::IGET_BOOLEAN: {
@@ -2529,7 +2492,10 @@ bool FastCompilerARM64::BuildInstanceFieldGet(const Instruction& instruction,
                                          /* is_static= */ false,
                                          /* is_put= */ false,
                                          /* resolve_field_type= */ 0u);
-    if (!CanGenerateCodeFor(field, can_receiver_be_null)) {
+    if (field == nullptr) {
+      // Clear potential resolution exception.
+      Thread::Current()->ClearException();
+      unimplemented_reason_ = "UnresolvedField";
       return false;
     }
   }
@@ -2579,7 +2545,10 @@ bool FastCompilerARM64::BuildInstanceFieldSet(const Instruction& instruction,
                                          /* is_static= */ false,
                                          /* is_put= */ true,
                                          /* resolve_field_type= */ is_object);
-    if (!CanGenerateCodeFor(field, can_receiver_be_null)) {
+    if (field == nullptr) {
+      // Clear potential resolution exception.
+      Thread::Current()->ClearException();
+      unimplemented_reason_ = "UnresolvedField";
       return false;
     }
   }
@@ -2619,6 +2588,14 @@ bool FastCompilerARM64::DoPut(const MemOperand& base,
                               bool is_object,
                               bool is_volatile,
                               uint32_t dex_pc) {
+  if (can_receiver_be_null && !CanDoImplicitNullCheckOn(field->GetOffset().Uint32Value())) {
+    vixl::aarch64::Label is_not_null;
+    __ Cbnz(holder, &is_not_null);
+    InvokeRuntime(kQuickThrowNullPointer, dex_pc);
+    __ Bind(&is_not_null);
+  }
+  bool record_pc_info =
+      (can_receiver_be_null && CanDoImplicitNullCheckOn(field->GetOffset().Uint32Value()));
   UseScratchRegisterScope temps(GetVIXLAssembler());
   Location src = vreg_locations_[source_reg];
   bool assigning_constant = false;
@@ -2648,7 +2625,7 @@ bool FastCompilerARM64::DoPut(const MemOperand& base,
     } else {
       __ Str(reg, mem);
     }
-    if (can_receiver_be_null) {
+    if (record_pc_info) {
       RecordPcInfo(dex_pc);
     }
     // If we assign a constant (only null for iput-object), no need for the write
@@ -2748,7 +2725,7 @@ bool FastCompilerARM64::DoPut(const MemOperand& base,
   if (HitUnimplemented()) {
     return false;
   }
-  if (can_receiver_be_null) {
+  if (record_pc_info) {
     RecordPcInfo(dex_pc);
   }
   return true;
@@ -2777,7 +2754,10 @@ bool FastCompilerARM64::BuildStaticFieldAccess(const Instruction& instruction,
                                          /* is_static= */ true,
                                          is_put,
                                          /* resolve_field_type= */ 0u);
-    if (!CanGenerateCodeFor(field, /* can_receiver_be_null= */ false)) {
+    if (field == nullptr) {
+      // Clear potential resolution exception.
+      Thread::Current()->ClearException();
+      unimplemented_reason_ = "UnresolvedField";
       return false;
     }
     Handle<mirror::Class> h_klass = handles_->NewHandle(field->GetDeclaringClass());
@@ -3257,6 +3237,7 @@ bool FastCompilerARM64::ProcessDexInstruction(const Instruction& instruction,
     IF_XX(vixl::aarch64::le, LE);
     IF_XX(vixl::aarch64::gt, GT);
     IF_XX(vixl::aarch64::ge, GE);
+#undef IF_XX
 
     case Instruction::GOTO:
     case Instruction::GOTO_16:
@@ -3925,12 +3906,396 @@ bool FastCompilerARM64::ProcessDexInstruction(const Instruction& instruction,
   return false;
 }  // NOLINT(readability/fn_size)
 
-bool FastCompilerARM64::Compile() {
+
+bool FastCompilerARM64::AnalyzeBranches() {
+  for (const DexInstructionPcPair& pair : GetCodeItemAccessor()) {
+    const uint32_t dex_pc = pair.DexPc();
+    const Instruction& instruction = pair.Inst();
+
+    if (instruction.IsBranch()) {
+      int32_t target_offset = instruction.GetTargetOffset();
+      branch_pcs_.SetBit(dex_pc + target_offset);
+    } else if (instruction.IsSwitch()) {
+      DexSwitchTable table(instruction, dex_pc);
+      for (DexSwitchTableIterator s_it(table); !s_it.Done(); s_it.Advance()) {
+        int32_t target_offset = s_it.CurrentTargetOffset();
+        branch_pcs_.SetBit(dex_pc + target_offset);
+      }
+    }
+  }
+
+  if (GetCodeItemAccessor().TriesSize() != 0) {
+    const uint8_t* handlers_ptr = GetCodeItemAccessor().GetCatchHandlerData();
+    uint32_t handlers_size = DecodeUnsignedLeb128(&handlers_ptr);
+    for (uint32_t idx = 0; idx < handlers_size; ++idx) {
+      CatchHandlerIterator iterator(handlers_ptr);
+      for (; iterator.HasNext(); iterator.Next()) {
+        branch_pcs_.SetBit(iterator.GetHandlerAddress());
+      }
+      handlers_ptr = iterator.EndDataPointer();
+    }
+  }
+
+  // The existing masks have been updated with parameter information.
+  // Save them and restore them after this analysis.
+  uint64_t saved_object_register_mask = object_register_mask_;
+  ArenaBitVector saved_object_stack_mask(allocator_, /*start_bits=*/ 0, /*expandable=*/ true);
+  saved_object_stack_mask.Copy(&object_stack_mask_);
+
+  AddToWorkQueue(/* dex_pc= */ 0u);
+  UpdateObjectMasks(/* dex_pc= */ 0u);
+  while (!work_queue_.empty()) {
+    uint32_t dex_pc = work_queue_.top();
+    work_queue_.pop();
+    if (!ProcessBlockForMasks(dex_pc)) {
+      return false;
+    }
+  }
+  object_register_mask_ = saved_object_register_mask;
+  object_stack_mask_.Copy(&saved_object_stack_mask);
+  return true;
+}
+
+bool FastCompilerARM64::UpdateObjectMasks(uint32_t dex_pc) {
+  bool changed = false;
+  uint64_t old_mask = object_register_masks_[dex_pc];
+  object_register_masks_[dex_pc] &= object_register_mask_;
+  changed = (old_mask != object_register_masks_[dex_pc]);
+
+  if (object_stack_masks_[dex_pc] == nullptr) {
+    object_stack_masks_[dex_pc] =
+        new (allocator_) ArenaBitVector(allocator_, /*start_bits=*/ 0, /*expandable=*/ true);
+    object_stack_masks_[dex_pc]->Copy(&object_stack_mask_);
+    changed = true;
+  } else if (!object_stack_masks_[dex_pc]->IsSubsetOf(&object_stack_mask_)) {
+    object_stack_masks_[dex_pc]->Intersect(&object_stack_mask_);
+    changed = true;
+  }
+  return changed;
+}
+
+bool FastCompilerARM64::ProcessBlockForMasks(uint32_t dex_pc) {
+  DexInstructionIterator it = GetCodeItemAccessor().InstructionsFrom(dex_pc).begin();
+  DexInstructionIterator end = GetCodeItemAccessor().end();
+
+  object_register_mask_ = object_register_masks_[dex_pc];
+  DCHECK_NE(object_stack_masks_[dex_pc], nullptr);
+  object_stack_mask_.Copy(object_stack_masks_[dex_pc]);
+
+  do {
+    DexInstructionPcPair pair = *it;
+    const Instruction& instruction = pair.Inst();
+
+    // If the instruction can throw, emulate a branch to each catch handler.
+    if (GetCodeItemAccessor().TriesSize() != 0 &&
+        (Instruction::FlagsOf(instruction.Opcode()) & Instruction::kThrow) != 0) {
+      const dex::TryItem* try_item = GetCodeItemAccessor().FindTryItem(pair.DexPc());
+      if (try_item != nullptr) {
+        for (CatchHandlerIterator iterator(GetCodeItemAccessor(), *try_item);
+             iterator.HasNext();
+             iterator.Next()) {
+          if (UpdateObjectMasks(iterator.GetHandlerAddress())) {
+            AddToWorkQueue(iterator.GetHandlerAddress());
+          }
+        }
+      }
+    }
+
+    if (instruction.IsBranch()) {
+      int32_t target_offset = instruction.GetTargetOffset();
+      if (UpdateObjectMasks(dex_pc + target_offset)) {
+        AddToWorkQueue(dex_pc + target_offset);
+      }
+    } else if (instruction.IsSwitch()) {
+      DexSwitchTable table(instruction, dex_pc);
+      for (DexSwitchTableIterator s_it(table); !s_it.Done(); s_it.Advance()) {
+        int32_t target_offset = s_it.CurrentTargetOffset();
+        if (UpdateObjectMasks(dex_pc + target_offset)) {
+          AddToWorkQueue(dex_pc + target_offset);
+        }
+      }
+    } else if (!ProcessDexInstructionForMasks(instruction)) {
+      DCHECK(HitUnimplemented());
+      return false;
+    }
+
+    ++it;
+    if (it == end || !instruction.CanFlowThrough()) {
+      break;
+    }
+    dex_pc = (*it).DexPc();
+    if (IsBranchTarget(dex_pc)) {
+      if (UpdateObjectMasks(dex_pc)) {
+        AddToWorkQueue(dex_pc);
+      }
+      break;
+    }
+  } while (true);
+  return true;
+}
+
+
+bool FastCompilerARM64::ProcessDexInstructionForMasks(const Instruction& instruction) {
+  switch (instruction.Opcode()) {
+    case Instruction::CONST_4:
+    case Instruction::CONST_16:
+    case Instruction::CONST:
+    case Instruction::CONST_HIGH16: {
+      bool can_be_object = (instruction.VRegB() == 0);
+      UpdateLocal(instruction.VRegA(), can_be_object, /* is_wide= */ false);
+      return true;
+    }
+
+#define IF_XX(cond) \
+    case Instruction::IF_##cond: \
+    case Instruction::IF_##cond##Z:
+    IF_XX(EQ)
+    IF_XX(NE)
+    IF_XX(LT)
+    IF_XX(LE)
+    IF_XX(GT)
+    IF_XX(GE)
+#undef IF_XX
+    case Instruction::GOTO:
+    case Instruction::GOTO_16:
+    case Instruction::GOTO_32:
+    case Instruction::RETURN:
+    case Instruction::RETURN_OBJECT:
+    case Instruction::RETURN_WIDE:
+    case Instruction::INVOKE_DIRECT:
+    case Instruction::INVOKE_DIRECT_RANGE:
+    case Instruction::INVOKE_INTERFACE:
+    case Instruction::INVOKE_INTERFACE_RANGE:
+    case Instruction::INVOKE_STATIC:
+    case Instruction::INVOKE_STATIC_RANGE:
+    case Instruction::INVOKE_SUPER:
+    case Instruction::INVOKE_SUPER_RANGE:
+    case Instruction::INVOKE_VIRTUAL:
+    case Instruction::INVOKE_VIRTUAL_RANGE:
+    case Instruction::INVOKE_POLYMORPHIC:
+    case Instruction::INVOKE_POLYMORPHIC_RANGE:
+    case Instruction::INVOKE_CUSTOM:
+    case Instruction::INVOKE_CUSTOM_RANGE:
+    case Instruction::RETURN_VOID:
+    case Instruction::NOP:
+    case Instruction::IPUT_OBJECT:
+    case Instruction::IPUT:
+    case Instruction::IPUT_BOOLEAN:
+    case Instruction::IPUT_BYTE:
+    case Instruction::IPUT_CHAR:
+    case Instruction::IPUT_SHORT:
+    case Instruction::IPUT_WIDE:
+    case Instruction::SPUT:
+    case Instruction::SPUT_BOOLEAN:
+    case Instruction::SPUT_BYTE:
+    case Instruction::SPUT_CHAR:
+    case Instruction::SPUT_SHORT:
+    case Instruction::SPUT_WIDE:
+    case Instruction::APUT_WIDE:
+    case Instruction::APUT_OBJECT:
+    case Instruction::SPUT_OBJECT:
+    case Instruction::APUT:
+    case Instruction::APUT_BOOLEAN:
+    case Instruction::APUT_BYTE:
+    case Instruction::APUT_CHAR:
+    case Instruction::APUT_SHORT:
+    case Instruction::THROW:
+    case Instruction::CHECK_CAST:
+    case Instruction::MONITOR_ENTER:
+    case Instruction::MONITOR_EXIT:
+    case Instruction::SPARSE_SWITCH:
+    case Instruction::PACKED_SWITCH:
+    case Instruction::FILL_ARRAY_DATA: {
+      return true;
+    }
+
+#define OP_CASE(opcode) \
+    case Instruction::opcode ##_INT_2ADDR: \
+    case Instruction::opcode ##_INT:
+    OP_CASE(ADD)
+    OP_CASE(SUB)
+    OP_CASE(MUL)
+    OP_CASE(AND)
+    OP_CASE(OR)
+    OP_CASE(XOR)
+    OP_CASE(DIV)
+    OP_CASE(REM)
+#undef OP_CASE
+#define OP_CASE(opcode) \
+    case Instruction::opcode ##_INT_2ADDR: \
+    case Instruction::opcode ##_INT: \
+    case Instruction::opcode ##_LONG_2ADDR: \
+    case Instruction::opcode ##_LONG:
+    OP_CASE(SHL)
+    OP_CASE(SHR)
+    OP_CASE(USHR)
+#undef OP_CASE
+    case Instruction::CMP_LONG:
+    case Instruction::CMPG_DOUBLE:
+    case Instruction::CMPL_DOUBLE:
+    case Instruction::CMPG_FLOAT:
+    case Instruction::CMPL_FLOAT:
+    case Instruction::NEG_INT:
+    case Instruction::NEG_FLOAT:
+    case Instruction::NOT_INT:
+    case Instruction::LONG_TO_INT:
+    case Instruction::INT_TO_BYTE:
+    case Instruction::INT_TO_SHORT:
+    case Instruction::INT_TO_CHAR:
+    case Instruction::INT_TO_FLOAT:
+    case Instruction::LONG_TO_FLOAT:
+    case Instruction::FLOAT_TO_INT:
+    case Instruction::DOUBLE_TO_INT:
+    case Instruction::DOUBLE_TO_FLOAT:
+    case Instruction::REM_FLOAT:
+    case Instruction::REM_FLOAT_2ADDR:
+    case Instruction::ADD_FLOAT_2ADDR:
+    case Instruction::ADD_FLOAT:
+    case Instruction::SUB_FLOAT_2ADDR:
+    case Instruction::SUB_FLOAT:
+    case Instruction::MUL_FLOAT_2ADDR:
+    case Instruction::MUL_FLOAT:
+    case Instruction::DIV_FLOAT_2ADDR:
+    case Instruction::DIV_FLOAT:
+    case Instruction::ADD_INT_LIT16:
+    case Instruction::AND_INT_LIT16:
+    case Instruction::OR_INT_LIT16:
+    case Instruction::XOR_INT_LIT16:
+    case Instruction::MUL_INT_LIT16:
+    case Instruction::DIV_INT_LIT16:
+    case Instruction::RSUB_INT:
+    case Instruction::REM_INT_LIT16:
+    case Instruction::ADD_INT_LIT8:
+    case Instruction::AND_INT_LIT8:
+    case Instruction::OR_INT_LIT8:
+    case Instruction::XOR_INT_LIT8:
+    case Instruction::RSUB_INT_LIT8:
+    case Instruction::MUL_INT_LIT8:
+    case Instruction::DIV_INT_LIT8:
+    case Instruction::REM_INT_LIT8:
+    case Instruction::SHL_INT_LIT8:
+    case Instruction::SHR_INT_LIT8:
+    case Instruction::USHR_INT_LIT8:
+    case Instruction::MOVE_RESULT:
+    case Instruction::IGET:
+    case Instruction::IGET_BOOLEAN:
+    case Instruction::IGET_BYTE:
+    case Instruction::IGET_CHAR:
+    case Instruction::IGET_SHORT:
+    case Instruction::SGET:
+    case Instruction::SGET_BOOLEAN:
+    case Instruction::SGET_BYTE:
+    case Instruction::SGET_CHAR:
+    case Instruction::SGET_SHORT:
+    case Instruction::ARRAY_LENGTH:
+    case Instruction::AGET:
+    case Instruction::AGET_BOOLEAN:
+    case Instruction::AGET_BYTE:
+    case Instruction::AGET_CHAR:
+    case Instruction::AGET_SHORT:
+    case Instruction::MOVE:
+    case Instruction::MOVE_16:
+    case Instruction::MOVE_FROM16:
+    case Instruction::INSTANCE_OF: {
+      int32_t vreg_a = instruction.VRegA();
+      UpdateLocal(vreg_a, /* is_object= */ false, /* is_wide= */ false);
+      return true;
+    }
+
+#define OP_CASE(opcode) \
+    case Instruction::opcode ##_LONG_2ADDR: \
+    case Instruction::opcode ##_LONG:
+    OP_CASE(ADD)
+    OP_CASE(SUB)
+    OP_CASE(MUL)
+    OP_CASE(AND)
+    OP_CASE(OR)
+    OP_CASE(XOR)
+    OP_CASE(DIV)
+    OP_CASE(REM)
+#undef OP_CASE
+    case Instruction::NEG_DOUBLE:
+    case Instruction::NEG_LONG:
+    case Instruction::NOT_LONG:
+    case Instruction::INT_TO_LONG:
+    case Instruction::INT_TO_DOUBLE:
+    case Instruction::LONG_TO_DOUBLE:
+    case Instruction::FLOAT_TO_LONG:
+    case Instruction::FLOAT_TO_DOUBLE:
+    case Instruction::DOUBLE_TO_LONG:
+    case Instruction::REM_DOUBLE:
+    case Instruction::REM_DOUBLE_2ADDR:
+    case Instruction::ADD_DOUBLE_2ADDR:
+    case Instruction::ADD_DOUBLE:
+    case Instruction::SUB_DOUBLE_2ADDR:
+    case Instruction::SUB_DOUBLE:
+    case Instruction::MUL_DOUBLE_2ADDR:
+    case Instruction::MUL_DOUBLE:
+    case Instruction::DIV_DOUBLE_2ADDR:
+    case Instruction::DIV_DOUBLE:
+    case Instruction::MOVE_RESULT_WIDE:
+    case Instruction::SGET_WIDE:
+    case Instruction::IGET_WIDE:
+    case Instruction::AGET_WIDE:
+    case Instruction::CONST_WIDE_16:
+    case Instruction::CONST_WIDE_32:
+    case Instruction::CONST_WIDE:
+    case Instruction::CONST_WIDE_HIGH16:
+    case Instruction::MOVE_WIDE:
+    case Instruction::MOVE_WIDE_FROM16:
+    case Instruction::MOVE_WIDE_16: {
+      int32_t vreg_a = instruction.VRegA();
+      UpdateLocal(vreg_a, /* is_object= */ false, /* is_wide= */ true);
+      return true;
+    }
+
+    case Instruction::NEW_ARRAY:
+    case Instruction::NEW_INSTANCE:
+    case Instruction::FILLED_NEW_ARRAY:
+    case Instruction::FILLED_NEW_ARRAY_RANGE:
+    case Instruction::MOVE_RESULT_OBJECT:
+    case Instruction::IGET_OBJECT:
+    case Instruction::SGET_OBJECT:
+    case Instruction::AGET_OBJECT:
+    case Instruction::CONST_STRING:
+    case Instruction::CONST_STRING_JUMBO:
+    case Instruction::CONST_CLASS:
+    case Instruction::CONST_METHOD_HANDLE:
+    case Instruction::CONST_METHOD_TYPE:
+    case Instruction::MOVE_EXCEPTION:
+    case Instruction::MOVE_OBJECT:
+    case Instruction::MOVE_OBJECT_FROM16:
+    case Instruction::MOVE_OBJECT_16: {
+      UpdateLocal(instruction.VRegA(), /* is_object= */ true, /* is_wide= */ false);
+      return true;
+    }
+
+    case Instruction::UNUSED_3E ... Instruction::UNUSED_43:
+    case Instruction::UNUSED_73:
+    case Instruction::UNUSED_79:
+    case Instruction::UNUSED_7A:
+    case Instruction::UNUSED_E3 ... Instruction::UNUSED_F9: {
+      break;
+    }
+  }
+  unimplemented_reason_ = instruction.Name();
+  return false;
+}
+
+bool FastCompilerARM64::Compile(bool with_loop_support) {
   if (!InitializeParameters()) {
     DCHECK(HitUnimplemented());
     AbortCompilation();
     return false;
   }
+  if (with_loop_support) {
+    if (!EnsureHasFrame()) {
+      AbortCompilation();
+      return false;
+    }
+    AnalyzeBranches();
+  }
+
   if (!ProcessInstructions()) {
     DCHECK(HitUnimplemented());
     AbortCompilation();
@@ -4013,9 +4378,8 @@ std::unique_ptr<arm64::FastCompilerARM64> TryCompile(
       arena_stack,
       handles,
       compiler_options,
-      dex_compilation_unit,
-      with_loop_support));
-  if (compiler->Compile()) {
+      dex_compilation_unit));
+  if (compiler->Compile(with_loop_support)) {
     return compiler;
   }
 
@@ -4044,6 +4408,7 @@ std::unique_ptr<FastCompiler> FastCompiler::CompileARM64(
     const DexCompilationUnit& dex_compilation_unit) {
   if (!compiler_options.GetImplicitNullChecks() ||
       !compiler_options.GetImplicitStackOverflowChecks() ||
+      compiler_options.IsJitCompilerForSharedCode() ||
       kUseTableLookupReadBarrier ||
       !kReserveMarkingRegister ||
       kPoisonHeapReferences) {

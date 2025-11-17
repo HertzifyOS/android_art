@@ -26,6 +26,7 @@ namespace art HIDDEN {
 // LINT.IfChange
 enum PinningReason {
   kNoReason = 0,
+  kCriticalSection = 2,
   kNativeMethod = 3,
   kMonitor = 4,
   kUnsupportedFrame = 5,

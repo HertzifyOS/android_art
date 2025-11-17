@@ -18,3 +18,5 @@ def run(ctx, args):
   ctx.default_run(args)
   if args.jvm:
     ctx.expected_stdout = ctx.expected_stdout.with_suffix(".jvm.txt")
+
+  ctx.run(fr"sed -i 's/[0-9a-f]\{{40\}}/<hash>/g' '{args.stdout_file}'")

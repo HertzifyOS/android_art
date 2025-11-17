@@ -640,17 +640,17 @@ void HInstructionBuilder::InitializeParameters() {
   const char* shorty = dex_compilation_unit_->GetShorty();
   uint16_t number_of_parameters = graph_->GetNumberOfInVRegs();
   uint16_t locals_index = graph_->GetNumberOfLocalVRegs();
-  uint16_t parameter_index = 0;
+  uint16_t input_vreg_index = 0;
 
   const dex::MethodId& referrer_method_id =
       dex_file_->GetMethodId(dex_compilation_unit_->GetDexMethodIndex());
   if (!dex_compilation_unit_->IsStatic()) {
     // Add the implicit 'this' argument, not expressed in the signature.
     HParameterValue* parameter = new (allocator_) HParameterValue(*dex_file_,
-                                                              referrer_method_id.class_idx_,
-                                                              parameter_index++,
-                                                              DataType::Type::kReference,
-                                                              /* is_this= */ true);
+                                                                  referrer_method_id.class_idx_,
+                                                                  input_vreg_index++,
+                                                                  DataType::Type::kReference,
+                                                                  /* is_this= */ true);
     AppendInstruction(parameter);
     UpdateLocal(locals_index++, parameter);
     number_of_parameters--;
@@ -665,7 +665,7 @@ void HInstructionBuilder::InitializeParameters() {
     HParameterValue* parameter = new (allocator_) HParameterValue(
         *dex_file_,
         arg_types->GetTypeItem(shorty_pos - 1).type_idx_,
-        parameter_index++,
+        input_vreg_index++,
         DataType::FromShorty(shorty[shorty_pos]),
         /* is_this= */ false);
     ++shorty_pos;
@@ -676,7 +676,7 @@ void HInstructionBuilder::InitializeParameters() {
     if (DataType::Is64BitType(parameter->GetType())) {
       i++;
       locals_index++;
-      parameter_index++;
+      input_vreg_index++;
     }
   }
 }

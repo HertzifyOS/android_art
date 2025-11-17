@@ -86,6 +86,13 @@ struct VirtualThreadParkingVisitor final : public StackVisitor {
       return false;
     }
 
+    ArtMethod* method = shadow_frame->GetMethod();
+    DCHECK(method != nullptr);
+    if (method->IsClassInitializer()) {
+      reason_ = kCriticalSection;
+      return false;
+    }
+
     if (!shadow_frame->GetLockCountData().IsEmpty()) {
       reason_ = kMonitor;
       return false;

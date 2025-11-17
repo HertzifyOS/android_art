@@ -1657,87 +1657,51 @@ bool JitCodeCache::IsOsrCompiled(ArtMethod* method) {
   return osr_code_map_.find(method) != osr_code_map_.end();
 }
 
-bool JitCodeCache::NotifyCompilationOf(ArtMethod* method,
-                                       Thread* self,
-                                       CompilationKind compilation_kind,
-                                       bool prejit) {
-  if (compilation_kind != CompilationKind::kOsr) {
-    const void* existing_entry_point = method->GetEntryPointFromQuickCompiledCode();
-    if (ContainsPc(existing_entry_point)) {
-      CompilationKind existing_kind = CodeInfo::GetCompilationKind(
-          OatQuickMethodHeader::FromEntryPoint(existing_entry_point)->GetOptimizedCodeInfoPtr());
-      if (static_cast<size_t>(existing_kind >= compilation_kind)) {
-        // The existing entry point is either already baseline, or optimized. No
-        // need to compile.
-        VLOG(jit) << "Not compiling "
-                  << method->PrettyMethod() << " " << compilation_kind
-                  << " because it has already been compiled " << existing_kind;
-        return false;
-      }
-    }
+bool JitCodeCache::HasCompiledCodeFor(ArtMethod* method,
+                                      Thread* self,
+                                      CompilationKind compilation_kind) {
+  if (compilation_kind == CompilationKind::kOsr) {
+    DCHECK(!method->IsNative());
+    return IsOsrCompiled(method);
   }
 
-  if (method->NeedsClinitCheckBeforeCall() && !prejit) {
-    // We do not need a synchronization barrier for checking the visibly initialized status
-    // or checking the initialized status just for requesting visible initialization.
-    ClassStatus status = method->GetDeclaringClass()
-        ->GetStatus<kDefaultVerifyFlags, /*kWithSynchronizationBarrier=*/ false>();
-    if (status != ClassStatus::kVisiblyInitialized) {
-      // Unless we're pre-jitting, we currently don't save the JIT compiled code if we cannot
-      // update the entrypoint due to needing an initialization check.
-      if (status == ClassStatus::kInitialized) {
-        // Request visible initialization but do not block to allow compiling other methods.
-        // Hopefully, this will complete by the time the method becomes hot again.
-        Runtime::Current()->GetClassLinker()->MakeInitializedClassesVisiblyInitialized(
-            self, /*wait=*/ false);
-      }
-      VLOG(jit) << "Not compiling "
-                << method->PrettyMethod()
-                << " because it has the resolution stub";
-      return false;
-    }
+  const void* existing_entry_point = method->GetEntryPointFromQuickCompiledCode();
+  if (ContainsPc(existing_entry_point)) {
+    CompilationKind existing_kind = CodeInfo::GetCompilationKind(
+        OatQuickMethodHeader::FromEntryPoint(existing_entry_point)->GetOptimizedCodeInfoPtr());
+    return existing_kind >= compilation_kind;
+  }
+
+  if (LIKELY(!method->IsNative())) {
+    return false;
   }
 
   ScopedDebugDisallowReadBarriers sddrb(self);
-  if (compilation_kind == CompilationKind::kOsr) {
-    ReaderMutexLock mu(self, *Locks::jit_mutator_lock_);
-    if (osr_code_map_.find(method) != osr_code_map_.end()) {
-      return false;
-    }
+  JniStubKey key(method);
+  MutexLock mu2(self, *Locks::jit_lock_);
+  WriterMutexLock mu(self, *Locks::jit_mutator_lock_);
+  auto it = jni_stubs_map_.find(key);
+  if (it == jni_stubs_map_.end()) {
+    it = jni_stubs_map_.Put(key, JniStubData{});
+    it->second.AddMethod(method);
+    return false;
   }
-
-  if (UNLIKELY(method->IsNative())) {
-    JniStubKey key(method);
-    MutexLock mu2(self, *Locks::jit_lock_);
-    WriterMutexLock mu(self, *Locks::jit_mutator_lock_);
-    auto it = jni_stubs_map_.find(key);
-    bool new_compilation = false;
-    if (it == jni_stubs_map_.end()) {
-      // Create a new entry to mark the stub as being compiled.
-      it = jni_stubs_map_.Put(key, JniStubData{});
-      new_compilation = true;
+  // We have code for the native method, update all entrypoints.
+  JniStubData* data = &it->second;
+  data->AddMethod(method);
+  if (data->IsCompiled()) {
+    OatQuickMethodHeader* method_header = OatQuickMethodHeader::FromCodePointer(data->GetCode());
+    const void* entrypoint = method_header->GetEntryPoint();
+    // Update also entrypoints of other methods held by the JniStubData.
+    // We could simply update the entrypoint of `method` but if the last JIT GC has
+    // changed these entrypoints to GenericJNI in preparation for a full GC, we may
+    // as well change them back as this stub shall not be collected anyway and this
+    // can avoid a few expensive GenericJNI calls.
+    for (ArtMethod* m : it->second.GetMethods()) {
+      zombie_jni_code_.erase(m);
+      processed_zombie_jni_code_.erase(m);
     }
-    JniStubData* data = &it->second;
-    data->AddMethod(method);
-    if (data->IsCompiled()) {
-      OatQuickMethodHeader* method_header = OatQuickMethodHeader::FromCodePointer(data->GetCode());
-      const void* entrypoint = method_header->GetEntryPoint();
-      // Update also entrypoints of other methods held by the JniStubData.
-      // We could simply update the entrypoint of `method` but if the last JIT GC has
-      // changed these entrypoints to GenericJNI in preparation for a full GC, we may
-      // as well change them back as this stub shall not be collected anyway and this
-      // can avoid a few expensive GenericJNI calls.
-      for (ArtMethod* m : it->second.GetMethods()) {
-        zombie_jni_code_.erase(m);
-        processed_zombie_jni_code_.erase(m);
-      }
-      data->UpdateEntryPoints(entrypoint);
-    }
-    return new_compilation;
-  } else {
-    if (compilation_kind == CompilationKind::kBaseline) {
-      DCHECK(CanAllocateProfilingInfo());
-    }
+    data->UpdateEntryPoints(entrypoint);
   }
   return true;
 }

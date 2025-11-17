@@ -1469,7 +1469,7 @@ END_FUNCTION \name
    .endif
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalStaticField", success_label="1b", fail_label="9f", is_static="1")
+%  fetch_field_from_fast_path("NterpGetLocalStaticField", success_label="1b", fail_label="9f", is_static=True)
 9:
    EXPORT_PC
    movl rSELF:THREAD_SELF_OFFSET, ARG0
@@ -1523,7 +1523,7 @@ END_FUNCTION \name
    .endif
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalStaticField", success_label="1b", fail_label="7f", is_static="1")
+%  fetch_field_from_fast_path("NterpGetLocalStaticField", success_label="1b", fail_label="7f", is_static=True)
 7:
    EXPORT_PC
    movl rSELF:THREAD_SELF_OFFSET, ARG0
@@ -1584,7 +1584,7 @@ END_FUNCTION \name
    OP_IPUT_INTERNAL \rINST_reg, \store, \wide, volatile=0
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalInstanceField", success_label="1b", fail_label="3f", is_static="0")
+%  fetch_field_from_fast_path("NterpGetLocalInstanceField", success_label="1b", fail_label="3f")
 3:
    EXPORT_PC
    movl rSELF:THREAD_SELF_OFFSET, ARG0
@@ -1623,7 +1623,7 @@ END_FUNCTION \name
    .endif
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalInstanceField", success_label="1b", fail_label="3f", is_static="0")
+%  fetch_field_from_fast_path("NterpGetLocalInstanceField", success_label="1b", fail_label="3f")
 3:
    EXPORT_PC
    movl rSELF:THREAD_SELF_OFFSET, ARG0
@@ -1867,7 +1867,7 @@ OAT_ENTRY ExecuteNterpImpl
    jne  ${miss_label}
    movl __SIZEOF_POINTER__+THREAD_INTERPRETER_CACHE_OFFSET(%eax, %ecx, 1), ${dest_reg}
 
-%def fetch_field_from_fast_path(get_local, success_label, fail_label, is_static):
+%def fetch_field_from_fast_path(get_local, success_label, fail_label, is_static=False):
    movl 0(%esp), %eax
    testl $$ART_METHOD_IS_OBSOLETE_FLAG, ART_METHOD_ACCESS_FLAGS_OFFSET(%eax)
    jne ${fail_label}
@@ -1882,11 +1882,11 @@ OAT_ENTRY ExecuteNterpImpl
    RESTORE_IBASE
    FETCH_INST_CLEAR_OPCODE
    cmpl MACRO_LITERAL(0), %eax
-   .if ${is_static}
-   jne ${success_label}
-   .else
-   jge ${success_label}
-   .endif
+%  if is_static:
+     jne ${success_label}
+%  else:
+     jge ${success_label}
+%  #endif
 
 %def footer():
 /*
@@ -2028,7 +2028,7 @@ NterpPutObjectInstanceField:
 4:
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalInstanceFieldForIPutObject", success_label="1b", fail_label="6f", is_static="0")
+%  fetch_field_from_fast_path("NterpGetLocalInstanceFieldForIPutObject", success_label="1b", fail_label="6f")
 6:
    EXPORT_PC
    movl rSELF:THREAD_SELF_OFFSET, ARG0
@@ -2076,7 +2076,7 @@ NterpGetObjectInstanceField:
    SET_VREG_OBJECT %eax, rINST             # fp[A] <- value
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalInstanceField", success_label="1b", fail_label="5f", is_static="0")
+%  fetch_field_from_fast_path("NterpGetLocalInstanceField", success_label="1b", fail_label="5f")
 5:
    EXPORT_PC
    movl rSELF:THREAD_SELF_OFFSET, ARG0
@@ -2116,7 +2116,7 @@ NterpPutObjectStaticField:
 4:
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalStaticFieldForSPutObject", success_label="1b", fail_label="9f", is_static="1")
+%  fetch_field_from_fast_path("NterpGetLocalStaticFieldForSPutObject", success_label="1b", fail_label="9f", is_static=True)
 9:
    EXPORT_PC
    movl rSELF:THREAD_SELF_OFFSET, ARG0
@@ -2167,7 +2167,7 @@ NterpGetObjectStaticField:
    SET_VREG_OBJECT %eax, rINST             # fp[A] <- value
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalStaticField", success_label="1b", fail_label="9f", is_static="1")
+%  fetch_field_from_fast_path("NterpGetLocalStaticField", success_label="1b", fail_label="9f", is_static=True)
 9:
    EXPORT_PC
    movl rSELF:THREAD_SELF_OFFSET, ARG0
@@ -2382,17 +2382,17 @@ SYMBOL(artNterpAsmInstructionEnd):
     FUNCTION_TYPE(artNterpAsmInstructionStart)
     ASM_HIDDEN SYMBOL(artNterpAsmInstructionStart)
     .global SYMBOL(artNterpAsmInstructionStart)
-SYMBOL(artNterpAsmInstructionStart) = .L_op_nop
+SYMBOL(artNterpAsmInstructionStart) = ${opcode_name_prefix}op_nop
     .text
 
-%def opcode_name_prefix():
-%   return "nterp_"
+%def opcode_name_prefixes():
+%   return ["nterp_"]
 %def opcode_start():
-    ENTRY nterp_${opcode}
+    ENTRY ${opcode}
 %def opcode_end():
-    END nterp_${opcode}
+    END ${opcode}
     // Advance to the end of this handler. Causes error if we are past that point.
-    .org nterp_${opcode} + NTERP_HANDLER_SIZE  // ${opcode} handler is too big!
+    .org ${opcode} + NTERP_HANDLER_SIZE  // ${opcode} handler is too big!
 %def opcode_slow_path_start(name):
     ENTRY ${name}
 %def opcode_slow_path_end(name):

@@ -1,4 +1,4 @@
-%def binop(preinstr="", result="r0", chkzero="0", instr=""):
+%def binop(preinstr="", result="r0", chkzero=False, instr=""):
     /*
      * Generic 32-bit binary operation.  Provide an "instr" line that
      * specifies an instruction that performs "result = r0 op r1".
@@ -21,20 +21,20 @@
     and     r2, r0, #255                @ r2<- BB
     GET_VREG r1, r3                     @ r1<- vCC
     GET_VREG r0, r2                     @ r0<- vBB
-    .if $chkzero
-    cmp     r1, #0                      @ is second operand zero?
-    beq     common_errDivideByZero
-    .endif
+%   if chkzero:
+      cmp     r1, #0                    @ is second operand zero?
+      beq     common_errDivideByZero
+%   #endif
 
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     $preinstr                           @ optional op; may set condition codes
     $instr                              @ $result<- op, r0-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG $result, r4                @ vAA<- $result
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 11-14 instructions */
 
-%def binop2addr(preinstr="", result="r0", chkzero="0", instr=""):
+%def binop2addr(preinstr="", result="r0", chkzero=False, instr=""):
     /*
      * Generic 32-bit "/2addr" binary operation.  Provide an "instr" line
      * that specifies an instruction that performs "result = r0 op r1".
@@ -54,20 +54,20 @@
     ubfx    r4, rINST, #8, #4           @ r4<- A
     GET_VREG r1, r3                     @ r1<- vB
     GET_VREG r0, r4                     @ r0<- vA
-    .if $chkzero
-    cmp     r1, #0                      @ is second operand zero?
-    beq     common_errDivideByZero
-    .endif
+%   if chkzero:
+      cmp     r1, #0                    @ is second operand zero?
+      beq     common_errDivideByZero
+%   #endif
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
 
     $preinstr                           @ optional op; may set condition codes
     $instr                              @ $result<- op, r0-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG $result, r4                @ vAA<- $result
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-13 instructions */
 
-%def binopLit16(result="r0", chkzero="0", instr=""):
+%def binopLit16(result="r0", chkzero=False, instr=""):
     /*
      * Generic 32-bit "lit16" binary operation.  Provide an "instr" line
      * that specifies an instruction that performs "result = r0 op r1".
@@ -85,19 +85,19 @@
     mov     r2, rINST, lsr #12          @ r2<- B
     ubfx    r4, rINST, #8, #4           @ r4<- A
     GET_VREG r0, r2                     @ r0<- vB
-    .if $chkzero
-    cmp     r1, #0                      @ is second operand zero?
-    beq     common_errDivideByZero
-    .endif
+%   if chkzero:
+      cmp     r1, #0                    @ is second operand zero?
+      beq     common_errDivideByZero
+%   #endif
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
 
     $instr                              @ $result<- op, r0-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG $result, r4                @ vAA<- $result
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-13 instructions */
 
-%def binopLit8(extract="asr     r1, r3, #8", result="r0", chkzero="0", instr=""):
+%def binopLit8(extract="asr     r1, r3, #8", result="r0", chkzero=False, instr=""):
     /*
      * Generic 32-bit "lit8" binary operation.  Provide an "instr" line
      * that specifies an instruction that performs "result = r0 op r1".
@@ -121,19 +121,19 @@
     and     r2, r3, #255                @ r2<- BB
     GET_VREG r0, r2                     @ r0<- vBB
     $extract                            @ optional; typically r1<- ssssssCC (sign extended)
-    .if $chkzero
-    @cmp     r1, #0                     @ is second operand zero?
-    beq     common_errDivideByZero
-    .endif
+%   if chkzero:
+      @cmp     r1, #0                   @ is second operand zero?
+      beq     common_errDivideByZero
+%   #endif
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
 
     $instr                              @ $result<- op, r0-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG $result, r4                @ vAA<- $result
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-12 instructions */
 
-%def binopWide(preinstr="", result0="r0", result1="r1", chkzero="0", instr=""):
+%def binopWide(preinstr="", result0="r0", result1="r1", chkzero=False, instr=""):
     /*
      * Generic 64-bit binary operation.  Provide an "instr" line that
      * specifies an instruction that performs "result = r0-r1 op r2-r3".
@@ -159,20 +159,20 @@
     VREG_INDEX_TO_ADDR r3, r3           @ r3<- &fp[CC]
     GET_VREG_WIDE_BY_ADDR r0, r1, r2    @ r0/r1<- vBB/vBB+1
     GET_VREG_WIDE_BY_ADDR r2, r3, r3    @ r2/r3<- vCC/vCC+1
-    .if $chkzero
-    orrs    ip, r2, r3                  @ second arg (r2-r3) is zero?
-    beq     common_errDivideByZero
-    .endif
+%   if chkzero:
+      orrs    ip, r2, r3                @ second arg (r2-r3) is zero?
+      beq     common_errDivideByZero
+%   #endif
     CLEAR_SHADOW_PAIR rINST, lr, ip     @ Zero out the shadow regs
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     $preinstr                           @ optional op; may set condition codes
     $instr                              @ result<- op, r0-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR $result0,$result1,r4  @ vAA/vAA+1<,  $result0/$result1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 14-17 instructions */
 
-%def binopWide2addr(preinstr="", result0="r0", result1="r1", chkzero="0", instr=""):
+%def binopWide2addr(preinstr="", result0="r0", result1="r1", chkzero=False, instr=""):
     /*
      * Generic 64-bit "/2addr" binary operation.  Provide an "instr" line
      * that specifies an instruction that performs "result = r0-r1 op r2-r3".
@@ -194,17 +194,17 @@
     VREG_INDEX_TO_ADDR r4, rINST        @ r4<- &fp[A]
     GET_VREG_WIDE_BY_ADDR r2, r3, r1    @ r2/r3<- vBB/vBB+1
     GET_VREG_WIDE_BY_ADDR r0, r1, r4    @ r0/r1<- vAA/vAA+1
-    .if $chkzero
-    orrs    ip, r2, r3                  @ second arg (r2-r3) is zero?
-    beq     common_errDivideByZero
-    .endif
+%   if chkzero:
+      orrs    ip, r2, r3                @ second arg (r2-r3) is zero?
+      beq     common_errDivideByZero
+%   #endif
     CLEAR_SHADOW_PAIR rINST, ip, lr     @ Zero shadow regs
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     $preinstr                           @ optional op; may set condition codes
     $instr                              @ result<- op, r0-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR $result0,$result1,r4  @ vAA/vAA+1<- $result0/$result1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 12-15 instructions */
 
 %def unop(preinstr="", instr=""):
@@ -223,9 +223,9 @@
     $preinstr                           @ optional op; may set condition codes
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     $instr                              @ r0<- op, r0-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r0, r4                     @ vAA<- r0
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 8-9 instructions */
 
 %def unopNarrower(preinstr="", instr=""):
@@ -247,12 +247,12 @@
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     $preinstr                           @ optional op; may set condition codes
     $instr                              @ r0<- op, r0-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r0, r4                     @ vA<- r0
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 9-10 instructions */
 
-%def unopWide(preinstr="", instr=""):
+%def unopWide(preinstr="", instr="", postinstr=""):
     /*
      * Generic 64-bit unary operation.  Provide an "instr" line that
      * specifies an instruction that performs "result = op r0/r1".
@@ -270,9 +270,10 @@
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     $preinstr                           @ optional op; may set condition codes
     $instr                              @ r0/r1<- op, r2-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    $postinstr                          @ optional op
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-11 instructions */
 
 %def unopWider(preinstr="", instr=""):
@@ -292,9 +293,9 @@
     CLEAR_SHADOW_PAIR rINST, ip, lr     @ Zero shadow regs
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     $instr                              @ r0<- op, r0-r3 changed
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vA/vA+1<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 9-10 instructions */
 
 %def op_add_int():
@@ -358,8 +359,8 @@
     moveq   r3, #0
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     SET_VREG r3, r4                     @ vAA<- ip
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
-    GOTO_OPCODE ip                      @ jump to next instruction
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_div_int():
     /*
@@ -387,9 +388,9 @@
 #else
     bl    __aeabi_idiv                  @ r0<- op, r0-r3 changed
 #endif
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r0, r4                     @ vAA<- r0
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 11-14 instructions */
 
 %def op_div_int_2addr():
@@ -416,9 +417,9 @@
 #else
     bl       __aeabi_idiv               @ r0<- op, r0-r3 changed
 #endif
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r0, r4                     @ vAA<- r0
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-13 instructions */
 
 
@@ -446,9 +447,9 @@
 #else
     bl       __aeabi_idiv               @ r0<- op, r0-r3 changed
 #endif
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r0, r4                     @ vAA<- r0
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-13 instructions */
 
 %def op_div_int_lit8():
@@ -476,16 +477,16 @@
 #else
     bl   __aeabi_idiv                   @ r0<- op, r0-r3 changed
 #endif
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r0, r4                     @ vAA<- r0
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-12 instructions */
 
 %def op_div_long():
-%  binopWide(instr="bl      __aeabi_ldivmod", chkzero="1")
+%  binopWide(instr="bl      __aeabi_ldivmod", chkzero=True)
 
 %def op_div_long_2addr():
-%  binopWide2addr(instr="bl      __aeabi_ldivmod", chkzero="1")
+%  binopWide2addr(instr="bl      __aeabi_ldivmod", chkzero=True)
 
 %def op_int_to_byte():
 %  unop(instr="sxtb    r0, r0")
@@ -556,9 +557,9 @@
     CLEAR_SHADOW_PAIR r4, lr, ip        @ Zero out the shadow regs
     VREG_INDEX_TO_ADDR r4, r4           @ r2<- &fp[AA]
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1 , r4   @ vAA/vAA+1<- r1/r2
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_mul_long_2addr():
     /*
@@ -582,15 +583,15 @@
     mov     r4, rINST                   @ Save vAA before FETCH_ADVANCE_INST
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     add     r1, r3, lr                  @ r1<- lr + low(ZxW + (YxX))
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_neg_int():
 %  unop(instr="rsb     r0, r0, #0")
 
 %def op_neg_long():
-%  unopWide(preinstr="rsbs    r0, r0, #0", instr="rsc     r1, r1, #0")
+%  unopWide(preinstr="rsbs    r0, r0, #0", instr="mov     ip, #0", postinstr="sbc     r1, ip, r1")
 
 %def op_not_int():
 %  unop(instr="mvn     r0, r0")
@@ -645,9 +646,9 @@
 #else
     bl      __aeabi_idivmod                @ r1<- op, r0-r3 changed
 #endif
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r1, r4                     @ vAA<- r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 11-14 instructions */
 
 %def op_rem_int_2addr():
@@ -677,9 +678,9 @@
 #else
     bl      __aeabi_idivmod             @ r1<- op, r0-r3 changed
 #endif
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r1, r4                     @ vAA<- r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-13 instructions */
 
 
@@ -710,9 +711,9 @@
 #else
     bl     __aeabi_idivmod              @ r1<- op, r0-r3 changed
 #endif
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r1, r4                     @ vAA<- r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-13 instructions */
 
 %def op_rem_int_lit8():
@@ -743,18 +744,18 @@
 #else
     bl       __aeabi_idivmod            @ r1<- op, r0-r3 changed
 #endif
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG r1, r4                     @ vAA<- r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
     /* 10-12 instructions */
 
 %def op_rem_long():
 /* ldivmod returns quotient in r0/r1 and remainder in r2/r3 */
-%  binopWide(instr="bl      __aeabi_ldivmod", result0="r2", result1="r3", chkzero="1")
+%  binopWide(instr="bl      __aeabi_ldivmod", result0="r2", result1="r3", chkzero=True)
 
 %def op_rem_long_2addr():
 /* ldivmod returns quotient in r0/r1 and remainder in r2/r3 */
-%  binopWide2addr(instr="bl      __aeabi_ldivmod", result0="r2", result1="r3", chkzero="1")
+%  binopWide2addr(instr="bl      __aeabi_ldivmod", result0="r2", result1="r3", chkzero=True)
 
 %def op_rsub_int():
 /* this op is "rsub-int", but can be thought of as "rsub-int/lit16" */
@@ -792,15 +793,16 @@
     VREG_INDEX_TO_ADDR r4, r4           @ r4<- &fp[AA]
     mov     r1, r1, asl r2              @ r1<- r1 << r2
     rsb     r3, r2, #32                 @ r3<- 32 - r2
-    orr     r1, r1, r0, lsr r3          @ r1<- r1 | (r0 << (32-r2))
+    lsr     r3, r0, r3                  @ r3<- r0 << (32-r2)
+    orr     r1, r1,  r3                 @ r1<- r1 | (r0 << (32-r2))
     subs    ip, r2, #32                 @ ip<- r2 - 32
     it      pl
     movpl   r1, r0, asl ip              @ if r2 >= 32, r1<- r0 << (r2-32)
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     mov     r0, r0, asl r2              @ r0<- r0 << r2
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_shl_long_2addr():
     /*
@@ -817,15 +819,16 @@
     GET_VREG_WIDE_BY_ADDR r0, r1, r4    @ r0/r1<- vAA/vAA+1
     mov     r1, r1, asl r2              @ r1<- r1 << r2
     rsb     r3, r2, #32                 @ r3<- 32 - r2
-    orr     r1, r1, r0, lsr r3          @ r1<- r1 | (r0 << (32-r2))
+    lsr     r3, r0, r3                  @ r3<- r0 << (32-r2)
+    orr     r1, r1, r3                  @ r1<- r1 | (r0 << (32-r2))
     subs    ip, r2, #32                 @ ip<- r2 - 32
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     it      pl
     movpl   r1, r0, asl ip              @ if r2 >= 32, r1<- r0 << (r2-32)
     mov     r0, r0, asl r2              @ r0<- r0 << r2
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_shr_int():
 %  binop(preinstr="and     r1, r1, #31", instr="mov     r0, r0, asr r1")
@@ -856,15 +859,16 @@
     VREG_INDEX_TO_ADDR r4, r4           @ r4<- &fp[AA]
     mov     r0, r0, lsr r2              @ r0<- r2 >> r2
     rsb     r3, r2, #32                 @ r3<- 32 - r2
-    orr     r0, r0, r1, lsl r3          @ r0<- r0 | (r1 << (32-r2))
+    lsl     r3, r1, r3                  @ r3<- r1 << (32-r2)
+    orr     r0, r0, r3                  @ r0<- r0 | (r1 << (32-r2))
     subs    ip, r2, #32                 @ ip<- r2 - 32
     it      pl
     movpl   r0, r1, asr ip              @ if r2 >= 32, r0<-r1 >> (r2-32)
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     mov     r1, r1, asr r2              @ r1<- r1 >> r2
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_shr_long_2addr():
     /*
@@ -881,15 +885,16 @@
     GET_VREG_WIDE_BY_ADDR r0, r1, r4    @ r0/r1<- vAA/vAA+1
     mov     r0, r0, lsr r2              @ r0<- r2 >> r2
     rsb     r3, r2, #32                 @ r3<- 32 - r2
-    orr     r0, r0, r1, lsl r3          @ r0<- r0 | (r1 << (32-r2))
+    lsl     r3, r1, r3                  @ r3<- r1 << (32-r2)
+    orr     r0, r0, r3                  @ r0<- r0 | (r1 << (32-r2))
     subs    ip, r2, #32                 @ ip<- r2 - 32
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     it      pl
     movpl   r0, r1, asr ip              @ if r2 >= 32, r0<-r1 >> (r2-32)
     mov     r1, r1, asr r2              @ r1<- r1 >> r2
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_sub_int():
 %  binop(instr="sub     r0, r0, r1")
@@ -932,15 +937,16 @@
     VREG_INDEX_TO_ADDR r4, r4           @ r4<- &fp[AA]
     mov     r0, r0, lsr r2              @ r0<- r2 >> r2
     rsb     r3, r2, #32                 @ r3<- 32 - r2
-    orr     r0, r0, r1, lsl r3          @ r0<- r0 | (r1 << (32-r2))
+    lsl     r3, r1, r3                  @ r3<- r1 << (32-r2)
+    orr     r0, r0, r3                  @ r0<- r0 | (r1 << (32-r2))
     subs    ip, r2, #32                 @ ip<- r2 - 32
     it      pl
     movpl   r0, r1, lsr ip              @ if r2 >= 32, r0<-r1 >>> (r2-32)
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     mov     r1, r1, lsr r2              @ r1<- r1 >>> r2
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_ushr_long_2addr():
     /*
@@ -957,15 +963,16 @@
     GET_VREG_WIDE_BY_ADDR r0, r1, r4    @ r0/r1<- vAA/vAA+1
     mov     r0, r0, lsr r2              @ r0<- r2 >> r2
     rsb     r3, r2, #32                 @ r3<- 32 - r2
-    orr     r0, r0, r1, lsl r3          @ r0<- r0 | (r1 << (32-r2))
+    lsl     r3, r1, r3                  @ r3<- r1 << (32-r2)
+    orr     r0, r0, r3                  @ r0<- r0 | (r1 << (32-r2))
     subs    ip, r2, #32                 @ ip<- r2 - 32
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     it      pl
     movpl   r0, r1, lsr ip              @ if r2 >= 32, r0<-r1 >>> (r2-32)
     mov     r1, r1, lsr r2              @ r1<- r1 >>> r2
-    GET_INST_OPCODE ip                  @ extract opcode from rINST
+    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
-    GOTO_OPCODE ip                      @ jump to next instruction
+    GOTO_OPCODE                         @ jump to next instruction
 
 %def op_xor_int():
 %  binop(instr="eor     r0, r0, r1")

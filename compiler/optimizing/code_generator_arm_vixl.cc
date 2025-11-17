@@ -6514,33 +6514,28 @@ void InstructionCodeGeneratorARMVIXL::VisitNullCheck(HNullCheck* instruction) {
   codegen_->GenerateNullCheck(instruction);
 }
 
-void CodeGeneratorARMVIXL::LoadFromShiftedRegOffset(DataType::Type type,
-                                                    Location out_loc,
-                                                    vixl32::Register base,
-                                                    vixl32::Register reg_index,
-                                                    vixl32::Condition cond) {
-  uint32_t shift_count = DataType::SizeShift(type);
-  MemOperand mem_address(base, reg_index, vixl32::LSL, shift_count);
-
+void CodeGeneratorARMVIXL::Load(DataType::Type type,
+                           vixl32::Register dst,
+                           const MemOperand& src,
+                           vixl32::Condition cond) {
   switch (type) {
     case DataType::Type::kBool:
     case DataType::Type::kUint8:
-      __ Ldrb(cond, RegisterFrom(out_loc), mem_address);
+      __ Ldrb(cond, dst, src);
       break;
     case DataType::Type::kInt8:
-      __ Ldrsb(cond, RegisterFrom(out_loc), mem_address);
+      __ Ldrsb(cond, dst, src);
       break;
     case DataType::Type::kUint16:
-      __ Ldrh(cond, RegisterFrom(out_loc), mem_address);
+      __ Ldrh(cond, dst, src);
       break;
     case DataType::Type::kInt16:
-      __ Ldrsh(cond, RegisterFrom(out_loc), mem_address);
+      __ Ldrsh(cond, dst, src);
       break;
     case DataType::Type::kReference:
     case DataType::Type::kInt32:
-      __ Ldr(cond, RegisterFrom(out_loc), mem_address);
+      __ Ldr(cond, dst, src);
       break;
-    // T32 doesn't support LoadFromShiftedRegOffset mem address mode for these types.
     case DataType::Type::kInt64:
     case DataType::Type::kFloat32:
     case DataType::Type::kFloat64:
@@ -6550,29 +6545,24 @@ void CodeGeneratorARMVIXL::LoadFromShiftedRegOffset(DataType::Type type,
   }
 }
 
-void CodeGeneratorARMVIXL::StoreToShiftedRegOffset(DataType::Type type,
-                                                   Location loc,
-                                                   vixl32::Register base,
-                                                   vixl32::Register reg_index,
-                                                   vixl32::Condition cond) {
-  uint32_t shift_count = DataType::SizeShift(type);
-  MemOperand mem_address(base, reg_index, vixl32::LSL, shift_count);
-
+void CodeGeneratorARMVIXL::Store(DataType::Type type,
+                                 vixl32::Register src,
+                                 const MemOperand& dst,
+                                 vixl32::Condition cond) {
   switch (type) {
     case DataType::Type::kBool:
     case DataType::Type::kUint8:
     case DataType::Type::kInt8:
-      __ Strb(cond, RegisterFrom(loc), mem_address);
+      __ Strb(cond, src, dst);
       break;
     case DataType::Type::kUint16:
     case DataType::Type::kInt16:
-      __ Strh(cond, RegisterFrom(loc), mem_address);
+      __ Strh(cond, src, dst);
       break;
     case DataType::Type::kReference:
     case DataType::Type::kInt32:
-      __ Str(cond, RegisterFrom(loc), mem_address);
+      __ Str(cond, src, dst);
       break;
-    // T32 doesn't support StoreToShiftedRegOffset mem address mode for these types.
     case DataType::Type::kInt64:
     case DataType::Type::kFloat32:
     case DataType::Type::kFloat64:
@@ -6580,6 +6570,24 @@ void CodeGeneratorARMVIXL::StoreToShiftedRegOffset(DataType::Type type,
       LOG(FATAL) << "Unreachable type " << type;
       UNREACHABLE();
   }
+}
+
+void CodeGeneratorARMVIXL::LoadFromShiftedRegOffset(DataType::Type type,
+                                                    Location out_loc,
+                                                    vixl32::Register base,
+                                                    vixl32::Register reg_index,
+                                                    vixl32::Condition cond) {
+  MemOperand mem_operand(base, reg_index, vixl32::LSL, DataType::SizeShift(type));
+  Load(type, RegisterFrom(out_loc), mem_operand, cond);
+}
+
+void CodeGeneratorARMVIXL::StoreToShiftedRegOffset(DataType::Type type,
+                                                   Location loc,
+                                                   vixl32::Register base,
+                                                   vixl32::Register reg_index,
+                                                   vixl32::Condition cond) {
+  MemOperand mem_operand(base, reg_index, vixl32::LSL, DataType::SizeShift(type));
+  Store(type, RegisterFrom(loc), mem_operand, cond);
 }
 
 void LocationsBuilderARMVIXL::VisitArrayGet(HArrayGet* instruction) {

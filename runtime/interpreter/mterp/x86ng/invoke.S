@@ -11,16 +11,16 @@
    movzwl 2(rPC), %eax // call_site index, first argument of runtime call.
    jmp NterpCommonInvokeCustomRange
 
-%def invoke_direct_or_super(helper="", range="", is_super=""):
+%def invoke_direct_or_super(helper="", range=False, is_super=False):
    EXPORT_PC
    // Fast-path which gets the method from thread-local cache.
 %  fetch_from_thread_cache("%eax", miss_label="2f")
 1:
    // Load the first argument (the 'this' pointer).
    movzwl 4(rPC), %ecx // arguments
-   .if !$range
-   andl $$0xf, %ecx
-   .endif
+%  if not range:
+     andl $$0xf, %ecx
+%  #endif
    movl (rFP, %ecx, 4), %ecx
    // NullPointerException check.
    testl %ecx, %ecx
@@ -32,24 +32,24 @@
    movl rPC, ARG2
    movl rFP, ARG3
    call nterp_get_method
-   .if $is_super
-   jmp 1b
-   .else
-   testl MACRO_LITERAL(1), %eax
-   je 1b
-   andl $$-2, %eax  // Remove the extra bit that marks it's a String.<init> method.
-   .if $range
-   jmp NterpHandleStringInitRange
-   .else
-   jmp NterpHandleStringInit
-   .endif
-   .endif
+%  if is_super:
+     jmp 1b
+%  else:
+     testl MACRO_LITERAL(1), %eax
+     je 1b
+     andl $$-2, %eax  // Remove the extra bit that marks it's a String.<init> method.
+%    if range:
+       jmp NterpHandleStringInitRange
+%    else:
+       jmp NterpHandleStringInit
+%    #endif
+%  #endif
 
 %def op_invoke_direct():
-%  invoke_direct_or_super(helper="NterpCommonInvokeInstance", range="0", is_super="0")
+%  invoke_direct_or_super(helper="NterpCommonInvokeInstance")
 
 %def op_invoke_direct_range():
-%  invoke_direct_or_super(helper="NterpCommonInvokeInstanceRange", range="1", is_super="0")
+%  invoke_direct_or_super(helper="NterpCommonInvokeInstanceRange", range=True)
 
 %def op_invoke_polymorphic():
    EXPORT_PC
@@ -74,7 +74,7 @@
    je common_errNullObject
    jmp NterpCommonInvokePolymorphicRange
 
-%def invoke_interface(helper="", range=""):
+%def invoke_interface(helper="", range=False):
 %  slow_path = add_slow_path(op_invoke_interface_slow_path)
    EXPORT_PC
    // Fast-path which gets the interface method from thread-local cache.
@@ -82,9 +82,9 @@
 .L${opcode}_resume:
    // First argument is the 'this' pointer.
    movzwl 4(rPC), %ecx // arguments
-   .if !$range
-   andl $$0xf, %ecx
-   .endif
+%  if not range:
+     andl $$0xf, %ecx
+%  #endif
    movl (rFP, %ecx, 4), %ecx
    movl MIRROR_OBJECT_CLASS_OFFSET(%ecx), %edx
    UNPOISON_HEAP_REF edx
@@ -102,11 +102,11 @@
    jmp $helper
 2:
    testl $$1, %eax
-   .if $range
-   jne NterpHandleInvokeInterfaceOnObjectMethodRange
-   .else
-   jne NterpHandleInvokeInterfaceOnObjectMethod
-   .endif
+%  if range:
+     jne NterpHandleInvokeInterfaceOnObjectMethodRange
+%  else:
+     jne NterpHandleInvokeInterfaceOnObjectMethod
+%  #endif
    // Default method
    andl $$-4, %eax
    // Save interface method as hidden argument.
@@ -124,10 +124,10 @@
    jmp .L${opcode}_resume
 
 %def op_invoke_interface():
-%  invoke_interface(helper="NterpCommonInvokeInterface", range="0")
+%  invoke_interface(helper="NterpCommonInvokeInterface")
 
 %def op_invoke_interface_range():
-%  invoke_interface(helper="NterpCommonInvokeInterfaceRange", range="1")
+%  invoke_interface(helper="NterpCommonInvokeInterfaceRange", range=True)
 
 %def invoke_static(helper=""):
    EXPORT_PC
@@ -149,21 +149,21 @@
 %  invoke_static(helper="NterpCommonInvokeStaticRange")
 
 %def op_invoke_super():
-%  invoke_direct_or_super(helper="NterpCommonInvokeInstance", range="0", is_super="1")
+%  invoke_direct_or_super(helper="NterpCommonInvokeInstance", is_super=True)
 
 %def op_invoke_super_range():
-%  invoke_direct_or_super(helper="NterpCommonInvokeInstanceRange", range="1", is_super="1")
+%  invoke_direct_or_super(helper="NterpCommonInvokeInstanceRange", range=True, is_super=True)
 
-%def invoke_virtual(helper="", range=""):
+%def invoke_virtual(helper="", range=False):
    EXPORT_PC
    // Fast-path which gets the method from thread-local cache.
 %  fetch_from_thread_cache("%eax", miss_label="2f")
 1:
    // First argument is the 'this' pointer.
    movzwl 4(rPC), %ecx // arguments
-   .if !$range
-   andl $$0xf, %ecx
-   .endif
+%  if not range:
+     andl $$0xf, %ecx
+%  #endif
    movl (rFP, %ecx, 4), %ecx
    // Note: if ecx is null, this will be handled by our SIGSEGV handler.
    movl MIRROR_OBJECT_CLASS_OFFSET(%ecx), %edx
@@ -179,7 +179,7 @@
    jmp 1b
 
 %def op_invoke_virtual():
-%  invoke_virtual(helper="NterpCommonInvokeInstance", range="0")
+%  invoke_virtual(helper="NterpCommonInvokeInstance")
 
 %def op_invoke_virtual_range():
-%  invoke_virtual(helper="NterpCommonInvokeInstanceRange", range="1")
+%  invoke_virtual(helper="NterpCommonInvokeInstanceRange", range=True)

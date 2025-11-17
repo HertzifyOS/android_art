@@ -422,6 +422,12 @@ class HGraphVisualizerPrinter final : public CRTPGraphVisitor<HGraphVisualizerPr
         << load_class->NeedsAccessCheck() << std::noboolalpha;
   }
 
+  void VisitClinitCheck(HClinitCheck* clinit_check) {
+    HLoadClass* load_class = clinit_check->GetLoadClass();
+    StartAttributeStream("class_name")
+        << load_class->GetDexFile().PrettyType(load_class->GetTypeIndex());
+  }
+
   void VisitLoadMethodHandle(HLoadMethodHandle* load_method_handle) {
     StartAttributeStream("load_kind") << "RuntimeCall";
     StartAttributeStream("method_handle_index") << load_method_handle->GetMethodHandleIndex();

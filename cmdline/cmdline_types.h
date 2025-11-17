@@ -33,8 +33,9 @@
 
 // Includes for the types that are being specialized
 #include <string>
-#include "base/time_utils.h"
+
 #include "base/logging.h"
+#include "base/time_utils.h"
 #include "experimental_flags.h"
 #include "gc/collector_type.h"
 #include "gc/space/large_object_space.h"
@@ -42,7 +43,7 @@
 #include "jit/profile_saver_options.h"
 #include "plugin.h"
 #include "read_barrier_config.h"
-#include "ti/agent.h"
+#include "ti/agent_spec.h"
 #include "unit.h"
 
 namespace art {

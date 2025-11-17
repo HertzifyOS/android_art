@@ -106,6 +106,7 @@ public class Main {
     testGetAcquireAndPutRelease(unsafe);
     testCopyMemory(unsafe);
     testNullBasedAccessors(unsafe);
+    testConstants(unsafe);
   }
 
   private static void testArrayBaseOffset(Unsafe unsafe) {
@@ -702,6 +703,46 @@ public class Main {
         Double.doubleToRawLongBits(doubleV),
         "putDouble/getDouble volatile");
   }
+
+  private static void testConstants(Unsafe unsafe) {
+    check(Unsafe.ADDRESS_SIZE, unsafe.addressSize(), "ADDRESS_SIZE vs addressSize()");
+    check(
+        Unsafe.ARRAY_BOOLEAN_BASE_OFFSET,
+        unsafe.arrayBaseOffset(boolean[].class),
+        "boolean array offset");
+    check(
+        Unsafe.ARRAY_BYTE_BASE_OFFSET,
+        unsafe.arrayBaseOffset(byte[].class),
+        "byte array offset");
+    check(
+        Unsafe.ARRAY_SHORT_BASE_OFFSET,
+        unsafe.arrayBaseOffset(short[].class),
+        "short array offset");
+    check(
+        Unsafe.ARRAY_CHAR_BASE_OFFSET,
+        unsafe.arrayBaseOffset(char[].class),
+        "char array offset");
+    check(
+        Unsafe.ARRAY_INT_BASE_OFFSET,
+        unsafe.arrayBaseOffset(int[].class),
+        "int array offset");
+    check(
+        Unsafe.ARRAY_LONG_BASE_OFFSET,
+        unsafe.arrayBaseOffset(long[].class),
+        "long array offset");
+    check(
+        Unsafe.ARRAY_FLOAT_BASE_OFFSET,
+        unsafe.arrayBaseOffset(float[].class),
+        "float array offset");
+    check(
+        Unsafe.ARRAY_DOUBLE_BASE_OFFSET,
+        unsafe.arrayBaseOffset(double[].class),
+        "double array offset");
+    check(
+        Unsafe.ARRAY_OBJECT_BASE_OFFSET,
+        unsafe.arrayBaseOffset(Object[].class),
+        "Object array offset");
+   }
 
   private static class TestClass {
     public int intVar = 0;
