@@ -1315,7 +1315,7 @@ ArrayRef<HBasicBlock* const> HBasicBlock::GetNormalSuccessors() const {
 
 ArrayRef<HBasicBlock* const> HBasicBlock::GetExceptionalSuccessors() const {
   if (EndsWithTryBoundary()) {
-    return GetLastInstruction()->AsTryBoundary()->GetExceptionHandlers();
+    return ArrayRef<HBasicBlock* const>(GetSuccessors()).SubArray(1u);
   } else {
     // Blocks not ending with TryBoundary do not have exceptional successors.
     return ArrayRef<HBasicBlock* const>();

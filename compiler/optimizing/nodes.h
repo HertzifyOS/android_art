@@ -2703,7 +2703,7 @@ class HTryBoundary final : public HExpression<0> {
   HBasicBlock* GetNormalFlowSuccessor() const { return GetBlock()->GetSuccessors()[0]; }
 
   ArrayRef<HBasicBlock* const> GetExceptionHandlers() const {
-    return ArrayRef<HBasicBlock* const>(GetBlock()->GetSuccessors()).SubArray(1u);
+    return GetBlock()->GetExceptionalSuccessors();
   }
 
   // Returns whether `handler` is among its exception handlers (non-zero index
