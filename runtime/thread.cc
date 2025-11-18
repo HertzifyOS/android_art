@@ -4754,6 +4754,7 @@ void Thread::SweepInterpreterCache(IsMarkedVisitor* visitor) {
 // http://b/197647048
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wframe-larger-than="
+NO_INLINE
 void Thread::VisitRoots(RootVisitor* visitor, VisitRootFlags flags) {
   if ((flags & VisitRootFlags::kVisitRootFlagPrecise) != 0) {
     VisitRoots</* kPrecise= */ true>(visitor);
