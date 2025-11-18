@@ -34,13 +34,20 @@ namespace art {
 void PreciseHiddenApiFinder::RunInternal(
     const std::vector<std::unique_ptr<VeridexResolver>>& resolvers,
     const ClassFilter& class_filter,
-    const std::function<void(VeridexResolver*, const ClassAccessor::Method&)>& action) {
+    const std::function<void(VeridexResolver*, const ClassAccessor::Method&, AconfigGuardFinder*)>&
+        action) {
   for (const std::unique_ptr<VeridexResolver>& resolver : resolvers) {
     for (ClassAccessor accessor : resolver->GetDexFile().GetClasses()) {
       if (class_filter.Matches(accessor.GetDescriptorView())) {
         for (const ClassAccessor::Method& method : accessor.GetMethods()) {
           if (method.GetCodeItem() != nullptr) {
-            action(resolver.get(), method);
+            std::unique_ptr<AconfigGuardFinder> aconfig_guard_finder;
+            if (ignore_aconfig_guards_) {
+              aconfig_guard_finder =
+                  std::make_unique<AconfigGuardFinder>(resolver.get(), method, dependency_graph_);
+              aconfig_guard_finder->Run();
+            }
+            action(resolver.get(), method, aconfig_guard_finder.get());
           }
         }
       }
@@ -64,11 +71,13 @@ void PreciseHiddenApiFinder::Run(const std::vector<std::unique_ptr<VeridexResolv
   // Collect reflection uses.
   RunInternal(resolvers,
               class_filter,
-              [this] (VeridexResolver* resolver, const ClassAccessor::Method& method) {
-    FlowAnalysisCollector collector(resolver, method);
-    collector.Run();
-    AddUsesAt(collector.GetUses(), method.GetReference());
-  });
+              [this](VeridexResolver* resolver,
+                     const ClassAccessor::Method& method,
+                     AconfigGuardFinder* aconfig_guard_finder) {
+                FlowAnalysisCollector collector(resolver, method, aconfig_guard_finder);
+                collector.Run();
+                AddUsesAt(collector.GetUses(), method.GetReference());
+              });
 
   // For non-final reflection uses, do a limited fixed point calculation over the code to try
   // substituting them with final reflection uses.
@@ -81,12 +90,14 @@ void PreciseHiddenApiFinder::Run(const std::vector<std::unique_ptr<VeridexResolv
         = std::move(abstract_uses_);
     RunInternal(resolvers,
                 class_filter,
-                [this, current_uses] (VeridexResolver* resolver,
-                                      const ClassAccessor::Method& method) {
-      FlowAnalysisSubstitutor substitutor(resolver, method, current_uses);
-      substitutor.Run();
-      AddUsesAt(substitutor.GetUses(), method.GetReference());
-    });
+                [this, current_uses](VeridexResolver* resolver,
+                                     const ClassAccessor::Method& method,
+                                     AconfigGuardFinder* aconfig_guard_finder) {
+                  FlowAnalysisSubstitutor substitutor(
+                      resolver, method, current_uses, aconfig_guard_finder);
+                  substitutor.Run();
+                  AddUsesAt(substitutor.GetUses(), method.GetReference());
+                });
   }
 }
 
