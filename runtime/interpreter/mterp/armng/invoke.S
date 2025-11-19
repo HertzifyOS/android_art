@@ -17,7 +17,6 @@
    FETCH r1, 2
 %  if not range:
      and r1, r1, #0xf
-%  #endif
    GET_VREG r1, r1
    cmp r1, #0
    beq common_errNullObject    // bail if null
@@ -38,8 +37,6 @@
        b NterpHandleStringInitRange
 %    else:
        b NterpHandleStringInit
-%    #endif
-%  #endif
 
 %def op_invoke_direct():
 %  invoke_direct_or_super(helper="NterpCommonInvokeInstance")
@@ -84,7 +81,6 @@
    FETCH r1, 2
 %  if not range:
      and r1, r1, #0xf
-%  #endif
    GET_VREG r1, r1
    // Note: if r1 is null, this will be handled by our SIGSEGV handler.
    ldr r2, [r1, #MIRROR_OBJECT_CLASS_OFFSET]
@@ -102,7 +98,7 @@
      b NterpCommonInvokeInterfaceRange
 %  else:
      b NterpCommonInvokeInterface
-%  #endif
+%  pass
 2:
    tst r4, #1
    bne 3f
@@ -118,7 +114,6 @@
      b NterpCommonInvokeInstanceRange
 %  else:
      b NterpCommonInvokeInstance
-%  #endif
 
 %def op_invoke_interface_slow_path():
    mov r0, rSELF
@@ -162,7 +157,6 @@
    FETCH r1, 2
 %  if not range:
      and r1, r1, #0xf
-%  #endif
    GET_VREG r1, r1
    // Note: if r1 is null, this will be handled by our SIGSEGV handler.
    ldr r0, [r1, #MIRROR_OBJECT_CLASS_OFFSET]

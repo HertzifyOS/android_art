@@ -20,7 +20,6 @@
    movzwl 4(rPC), %r11d // arguments
 %  if not range:
      andq $$0xf, %r11
-%  #endif
    movl (rFP, %r11, 4), %esi
    // NullPointerException check.
    movl (%esi), %eax
@@ -42,8 +41,6 @@
        jmp NterpHandleStringInitRange
 %    else:
        jmp NterpHandleStringInit
-%    #endif
-%  #endif
 
 %def op_invoke_direct():
 %  invoke_direct_or_super(helper="NterpCommonInvokeInstance")
@@ -82,7 +79,6 @@
    movzwl 4(rPC), %r11d // arguments
 %  if not range:
      andq $$0xf, %r11
-%  #endif
    movl (rFP, %r11, 4), %esi
    movl MIRROR_OBJECT_CLASS_OFFSET(%esi), %edx
    UNPOISON_HEAP_REF edx
@@ -102,7 +98,6 @@
      jne NterpHandleInvokeInterfaceOnObjectMethodRange
 %  else:
      jne NterpHandleInvokeInterfaceOnObjectMethod
-%  #endif
    // Default method
    andq $$-4, %rax
    movzw ART_METHOD_METHOD_INDEX_OFFSET(%rax), %ecx
@@ -158,7 +153,6 @@
    movzwl 4(rPC), %r11d // arguments
 %  if not range:
      andq $$0xf, %r11
-%  #endif
    movl (rFP, %r11, 4), %esi
    // Note: if esi is null, this will be handled by our SIGSEGV handler.
    movl MIRROR_OBJECT_CLASS_OFFSET(%esi), %edx

@@ -1,4 +1,3 @@
-%def header():
 /*
  * Copyright (C) 2021 The Android Open Source Project
  *
@@ -246,6 +245,7 @@
     .global SYMBOL(\name)
     .balign 16
 SYMBOL(\name):
+%   pass
 .endm
 
 .macro ENTRY name
@@ -254,6 +254,7 @@ SYMBOL(\name):
     .global SYMBOL(\name)
     FUNCTION_TYPE(\name)
 SYMBOL(\name):
+%   pass
 .endm
 
 .macro END name
@@ -264,23 +265,23 @@ SYMBOL(\name):
 // (we're not holding references there), but there is no
 // kDontSave runtime method. So just use the kSaveRefsOnly runtime method.
 .macro NTERP_TRAMPOLINE name, helper
-DEFINE_FUNCTION \name
-  movd %ebx, %xmm0
-  SETUP_SAVE_REFS_ONLY_FRAME ebx
-  movd %xmm0, %ebx
-  PUSH_ARG ebx
-  PUSH_ARG edx
-  PUSH_ARG ecx
-  PUSH_ARG eax
-  call \helper
-  DECREASE_FRAME 16
-  RESTORE_IBASE_WITH_CFA
-  FETCH_INST_CLEAR_OPCODE
-  RESTORE_SAVE_REFS_ONLY_FRAME
-  cmpl LITERAL(0), %fs:THREAD_EXCEPTION_OFFSET
-  jne nterp_deliver_pending_exception
-  ret
-END_FUNCTION \name
+  DEFINE_FUNCTION \name
+    movd %ebx, %xmm0
+    SETUP_SAVE_REFS_ONLY_FRAME ebx
+    movd %xmm0, %ebx
+    PUSH_ARG ebx
+    PUSH_ARG edx
+    PUSH_ARG ecx
+    PUSH_ARG eax
+    call \helper
+    DECREASE_FRAME 16
+    RESTORE_IBASE_WITH_CFA
+    FETCH_INST_CLEAR_OPCODE
+    RESTORE_SAVE_REFS_ONLY_FRAME
+    cmpl LITERAL(0), %fs:THREAD_EXCEPTION_OFFSET
+    jne nterp_deliver_pending_exception
+    ret
+  END_FUNCTION \name
 .endm
 
 .macro CLEAR_VOLATILE_MARKER reg
@@ -382,6 +383,7 @@ END_FUNCTION \name
     cmpl %eax, \fp
     jne 1b
 2:
+%   pass
 .endm
 
 // Puts the next floating point argument into the expected register,
@@ -448,6 +450,7 @@ END_FUNCTION \name
 8:
     GET_VREG_XMMs REG_VAR(xmm_reg), %eax
 4:
+%   pass
 .endm
 
 // Puts the next int/long/object argument in the expected register,
@@ -487,27 +490,27 @@ END_FUNCTION \name
       subl MACRO_LITERAL(1), REG_VAR(shorty)
       jmp 5f
     .else
-    movl REG_VAR(inst), %eax
-    andl MACRO_LITERAL(0xf), %eax
-    GET_VREG REG_VAR(gpr_reg), %eax
-    shrl MACRO_LITERAL(4), REG_VAR(inst)
-    addl MACRO_LITERAL(1), REG_VAR(arg_index)
-    cmpl MACRO_LITERAL(4), REG_VAR(arg_index)
-    je 9f
-    movl REG_VAR(inst), %eax
-    andl MACRO_LITERAL(0xf), %eax
-    shrl MACRO_LITERAL(4), REG_VAR(inst)
-    addl MACRO_LITERAL(1), REG_VAR(arg_index)
-    jmp 10f
+      movl REG_VAR(inst), %eax
+      andl MACRO_LITERAL(0xf), %eax
+      GET_VREG REG_VAR(gpr_reg), %eax
+      shrl MACRO_LITERAL(4), REG_VAR(inst)
+      addl MACRO_LITERAL(1), REG_VAR(arg_index)
+      cmpl MACRO_LITERAL(4), REG_VAR(arg_index)
+      je 9f
+      movl REG_VAR(inst), %eax
+      andl MACRO_LITERAL(0xf), %eax
+      shrl MACRO_LITERAL(4), REG_VAR(inst)
+      addl MACRO_LITERAL(1), REG_VAR(arg_index)
+      jmp 10f
 9:
-    // Fetch PC
-    movl LOCAL1(%esp), %eax
-    movl -8(%eax), %eax
-    movzbl 1(%eax), %eax
-    andl MACRO_LITERAL(0xf), %eax
+      // Fetch PC
+      movl LOCAL1(%esp), %eax
+      movl -8(%eax), %eax
+      movzbl 1(%eax), %eax
+      andl MACRO_LITERAL(0xf), %eax
 10:
-    GET_VREG REG_VAR(gpr_long_reg), %eax
-    jmp \if_long
+      GET_VREG REG_VAR(gpr_long_reg), %eax
+      jmp \if_long
     .endif
 3:  // SKIP_FLOAT
     shrl MACRO_LITERAL(4), REG_VAR(inst)
@@ -518,6 +521,7 @@ END_FUNCTION \name
     addl MACRO_LITERAL(2), REG_VAR(arg_index)
     jmp 1b
 5:
+%   pass
 .endm
 
 // Puts the next int/long/object argument in the expected stack slot,
@@ -628,6 +632,7 @@ END_FUNCTION \name
     addl MACRO_LITERAL(1), REG_VAR(arg_index)
     add MACRO_LITERAL(1), REG_VAR(stack_index)
 4:
+%   pass
 .endm
 
 // Puts the next floating point argument into the expected stack slot,
@@ -710,6 +715,7 @@ END_FUNCTION \name
     addl MACRO_LITERAL(2), REG_VAR(stack_index)
     jmp 1b
 5:
+%   pass
 .endm
 
 // Puts the next int/long/object argument in the expected stack slot,
@@ -774,6 +780,7 @@ END_FUNCTION \name
     movss REG_VAR(xmm_reg), (REG_VAR(fp), REG_VAR(arg_index), 4)
     addl MACRO_LITERAL(1), REG_VAR(arg_index)
 4:
+%   pass
 .endm
 
 // Puts the next int/long/object parameter passed in physical register
@@ -822,6 +829,7 @@ END_FUNCTION \name
     movl %eax, (REG_VAR(regs), REG_VAR(arg_index), 4)
     addl MACRO_LITERAL(1), REG_VAR(arg_index)
 5:
+%   pass
 .endm
 
 // Puts the next floating point parameter passed in stack
@@ -1040,10 +1048,13 @@ END_FUNCTION \name
 .macro COMMON_INVOKE_NON_RANGE is_static=0, is_interface=0, suffix="", is_string_init=0, is_polymorphic=0, is_custom=0
    .if \is_polymorphic
      // No fast path for polymorphic calls.
+%    pass
    .elseif \is_custom
      // No fast path for custom calls.
+%    pass
    .elseif \is_string_init
      // No fast path for string.init.
+%    pass
    .else
      testl $$ART_METHOD_NTERP_INVOKE_FAST_PATH_FLAG, ART_METHOD_ACCESS_FLAGS_OFFSET(%eax)
      je .Lfast_path_with_few_args_\suffix
@@ -1090,6 +1101,7 @@ END_FUNCTION \name
        GET_VREG    %ecx, %esi
      .else
        // First argument already in %ecx.
+%      pass
      .endif
 .Linvoke_fast_path_\suffix:
      // Fetch PC before calling for proper stack unwinding.
@@ -1255,10 +1267,13 @@ END_FUNCTION \name
 .macro COMMON_INVOKE_RANGE is_static=0, is_interface=0, suffix="", is_string_init=0, is_polymorphic=0, is_custom=0
    .if \is_polymorphic
      // No fast path for polymorphic calls.
+%    pass
    .elseif \is_custom
      // No fast path for custom calls.
+%    pass
    .elseif \is_string_init
      // No fast path for string.init.
+%    pass
    .else
      testl $$ART_METHOD_NTERP_INVOKE_FAST_PATH_FLAG, ART_METHOD_ACCESS_FLAGS_OFFSET(%eax)
      je .Lfast_path_with_few_args_range_\suffix
@@ -1296,6 +1311,7 @@ END_FUNCTION \name
        movl 0(%esi), %ecx
      .else
        // First argument already in %ecx.
+%      pass
      .endif
 .Linvoke_fast_path_range_\suffix:
      FETCH_PC
@@ -1447,6 +1463,38 @@ END_FUNCTION \name
    jmp .Ldone_return_range_\suffix
 .endm
 
+%def fetch_from_thread_cache(dest_reg, miss_label):
+   // Fetch some information from the thread cache.
+   // Uses eax, and ecx as temporaries.
+   movl rSELF:THREAD_SELF_OFFSET, %eax
+   movl rPC, %ecx
+   andl MACRO_LITERAL(THREAD_INTERPRETER_CACHE_KEY_MASK), %ecx
+   sall MACRO_LITERAL(THREAD_INTERPRETER_CACHE_KEY_TO_ENTRY_SHIFT), %ecx
+   cmpl THREAD_INTERPRETER_CACHE_OFFSET(%eax, %ecx, 1), rPC
+   jne  ${miss_label}
+   movl __SIZEOF_POINTER__+THREAD_INTERPRETER_CACHE_OFFSET(%eax, %ecx, 1), ${dest_reg}
+
+%def fetch_field_from_fast_path(get_local, success_label, fail_label, is_static=False):
+   movl 0(%esp), %eax
+   testl $$ART_METHOD_IS_OBSOLETE_FLAG, ART_METHOD_ACCESS_FLAGS_OFFSET(%eax)
+   jne ${fail_label}
+   // We don't do a read barrier for faster execution.
+   // See comment in `NterpGetLocalStaticFieldInternal`.
+   movl ART_METHOD_DECLARING_CLASS_OFFSET(%eax), %eax
+   subl MACRO_LITERAL(8), %esp
+   pushl rPC
+   pushl %eax
+   call ${get_local}
+   addl MACRO_LITERAL(16), %esp
+   RESTORE_IBASE
+   FETCH_INST_CLEAR_OPCODE
+   cmpl MACRO_LITERAL(0), %eax
+%  if is_static:
+     jne ${success_label}
+%  else:
+     jge ${success_label}
+
+
 // Helper for static field get.
 .macro OP_SGET load="movl", wide="0"
    // Fast-path which gets the field from thread-local cache.
@@ -1481,20 +1529,20 @@ END_FUNCTION \name
      CLEAR_VOLATILE_MARKER %eax
      jmp 1b
    .else
-   testl MACRO_LITERAL(1), %eax
-   je 1b
-   CLEAR_VOLATILE_MARKER %eax
-   movl ART_FIELD_OFFSET_OFFSET(%eax), %ecx
-   movl ART_FIELD_DECLARING_CLASS_OFFSET(%eax), %eax
-   cmpl $$0, rSELF:THREAD_READ_BARRIER_MARK_REG00_OFFSET
-   jne 5f
+     testl MACRO_LITERAL(1), %eax
+     je 1b
+     CLEAR_VOLATILE_MARKER %eax
+     movl ART_FIELD_OFFSET_OFFSET(%eax), %ecx
+     movl ART_FIELD_DECLARING_CLASS_OFFSET(%eax), %eax
+     cmpl $$0, rSELF:THREAD_READ_BARRIER_MARK_REG00_OFFSET
+     jne 5f
 6:
-   movsd (%eax, %ecx, 1), %xmm0
-   SET_WIDE_FP_VREG %xmm0, rINST
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
+     movsd (%eax, %ecx, 1), %xmm0
+     SET_WIDE_FP_VREG %xmm0, rINST
+     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 5:
-   call art_quick_read_barrier_mark_reg00
-   jmp 6b
+     call art_quick_read_barrier_mark_reg00
+     jmp 6b
    .endif
 3:
    call art_quick_read_barrier_mark_reg00
@@ -1693,7 +1741,6 @@ END_FUNCTION \name
 .endm
 
 
-%def entry():
 /*
  * ArtMethod entry point.
  *
@@ -1727,6 +1774,7 @@ OAT_ENTRY ExecuteNterpWithClinitImpl
     .cfi_endproc
     .global SYMBOL(EndExecuteNterpWithClinitImpl)
 SYMBOL(EndExecuteNterpWithClinitImpl):
+%   pass
 
 OAT_ENTRY ExecuteNterpImpl
     .cfi_startproc
@@ -1855,38 +1903,7 @@ OAT_ENTRY ExecuteNterpImpl
     END ExecuteNterpImpl
 
 %def opcode_pre():
-
-%def fetch_from_thread_cache(dest_reg, miss_label):
-   // Fetch some information from the thread cache.
-   // Uses eax, and ecx as temporaries.
-   movl rSELF:THREAD_SELF_OFFSET, %eax
-   movl rPC, %ecx
-   andl MACRO_LITERAL(THREAD_INTERPRETER_CACHE_KEY_MASK), %ecx
-   sall MACRO_LITERAL(THREAD_INTERPRETER_CACHE_KEY_TO_ENTRY_SHIFT), %ecx
-   cmpl THREAD_INTERPRETER_CACHE_OFFSET(%eax, %ecx, 1), rPC
-   jne  ${miss_label}
-   movl __SIZEOF_POINTER__+THREAD_INTERPRETER_CACHE_OFFSET(%eax, %ecx, 1), ${dest_reg}
-
-%def fetch_field_from_fast_path(get_local, success_label, fail_label, is_static=False):
-   movl 0(%esp), %eax
-   testl $$ART_METHOD_IS_OBSOLETE_FLAG, ART_METHOD_ACCESS_FLAGS_OFFSET(%eax)
-   jne ${fail_label}
-   // We don't do a read barrier for faster execution.
-   // See comment in `NterpGetLocalStaticFieldInternal`.
-   movl ART_METHOD_DECLARING_CLASS_OFFSET(%eax), %eax
-   subl MACRO_LITERAL(8), %esp
-   pushl rPC
-   pushl %eax
-   call ${get_local}
-   addl MACRO_LITERAL(16), %esp
-   RESTORE_IBASE
-   FETCH_INST_CLEAR_OPCODE
-   cmpl MACRO_LITERAL(0), %eax
-%  if is_static:
-     jne ${success_label}
-%  else:
-     jge ${success_label}
-%  #endif
+%   pass
 
 %def footer():
 /*
@@ -1895,11 +1912,11 @@ OAT_ENTRY ExecuteNterpImpl
  * ===========================================================================
  */
 
-    .text
-    .align  2
+  .text
+  .align  2
 
-// Enclose all code below in a symbol (which gets printed in backtraces).
-ENTRY nterp_helper
+  // Enclose all code below in a symbol (which gets printed in backtraces).
+  ENTRY nterp_helper
 
 // Note: mterp also uses the common_* names below for helpers, but that's OK
 // as the assembler compiled each interpreter separately.
@@ -1950,304 +1967,304 @@ NterpCommonInvokeCustomRange:
     COMMON_INVOKE_RANGE is_static=1, is_interface=0, is_polymorphic=0, is_custom=1, suffix="invokeCustom"
 
 NterpHandleStringInit:
-   COMMON_INVOKE_NON_RANGE is_static=0, is_interface=0, is_string_init=1, suffix="stringInit"
+    COMMON_INVOKE_NON_RANGE is_static=0, is_interface=0, is_string_init=1, suffix="stringInit"
 
 NterpHandleStringInitRange:
-   COMMON_INVOKE_RANGE is_static=0, is_interface=0, is_string_init=1, suffix="stringInit"
+    COMMON_INVOKE_RANGE is_static=0, is_interface=0, is_string_init=1, suffix="stringInit"
 
 NterpNewInstance:
-   EXPORT_PC
-   // Fast-path which gets the class from thread-local cache.
-%  fetch_from_thread_cache("%eax", miss_label="2f")
-   cmpl $$0, rSELF:THREAD_READ_BARRIER_MARK_REG00_OFFSET
-   jne 3f
+    EXPORT_PC
+    // Fast-path which gets the class from thread-local cache.
+%   fetch_from_thread_cache("%eax", miss_label="2f")
+    cmpl $$0, rSELF:THREAD_READ_BARRIER_MARK_REG00_OFFSET
+    jne 3f
 4:
-   call *rSELF:THREAD_ALLOC_OBJECT_ENTRYPOINT_OFFSET
-   RESTORE_IBASE
-   FETCH_INST_CLEAR_OPCODE
+    call *rSELF:THREAD_ALLOC_OBJECT_ENTRYPOINT_OFFSET
+    RESTORE_IBASE
+    FETCH_INST_CLEAR_OPCODE
 1:
-   SET_VREG_OBJECT %eax, rINST             # fp[A] <- value
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
+    SET_VREG_OBJECT %eax, rINST             # fp[A] <- value
+    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-   movl rSELF:THREAD_SELF_OFFSET, ARG0
-   movl 0(%esp), ARG1
-   movl rPC, ARG2
-   call nterp_allocate_object
-   jmp 1b
+    movl rSELF:THREAD_SELF_OFFSET, ARG0
+    movl 0(%esp), ARG1
+    movl rPC, ARG2
+    call nterp_allocate_object
+    jmp 1b
 3:
-   // 00 is %eax
-   call art_quick_read_barrier_mark_reg00
-   jmp 4b
+    // 00 is %eax
+    call art_quick_read_barrier_mark_reg00
+    jmp 4b
 
 NterpNewArray:
-   /* new-array vA, vB, class@CCCC */
-   EXPORT_PC
-   // Fast-path which gets the class from thread-local cache.
-%  fetch_from_thread_cache("%eax", miss_label="2f")
-   cmpl $$0, rSELF:THREAD_READ_BARRIER_MARK_REG00_OFFSET
-   jne 3f
+    /* new-array vA, vB, class@CCCC */
+    EXPORT_PC
+    // Fast-path which gets the class from thread-local cache.
+%   fetch_from_thread_cache("%eax", miss_label="2f")
+    cmpl $$0, rSELF:THREAD_READ_BARRIER_MARK_REG00_OFFSET
+    jne 3f
 1:
-   movzbl  rINSTbl, %ecx
-   sarl    $$4, %ecx                         # ecx<- B
-   GET_VREG %ecx %ecx                        # ecx<- vB (array length)
-   call *rSELF:THREAD_ALLOC_ARRAY_ENTRYPOINT_OFFSET
-   RESTORE_IBASE
-   FETCH_INST_CLEAR_OPCODE
-   andb    $$0xf, rINSTbl                   # rINST<- A
-   SET_VREG_OBJECT %eax, rINST              # fp[A] <- value
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
+    movzbl  rINSTbl, %ecx
+    sarl    $$4, %ecx                         # ecx<- B
+    GET_VREG %ecx %ecx                        # ecx<- vB (array length)
+    call *rSELF:THREAD_ALLOC_ARRAY_ENTRYPOINT_OFFSET
+    RESTORE_IBASE
+    FETCH_INST_CLEAR_OPCODE
+    andb    $$0xf, rINSTbl                   # rINST<- A
+    SET_VREG_OBJECT %eax, rINST              # fp[A] <- value
+    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-   movl rSELF:THREAD_SELF_OFFSET, ARG0
-   movl 0(%esp), ARG1
-   movl rPC, ARG2
-   call nterp_get_class
-   jmp 1b
+    movl rSELF:THREAD_SELF_OFFSET, ARG0
+    movl 0(%esp), ARG1
+    movl rPC, ARG2
+    call nterp_get_class
+    jmp 1b
 3:
-   // 00 is %eax
-   call art_quick_read_barrier_mark_reg00
-   jmp 1b
+    // 00 is %eax
+    call art_quick_read_barrier_mark_reg00
+    jmp 1b
 
 NterpPutObjectInstanceField:
-   // Fast-path which gets the field from thread-local cache.
-%  fetch_from_thread_cache("%eax", miss_label="2f")
+    // Fast-path which gets the field from thread-local cache.
+%   fetch_from_thread_cache("%eax", miss_label="2f")
 1:
-   movl    rINST, %ecx                     # ecx <- BA
-   andl    $$0xf, %ecx                     # ecx <- A
-   GET_VREG %ecx, %ecx                     # ecx <- v[A]
-   sarl    $$4, rINST
-   GET_VREG rINST, rINST                   # vB (object we're operating on)
-   testl   rINST, rINST                    # is object null?
-   je      common_errNullObject
-   POISON_HEAP_REF ecx
-   movl %ecx, (rINST, %eax, 1)
-   testl %ecx, %ecx
-   je 4f
-   movl rSELF:THREAD_CARD_TABLE_OFFSET, %eax
-   shrl $$CARD_TABLE_CARD_SHIFT, rINST
-   movb %al, (%eax, rINST, 1)
+    movl    rINST, %ecx                     # ecx <- BA
+    andl    $$0xf, %ecx                     # ecx <- A
+    GET_VREG %ecx, %ecx                     # ecx <- v[A]
+    sarl    $$4, rINST
+    GET_VREG rINST, rINST                   # vB (object we're operating on)
+    testl   rINST, rINST                    # is object null?
+    je      common_errNullObject
+    POISON_HEAP_REF ecx
+    movl %ecx, (rINST, %eax, 1)
+    testl %ecx, %ecx
+    je 4f
+    movl rSELF:THREAD_CARD_TABLE_OFFSET, %eax
+    shrl $$CARD_TABLE_CARD_SHIFT, rINST
+    movb %al, (%eax, rINST, 1)
 4:
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
+    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalInstanceFieldForIPutObject", success_label="1b", fail_label="6f")
+%   fetch_field_from_fast_path("NterpGetLocalInstanceFieldForIPutObject", success_label="1b", fail_label="6f")
 6:
-   EXPORT_PC
-   movl rSELF:THREAD_SELF_OFFSET, ARG0
-   movl 0(%esp), ARG1
-   movl rPC, ARG2
-   movl rFP, ARG3
-   call nterp_get_instance_field_offset
-   testl %eax, %eax
-   jns 1b
-   negl %eax
-   // Reload the value as it may have moved.
-   movl    rINST, %ecx                     # ecx <- BA
-   andl    $$0xf, %ecx                     # ecx <- A
-   GET_VREG %ecx, %ecx                     # ecx <- v[A]
-   sarl    $$4, rINST
-   GET_VREG rINST, rINST                   # vB (object we're operating on)
-   testl   rINST, rINST                    # is object null?
-   je      common_errNullObject
-   POISON_HEAP_REF ecx
-   movl %ecx, (rINST, %eax, 1)
-   testl %ecx, %ecx
-   je 5f
-   movl rSELF:THREAD_CARD_TABLE_OFFSET, %eax
-   shrl $$CARD_TABLE_CARD_SHIFT, rINST
-   movb %al, (%eax, rINST, 1)
+    EXPORT_PC
+    movl rSELF:THREAD_SELF_OFFSET, ARG0
+    movl 0(%esp), ARG1
+    movl rPC, ARG2
+    movl rFP, ARG3
+    call nterp_get_instance_field_offset
+    testl %eax, %eax
+    jns 1b
+    negl %eax
+    // Reload the value as it may have moved.
+    movl    rINST, %ecx                     # ecx <- BA
+    andl    $$0xf, %ecx                     # ecx <- A
+    GET_VREG %ecx, %ecx                     # ecx <- v[A]
+    sarl    $$4, rINST
+    GET_VREG rINST, rINST                   # vB (object we're operating on)
+    testl   rINST, rINST                    # is object null?
+    je      common_errNullObject
+    POISON_HEAP_REF ecx
+    movl %ecx, (rINST, %eax, 1)
+    testl %ecx, %ecx
+    je 5f
+    movl rSELF:THREAD_CARD_TABLE_OFFSET, %eax
+    shrl $$CARD_TABLE_CARD_SHIFT, rINST
+    movb %al, (%eax, rINST, 1)
 5:
-   lock addl $$0, (%esp)
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
+    lock addl $$0, (%esp)
+    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 
 NterpGetObjectInstanceField:
-   // Fast-path which gets the field from thread-local cache.
-%  fetch_from_thread_cache("%eax", miss_label="2f")
+    // Fast-path which gets the field from thread-local cache.
+%   fetch_from_thread_cache("%eax", miss_label="2f")
 1:
-   movl    rINST, %ecx                     # ecx <- BA
-   sarl    $$4, %ecx                       # ecx <- B
-   GET_VREG %ecx, %ecx                     # vB (object we're operating on)
-   testl   %ecx, %ecx                      # is object null?
-   je      common_errNullObject
-   testb $$READ_BARRIER_TEST_VALUE, GRAY_BYTE_OFFSET(%ecx)
-   movl (%ecx,%eax,1), %eax
-   jnz 3f
-   UNPOISON_HEAP_REF eax  // Affects flags, so we cannot unpoison before the jnz.
+    movl    rINST, %ecx                     # ecx <- BA
+    sarl    $$4, %ecx                       # ecx <- B
+    GET_VREG %ecx, %ecx                     # vB (object we're operating on)
+    testl   %ecx, %ecx                      # is object null?
+    je      common_errNullObject
+    testb $$READ_BARRIER_TEST_VALUE, GRAY_BYTE_OFFSET(%ecx)
+    movl (%ecx,%eax,1), %eax
+    jnz 3f
+    UNPOISON_HEAP_REF eax  // Affects flags, so we cannot unpoison before the jnz.
 4:
-   andb    $$0xf,rINSTbl                   # rINST <- A
-   SET_VREG_OBJECT %eax, rINST             # fp[A] <- value
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
+    andb    $$0xf,rINSTbl                   # rINST <- A
+    SET_VREG_OBJECT %eax, rINST             # fp[A] <- value
+    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalInstanceField", success_label="1b", fail_label="5f")
+%   fetch_field_from_fast_path("NterpGetLocalInstanceField", success_label="1b", fail_label="5f")
 5:
-   EXPORT_PC
-   movl rSELF:THREAD_SELF_OFFSET, ARG0
-   movl 0(%esp), ARG1
-   movl rPC, ARG2
-   movl rFP, ARG3
-   call nterp_get_instance_field_offset
-   testl %eax, %eax
-   jns 1b
-   // For volatile fields, we return a negative offset. Remove the sign
-   // and no need for any barrier thanks to the memory model.
-   negl %eax
-   jmp 1b
+    EXPORT_PC
+    movl rSELF:THREAD_SELF_OFFSET, ARG0
+    movl 0(%esp), ARG1
+    movl rPC, ARG2
+    movl rFP, ARG3
+    call nterp_get_instance_field_offset
+    testl %eax, %eax
+    jns 1b
+    // For volatile fields, we return a negative offset. Remove the sign
+    // and no need for any barrier thanks to the memory model.
+    negl %eax
+    jmp 1b
 3:
-   UNPOISON_HEAP_REF eax
-   // reg00 is eax
-   call art_quick_read_barrier_mark_reg00
-   jmp 4b
+    UNPOISON_HEAP_REF eax
+    // reg00 is eax
+    call art_quick_read_barrier_mark_reg00
+    jmp 4b
 
 NterpPutObjectStaticField:
-   // Fast-path which gets the field from thread-local cache.
-%  fetch_from_thread_cache("%eax", miss_label="2f")
+    // Fast-path which gets the field from thread-local cache.
+%   fetch_from_thread_cache("%eax", miss_label="2f")
 1:
-   GET_VREG rINST, rINST
-   movl ART_FIELD_OFFSET_OFFSET(%eax), %ecx
-   movl ART_FIELD_DECLARING_CLASS_OFFSET(%eax), %eax
-   cmpl $$0, rSELF:THREAD_READ_BARRIER_MARK_REG00_OFFSET
-   jne 3f
+    GET_VREG rINST, rINST
+    movl ART_FIELD_OFFSET_OFFSET(%eax), %ecx
+    movl ART_FIELD_DECLARING_CLASS_OFFSET(%eax), %eax
+    cmpl $$0, rSELF:THREAD_READ_BARRIER_MARK_REG00_OFFSET
+    jne 3f
 5:
-   POISON_HEAP_REF ebx  // `rINST` is `%ebx` but we need to pass `ebx`.
-   movl rINST, (%eax, %ecx, 1)
-   testl rINST, rINST
-   je 4f
-   movl rSELF:THREAD_CARD_TABLE_OFFSET, %ecx
-   shrl $$CARD_TABLE_CARD_SHIFT, %eax
-   movb %cl, (%ecx, %eax, 1)
+    POISON_HEAP_REF ebx  // `rINST` is `%ebx` but we need to pass `ebx`.
+    movl rINST, (%eax, %ecx, 1)
+    testl rINST, rINST
+    je 4f
+    movl rSELF:THREAD_CARD_TABLE_OFFSET, %ecx
+    shrl $$CARD_TABLE_CARD_SHIFT, %eax
+    movb %cl, (%ecx, %eax, 1)
 4:
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
+    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalStaticFieldForSPutObject", success_label="1b", fail_label="9f", is_static=True)
+%   fetch_field_from_fast_path("NterpGetLocalStaticFieldForSPutObject", success_label="1b", fail_label="9f", is_static=True)
 9:
-   EXPORT_PC
-   movl rSELF:THREAD_SELF_OFFSET, ARG0
-   movl 0(%esp), ARG1
-   movl rPC, ARG2
-   GET_VREG ARG3, rINST
-   call nterp_get_static_field
-   testl MACRO_LITERAL(1), %eax
-   je 1b
-   CLEAR_VOLATILE_MARKER %eax
-   movl ART_FIELD_OFFSET_OFFSET(%eax), %ecx
-   movl ART_FIELD_DECLARING_CLASS_OFFSET(%eax), %eax
-   cmpl $$0, rSELF:THREAD_READ_BARRIER_MARK_REG00_OFFSET
-   jne 7f
+    EXPORT_PC
+    movl rSELF:THREAD_SELF_OFFSET, ARG0
+    movl 0(%esp), ARG1
+    movl rPC, ARG2
+    GET_VREG ARG3, rINST
+    call nterp_get_static_field
+    testl MACRO_LITERAL(1), %eax
+    je 1b
+    CLEAR_VOLATILE_MARKER %eax
+    movl ART_FIELD_OFFSET_OFFSET(%eax), %ecx
+    movl ART_FIELD_DECLARING_CLASS_OFFSET(%eax), %eax
+    cmpl $$0, rSELF:THREAD_READ_BARRIER_MARK_REG00_OFFSET
+    jne 7f
 6:
-   GET_VREG rINST, rINST
-   POISON_HEAP_REF ebx  // `rINST` is `%ebx` but we need to pass `ebx`.
-   movl rINST, (%eax, %ecx, 1)
-   testl rINST, rINST
-   je 8f
-   movl rSELF:THREAD_CARD_TABLE_OFFSET, %ecx
-   shrl $$CARD_TABLE_CARD_SHIFT, %eax
-   movb %cl, (%ecx, %eax, 1)
+    GET_VREG rINST, rINST
+    POISON_HEAP_REF ebx  // `rINST` is `%ebx` but we need to pass `ebx`.
+    movl rINST, (%eax, %ecx, 1)
+    testl rINST, rINST
+    je 8f
+    movl rSELF:THREAD_CARD_TABLE_OFFSET, %ecx
+    shrl $$CARD_TABLE_CARD_SHIFT, %eax
+    movb %cl, (%ecx, %eax, 1)
 8:
-   lock addl $$0, (%esp)
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
+    lock addl $$0, (%esp)
+    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 3:
-   call art_quick_read_barrier_mark_reg00
-   jmp 5b
+    call art_quick_read_barrier_mark_reg00
+    jmp 5b
 7:
-   call art_quick_read_barrier_mark_reg00
-   jmp 6b
+    call art_quick_read_barrier_mark_reg00
+    jmp 6b
 
 NterpGetObjectStaticField:
-   // Fast-path which gets the field from thread-local cache.
-%  fetch_from_thread_cache("%eax", miss_label="2f")
+    // Fast-path which gets the field from thread-local cache.
+%   fetch_from_thread_cache("%eax", miss_label="2f")
 1:
-   movl ART_FIELD_OFFSET_OFFSET(%eax), %ecx
-   movl ART_FIELD_DECLARING_CLASS_OFFSET(%eax), %eax
-   cmpl $$0, rSELF:THREAD_READ_BARRIER_MARK_REG00_OFFSET
-   jne 5f
+    movl ART_FIELD_OFFSET_OFFSET(%eax), %ecx
+    movl ART_FIELD_DECLARING_CLASS_OFFSET(%eax), %eax
+    cmpl $$0, rSELF:THREAD_READ_BARRIER_MARK_REG00_OFFSET
+    jne 5f
 6:
-   testb $$READ_BARRIER_TEST_VALUE, GRAY_BYTE_OFFSET(%eax)
-   movl (%eax, %ecx, 1), %eax
-   jnz 3f
-   UNPOISON_HEAP_REF eax  // Affects flags, so we cannot unpoison before the jnz.
+    testb $$READ_BARRIER_TEST_VALUE, GRAY_BYTE_OFFSET(%eax)
+    movl (%eax, %ecx, 1), %eax
+    jnz 3f
+    UNPOISON_HEAP_REF eax  // Affects flags, so we cannot unpoison before the jnz.
 4:
-   SET_VREG_OBJECT %eax, rINST             # fp[A] <- value
-   ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
+    SET_VREG_OBJECT %eax, rINST             # fp[A] <- value
+    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
-%  fetch_field_from_fast_path("NterpGetLocalStaticField", success_label="1b", fail_label="9f", is_static=True)
+%   fetch_field_from_fast_path("NterpGetLocalStaticField", success_label="1b", fail_label="9f", is_static=True)
 9:
-   EXPORT_PC
-   movl rSELF:THREAD_SELF_OFFSET, ARG0
-   movl 0(%esp), ARG1
-   movl rPC, ARG2
-   movl $$0, ARG3
-   call nterp_get_static_field
-   CLEAR_VOLATILE_MARKER %eax
-   jmp 1b
+    EXPORT_PC
+    movl rSELF:THREAD_SELF_OFFSET, ARG0
+    movl 0(%esp), ARG1
+    movl rPC, ARG2
+    movl $$0, ARG3
+    call nterp_get_static_field
+    CLEAR_VOLATILE_MARKER %eax
+    jmp 1b
 3:
-   UNPOISON_HEAP_REF eax
-   call art_quick_read_barrier_mark_reg00
-   jmp 4b
+    UNPOISON_HEAP_REF eax
+    call art_quick_read_barrier_mark_reg00
+    jmp 4b
 5:
-   call art_quick_read_barrier_mark_reg00
-   jmp 6b
+    call art_quick_read_barrier_mark_reg00
+    jmp 6b
 
 NterpGetBooleanStaticField:
-  OP_SGET load="movzbl", wide=0
+    OP_SGET load="movzbl", wide=0
 
 NterpGetByteStaticField:
-  OP_SGET load="movsbl", wide=0
+    OP_SGET load="movsbl", wide=0
 
 NterpGetCharStaticField:
-  OP_SGET load="movzwl", wide=0
+    OP_SGET load="movzwl", wide=0
 
 NterpGetShortStaticField:
-  OP_SGET load="movswl", wide=0
+    OP_SGET load="movswl", wide=0
 
 NterpGetWideStaticField:
-  OP_SGET load="movl", wide=1
+    OP_SGET load="movl", wide=1
 
 NterpGetIntStaticField:
-  OP_SGET load="movl", wide=0
+    OP_SGET load="movl", wide=0
 
 NterpPutStaticField:
-  OP_SPUT rINST_reg=rINST, store="movl", wide=0
+    OP_SPUT rINST_reg=rINST, store="movl", wide=0
 
 NterpPutBooleanStaticField:
 NterpPutByteStaticField:
-  OP_SPUT rINST_reg=rINSTbl, store="movb", wide=0
+    OP_SPUT rINST_reg=rINSTbl, store="movb", wide=0
 
 NterpPutCharStaticField:
 NterpPutShortStaticField:
-  OP_SPUT rINST_reg=rINSTw, store="movw", wide=0
+    OP_SPUT rINST_reg=rINSTw, store="movw", wide=0
 
 NterpPutWideStaticField:
-  OP_SPUT rINST_reg=rINST, store="movl", wide=1
+    OP_SPUT rINST_reg=rINST, store="movl", wide=1
 
 NterpPutInstanceField:
-  OP_IPUT rINST_reg=rINST, store="movl", wide=0
+    OP_IPUT rINST_reg=rINST, store="movl", wide=0
 
 NterpPutBooleanInstanceField:
 NterpPutByteInstanceField:
-  OP_IPUT rINST_reg=rINSTbl, store="movb", wide=0
+    OP_IPUT rINST_reg=rINSTbl, store="movb", wide=0
 
 NterpPutCharInstanceField:
 NterpPutShortInstanceField:
-  OP_IPUT rINST_reg=rINSTw, store="movw", wide=0
+    OP_IPUT rINST_reg=rINSTw, store="movw", wide=0
 
 NterpPutWideInstanceField:
-  OP_IPUT rINST_reg=rINST, store="movl", wide=1
+    OP_IPUT rINST_reg=rINST, store="movl", wide=1
 
 NterpGetBooleanInstanceField:
-  OP_IGET load="movzbl", wide=0
+    OP_IGET load="movzbl", wide=0
 
 NterpGetByteInstanceField:
-  OP_IGET load="movsbl", wide=0
+    OP_IGET load="movsbl", wide=0
 
 NterpGetCharInstanceField:
-  OP_IGET load="movzwl", wide=0
+    OP_IGET load="movzwl", wide=0
 
 NterpGetShortInstanceField:
-  OP_IGET load="movswl", wide=0
+    OP_IGET load="movswl", wide=0
 
 NterpGetWideInstanceField:
-  OP_IGET load="movl", wide=1
+    OP_IGET load="movl", wide=1
 
 NterpGetInstanceField:
-  OP_IGET load="movl", wide=0
+    OP_IGET load="movl", wide=0
 
 NterpCallSuspendAndGotoNext:
     EXPORT_PC
@@ -2326,43 +2343,43 @@ NterpHotnessCheck:
     ret
 
 NterpHandleInvokeInterfaceOnObjectMethodRange:
-   shrl $$16, %eax
-   movl MIRROR_CLASS_VTABLE_OFFSET_32(%edx, %eax, 4), %eax
-   jmp NterpCommonInvokeInstanceRange
+    shrl $$16, %eax
+    movl MIRROR_CLASS_VTABLE_OFFSET_32(%edx, %eax, 4), %eax
+    jmp NterpCommonInvokeInstanceRange
 
 NterpHandleInvokeInterfaceOnObjectMethod:
-   shrl $$16, %eax
-   movl MIRROR_CLASS_VTABLE_OFFSET_32(%edx, %eax, 4), %eax
-   jmp NterpCommonInvokeInstance
+    shrl $$16, %eax
+    movl MIRROR_CLASS_VTABLE_OFFSET_32(%edx, %eax, 4), %eax
+    jmp NterpCommonInvokeInstance
 
-// This is the logical end of ExecuteNterpImpl, where the frame info applies.
-// EndExecuteNterpImpl includes the methods below as we want the runtime to
-// see them as part of the Nterp PCs.
-.cfi_endproc
+    // This is the logical end of ExecuteNterpImpl, where the frame info applies.
+    // EndExecuteNterpImpl includes the methods below as we want the runtime to
+    // see them as part of the Nterp PCs.
+    .cfi_endproc
 
-END nterp_helper
+  END nterp_helper
 
-// This is the end of PCs contained by the OatQuickMethodHeader created for the interpreter
-// entry point.
-    FUNCTION_TYPE(EndExecuteNterpImpl)
-    ASM_HIDDEN SYMBOL(EndExecuteNterpImpl)
-    .global SYMBOL(EndExecuteNterpImpl)
-SYMBOL(EndExecuteNterpImpl):
+  // This is the end of PCs contained by the OatQuickMethodHeader created for the interpreter
+  // entry point.
+  FUNCTION_TYPE(EndExecuteNterpImpl)
+  ASM_HIDDEN SYMBOL(EndExecuteNterpImpl)
+  .global SYMBOL(EndExecuteNterpImpl)
+  SYMBOL(EndExecuteNterpImpl):
 
-// Entrypoints into runtime.
-NTERP_TRAMPOLINE nterp_get_static_field, NterpGetStaticField
-NTERP_TRAMPOLINE nterp_get_instance_field_offset, NterpGetInstanceFieldOffset
-NTERP_TRAMPOLINE nterp_filled_new_array, NterpFilledNewArray
-NTERP_TRAMPOLINE nterp_filled_new_array_range, NterpFilledNewArrayRange
-NTERP_TRAMPOLINE nterp_get_class, NterpGetClass
-NTERP_TRAMPOLINE nterp_allocate_object, NterpAllocateObject
-NTERP_TRAMPOLINE nterp_get_method, NterpGetMethod
-NTERP_TRAMPOLINE nterp_hot_method, NterpHotMethod
-NTERP_TRAMPOLINE nterp_load_object, NterpLoadObject
+  // Entrypoints into runtime.
+  NTERP_TRAMPOLINE nterp_get_static_field, NterpGetStaticField
+  NTERP_TRAMPOLINE nterp_get_instance_field_offset, NterpGetInstanceFieldOffset
+  NTERP_TRAMPOLINE nterp_filled_new_array, NterpFilledNewArray
+  NTERP_TRAMPOLINE nterp_filled_new_array_range, NterpFilledNewArrayRange
+  NTERP_TRAMPOLINE nterp_get_class, NterpGetClass
+  NTERP_TRAMPOLINE nterp_allocate_object, NterpAllocateObject
+  NTERP_TRAMPOLINE nterp_get_method, NterpGetMethod
+  NTERP_TRAMPOLINE nterp_hot_method, NterpHotMethod
+  NTERP_TRAMPOLINE nterp_load_object, NterpLoadObject
 
-DEFINE_FUNCTION nterp_deliver_pending_exception
-    DELIVER_PENDING_EXCEPTION
-END_FUNCTION nterp_deliver_pending_exception
+  DEFINE_FUNCTION nterp_deliver_pending_exception
+      DELIVER_PENDING_EXCEPTION
+  END_FUNCTION nterp_deliver_pending_exception
 
 // gen_mterp.py will inline the following definitions
 // within [ExecuteNterpImpl, EndExecuteNterpImpl).
@@ -2382,18 +2399,20 @@ SYMBOL(artNterpAsmInstructionEnd):
     FUNCTION_TYPE(artNterpAsmInstructionStart)
     ASM_HIDDEN SYMBOL(artNterpAsmInstructionStart)
     .global SYMBOL(artNterpAsmInstructionStart)
-SYMBOL(artNterpAsmInstructionStart) = ${opcode_name_prefix}op_nop
+    SYMBOL(artNterpAsmInstructionStart) = ${opcode_name_prefix}op_nop
     .text
 
 %def opcode_name_prefixes():
 %   return ["nterp_"]
 %def opcode_start():
     ENTRY ${opcode}
+%     pass
 %def opcode_end():
     END ${opcode}
     // Advance to the end of this handler. Causes error if we are past that point.
     .org ${opcode} + NTERP_HANDLER_SIZE  // ${opcode} handler is too big!
 %def opcode_slow_path_start(name):
     ENTRY ${name}
+%     pass
 %def opcode_slow_path_end(name):
     END ${name}

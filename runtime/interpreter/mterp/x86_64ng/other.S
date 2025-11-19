@@ -40,7 +40,7 @@
      ADVANCE_PC_FETCH_AND_GOTO_NEXT 3
 %  else:
      ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
-%  #endif
+%  pass
 1:
    // 00 is %rax
    call art_quick_read_barrier_mark_reg00
@@ -131,7 +131,6 @@
       SET_VREG_OBJECT %edx, %rax            # fp[A] <- fp[B]
 %   else:
       SET_VREG %edx, %rax                   # fp[A] <- fp[B]
-%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
 %def op_move_16(is_object=False):
@@ -144,7 +143,6 @@
       SET_VREG_OBJECT %edx, %rax            # fp[A] <- fp[B]
 %   else:
       SET_VREG %edx, %rax                   # fp[A] <- fp[B]
-%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 3
 
 %def op_move_exception():
@@ -163,7 +161,6 @@
       SET_VREG_OBJECT %edx, rINSTq          # fp[A] <- fp[B]
 %   else:
       SET_VREG %edx, rINSTq                 # fp[A] <- fp[B]
-%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 
 %def op_move_object():
@@ -182,7 +179,6 @@
       SET_VREG_OBJECT %eax, rINSTq          # fp[A] <- fp[B]
 %   else:
       SET_VREG %eax, rINSTq                 # fp[A] <- fp[B]
-%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
 %def op_move_result_object():

@@ -24,7 +24,6 @@
 %   if chkzero:
       cmp     r1, #0                    @ is second operand zero?
       beq     common_errDivideByZero
-%   #endif
 
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     $preinstr                           @ optional op; may set condition codes
@@ -57,7 +56,6 @@
 %   if chkzero:
       cmp     r1, #0                    @ is second operand zero?
       beq     common_errDivideByZero
-%   #endif
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
 
     $preinstr                           @ optional op; may set condition codes
@@ -88,7 +86,6 @@
 %   if chkzero:
       cmp     r1, #0                    @ is second operand zero?
       beq     common_errDivideByZero
-%   #endif
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
 
     $instr                              @ $result<- op, r0-r3 changed
@@ -124,7 +121,6 @@
 %   if chkzero:
       @cmp     r1, #0                   @ is second operand zero?
       beq     common_errDivideByZero
-%   #endif
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
 
     $instr                              @ $result<- op, r0-r3 changed
@@ -162,7 +158,6 @@
 %   if chkzero:
       orrs    ip, r2, r3                @ second arg (r2-r3) is zero?
       beq     common_errDivideByZero
-%   #endif
     CLEAR_SHADOW_PAIR rINST, lr, ip     @ Zero out the shadow regs
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     $preinstr                           @ optional op; may set condition codes
@@ -197,7 +192,6 @@
 %   if chkzero:
       orrs    ip, r2, r3                @ second arg (r2-r3) is zero?
       beq     common_errDivideByZero
-%   #endif
     CLEAR_SHADOW_PAIR rINST, ip, lr     @ Zero shadow regs
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
     $preinstr                           @ optional op; may set condition codes

@@ -52,7 +52,6 @@
      FETCH_ADVANCE_INST 3              // advance rPC, load rINST
 %  else:
      FETCH_ADVANCE_INST 2              // advance rPC, load rINST
-%  #endif
    PREPARE_OPCODE_DISPATCH             // insert opcode to rIBASE
    SET_VREG_OBJECT r0, r1              // vAA <- value
    GOTO_OPCODE                         // jump to next instruction
@@ -182,7 +181,6 @@
       SET_VREG_OBJECT r2, r0            @ fp[A]<- r2
 %   else:
       SET_VREG r2, r0                   @ fp[A]<- r2
-%   #endif
     GOTO_OPCODE                         @ jump to next instruction
 
 %def op_move_16(is_object=False):
@@ -197,7 +195,6 @@
       SET_VREG_OBJECT r2, r0            @ fp[AAAA]<- r2
 %   else:
       SET_VREG r2, r0                   @ fp[AAAA]<- r2
-%   #endif
     GOTO_OPCODE                         @ jump to next instruction
 
 %def op_move_exception():
@@ -223,7 +220,6 @@
       SET_VREG_OBJECT r2, r0            @ fp[AA]<- r2
 %   else:
       SET_VREG r2, r0                   @ fp[AA]<- r2
-%   #endif
     GOTO_OPCODE                         @ jump to next instruction
 
 %def op_move_object():
@@ -245,7 +241,6 @@
       SET_VREG_OBJECT r0, r2            @ fp[AA]<- r0
 %   else:
       SET_VREG r0, r2                   @ fp[AA]<- r0
-%   #endif
     GOTO_OPCODE                         @ jump to next instruction
 
 %def op_move_result_object():

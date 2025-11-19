@@ -35,7 +35,6 @@
       $load   $data_offset(%eax,%ecx,$multiplier), %eax
       SET_VREG %eax, rINST
       ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
-%   #endif
 
 %def op_aget_boolean():
 %  op_aget(load="movzbl", multiplier=1, data_offset="MIRROR_BOOLEAN_ARRAY_DATA_OFFSET")
@@ -77,7 +76,6 @@
 %   else:
       GET_VREG rINST, rINST
       $store    $rINST_reg, $data_offset(%eax,%ecx,$multiplier)
-%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 
 %def op_aput_boolean():

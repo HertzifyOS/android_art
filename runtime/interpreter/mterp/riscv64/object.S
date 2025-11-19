@@ -246,7 +246,6 @@
      ld $dst, ($src)
 %  else:
 %    assert False, width
-%#:
 
 
 %def store(src, dst, width):
@@ -260,7 +259,6 @@
      sd $src, ($dst)
 %  else:
 %    assert False, width
-%#:
 
 
 // iget vA, vB, field@CCCC
@@ -483,7 +481,6 @@
      amoswap.d.rl zero, $value, ($z0)
 %  else:
 %    assert False, width
-%#:
 
    FETCH_ADVANCE_INST 2
    GET_INST_OPCODE $z0
@@ -842,7 +839,6 @@
      amoswap.d.rl zero, $value, ($z0)
 %  else:
 %    assert False, width
-%#:
 
    FETCH_ADVANCE_INST 2
    GET_INST_OPCODE $z0
@@ -944,6 +940,7 @@
    add $z1, $z0, $z1
    sb $z0, ($z1)
 .L${uniq}_skip_write_barrier:
+%  pass
 
 
 // sput-object vAA, field@BBBB

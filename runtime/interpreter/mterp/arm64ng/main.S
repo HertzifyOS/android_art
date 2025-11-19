@@ -1,4 +1,3 @@
-%def header():
 /*
  * Copyright (C) 2020 The Android Open Source Project
  *
@@ -260,6 +259,7 @@
     .global \name
     .balign 16
 \name:
+%   pass
 .endm
 
 .macro SIZE name
@@ -273,6 +273,7 @@
     /* Cache alignment for function entry */
     .balign 16
 \name:
+%   pass
 .endm
 
 .macro NAME_END name
@@ -283,15 +284,15 @@
 // (we're not holding references there), but there is no
 // kDontSave runtime method. So just use the kSaveRefsOnly runtime method.
 .macro NTERP_TRAMPOLINE name, helper
-ENTRY \name
-  SETUP_SAVE_REFS_ONLY_FRAME
-  bl \helper
-  RESTORE_SAVE_REFS_ONLY_FRAME
-  REFRESH_MARKING_REGISTER
-  ldr xIP0, [xSELF, # THREAD_EXCEPTION_OFFSET]   // Get exception field.
-  cbnz xIP0, nterp_deliver_pending_exception
-  ret
-END \name
+  ENTRY \name
+    SETUP_SAVE_REFS_ONLY_FRAME
+    bl \helper
+    RESTORE_SAVE_REFS_ONLY_FRAME
+    REFRESH_MARKING_REGISTER
+    ldr xIP0, [xSELF, # THREAD_EXCEPTION_OFFSET]   // Get exception field.
+    cbnz xIP0, nterp_deliver_pending_exception
+    ret
+  END \name
 .endm
 
 .macro CLEAR_STATIC_VOLATILE_MARKER reg
@@ -418,6 +419,7 @@ END \name
     bl nterp_try_fast_compile
     b 1b
 #endif
+%   pass
 .endm
 
 .macro SPILL_ALL_CALLEE_SAVES
@@ -567,6 +569,7 @@ END \name
 1:
    .if \is_string_init
      // Ignore the first argument
+%    pass
    .elseif \is_static
      and         x2, x3, #0xf
      GET_VREG_OBJECT w5, w2
@@ -624,6 +627,7 @@ END \name
 2:
    .if \is_string_init
      // Ignore first argument
+%    pass
    .elseif !\is_static
      str w1, [xNEW_FP, ip]
      str w1, [x4, ip]
@@ -754,6 +758,7 @@ END \name
 8:
     GET_VREG \sreg, wip
 4:
+%   pass
 .endm
 
 // Puts the next int/long/object argument in the expected register,
@@ -812,6 +817,7 @@ END \name
     add \arg_index, \arg_index, #1
     b 1b
 5:
+%   pass
 .endm
 
 .macro SETUP_RETURN_VALUE shorty
@@ -825,13 +831,16 @@ END \name
 1:
    fmov x0, d0
 2:
+%  pass
 .endm
 
 .macro COMMON_INVOKE_NON_RANGE is_static=0, is_interface=0, suffix="", is_string_init=0, is_polymorphic=0, is_custom=0
    .if \is_polymorphic
      // We always go to compiled code for polymorphic calls.
+%    pass
    .elseif \is_custom
      // We always go to compiled code for custom calls.
+%    pass
    .else
      DO_ENTRY_POINT_CHECK .Lcall_compiled_code_\suffix
      GET_CODE_ITEM
@@ -848,10 +857,13 @@ END \name
 .Lcall_compiled_code_\suffix:
    .if \is_polymorphic
      // No fast path for polymorphic calls.
+%    pass
    .elseif \is_custom
      // No fast path for custom calls.
+%    pass
    .elseif \is_string_init
      // No fast path for string.init.
+%    pass
    .else
      ldr wip, [x0, #ART_METHOD_ACCESS_FLAGS_OFFSET]
      tbz wip, #ART_METHOD_NTERP_INVOKE_FAST_PATH_FLAG_BIT, .Lfast_path_with_few_args_\suffix
@@ -890,6 +902,7 @@ END \name
        GET_VREG    w1, wip
      .else
        // First argument already in w1.
+%      pass
      .endif
 .Linvoke_fast_path_\suffix:
      .if \is_interface
@@ -1052,6 +1065,7 @@ END \name
     add \arg_index, \arg_index, #1
     add \stack_index, \stack_index, #1
 4:
+%   pass
 .endm
 
 // Puts the next floating point argument into the expected stack slot,
@@ -1125,6 +1139,7 @@ END \name
     add \stack_index, \stack_index, #2
     b 1b
 5:
+%   pass
 .endm
 
 // Puts the next int/long/object argument in the expected stack slot,
@@ -1165,8 +1180,10 @@ END \name
 .macro COMMON_INVOKE_RANGE is_static=0, is_interface=0, suffix="", is_string_init=0, is_polymorphic=0, is_custom=0
    .if \is_polymorphic
      // We always go to compiled code for polymorphic calls.
+%    pass
    .elseif \is_custom
      // We always go to compiled code for custom calls.
+%    pass
    .else
      DO_ENTRY_POINT_CHECK .Lcall_compiled_code_range_\suffix
      GET_CODE_ITEM
@@ -1183,10 +1200,13 @@ END \name
 .Lcall_compiled_code_range_\suffix:
    .if \is_polymorphic
      // No fast path for polymorphic calls.
+%    pass
    .elseif \is_custom
      // No fast path for custom calls.
+%    pass
    .elseif \is_string_init
      // No fast path for string.init.
+%    pass
    .else
      ldr wip, [x0, #ART_METHOD_ACCESS_FLAGS_OFFSET]
      tbz wip, #ART_METHOD_NTERP_INVOKE_FAST_PATH_FLAG_BIT, .Lfast_path_with_few_args_range_\suffix
@@ -1240,6 +1260,7 @@ END \name
        ldr w1, [x8, #0]
      .else
        // First argument already in w1.
+%      pass
      .endif
 .Linvoke_fast_path_range_\suffix:
      .if \is_interface
@@ -1394,6 +1415,7 @@ END \name
      cbz     \value, \label
      WRITE_BARRIER_NOT_NULL \holder
 \label:
+%    pass
    .endif
 .endm
 
@@ -1428,6 +1450,7 @@ END \name
     add \arg_offset, \arg_offset, #8
     b 1b
 5:
+%   pass
 .endm
 
 // Puts the next floating point parameter passed in physical register
@@ -1455,6 +1478,7 @@ END \name
     str \sreg, [\fp, \arg_offset]
     add \arg_offset, \arg_offset, #4
 4:
+%   pass
 .endm
 
 // Puts the next floating point parameter passed in stack
@@ -1570,7 +1594,6 @@ END \name
     bl    art_quick_test_suspend
 .endm
 
-%def entry():
 /*
  * ArtMethod entry point.
  *
@@ -1607,6 +1630,7 @@ OAT_ENTRY ExecuteNterpWithClinitImpl
     .hidden EndExecuteNterpWithClinitImpl
     .global EndExecuteNterpWithClinitImpl
 EndExecuteNterpWithClinitImpl:
+%   pass
 
 OAT_ENTRY ExecuteNterpImpl
     .cfi_startproc
@@ -1726,6 +1750,7 @@ OAT_ENTRY ExecuteNterpImpl
     SIZE ExecuteNterpImpl
 
 %def opcode_pre():
+%  pass
 
 %def fetch_from_thread_cache(dest_reg, miss_label):
    // Fetch some information from the thread cache.
@@ -1744,11 +1769,11 @@ OAT_ENTRY ExecuteNterpImpl
  * ===========================================================================
  */
 
-    .text
-    .align  2
+  .text
+  .align  2
 
-// Enclose all code below in a symbol (which gets printed in backtraces).
-NAME_START nterp_helper
+  // Enclose all code below in a symbol (which gets printed in backtraces).
+  NAME_START nterp_helper
 
 // Note: mterp also uses the common_* names below for helpers, but that's OK
 // as the assembler compiled each interpreter separately.
@@ -1801,10 +1826,10 @@ NterpCommonInvokeCustomRange:
     COMMON_INVOKE_RANGE is_static=1, is_custom=1, suffix="invokeCustom"
 
 NterpHandleStringInit:
-   COMMON_INVOKE_NON_RANGE is_string_init=1, suffix="stringInit"
+    COMMON_INVOKE_NON_RANGE is_string_init=1, suffix="stringInit"
 
 NterpHandleStringInitRange:
-   COMMON_INVOKE_RANGE is_string_init=1, suffix="stringInit"
+    COMMON_INVOKE_RANGE is_string_init=1, suffix="stringInit"
 
 NterpHotnessCheck:
     ldr x0, [sp]
@@ -1888,7 +1913,7 @@ NterpHotnessCheck:
 // This is the logical end of ExecuteNterpImpl, where the frame info applies.
 // EndExecuteNterpImpl includes the methods below as we want the runtime to
 // see them as part of the Nterp PCs.
-.cfi_endproc
+    .cfi_endproc
 
 nterp_to_nterp_static_non_range:
     .cfi_startproc
@@ -1926,33 +1951,33 @@ nterp_to_nterp_string_init_range:
     SETUP_RANGE_ARGUMENTS_AND_EXECUTE is_static=0, is_string_init=1
     .cfi_endproc
 
-NAME_END nterp_helper
+  NAME_END nterp_helper
 
-// This is the end of PCs contained by the OatQuickMethodHeader created for the interpreter
-// entry point.
-    .type EndExecuteNterpImpl, #function
-    .hidden EndExecuteNterpImpl
-    .global EndExecuteNterpImpl
-EndExecuteNterpImpl:
+  // This is the end of PCs contained by the OatQuickMethodHeader created for the interpreter
+  // entry point.
+  .type EndExecuteNterpImpl, #function
+  .hidden EndExecuteNterpImpl
+  .global EndExecuteNterpImpl
+  EndExecuteNterpImpl:
 
-// Entrypoints into runtime.
-NTERP_TRAMPOLINE nterp_get_static_field, NterpGetStaticField
-NTERP_TRAMPOLINE nterp_get_instance_field_offset, NterpGetInstanceFieldOffset
-NTERP_TRAMPOLINE nterp_filled_new_array, NterpFilledNewArray
-NTERP_TRAMPOLINE nterp_filled_new_array_range, NterpFilledNewArrayRange
-NTERP_TRAMPOLINE nterp_get_class, NterpGetClass
-NTERP_TRAMPOLINE nterp_allocate_object, NterpAllocateObject
-NTERP_TRAMPOLINE nterp_get_method, NterpGetMethod
-NTERP_TRAMPOLINE nterp_hot_method, NterpHotMethod
-NTERP_TRAMPOLINE nterp_try_fast_compile, NterpTryFastCompile
-NTERP_TRAMPOLINE nterp_load_object, NterpLoadObject
+  // Entrypoints into runtime.
+  NTERP_TRAMPOLINE nterp_get_static_field, NterpGetStaticField
+  NTERP_TRAMPOLINE nterp_get_instance_field_offset, NterpGetInstanceFieldOffset
+  NTERP_TRAMPOLINE nterp_filled_new_array, NterpFilledNewArray
+  NTERP_TRAMPOLINE nterp_filled_new_array_range, NterpFilledNewArrayRange
+  NTERP_TRAMPOLINE nterp_get_class, NterpGetClass
+  NTERP_TRAMPOLINE nterp_allocate_object, NterpAllocateObject
+  NTERP_TRAMPOLINE nterp_get_method, NterpGetMethod
+  NTERP_TRAMPOLINE nterp_hot_method, NterpHotMethod
+  NTERP_TRAMPOLINE nterp_try_fast_compile, NterpTryFastCompile
+  NTERP_TRAMPOLINE nterp_load_object, NterpLoadObject
 
-ENTRY nterp_deliver_pending_exception
+  ENTRY nterp_deliver_pending_exception
     DELIVER_PENDING_EXCEPTION
-END nterp_deliver_pending_exception
+  END nterp_deliver_pending_exception
 
-// gen_mterp.py will inline the following definitions
-// within [ExecuteNterpImpl, EndExecuteNterpImpl).
+  // gen_mterp.py will inline the following definitions
+  // within [ExecuteNterpImpl, EndExecuteNterpImpl).
 
 %def instruction_end():
 %   prefix_number = int(re.sub(r"nterp([0-3])_", r"\1", opcode_name_prefix))
@@ -1965,7 +1990,6 @@ artNterpAsmInstructionEnd:
       FETCH_INST
       PREPARE_OPCODE_DISPATCH
       GOTO_OPCODE
-%   #endif
 
 %def instruction_start():
 %   prefix_number = int(re.sub(r"nterp([0-3])_", r"\1", opcode_name_prefix))
@@ -1973,13 +1997,12 @@ artNterpAsmInstructionEnd:
       .type artNterpAsmInstructionStart, #function
       .hidden artNterpAsmInstructionStart
       .global artNterpAsmInstructionStart
-artNterpAsmInstructionStart = nterp0_op_nop
+      artNterpAsmInstructionStart = nterp0_op_nop
       .text
       .balign 4096
 %   else:
 %     prev_op_nop = "nterp{}_op_nop".format(int(prefix_number) - 1)
       .org ${prev_op_nop} + 20480
-%   #endif
 
 %def add_slow_path_for_last_prefix(write_fn, *write_args, suffix="_slow_path"):
 %   if opcode_name_prefix != "nterp3_":
@@ -1990,14 +2013,15 @@ artNterpAsmInstructionStart = nterp0_op_nop
 %def opcode_name_prefixes():
 %   return ["nterp0_", "nterp1_", "nterp2_", "nterp3_"]
 %def opcode_start():
-    NAME_START ${opcode}
+  NAME_START ${opcode}
     # Explicitly restore CFA, just in case the previous opcode clobbered it (by .cfi_def_*).
     CFI_DEF_CFA_BREG_PLUS_UCONST CFI_REFS, -8, CALLEE_SAVES_SIZE
 %def opcode_end():
-    NAME_END ${opcode}
-    // Advance to the end of this handler. Causes error if we are past that point.
-    .org ${opcode} + NTERP_HANDLER_SIZE  // ${opcode} handler is too big!
+  NAME_END ${opcode}
+  // Advance to the end of this handler. Causes error if we are past that point.
+  .org ${opcode} + NTERP_HANDLER_SIZE  // ${opcode} handler is too big!
 %def opcode_slow_path_start(name):
-    NAME_START ${name}
+  NAME_START ${name}
+%   pass
 %def opcode_slow_path_end(name):
-    NAME_END ${name}
+  NAME_END ${name}

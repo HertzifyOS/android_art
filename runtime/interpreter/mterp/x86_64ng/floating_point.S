@@ -49,7 +49,6 @@
 %   else:
       SET_VREG_XMMs %xmm0, %rcx
       CLEAR_REF %rcx
-%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
 %def sseBinop(instr="", suff=""):

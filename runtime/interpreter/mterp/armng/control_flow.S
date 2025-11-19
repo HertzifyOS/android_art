@@ -159,9 +159,6 @@
           // In case we're going back to compiled code, put the
           // result also in s0.
           vmov s0, r0
-%       #endif
-%     #endif
-%   #endif
     .cfi_remember_state
     ldr ip, [rREFS, #-4]
     mov sp, ip

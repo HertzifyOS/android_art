@@ -133,7 +133,6 @@
       // In case we're going back to compiled code, put the
       // result also in a xmm register.
       movd %eax, %xmm0
-%   #endif
     CFI_REMEMBER_STATE
     movq -8(rREFS), %rsp
     CFI_DEF_CFA(rsp, CALLEE_SAVES_SIZE)
