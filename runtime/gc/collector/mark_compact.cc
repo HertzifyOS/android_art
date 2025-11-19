@@ -1578,6 +1578,13 @@ void MarkCompact::MarkingPause() {
         // into the live stack.
         thread->RevokeThreadLocalAllocationStack();
         bump_pointer_space_->RevokeThreadLocalBuffers(thread);
+        if (com::android::art::flags::weak_const_string()) {
+          // When we end the pause, weak reference access shall be disabled until we sweep weaks.
+          // Since we shall not be marking anymore, we cannot allow retrieving intern references
+          // from the interpreter cache as those strings could be sweeped. Attempts to retrieve
+          // them from the `InternTable` shall block until we enable weak reference access again.
+          thread->GetInterpreterCache()->Clear(thread);
+        }
       }
     }
     ProcessMarkStack();
