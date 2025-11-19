@@ -894,7 +894,7 @@ END \name
      .endif
      b .Ldone_return_\suffix
 .Lfetch_nterp_\suffix:
-    .word   (ExecuteNterpImpl + /* thumb mode */ 1) - (.Lfetch_location_\suffix + 4)
+     .word   (ExecuteNterpImpl + /* thumb mode */ 1) - (.Lfetch_location_\suffix + 4)
    .endif
 
 .Lcall_compiled_code_\suffix:
@@ -1193,7 +1193,7 @@ END \name
      .endif
      b .Ldone_return_range_\suffix
 .Lfetch_nterp_range_\suffix:
-    .word   (.Lfetch_location_range_\suffix+8) - ExecuteNterpImpl
+     .word   (ExecuteNterpImpl + /* thumb mode */ 1) - (.Lfetch_location_range_\suffix + 4)
    .endif
 
 .Lcall_compiled_code_range_\suffix:
