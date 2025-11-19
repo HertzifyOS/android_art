@@ -21,7 +21,6 @@
 
 #include "base/locks.h"
 #include "base/macros.h"
-#include "mirror/virtual_thread_context.h"
 #include "read_barrier_option.h"
 
 namespace art HIDDEN {
@@ -57,8 +56,6 @@ class StaticFieldVarHandle;
 class String;
 class Throwable;
 class VarHandle;
-class VirtualThreadContext;
-class VirtualThreadFrame;
 }  // namespace mirror
 
 #define CLASS_MIRROR_ROOT_LIST(M)                                                                                                         \
@@ -103,9 +100,7 @@ class VirtualThreadFrame;
   M(kShortArrayClass,                       "[S",                                         mirror::PrimitiveArray<int16_t>)                \
   M(kJavaLangStackTraceElementArrayClass,   "[Ljava/lang/StackTraceElement;",             mirror::ObjectArray<mirror::StackTraceElement>) \
   M(kJavaLangClassLoaderArrayClass,         "[Ljava/lang/ClassLoader;",                   mirror::ObjectArray<mirror::ClassLoader>)       \
-  M(kDalvikSystemClassExt,                  "Ldalvik/system/ClassExt;",                   mirror::ClassExt)                               \
-  M(kDalvikSystemVirtualThreadContext,      "Ldalvik/system/VirtualThreadContext;",       mirror::VirtualThreadContext)                   \
-  M(kDalvikSystemVirtualThreadFrame,        "Ldalvik/system/VirtualThreadFrame;",         mirror::VirtualThreadFrame)
+  M(kDalvikSystemClassExt,                  "Ldalvik/system/ClassExt;",                   mirror::ClassExt)
 
 #define CLASS_NO_MIRROR_ROOT_LIST(M)                                                                                                                \
   M(kJavaLangClassNotFoundException,        "Ljava/lang/ClassNotFoundException;",         detail::NoMirrorType<detail::ClassNotFoundExceptionTag>)  \

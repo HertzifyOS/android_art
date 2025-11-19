@@ -19,7 +19,6 @@
 
 #include "base/macros.h"
 #include "mirror/object.h"
-#include "mirror/virtual_thread_context.h"
 #include "obj_ptr.h"
 
 namespace art HIDDEN {
@@ -39,7 +38,7 @@ enum PinningReason {
 /**
  * @return true if parking is successful. False if the thread is pinned, or fails to park.
  */
-bool VirtualThreadPark(ObjPtr<mirror::VirtualThreadContext> v_context,
+bool VirtualThreadPark(ObjPtr<mirror::Object> v_context,
                        ObjPtr<mirror::Object> parked_states,
                        ObjPtr<mirror::Throwable> vm_error,
                        bool is_continuation_api,

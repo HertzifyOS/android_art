@@ -77,9 +77,7 @@ constexpr bool IsMirroredDescriptor(std::string_view desc) {
     vis("Ljava/lang/reflect/Method;")                 \
     vis("Ljava/lang/reflect/Proxy;")                  \
     vis("Ldalvik/system/ClassExt;")                   \
-    vis("Ldalvik/system/EmulatedStackFrame;")         \
-    vis("Ldalvik/system/VirtualThreadContext;")       \
-    vis("Ldalvik/system/VirtualThreadFrame;")
+    vis("Ldalvik/system/EmulatedStackFrame;")
   // LINT.ThenChange(/libcore/r8_exclude_classes.txt)
   // TODO: Once we are C++ 20 we can just have a constexpr array and std::find.
   // constexpr std::array<std::string_view, 28> kMirrorTypes{

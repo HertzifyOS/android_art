@@ -258,7 +258,7 @@ static void Thread_parkVirtualInternal(
     JNIEnv* env, jobject, jobject v_context, jobject parked_states, jobject vm_error) {
   ScopedObjectAccess soa(env);
   PinningReason reason;
-  VirtualThreadPark(soa.Decode<mirror::VirtualThreadContext>(v_context),
+  VirtualThreadPark(soa.Decode<mirror::Object>(v_context),
                     soa.Decode<mirror::Object>(parked_states),
                     soa.Decode<mirror::Throwable>(vm_error),
                     /* is_continuation_api= */ false,
