@@ -84,6 +84,7 @@ class CatchBlockStackVisitor final : public StackVisitor {
   bool VisitFrame() override REQUIRES_SHARED(Locks::mutator_lock_) {
     ArtMethod* method = GetMethod();
     exception_handler_->SetHandlerFrameDepth(GetFrameDepth());
+    DCHECK(!IsShadowFrame());
     if (method == nullptr) {
       DCHECK_EQ(skip_frames_, 0u)
           << "We tried to skip an upcall! We should have returned to the upcall to finish delivery";
@@ -111,14 +112,17 @@ class CatchBlockStackVisitor final : public StackVisitor {
       // that case, we should have runtime method (artMethodExitHook) on top of stack and the
       // second should be the method for which method exit was called.
       DCHECK_IMPLIES(skip_unwind_callback_, GetFrameDepth() == 2);
-      unwound_methods_.push(method);
+      if (Runtime::Current()->GetInstrumentation()->MethodSupportsExitEvents(
+              GetMethod(), GetCurrentOatQuickMethodHeader())) {
+        unwound_methods_for_callbacks_.push(method);
+      }
     }
     skip_unwind_callback_ = false;
     return continue_stack_walk;
   }
 
   std::queue<ArtMethod*>& GetUnwoundMethods() {
-    return unwound_methods_;
+    return unwound_methods_for_callbacks_;
   }
 
  private:
@@ -166,7 +170,7 @@ class CatchBlockStackVisitor final : public StackVisitor {
   uint32_t skip_frames_;
   // The list of methods we would skip to reach the catch block. We record these to call
   // MethodUnwind callbacks.
-  std::queue<ArtMethod*> unwound_methods_;
+  std::queue<ArtMethod*> unwound_methods_for_callbacks_;
   // Specifies if the unwind callback should be ignored for method at the top of the stack.
   bool skip_unwind_callback_;
 

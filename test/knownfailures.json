@@ -1280,7 +1280,8 @@
                   "2271-profile-inline-cache",
                   "2279-aconfig-flags",
                   "2286-method-tracing-aot-code",
-                  "2396-unmodifiable-final-fields"],
+                  "2396-unmodifiable-final-fields",
+                  "2398-method-trace-opt-code"],
         "variant": "jvm",
         "description": ["Doesn't run on RI."]
     },
