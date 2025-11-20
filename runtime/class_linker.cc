@@ -1057,6 +1057,14 @@ bool ClassLinker::InitWithoutImage(std::vector<std::unique_ptr<const DexFile>> b
   CHECK(class_root != nullptr);
   SetClassRoot(ClassRoot::kDalvikSystemEmulatedStackFrame, class_root);
 
+  class_root = FindSystemClass(self, "Ldalvik/system/VirtualThreadContext;");
+  CHECK(class_root != nullptr);
+  SetClassRoot(ClassRoot::kDalvikSystemVirtualThreadContext, class_root);
+
+  class_root = FindSystemClass(self, "Ldalvik/system/VirtualThreadFrame;");
+  CHECK(class_root != nullptr);
+  SetClassRoot(ClassRoot::kDalvikSystemVirtualThreadFrame, class_root);
+
   // java.lang.ref classes need to be specially flagged, but otherwise are normal classes
   // finish initializing Reference class
   mirror::Class::SetStatus(java_lang_ref_Reference, ClassStatus::kNotReady, self);
