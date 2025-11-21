@@ -16,6 +16,7 @@
 
 #include <android-base/properties.h>
 
+#include <cstddef>
 #include <vector>
 
 #include "android-base/stringprintf.h"
@@ -206,7 +207,7 @@ void Monitor::SetLockingMethod(Thread* owner) {
       ArtMethod* method_;
       uint32_t dex_pc_;
     };
-    NextMethodVisitor nmv(owner_.load(std::memory_order_relaxed));
+    NextMethodVisitor nmv(owner);
     nmv.WalkStack();
     lock_owner_method = nmv.method_;
     lock_owner_dex_pc = nmv.dex_pc_;
@@ -677,9 +678,10 @@ static std::string ThreadToString(Thread* thread) {
 }
 
 void Monitor::FailedUnlock(ObjPtr<mirror::Object> o,
-                           uint32_t expected_owner_thread_id,
+                           Thread* expected_owner,
                            uint32_t found_owner_thread_id,
                            Monitor* monitor) {
+  DCHECK_NE(expected_owner, nullptr);
   std::string current_owner_string;
   std::string expected_owner_string;
   std::string found_owner_string;
@@ -687,7 +689,6 @@ void Monitor::FailedUnlock(ObjPtr<mirror::Object> o,
   {
     MutexLock mu(Thread::Current(), *Locks::thread_list_lock_);
     ThreadList* const thread_list = Runtime::Current()->GetThreadList();
-    Thread* expected_owner = thread_list->FindThreadByThreadId(expected_owner_thread_id);
     Thread* found_owner = thread_list->FindThreadByThreadId(found_owner_thread_id);
 
     // Re-read owner now that we hold lock.
@@ -697,7 +698,7 @@ void Monitor::FailedUnlock(ObjPtr<mirror::Object> o,
     }
     // Get short descriptions of the threads involved.
     current_owner_string = ThreadToString(current_owner);
-    expected_owner_string = expected_owner != nullptr ? ThreadToString(expected_owner) : "unnamed";
+    expected_owner_string = ThreadToString(expected_owner);
     found_owner_string = found_owner != nullptr ? ThreadToString(found_owner) : "unnamed";
   }
 
@@ -772,7 +773,7 @@ bool Monitor::Unlock(Thread* self) {
       owner_thread_id = owner->GetThreadId();
     }
   }
-  FailedUnlock(GetObject(), self->GetThreadId(), owner_thread_id, this);
+  FailedUnlock(GetObject(), self, owner_thread_id, this);
   // Pretend to release monitor_lock_, which we should not.
   FakeUnlockMonitorLock();
   return false;
@@ -1254,13 +1255,13 @@ bool Monitor::MonitorExit(Thread* self, ObjPtr<mirror::Object> obj) {
       case LockWord::kHashCode:
         // Fall-through.
       case LockWord::kUnlocked:
-        FailedUnlock(h_obj.Get(), self->GetThreadId(), 0u, nullptr);
+        FailedUnlock(h_obj.Get(), self, 0u, nullptr);
         return false;  // Failure.
       case LockWord::kThinLocked: {
         uint32_t thread_id = self->GetThreadId();
         uint32_t owner_thread_id = lock_word.ThinLockOwner();
         if (owner_thread_id != thread_id) {
-          FailedUnlock(h_obj.Get(), thread_id, owner_thread_id, nullptr);
+          FailedUnlock(h_obj.Get(), self, owner_thread_id, nullptr);
           return false;  // Failure.
         } else {
           // We own the lock, decrease the recursion count.
