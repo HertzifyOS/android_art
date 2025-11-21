@@ -26,6 +26,7 @@
 #include <list>
 #include <vector>
 
+#include "android-base/logging.h"
 #include "base/allocator.h"
 #include "base/atomic.h"
 #include "base/macros.h"
@@ -55,6 +56,31 @@ enum class LockReason {
   kForWait,
   kForLock,
 };
+
+// Storage of a monitor owner id.
+// For a java platform thread, it stores the art::Thread pointer.
+struct MonitorOwner {
+  uintptr_t storage_;
+
+  ALWAYS_INLINE static MonitorOwner FromThread(const Thread* ptr) {
+    return MonitorOwner(reinterpret_cast<uintptr_t>(ptr));
+  }
+
+  ALWAYS_INLINE Thread* GetThreadPtr() const { return reinterpret_cast<Thread*>(storage_); }
+
+  ALWAYS_INLINE bool IsNull() const { return storage_ == 0; }
+
+  uint32_t GetThreadId() const;
+  bool operator==(const Thread* t) const;
+  // Check if the Thread is the owner stored in MonitorOwner.
+  // This function always returns false if `t` is nullptr.
+  bool IsOwner(const Thread* t) const;
+};
+static_assert(sizeof(MonitorOwner) == sizeof(Thread*), "Expect the size of a pointer");
+static_assert(sizeof(std::atomic<MonitorOwner>) == sizeof(uintptr_t),
+              "Expect the size of a pointer");
+static_assert(std::atomic<MonitorOwner>::is_always_lock_free,
+              "atomic<MonitorOwner> should be lock-free");
 
 class Monitor {
  public:
@@ -138,7 +164,7 @@ class Monitor {
   void SetObject(ObjPtr<mirror::Object> object) REQUIRES_SHARED(Locks::mutator_lock_);
 
   // Provides no memory ordering guarantees.
-  Thread* GetOwner() const REQUIRES_SHARED(Locks::mutator_lock_) {
+  MonitorOwner GetOwner() const REQUIRES_SHARED(Locks::mutator_lock_) {
     return owner_.load(std::memory_order_relaxed);
   }
 
@@ -187,10 +213,13 @@ class Monitor {
 #endif
 
  private:
-  Monitor(Thread* self, Thread* owner, ObjPtr<mirror::Object> obj, int32_t hash_code)
+  Monitor(Thread* self, MonitorOwner owner, ObjPtr<mirror::Object> obj, int32_t hash_code)
       REQUIRES_SHARED(Locks::mutator_lock_);
-  Monitor(Thread* self, Thread* owner, ObjPtr<mirror::Object> obj, int32_t hash_code, MonitorId id)
-      REQUIRES_SHARED(Locks::mutator_lock_);
+  Monitor(Thread* self,
+          MonitorOwner owner,
+          ObjPtr<mirror::Object> obj,
+          int32_t hash_code,
+          MonitorId id) REQUIRES_SHARED(Locks::mutator_lock_);
 
   // Install the monitor into its object, may fail if another thread installs a different monitor
   // first. Monitor remains in the same logical state as before, i.e. held the same # of times.
@@ -216,8 +245,16 @@ class Monitor {
   // threads inflating the lock, installing hash codes and spurious failures. The caller should
   // re-read the lock word following the call.
   static void Inflate(Thread* self, Thread* owner, ObjPtr<mirror::Object> obj, int32_t hash_code)
-      REQUIRES_SHARED(Locks::mutator_lock_)
-      NO_THREAD_SAFETY_ANALYSIS;  // For m->Install(self)
+      REQUIRES_SHARED(Locks::mutator_lock_)  // For m->Install(self)
+  {
+    Inflate(self, MonitorOwner::FromThread(owner), std::move(obj), hash_code);
+  }
+
+  static void Inflate(Thread* self,
+                      MonitorOwner owner,
+                      ObjPtr<mirror::Object> obj,
+                      int32_t hash_code)
+      REQUIRES_SHARED(Locks::mutator_lock_);  // For m->Install(self)
 
   void LogContentionEvent(Thread* self,
                           uint32_t wait_ms,
@@ -227,7 +264,7 @@ class Monitor {
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   static void FailedUnlock(ObjPtr<mirror::Object> obj,
-                           Thread* expected_owner,
+                           Thread* expected_owner_thread,
                            uint32_t found_owner_thread_id,
                            Monitor* mon) REQUIRES(!Locks::thread_list_lock_)
       REQUIRES_SHARED(Locks::mutator_lock_);
@@ -336,7 +373,7 @@ class Monitor {
   // Which thread currently owns the lock? monitor_lock_ only keeps the tid.
   // Only set while holding monitor_lock_. Non-locking readers only use it to
   // compare to self or for debugging.
-  std::atomic<Thread*> owner_;
+  std::atomic<MonitorOwner> owner_;
 
   // Owner's recursive lock depth. Owner_ non-null, and lock_count_ == 0 ==> held once.
   unsigned int lock_count_ GUARDED_BY(monitor_lock_);
@@ -405,7 +442,7 @@ class Monitor {
       REQUIRES(monitor_lock_);
 
   // Get owning method and dex pc for the given thread, if available.
-  void GetLockOwnerInfo(/*out*/ArtMethod** method, /*out*/uint32_t* dex_pc, Thread* t);
+  void GetLockOwnerInfo(/*out*/ ArtMethod** method, /*out*/ uint32_t* dex_pc, MonitorOwner owner);
 
   // We never clear lock_owner method and dex pc. Since it often reflects
   // ownership when we last detected contention, it may be inconsistent with owner_
