@@ -3016,9 +3016,11 @@ bool FastCompilerARM64::BuildSwitch(const Instruction& instruction, uint32_t dex
   if (table.GetNumEntries() == 0) {
     return true;
   }
+  MoveConstantsAndFpusToRegisters();
+  // Take a temporary after moving constants and fpu registers as these moves
+  // may need temporaries as well.
   UseScratchRegisterScope temps(GetVIXLAssembler());
   Register temp = temps.AcquireX();
-  MoveConstantsAndFpusToRegisters();
   for (DexSwitchTableIterator it(table); !it.Done(); it.Advance()) {
     int32_t target_offset = it.CurrentTargetOffset();
     if (target_offset <= 0 && !CanHandleBackwardsBranch(dex_pc + target_offset)) {
