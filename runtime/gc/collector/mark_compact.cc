@@ -4037,7 +4037,7 @@ class MarkCompact::ImmuneSpaceUpdateObjVisitor {
 
   void VisitRoot(mirror::CompressedReference<mirror::Object>* root) const ALWAYS_INLINE
       REQUIRES_SHARED(Locks::mutator_lock_) {
-    DCHECK(!visit_native_roots_);
+    DCHECK(visit_native_roots_);
     collector_->UpdateRoot(root, moving_space_begin_, moving_space_end_);
   }
 
