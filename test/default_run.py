@@ -62,6 +62,7 @@ def parse_args(argv):
   argp.add_argument("--experimental", default=[], action="append")
   argp.add_argument("--external-log-tags", action="store_true")
   argp.add_argument("--gc-stress", action="store_true")
+  argp.add_argument("--continuous-gc", action="store_true")
   argp.add_argument("--gdb", action="store_true")
   argp.add_argument("--gdb-arg", default=[], action="append")
   argp.add_argument("--gdb-dex2oat", action="store_true")
@@ -329,8 +330,8 @@ def default_run(ctx, args, **kwargs):
     IS_JVMTI_TEST = True
     # Secondary images block some tested behavior.
     SECONDARY_APP_IMAGE = False
-  if args.gc_stress:
-    # Give an extra 20 mins if we are gc-stress.
+  if args.gc_stress or args.continuous_gc:
+    # Give an extra 20 mins if we are stress or continuous gc.
     TIME_OUT_EXTRA += 1200
   for arg in args.testlib:
     ARGS += f" {arg}"
