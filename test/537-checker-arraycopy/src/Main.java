@@ -121,11 +121,9 @@ public class Main {
   //
   /// CHECK-START-ARM: void Main.arraycopyCharDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
-  /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
+  /// CHECK-NEXT:     cmp {{\w+}}, #0
   /// CHECK-NEXT:     beq{{\.w?}}
-  /// CHECK-NEXT:     cmp <<reg1>>, #0
-  /// CHECK-NEXT:     bne{{\.w?}}
-  /// CHECK-NOT:      cmp <<reg2>>, #0
+  /// CHECK-NOT:      cmp {{\w+}}, #0
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-{X86,X86_64}: void Main.arraycopyCharDstNonNull() disassembly (after)
@@ -143,7 +141,7 @@ public class Main {
 
   // Test case for Char specialization when source and destination arrays are the same.
   //
-  /// CHECK-START-RISCV64: void Main.arraycopyCharSameSrcDst() disassembly (after)
+  /// CHECK-START-RISCV64: void Main.arraycopyCharSameSrcDstForward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
   /// CHECK-NEXT:     auipc a0, {{\d+}}
   /// CHECK-NEXT:     {{lwu|ld}} a0, {{\d+}}(a0)
@@ -151,7 +149,7 @@ public class Main {
   /// CHECK-NEXT:     c.jalr ra
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-ARM64: void Main.arraycopyCharSameSrcDst() disassembly (after)
+  /// CHECK-START-ARM64: void Main.arraycopyCharSameSrcDstForward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
   /// CHECK-NEXT:     adrp
   /// CHECK-NEXT:     ldr
@@ -159,7 +157,7 @@ public class Main {
   /// CHECK-NEXT:     blr lr
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-ARM: void Main.arraycopyCharSameSrcDst() disassembly (after)
+  /// CHECK-START-ARM: void Main.arraycopyCharSameSrcDstForward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
   /// CHECK:          add <<reg:\w+>>, pc
   /// CHECK-NEXT:     ldr <<reg>>, [<<reg>>]
@@ -167,12 +165,48 @@ public class Main {
   /// CHECK-NEXT:     blx lr
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-{X86,X86_64}: void Main.arraycopyCharSameSrcDst() disassembly (after)
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyCharSameSrcDstForward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
   /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [{{RIP|ebp}} + {{\w+}}]
   /// CHECK-NEXT:     call [{{\w+}} + {{\d+}}]
   /// CHECK:          ReturnVoid
-  public void arraycopyCharSameSrcDst() {
+  public void arraycopyCharSameSrcDstForward() {
+    // overlapping arrays, source position < destination position => not intrinsified (may clobber)
+    System.arraycopy(arrChar, 0, arrChar, 1, 1);
+  }
+
+  // Test case for Char specialization when source and destination arrays are the same.
+  //
+  /// CHECK-START-RISCV64: void Main.arraycopyCharSameSrcDstBackward() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
+  /// CHECK-NEXT:     auipc a0, {{\d+}}
+  /// CHECK-NEXT:     {{lwu|ld}} a0, {{\d+}}(a0)
+  /// CHECK-NEXT:     ld ra, {{\d+}}(a0)
+  /// CHECK-NEXT:     c.jalr ra
+  /// CHECK:          ReturnVoid
+  //
+  /// CHECK-START-ARM64: void Main.arraycopyCharSameSrcDstBackward() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
+  /// CHECK-NEXT:     adrp
+  /// CHECK-NEXT:     ldr
+  /// CHECK-NEXT:     ldr lr,
+  /// CHECK-NEXT:     blr lr
+  /// CHECK:          ReturnVoid
+  //
+  /// CHECK-START-ARM: void Main.arraycopyCharSameSrcDstBackward() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
+  /// CHECK-NEXT:     cmp {{\w+}}, #0
+  /// CHECK-NEXT:     beq{{\.w?}}
+  /// CHECK-NOT:      cmp {{\w+}}, #0
+  /// CHECK:          ReturnVoid
+  //
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyCharSameSrcDstBackward() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
+  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [{{RIP|ebp}} + {{\w+}}]
+  /// CHECK-NEXT:     call [{{\w+}} + {{\d+}}]
+  /// CHECK:          ReturnVoid
+  public void arraycopyCharSameSrcDstBackward() {
+    // overlapping arrays, source position > destination position => intrinsified (no clobber)
     System.arraycopy(arrChar, 1, arrChar, 0, 1);
   }
 
@@ -195,11 +229,9 @@ public class Main {
   //
   /// CHECK-START-ARM: void Main.arraycopyByteDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
-  /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
+  /// CHECK-NEXT:     cmp {{\w+}}, #0
   /// CHECK-NEXT:     beq{{\.w?}}
-  /// CHECK-NEXT:     cmp <<reg1>>, #0
-  /// CHECK-NEXT:     bne{{\.w?}}
-  /// CHECK-NOT:      cmp <<reg2>>, #0
+  /// CHECK-NOT:      cmp {{\w+}}, #0
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-{X86,X86_64}: void Main.arraycopyByteDstNonNull() disassembly (after)
@@ -216,7 +248,7 @@ public class Main {
   }
 
   // Test case for Byte specialization when source and destination arrays are the same.
-  /// CHECK-START-RISCV64: void Main.arraycopyByteSameSrcDst() disassembly (after)
+  /// CHECK-START-RISCV64: void Main.arraycopyByteSameSrcDstForward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
   /// CHECK-NEXT:     auipc a0, {{\d+}}
   /// CHECK-NEXT:     {{lwu|ld}} a0, {{\d+}}(a0)
@@ -224,7 +256,7 @@ public class Main {
   /// CHECK-NEXT:     c.jalr ra
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-ARM64: void Main.arraycopyByteSameSrcDst() disassembly (after)
+  /// CHECK-START-ARM64: void Main.arraycopyByteSameSrcDstForward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
   /// CHECK-NEXT:     adrp
   /// CHECK-NEXT:     ldr
@@ -232,7 +264,7 @@ public class Main {
   /// CHECK-NEXT:     blr lr
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-ARM: void Main.arraycopyByteSameSrcDst() disassembly (after)
+  /// CHECK-START-ARM: void Main.arraycopyByteSameSrcDstForward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
   /// CHECK:          add <<reg:\w+>>, pc
   /// CHECK-NEXT:     ldr <<reg>>, [<<reg>>]
@@ -240,15 +272,49 @@ public class Main {
   /// CHECK-NEXT:     blx lr
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-{X86,X86_64}: void Main.arraycopyByteSameSrcDst() disassembly (after)
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyByteSameSrcDstForward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
   /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [{{RIP|ebp}} + {{\w+}}]
   /// CHECK-NEXT:     call [{{\w+}} + {{\d+}}]
   /// CHECK:          ReturnVoid
-  public void arraycopyByteSameSrcDst() {
-    System.arraycopy(arrByte, 1, arrByte, 0, 1);
+  public void arraycopyByteSameSrcDstForward() {
+    // overlapping arrays, source position < destination position => not intrinsified (may clobber)
+    System.arraycopy(arrByte, 0, arrByte, 1, 1);
   }
 
+  // Test case for Byte specialization when source and destination arrays are the same.
+  /// CHECK-START-RISCV64: void Main.arraycopyByteSameSrcDstBackward() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
+  /// CHECK-NEXT:     auipc a0, {{\d+}}
+  /// CHECK-NEXT:     {{lwu|ld}} a0, {{\d+}}(a0)
+  /// CHECK-NEXT:     ld ra, {{\d+}}(a0)
+  /// CHECK-NEXT:     c.jalr ra
+  /// CHECK:          ReturnVoid
+  //
+  /// CHECK-START-ARM64: void Main.arraycopyByteSameSrcDstBackward() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
+  /// CHECK-NEXT:     adrp
+  /// CHECK-NEXT:     ldr
+  /// CHECK-NEXT:     ldr lr,
+  /// CHECK-NEXT:     blr lr
+  /// CHECK:          ReturnVoid
+  //
+  /// CHECK-START-ARM: void Main.arraycopyByteSameSrcDstBackward() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
+  /// CHECK-NEXT:     cmp {{\w+}}, #0
+  /// CHECK-NEXT:     beq{{\.w?}}
+  /// CHECK-NOT:      cmp {{\w+}}, #0
+  /// CHECK:          ReturnVoid
+  //
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyByteSameSrcDstBackward() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
+  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [{{RIP|ebp}} + {{\w+}}]
+  /// CHECK-NEXT:     call [{{\w+}} + {{\d+}}]
+  /// CHECK:          ReturnVoid
+  public void arraycopyByteSameSrcDstBackward() {
+    // overlapping arrays, source position > destination position => intrinsified (no clobber)
+    System.arraycopy(arrByte, 1, arrByte, 0, 1);
+  }
   // Test case for Int specialization when destination array is non-null.
   //
   /// CHECK-START-RISCV64: void Main.arraycopyIntDstNonNull() disassembly (after)
@@ -268,11 +334,9 @@ public class Main {
   //
   /// CHECK-START-ARM: void Main.arraycopyIntDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
-  /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
+  /// CHECK-NEXT:     cmp {{\w+}}, #0
   /// CHECK-NEXT:     beq{{\.w?}}
-  /// CHECK-NEXT:     cmp <<reg1>>, #0
-  /// CHECK-NEXT:     bne{{\.w?}}
-  /// CHECK-NOT:      cmp <<reg2>>, #0
+  /// CHECK-NOT:      cmp {{\w+}}, #0
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-{X86,X86_64}: void Main.arraycopyIntDstNonNull() disassembly (after)
@@ -289,7 +353,7 @@ public class Main {
   }
 
   // Test case for Int specialization when source and destination arrays are the same.
-  /// CHECK-START-RISCV64: void Main.arraycopyIntSameSrcDst() disassembly (after)
+  /// CHECK-START-RISCV64: void Main.arraycopyIntSameSrcDstForward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
   /// CHECK-NEXT:     auipc a0, {{\d+}}
   /// CHECK-NEXT:     {{lwu|ld}} a0, {{\d+}}(a0)
@@ -297,7 +361,7 @@ public class Main {
   /// CHECK-NEXT:     c.jalr ra
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-ARM64: void Main.arraycopyIntSameSrcDst() disassembly (after)
+  /// CHECK-START-ARM64: void Main.arraycopyIntSameSrcDstForward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
   /// CHECK-NEXT:     adrp
   /// CHECK-NEXT:     ldr
@@ -305,7 +369,7 @@ public class Main {
   /// CHECK-NEXT:     blr lr
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-ARM: void Main.arraycopyIntSameSrcDst() disassembly (after)
+  /// CHECK-START-ARM: void Main.arraycopyIntSameSrcDstForward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
   /// CHECK:          add <<reg:\w+>>, pc
   /// CHECK-NEXT:     ldr <<reg>>, [<<reg>>]
@@ -313,12 +377,47 @@ public class Main {
   /// CHECK-NEXT:     blx lr
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-{X86,X86_64}: void Main.arraycopyIntSameSrcDst() disassembly (after)
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyIntSameSrcDstForward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
   /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [{{RIP|ebp}} + {{\w+}}]
   /// CHECK-NEXT:     call [{{\w+}} + {{\d+}}]
   /// CHECK:          ReturnVoid
-  public void arraycopyIntSameSrcDst() {
+  public void arraycopyIntSameSrcDstForward() {
+    // overlapping arrays, source position < destination position => not intrinsified (may clobber)
+    System.arraycopy(arrInt, 0, arrInt, 1, 1);
+  }
+
+  // Test case for Int specialization when source and destination arrays are the same.
+  /// CHECK-START-RISCV64: void Main.arraycopyIntSameSrcDstBackward() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
+  /// CHECK-NEXT:     auipc a0, {{\d+}}
+  /// CHECK-NEXT:     {{lwu|ld}} a0, {{\d+}}(a0)
+  /// CHECK-NEXT:     ld ra, {{\d+}}(a0)
+  /// CHECK-NEXT:     c.jalr ra
+  /// CHECK:          ReturnVoid
+  //
+  /// CHECK-START-ARM64: void Main.arraycopyIntSameSrcDstBackward() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
+  /// CHECK-NEXT:     adrp
+  /// CHECK-NEXT:     ldr
+  /// CHECK-NEXT:     ldr lr,
+  /// CHECK-NEXT:     blr lr
+  /// CHECK:          ReturnVoid
+  //
+  /// CHECK-START-ARM: void Main.arraycopyIntSameSrcDstBackward() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
+  /// CHECK-NEXT:     cmp {{\w+}}, #0
+  /// CHECK-NEXT:     beq{{\.w?}}
+  /// CHECK-NOT:      cmp {{\w+}}, #0
+  /// CHECK:          ReturnVoid
+  //
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyIntSameSrcDstBackward() disassembly (after)
+  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
+  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [{{RIP|ebp}} + {{\w+}}]
+  /// CHECK-NEXT:     call [{{\w+}} + {{\d+}}]
+  /// CHECK:          ReturnVoid
+  public void arraycopyIntSameSrcDstBackward() {
+    // overlapping arrays, source position > destination position => intrinsified (no clobber)
     System.arraycopy(arrInt, 1, arrInt, 0, 1);
   }
 }

@@ -1752,8 +1752,10 @@ LocationSummary* CodeGenerator::CreateSystemArrayCopyLocationSummary(
     }
   }
 
-  if (optimizations.GetDestinationIsPrimitiveArray() || optimizations.GetSourceIsPrimitiveArray()) {
-    // We currently don't intrinsify primitive copying.
+  if (invoke->GetIntrinsic() == Intrinsics::kSystemArrayCopy &&
+      (optimizations.GetDestinationIsPrimitiveArray() ||
+          optimizations.GetSourceIsPrimitiveArray())) {
+    // The generic version: we currently don't intrinsify primitive copying.
     return nullptr;
   }
 
