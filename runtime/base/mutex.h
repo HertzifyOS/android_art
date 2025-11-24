@@ -19,6 +19,7 @@
 
 #include <limits.h>  // for INT_MAX
 #include <pthread.h>
+#include <sched.h>
 #include <stdint.h>
 #include <unistd.h>  // for pid_t
 
@@ -257,6 +258,11 @@ class EXPORT LOCKABLE Mutex : public BaseMutex {
   void ExclusiveUnlockUncontended();
 #endif  // ART_USE_FUTEXES
 
+ protected:
+  // The default implementation returns the tid of the thread.
+  virtual pid_t GetSelfId(const Thread* self) const;
+  void ExclusiveLockUncontendedForSelfId(pid_t selfId);
+
  private:
 #if ART_USE_FUTEXES
   // Low order bit: 0 is unheld, 1 is held.
@@ -299,7 +305,29 @@ class EXPORT LOCKABLE Mutex : public BaseMutex {
   uint32_t monitor_id_;
 
   friend class ConditionVariable;
+  friend class MonitorMutex;
   DISALLOW_COPY_AND_ASSIGN(Mutex);
+};
+
+class EXPORT LOCKABLE MonitorMutex : public Mutex {
+ public:
+  static constexpr uint32_t kVTFlag = 1 << 31;
+  MonitorMutex() : Mutex("a monitor lock", kMonitorLock) {}
+  ~MonitorMutex() {}
+
+  // Acquire the mutex, possibly on behalf of another thread. Acquisition must be
+  // uncontended. New_owner must be current thread or suspended.
+  void ExclusiveLockUncontendedForVirtualThreadId(uint32_t virtual_thread_id);
+
+ protected:
+  // Use the most significant bit of a 32-bit integer to indicate that it's a virtual thread.
+  // The max of PID_MAX_LIMIT on Android is 2^22. See Android kernel's <include/linux/threads.h>
+  // pid_t should have at least 32 bits.
+  pid_t GetSelfId(const Thread* self) const override;
+
+  friend class MutexTest;
+  friend class MutexTest_MonitorLockUnlock_Test;
+  DISALLOW_COPY_AND_ASSIGN(MonitorMutex);
 };
 
 // A ReaderWriterMutex is used to achieve mutual exclusion between threads, similar to a Mutex.
