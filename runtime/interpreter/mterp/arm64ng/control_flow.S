@@ -31,7 +31,6 @@
     GET_VREG w2, w0                     // w2<- vAA
 %   if compare:
       cmp     w2, #0                    // compare (vA, 0)
-%   #endif
     ${branch} 1f
     FETCH_ADVANCE_INST 2
     PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
@@ -156,13 +155,11 @@
         GET_VREG w0, w2                     // r0<- vAA
 %       if is_object:
 .L${opcode}_restore_registers_and_return:  // `return-wide` handler jumps here to shorten the code.
+%         pass
 %       else:
           // In case we're going back to compiled code, put the
           // result also in s0.
           fmov s0, w0
-%       #endif
-%     #endif
-%   #endif
 %   if is_wide:
       // To fit the handler in the 64B, jump to the code in `return-object`.
 %     return_object_opcode = re.sub("return_wide", "return_object", opcode);
@@ -176,7 +173,6 @@
       ret
       .cfi_restore_state
       CFI_DEF_CFA_BREG_PLUS_UCONST CFI_REFS, -8, CALLEE_SAVES_SIZE
-%   #endif
 
 %def op_return_object():
 %  op_return(is_object=True)

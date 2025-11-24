@@ -2770,9 +2770,6 @@ extern "C" Context* artMethodExitHook(Thread* self,
     }
     DCHECK(!method->IsRuntimeMethod());
 
-    // If we need a deoptimization MethodExitEvent will be called by the interpreter when it
-    // re-executes the return instruction. For native methods we have to process method exit
-    // events here since deoptimization just removes the native frame.
     instr->MethodExitEvent(self, method, /* frame= */ {}, return_value);
 
     if (is_ref) {

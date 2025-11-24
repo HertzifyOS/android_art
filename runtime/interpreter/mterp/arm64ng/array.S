@@ -32,18 +32,19 @@
       $load   w0, [x0, #$data_offset]   // w0<- vBB[vCC]
       FETCH_ADVANCE_INST 2              // advance rPC, load rINST
       SET_VREG w0, w2                   // vAA<- w0
-%   #endif
+%   pass
 #ifdef USE_HEAP_POISONING
 %   if is_object:
       b .L${iget_opcode}_slow_path_dispatch  // Dispatch would not fit in 64B.
 %   else:
       PREPARE_OPCODE_DISPATCH           // insert opcode to xIBASE
       GOTO_OPCODE                       // jump to next instruction
-%   #endif
+%   pass
 #else
     PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
     GOTO_OPCODE                         // jump to next instruction
 #endif
+%   pass
 
 %def op_aget_boolean():
 %  op_aget(load="ldrb", shift=0, data_offset="MIRROR_BOOLEAN_ARRAY_DATA_OFFSET")
@@ -79,25 +80,21 @@
     ldr     w3, [x0, #MIRROR_ARRAY_LENGTH_OFFSET]     // w3<- arrayObj->length
 %   if not is_object:
       add     x0, x0, w1, uxtw #$shift  // w0<- arrayObj + index*width
-%   #endif
     cmp     w1, w3                      // compare unsigned index, length
     bcs     common_errArrayIndex        // index >= length, bail
 %   if is_object:
       EXPORT_PC                         // Export PC before overwriting it.
-%   #endif
     FETCH_ADVANCE_INST 2                // advance rPC, load rINST
 %   if wide:
       GET_VREG_WIDE x2, w9              // x2<- vAA
 %   else:
       GET_VREG w2, w9                   // w2<- vAA
-%   #endif
 %   if wide:
       $store  x2, [x0, #$data_offset]   // vBB[vCC]<- x2
 %   elif is_object:
       bl art_quick_aput_obj
 %   else:
       $store  w2, [x0, #$data_offset]   // vBB[vCC]<- w2
-%   #endif
     PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
     GOTO_OPCODE                         // jump to next instruction
 

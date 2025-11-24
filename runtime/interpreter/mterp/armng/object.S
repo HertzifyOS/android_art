@@ -193,7 +193,6 @@
 %  else:
      $load   r0, [r3, r0]
      SET_VREG r0, r2                   // fp[A] <- value
-%  #endif
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
@@ -201,7 +200,6 @@
 .L${opcode}_read_barrier:
      bl      art_quick_read_barrier_mark_reg00
      b       .L${opcode}_resume_after_read_barrier
-%  #endif
 
 %def op_iget_slow_path(load, wide, is_object):
    ldr     r0, [sp]
@@ -246,8 +244,6 @@
        SET_VREG_OBJECT r0, r2          // fp[A] <- value
 %    else:
        SET_VREG r0, r2                 // fp[A] <- value
-%    #endif
-%  #endif
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
@@ -275,7 +271,6 @@
 %  if not wide:
      ubfx    r4, rINST, #8, #4           // r4<- A
      GET_VREG r4, r4                     // r4 <- v[A]
-%  #endif
    // Fast-path which gets the field from thread-local cache.
 %  fetch_from_thread_cache("r0", miss_label=slow_path)
 .L${opcode}_resume:
@@ -293,7 +288,6 @@
      POISON_HEAP_REF_IF_OBJECT $is_object, r4
      $store  r4, [r1, r0]
      WRITE_BARRIER_IF_OBJECT $is_object, r4, r1, .L${opcode}_skip_write_barrier, r0
-%  #endif
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
@@ -311,7 +305,6 @@
      bl      NterpGetLocalInstanceFieldForIPutObject
 %  else:
      bl      NterpGetLocalInstanceField
-%  #endif
    cmp     r0, #0
    bge     .L${opcode}_resume
 .L${opcode}_slow_path_continue:
@@ -325,7 +318,6 @@
      // Reload the value as it may have moved.
      ubfx    r4, rINST, #8, #4         // r4<- A
      GET_VREG r4, r4                   // r4 <- v[A]
-%  #endif
    cmp     r0, #0
    bge     .L${opcode}_resume
    CLEAR_INSTANCE_VOLATILE_MARKER r0
@@ -351,7 +343,6 @@
      $store  r4, [r1, r0]
      dmb     ish
      WRITE_BARRIER_IF_OBJECT $is_object, r4, r1, .L${opcode}_slow_path_skip_write_barrier, r0
-%  #endif
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
@@ -399,7 +390,6 @@
 %  else:
      $load   r0, [r0, r1]
      SET_VREG r0, r2                   // fp[A] <- value
-%  #endif
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
@@ -414,7 +404,6 @@
      b       .L${opcode}_after_reference_load
 %  else:
      b       .L${opcode}_resume_after_read_barrier
-%  #endif
 
 %def op_sget_slow_path(load, wide, is_object):
    ldr     r0, [sp]
@@ -459,8 +448,6 @@
        SET_VREG_OBJECT r0, r2            // fp[A] <- value
 %    else:
        SET_VREG r0, r2                   // fp[A] <- value
-%    #endif
-%  #endif
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
@@ -491,7 +478,6 @@
 %  if not wide:
      lsr     r4, rINST, #8             // r4 <- A
      GET_VREG r4, r4                   // r4 <- v[A]
-%  #endif
    // Fast-path which gets the field from thread-local cache.
 %  fetch_from_thread_cache("r0", miss_label=slow_path)
 .L${opcode}_resume:
@@ -509,7 +495,6 @@
      POISON_HEAP_REF_IF_OBJECT $is_object, r4
      $store  r4, [r0, r1]
      WRITE_BARRIER_IF_OBJECT $is_object, r4, r0, .L${opcode}_skip_write_barrier, r1
-%  #endif
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
@@ -530,7 +515,6 @@
      bl      NterpGetLocalStaticFieldForSPutObject
 %  else:
      bl      NterpGetLocalStaticField
-%  #endif
    cmp     r0, #0
    bne     .L${opcode}_resume
 .L${opcode}_slow_path_continue:
@@ -541,14 +525,12 @@
      mov     r3, r4
 %  else:
      mov     r3, #0
-%  #endif
    EXPORT_PC
    bl      nterp_get_static_field
 %  if is_object:
      // Reload the value as it may have moved.
      lsr     r4, rINST, #8             // r4 <- A
      GET_VREG r4, r4                   // r4 <- v[A]
-%  #endif
    tst     r0, #1
    beq     .L${opcode}_resume
    CLEAR_STATIC_VOLATILE_MARKER r0
@@ -570,7 +552,6 @@
      $store  r4, [r0, r1]
      dmb     ish
      WRITE_BARRIER_IF_OBJECT $is_object, r4, r0, .L${opcode}_slow_path_skip_write_barrier, r1
-%  #endif
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE

@@ -931,6 +931,8 @@ class MarkCompact final : public GarbageCollector {
 
   // Mark bits for non-moving space
   accounting::ContinuousSpaceBitmap* non_moving_space_bitmap_;
+  // Mark bits for large-object space
+  accounting::LargeObjectBitmap* large_object_space_bitmap_;
   // Array of moving-space's pages' compaction status, which is stored in the
   // least-significant byte. kProcessed entries also contain the from-space
   // offset of the page which contains the compacted contents of the ith

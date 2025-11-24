@@ -76,20 +76,19 @@
      */
     /* op vAA, vBB, vCC */
     FETCH w0, 1                         // w0<- CCBB
-%  if r1.startswith("d"):
-    LOAD_SCALED_VREG_MASK w5, 0xff      // w4<- ff * sizeof(vreg)
-    lsr     w4, wINST, #8               // w4<- AA
-    EXTRACT_SCALED_VREG w2, w5, w0, 0   // w2<- BB * sizeof(vreg)
-    EXTRACT_SCALED_VREG w3, w5, w0, 8   // w3<- CC * sizeof(vreg)
-    GET_VREG_DOUBLE_PRESCALED $r1, w2
-    GET_VREG_DOUBLE_PRESCALED $r2, w3
-%  else:
-    lsr     w4, wINST, #8               // w4<- AA
-    and     w2, w0, #255                // w2<- BB
-    lsr     w3, w0, #8                  // w3<- CC
-    GET_VREG $r1, w2
-    GET_VREG $r2, w3
-%  #endif
+%   if r1.startswith("d"):
+      LOAD_SCALED_VREG_MASK w5, 0xff      // w4<- ff * sizeof(vreg)
+      lsr     w4, wINST, #8               // w4<- AA
+      EXTRACT_SCALED_VREG w2, w5, w0, 0   // w2<- BB * sizeof(vreg)
+      EXTRACT_SCALED_VREG w3, w5, w0, 8   // w3<- CC * sizeof(vreg)
+      GET_VREG_DOUBLE_PRESCALED $r1, w2
+      GET_VREG_DOUBLE_PRESCALED $r2, w3
+%   else:
+      lsr     w4, wINST, #8               // w4<- AA
+      and     w2, w0, #255                // w2<- BB
+      lsr     w3, w0, #8                  // w3<- CC
+      GET_VREG $r1, w2
+      GET_VREG $r2, w3
     fcmp $r1, $r2
     cset w0, ne
     cneg w0, w0, $cond
@@ -126,11 +125,10 @@
     /* unop vA, vB */
     lsr     w3, wINST, #12              // w3<- B
     ubfx    w4, wINST, #8, #4           // w4<- A
-%  if srcreg.startswith("d"):
-    GET_VREG_DOUBLE $srcreg, w3
-%  else:
-    GET_VREG_WIDE $srcreg, w3
-%  #endif
+%   if srcreg.startswith("d"):
+      GET_VREG_DOUBLE $srcreg, w3
+%   else:
+      GET_VREG_WIDE $srcreg, w3
     FETCH_ADVANCE_INST 1                // advance rPC, load wINST
     $instr                              // d0<- op
     PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
@@ -147,19 +145,17 @@
     /* unop vA, vB */
     lsr     w3, wINST, #12              // w3<- B
     ubfx    w4, wINST, #8, #4           // w4<- A
-%  if srcreg.startswith("d"):
-    GET_VREG_DOUBLE $srcreg, w3
-%  else:
-    GET_VREG_WIDE $srcreg, w3
-%  #endif
+%   if srcreg.startswith("d"):
+      GET_VREG_DOUBLE $srcreg, w3
+%   else:
+      GET_VREG_WIDE $srcreg, w3
     FETCH_ADVANCE_INST 1                // advance rPC, load wINST
     $instr                              // d0<- op
     PREPARE_OPCODE_DISPATCH             // insert opcode to xIBASE
-%  if tgtreg.startswith("d"):
-    SET_VREG_DOUBLE $tgtreg, w4         // vA<- d0
-%  else:
-    SET_VREG_WIDE $tgtreg, w4           // vA<- d0
-%  #endif
+%   if tgtreg.startswith("d"):
+      SET_VREG_DOUBLE $tgtreg, w4       // vA<- d0
+%   else:
+      SET_VREG_WIDE $tgtreg, w4         // vA<- d0
     GOTO_OPCODE                         // jump to next instruction
 
 %def funopWider(srcreg="s0", tgtreg="d0", instr=""):

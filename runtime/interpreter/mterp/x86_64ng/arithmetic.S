@@ -11,7 +11,6 @@
 %   else:
       GET_VREG %eax, %rax                   # eax <- vBB
       GET_VREG $second, %rcx                # ecx <- vCC
-%   #endif
     test${suffix}   $second, $second
     jz      common_errDivideByZero
     cmp${suffix}  $$-1, $second
@@ -25,14 +24,12 @@
       SET_WIDE_VREG $result, rINSTq         # eax <- vBB
 %   else:
       SET_VREG $result, rINSTq              # eax <- vBB
-%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
 %   if rem:
       xor${suffix} $result, $result
 %   else:
       neg${suffix} $result
-%   #endif
     jmp     1b
 3:
 %   if rem:
@@ -41,7 +38,6 @@
         shr${suffix} $$63, $result
 %     else:
         shr${suffix} $$31, $result
-%     #endif
       add${suffix} $tmp, $result
       and${suffix} $$-2, $result
       sub${suffix} $result, $tmp
@@ -52,10 +48,8 @@
         shr${suffix} $$63, $tmp
 %     else:
         shr${suffix} $$31, $tmp
-%     #endif
       add${suffix} $tmp, $result
       sar${suffix} $result
-%   #endif
     jmp     1b
 
 %def bindiv2addr(result="", second="", tmp="", wide=False, suffix="", rem=False, ext="cdq"):
@@ -72,7 +66,6 @@
 %   else:
       GET_VREG %eax, rINSTq                 # eax <- vA
       GET_VREG $second, %rcx                # ecx <- vB
-%   #endif
     test${suffix}   $second, $second
     jz      common_errDivideByZero
     cmp${suffix}  $$-1, $second
@@ -86,14 +79,12 @@
       SET_WIDE_VREG $result, rINSTq         # vA <- result
 %   else:
       SET_VREG $result, rINSTq              # vA <- result
-%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 2:
 %   if rem:
       xor${suffix} $result, $result
 %   else:
       neg${suffix} $result
-%   #endif
     jmp     1b
 3:
 %   if rem:
@@ -102,7 +93,6 @@
         shr${suffix} $$63, $result
 %     else:
         shr${suffix} $$31, $result
-%     #endif
       add${suffix} $tmp, $result
       and${suffix} $$-2, $result
       sub${suffix} $result, $tmp
@@ -113,10 +103,8 @@
         shr${suffix} $$63, $tmp
 %     else:
         shr${suffix} $$31, $tmp
-%     #endif
       add${suffix} $tmp, $result
       sar${suffix} $result
-%   #endif
     jmp     1b
 
 %def bindivLit16(result="", rem=False):
@@ -144,7 +132,6 @@
       xorl    $result, $result
 %   else:
       negl    $result
-%   #endif
     jmp     1b
 
 %def bindivLit8(result="", rem=False):
@@ -170,7 +157,6 @@
       xorl    $result, $result
 %   else:
       negl    $result
-%   #endif
     jmp     1b
 
 %def binop(result="%eax", instr=""):
@@ -208,7 +194,6 @@
       GET_VREG %eax, %rax                   # eax <- vBB
       $instr                                # ex: addl    %ecx,%eax
       SET_VREG %eax, rINSTq
-%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 
 %def binop2addr(result="%eax", instr=""):
@@ -320,7 +305,6 @@
       SET_WIDE_VREG ${result_reg}, %rcx
 %   else:
       SET_VREG ${result_reg}, %rcx
-%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
 %def shop2addr(wide=False, instr=""):
@@ -340,7 +324,6 @@
       GET_VREG %eax, rINSTq                 # eax <- vAA
       $instr                                # ex: sarl %cl, %eax
       SET_VREG %eax, rINSTq
-%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
 %def unop(preinstr="", instr="", wide=False):
@@ -355,15 +338,13 @@
       GET_WIDE_VREG %rax, rINSTq            # rax <- vB
 %   else:
       GET_VREG %eax, rINSTq                 # eax <- vB
-%   #endif
     andb    $$0xf,%cl                       # ecx <- A
-$preinstr
-$instr
+    $preinstr
+    $instr
 %   if wide:
       SET_WIDE_VREG %rax, %rcx
 %   else:
       SET_VREG %eax, %rcx
-%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
 %def op_add_int():

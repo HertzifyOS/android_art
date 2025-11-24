@@ -256,6 +256,7 @@ def add_builder(mode,
                 ngen=False,
                 cmc=False,
                 gcstress=False,
+                continuousgc=False,
                 poison=False,
                 hidden=False,
                 build_only=False,
@@ -270,6 +271,7 @@ def add_builder(mode,
     # Create builder name based on the configuaration parameters.
     name = mode + '.' + arch
     name += '.gcstress' if gcstress else ''
+    name += '.cgc' if continuousgc else ''
     name += '.poison' if poison else ''
     name += '.ngen' if ngen else ''
     name += '.cmc' if cmc else ''
@@ -285,6 +287,7 @@ def add_builder(mode,
     category = category.replace("host|", "host.")
     category = category.replace("target|", "target.")
     category = category.replace("gcstress|cmc", "gcstress-cmc")
+    category = category.replace("cgc|cmc", "cgc.cmc")
 
     product = None
     if arch == "arm":
@@ -327,6 +330,7 @@ def add_builder(mode,
         "concurrent_collector": not cmc,
         "generational_cc": not ngen,
         "gcstress": gcstress,
+        "continuousgc": continuousgc,
         "heap_poisoning": poison,
         "testrunner_args": testrunner_args,
         "repo_root": REPO_ROOT,
@@ -356,6 +360,8 @@ def add_builders():
       add_builder(mode, arch, bitness, poison=True)
       add_builder(mode, arch, bitness, gcstress=True)
       add_builder(mode, arch, bitness, cmc=True, gcstress=True)
+      add_builder(mode, arch, bitness, continuousgc=True, hidden=True)
+      add_builder(mode, arch, bitness, cmc=True, continuousgc=True, hidden=True)
       add_builder(mode, arch, bitness, build_only=True, hidden=True, presubmit=True)
   add_builder('qemu', 'arm', bitness=64)
   add_builder('qemu', 'riscv', bitness=64)

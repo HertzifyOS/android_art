@@ -1187,6 +1187,7 @@
                   "855-native",
                   "860-vdex-failure",
                   "869-branches",
+                  "870-constant-if",
                   "999-redefine-hiddenapi",
                   "1000-non-moving-space-stress",
                   "1001-app-image-regions",

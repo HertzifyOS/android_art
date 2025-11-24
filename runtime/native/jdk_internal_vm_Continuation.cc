@@ -22,6 +22,8 @@
 #include "jni.h"
 #include "mirror/object.h"
 #include "mirror/throwable.h"
+#include "mirror/virtual_thread_context-inl.h"
+#include "mirror/virtual_thread_context.h"
 #include "native/native_util.h"
 #include "nativehelper/jni_macros.h"
 #include "obj_ptr-inl.h"
@@ -43,7 +45,7 @@ static jint Continuation_doYieldNative([[maybe_unused]] JNIEnv* env,
   ScopedObjectAccess soa(env);
 
   PinningReason reason = kNoReason;
-  bool success = VirtualThreadPark(soa.Decode<mirror::Object>(v_context),
+  bool success = VirtualThreadPark(soa.Decode<mirror::VirtualThreadContext>(v_context),
                                    soa.Decode<mirror::Object>(parked_states),
                                    soa.Decode<mirror::Throwable>(vm_error),
                                    /* is_continuation_api= */ true,
@@ -66,10 +68,9 @@ static void Continuation_enterSpecial(
 
   ScopedObjectAccess soa(env);
   ObjPtr<mirror::Object> continuation = soa.Decode<mirror::Object>(cont);
-  ObjPtr<mirror::Object> v_context =
-      WellKnownClasses::jdk_internal_vm_Continuation_virtualThreadContext->GetObject(continuation);
-  ObjPtr<mirror::Object> parked_states =
-      WellKnownClasses::dalvik_system_VirtualThreadContext_parkedStates->GetObject(v_context);
+  ObjPtr<mirror::VirtualThreadContext> v_context = ObjPtr<mirror::VirtualThreadContext>::DownCast(
+      WellKnownClasses::jdk_internal_vm_Continuation_virtualThreadContext->GetObject(continuation));
+  ObjPtr<mirror::Object> parked_states = v_context->GetParkedStates();
 
   bool is_continue = j_is_continue;
   DCHECK_NE(parked_states.IsNull(), is_continue) << "Likely a bug in the Continuation.java";

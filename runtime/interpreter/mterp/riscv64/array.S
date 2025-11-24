@@ -72,7 +72,6 @@
      call nterp_filled_new_array_range  // args a0, a1, a2, a3
 %  else:
      call nterp_filled_new_array  // args a0, a1, a2, a3
-%#:
    FETCH_ADVANCE_INST 3
    GET_INST_OPCODE t0
    GOTO_OPCODE t0
@@ -149,7 +148,6 @@
      ld t0, MIRROR_WIDE_ARRAY_DATA_OFFSET(t0)
 %  else:
 %    assert False, width
-%#:
                        // t0 := *(array obj + data offset + idx * elem_size)
    srliw t1, xINST, 8  // t1 := AA
 %  set_vreg("t0", "t1", z0="t2", width=width)
@@ -251,7 +249,6 @@
      sd t2, MIRROR_WIDE_ARRAY_DATA_OFFSET(t0)
 %  else:
 %    assert False, width
-%#:
    FETCH_ADVANCE_INST 2
    GET_INST_OPCODE t0
    GOTO_OPCODE t0

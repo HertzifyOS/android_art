@@ -668,12 +668,25 @@ bool DexFileVerifier::CheckHeader() {
 
   if (dex_version_ >= 41) {
     auto headerV41 = reinterpret_cast<const DexFile::HeaderV41*>(header_);
+
+    // Container size smaller than header.
     if (headerV41->container_size_ <= headerV41->header_offset_) {
       ErrorStringPrintf("Dex container is too small: size=%ud header_offset=%ud",
                         headerV41->container_size_,
                         headerV41->header_offset_);
       return false;
     }
+
+    // Claimed container size vs actual.
+    size_t actual_container_size = dex_file_->GetContainer()->Size();
+    if (headerV41->container_size_ > actual_container_size) {
+      ErrorStringPrintf("Claimed container size (%ud) exceeds actual container size (%zu)",
+                        headerV41->container_size_,
+                        actual_container_size);
+      return false;
+    }
+
+    // Check that the DEX file is within the container.
     uint32_t remainder = headerV41->container_size_ - headerV41->header_offset_;
     if (headerV41->file_size_ > remainder) {
       ErrorStringPrintf(

@@ -356,7 +356,9 @@ class BuildTestContext:
       args = []
       if d8_dex_container:
         args += ["-JDcom.android.tools.r8.dexContainerExperiment"]
-      args += d8_flags + ["--min-api", str(api_level), "--output", dst_jar]
+      args += (d8_flags +
+              ["--min-api", str(api_level), "--output", dst_jar,
+               "--verbose-synthetic-names"])
       args += ["--lib", self.bootclasspath] if use_desugar else ["--no-desugaring"]
       args += sorted(src_dir.glob("**/*.class"))
       self.d8(args)

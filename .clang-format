@@ -10,7 +10,7 @@ AllowShortBlocksOnASingleLine: Empty
 AllowShortCaseLabelsOnASingleLine: false
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
-AttributeMacros: ['__', 'NO_RETURN']
+AttributeMacros: ['__', 'HIDDEN', 'NO_RETURN']
 BinPackArguments: false
 BinPackParameters: false
 BreakConstructorInitializers: BeforeColon

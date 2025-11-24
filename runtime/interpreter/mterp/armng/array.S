@@ -40,7 +40,6 @@
       $load   r2, [r0, #$data_offset]   @ r2<- vBB[vCC]
       SET_VREG r2, r4                   @ vAA<- r2
       GOTO_OPCODE                       @ jump to next instruction
-%   #endif
 
 %def op_aget_boolean():
 %  op_aget(load="ldrb", shift=0, data_offset="MIRROR_BOOLEAN_ARRAY_DATA_OFFSET")
@@ -96,7 +95,6 @@
       GET_VREG r2, r4                   @ r2<- vAA
       PREPARE_OPCODE_DISPATCH           @ insert opcode to rIBASE
       $store  r2, [r0, #$data_offset]   @ vBB[vCC]<- r2
-%   #endif
     GOTO_OPCODE                         @ jump to next instruction
 
 %def op_aput_boolean():

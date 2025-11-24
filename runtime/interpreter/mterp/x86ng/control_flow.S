@@ -135,7 +135,6 @@
       // In case we're going back to compiled code, put the
       // result also in a xmm register.
       movd %eax, %xmm0
-%   #endif
     CFI_REMEMBER_STATE
     movl -4(rREFS), %esp
     DROP_PARAMETERS_SAVES

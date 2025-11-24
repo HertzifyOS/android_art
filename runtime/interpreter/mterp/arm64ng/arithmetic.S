@@ -23,7 +23,6 @@
     GET_VREG w0, w2                     // w0<- vBB
 %   if chkzero:
       cbz     w1, common_errDivideByZero  // is second operand zero?
-%   #endif
     FETCH_ADVANCE_INST 2                // advance rPC, load rINST
     $preinstr                           // optional op; may set condition codes
     $instr                              // $result<- op, w0-w3 changed
@@ -54,7 +53,6 @@
     GET_VREG w0, w9                     // w0<- vA
 %   if chkzero:
       cbz     w1, common_errDivideByZero
-%   #endif
     FETCH_ADVANCE_INST 1                // advance rPC, load rINST
     $preinstr                           // optional op; may set condition codes
     $instr                              // $result<- op, w0-w3 changed
@@ -83,7 +81,6 @@
     GET_VREG w0, w2                     // w0<- vB
 %   if chkzero:
       cbz     w1, common_errDivideByZero
-%   #endif
     FETCH_ADVANCE_INST 2                // advance rPC, load rINST
     $preinstr
     $instr                              // $result<- op, w0-w3 changed
@@ -118,7 +115,6 @@
     $extract                            // optional; typically w1<- ssssssCC (sign extended)
 %   if chkzero:
       cbz     w1, common_errDivideByZero
-%   #endif
     FETCH_ADVANCE_INST 2                // advance rPC, load rINST
     $preinstr                           // optional op; may set condition codes
     $instr                              // $result<- op, w0-w3 changed
@@ -150,7 +146,6 @@
     GET_VREG_WIDE_PRESCALED $r1, w1       // w1<- vBB
 %   if chkzero:
       cbz     $r2, common_errDivideByZero // is second operand zero?
-%   #endif
     FETCH_ADVANCE_INST 2                  // advance rPC, load rINST
     $preinstr
     $instr                                // $result<- op, w0-w4 changed
@@ -180,7 +175,6 @@
     GET_VREG_WIDE $r0, w2               // x0<- vA
 %   if chkzero:
       cbz     $r1, common_errDivideByZero
-%   #endif
     FETCH_ADVANCE_INST 1                // advance rPC, load rINST
     $preinstr
     $instr                              // result<- op

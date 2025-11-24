@@ -49,7 +49,6 @@
       CLEAR_WIDE_REF %ecx
 %   else:
       CLEAR_REF %ecx
-%   #endif
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 1
 
 %def sseBinop(instr="", suff=""):

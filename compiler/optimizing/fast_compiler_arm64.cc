@@ -796,7 +796,7 @@ void FastCompilerARM64::StartBranchTarget(bool flow_continues, uint32_t dex_pc) 
     // Emulate a branch to this pc.
     PrepareToBranch(dex_pc);
   } else {
-    DCHECK(BranchTargetIsInitialized(dex_pc));
+    DCHECK(BranchTargetIsInitialized(dex_pc)) << "0x" << std::hex << dex_pc;
     // Otherwise reset locations to known locations.
     ResetLocations();
   }
@@ -853,14 +853,22 @@ bool FastCompilerARM64::ProcessBlock(uint32_t dex_pc) {
     bool is_catch = catch_pcs_.IsBitSet(pair.DexPc());
     bool is_branch_target = IsBranchTarget(pair.DexPc());
     bool is_linked = label->IsLinked();
+    if (is_catch) {
+      if (!BranchTargetIsInitialized(pair.DexPc())) {
+        // The catch handler is in the normal flow (for example at dex pc 0), but
+        // we need to know the masks at throwing instruction. Recompile with loop
+        // support.
+        unimplemented_reason_ = "Loop retry";
+        recompile_with_loop_support_ = true;
+        return false;
+      }
+      catch_stack_maps_.push_back(std::make_pair(pair.DexPc(), GetAssembler()->CodePosition()));
+    }
     if (is_linked || is_branch_target || is_catch) {
       StartBranchTarget(flow_continues, pair.DexPc());
     }
     if (is_linked || is_branch_target) {
       __ Bind(label);
-    }
-    if (is_catch) {
-      catch_stack_maps_.push_back(std::make_pair(pair.DexPc(), GetAssembler()->CodePosition()));
     }
 
     // If the instruction can throw, emulate a branch to each catch handler by
@@ -2024,7 +2032,7 @@ void FastCompilerARM64::DoWriteBarrierOn(Register holder,
       if (constant op other) { \
         __ B(label); \
       } \
-      return true; \
+      break; \
     } \
 
 template<vixl::aarch64::Condition kCond, bool kCompareWithZero>
