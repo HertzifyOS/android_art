@@ -126,20 +126,11 @@ public class Main {
   /// CHECK-NOT:      cmp {{\w+}}, #0
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-X86_64: void Main.arraycopyCharDstNonNull() disassembly (after)
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyCharDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
   /// CHECK-NEXT:     test <<reg1:\w+>>, <<reg1>>
   /// CHECK-NEXT:     jz/eq
   /// CHECK-NOT:      test {{\w+}}, {{\w+}}
-  /// CHECK:          ReturnVoid
-  //
-  /// CHECK-START-X86: void Main.arraycopyCharDstNonNull() disassembly (after)
-  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
-  /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
-  /// CHECK-NEXT:     jz/eq
-  /// CHECK-NEXT:     test <<reg1>>, <<reg1>>
-  /// CHECK-NEXT:     jz/eq
-  /// CHECK-NOT:      test <<reg2>>, <<reg2>>
   /// CHECK:          ReturnVoid
   public void arraycopyCharDstNonNull() {
     char[] arrChar2 = new char[1];
@@ -207,17 +198,11 @@ public class Main {
   /// CHECK-NOT:      cmp {{\w+}}, #0
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-X86_64: void Main.arraycopyCharSameSrcDstBackward() disassembly (after)
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyCharSameSrcDstBackward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
   /// CHECK-NEXT:     test <<reg1:\w+>>, <<reg1>>
   /// CHECK-NEXT:     jz/eq
   /// CHECK-NOT:      test {{\w+}}, {{\w+}}
-  /// CHECK:          ReturnVoid
-  //
-  /// CHECK-START-{X86}: void Main.arraycopyCharSameSrcDstBackward() disassembly (after)
-  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
-  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [ebp + {{\w+}}]
-  /// CHECK-NEXT:     call [{{\w+}} + {{\d+}}]
   /// CHECK:          ReturnVoid
   public void arraycopyCharSameSrcDstBackward() {
     // overlapping arrays, source position > destination position => intrinsified (no clobber)
@@ -248,20 +233,11 @@ public class Main {
   /// CHECK-NOT:      cmp {{\w+}}, #0
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-X86_64: void Main.arraycopyByteDstNonNull() disassembly (after)
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyByteDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
   /// CHECK-NEXT:     test <<reg1:\w+>>, <<reg1>>
   /// CHECK-NEXT:     jz/eq
   /// CHECK-NOT:      test {{\w+}}, {{\w+}}
-  /// CHECK:          ReturnVoid
-  //
-  /// CHECK-START-X86: void Main.arraycopyByteDstNonNull() disassembly (after)
-  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
-  /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
-  /// CHECK-NEXT:     jz/eq
-  /// CHECK-NEXT:     test <<reg1>>, <<reg1>>
-  /// CHECK-NEXT:     jz/eq
-  /// CHECK-NOT:      test <<reg2>>, <<reg2>>
   /// CHECK:          ReturnVoid
   public void arraycopyByteDstNonNull() {
     byte[] arrByte2 = new byte[1];
@@ -327,17 +303,11 @@ public class Main {
   /// CHECK-NOT:      cmp {{\w+}}, #0
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-X86_64: void Main.arraycopyByteSameSrcDstBackward() disassembly (after)
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyByteSameSrcDstBackward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
   /// CHECK-NEXT:     test <<reg1:\w+>>, <<reg1>>
   /// CHECK-NEXT:     jz/eq
   /// CHECK-NOT:      test {{\w+}}, {{\w+}}
-  /// CHECK:          ReturnVoid
-  //
-  /// CHECK-START-X86: void Main.arraycopyByteSameSrcDstBackward() disassembly (after)
-  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
-  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [ebp + {{\w+}}]
-  /// CHECK-NEXT:     call [{{\w+}} + {{\d+}}]
   /// CHECK:          ReturnVoid
   public void arraycopyByteSameSrcDstBackward() {
     // overlapping arrays, source position > destination position => intrinsified (no clobber)
@@ -367,20 +337,11 @@ public class Main {
   /// CHECK-NOT:      cmp {{\w+}}, #0
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-X86_64: void Main.arraycopyIntDstNonNull() disassembly (after)
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyIntDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
   /// CHECK-NEXT:     test <<reg1:\w+>>, <<reg1>>
   /// CHECK-NEXT:     jz/eq
   /// CHECK-NOT:      test {{\w+}}, {{\w+}}
-  /// CHECK:          ReturnVoid
-  //
-  /// CHECK-START-X86: void Main.arraycopyIntDstNonNull() disassembly (after)
-  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
-  /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
-  /// CHECK-NEXT:     jz/eq
-  /// CHECK-NEXT:     test <<reg1>>, <<reg1>>
-  /// CHECK-NEXT:     jz/eq
-  /// CHECK-NOT:      test <<reg2>>, <<reg2>>
   /// CHECK:          ReturnVoid
   public void arraycopyIntDstNonNull() {
     int[] arrInt2 = new int[1];
@@ -446,17 +407,11 @@ public class Main {
   /// CHECK-NOT:      cmp {{\w+}}, #0
   /// CHECK:          ReturnVoid
   //
-  /// CHECK-START-X86_64: void Main.arraycopyIntSameSrcDstBackward() disassembly (after)
+  /// CHECK-START-{X86,X86_64}: void Main.arraycopyIntSameSrcDstBackward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
   /// CHECK-NEXT:     test <<reg1:\w+>>, <<reg1>>
   /// CHECK-NEXT:     jz/eq
   /// CHECK-NOT:      test {{\w+}}, {{\w+}}
-  /// CHECK:          ReturnVoid
-  //
-  /// CHECK-START-X86: void Main.arraycopyIntSameSrcDstBackward() disassembly (after)
-  /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
-  /// CHECK-NEXT:     mov{{q?}} {{\w+}}, [ebp + {{\w+}}]
-  /// CHECK-NEXT:     call [{{\w+}} + {{\d+}}]
   /// CHECK:          ReturnVoid
   public void arraycopyIntSameSrcDstBackward() {
     // overlapping arrays, source position > destination position => intrinsified (no clobber)

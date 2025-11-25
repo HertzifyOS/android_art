@@ -20,7 +20,7 @@ public class Main {
   /// CHECK: InvokeStaticOrDirect method_name:java.lang.System.arraycopy intrinsic:SystemArrayCopy
   /// CHECK-NOT:    call
   /// CHECK: InvokeStaticOrDirect method_name:java.lang.System.arraycopy intrinsic:SystemArrayCopyByte
-  /// CHECK:        call
+  /// CHECK-NOT:    call
   /// CHECK: ReturnVoid
   //
   // Byte version is not intrinsified because source and destination are the same.
@@ -40,7 +40,7 @@ public class Main {
   /// CHECK: InvokeStaticOrDirect method_name:java.lang.System.arraycopy intrinsic:SystemArrayCopy
   /// CHECK-NOT:    call
   /// CHECK: InvokeStaticOrDirect method_name:java.lang.System.arraycopy intrinsic:SystemArrayCopyByte
-  /// CHECK:        call
+  /// CHECK-NOT:    call
   /// CHECK: ReturnVoid
   //
   // Byte version is not intrinsified because source and destination are the same.

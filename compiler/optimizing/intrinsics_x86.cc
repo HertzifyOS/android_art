@@ -759,45 +759,17 @@ static void CreateSystemArrayCopyLocations(HInvoke* invoke) {
     return;
   }
 
-  // As long as we are checking, we might as well check to see if the src and dest
-  // positions are >= 0.
-  if ((src_pos != nullptr && src_pos->GetValue() < 0) ||
-      (dest_pos != nullptr && dest_pos->GetValue() < 0)) {
-    // We will have to fail anyways.
-    return;
+  constexpr int32_t copy_threshold = -1;  // negative value means "ignore threshold"
+  constexpr size_t kInitialNumTemps = 0u;  // we need specific temporary registers (added below)
+  LocationSummary* locations = CodeGenerator::CreateSystemArrayCopyLocationSummary(
+      invoke, copy_threshold, kInitialNumTemps);
+
+  if (locations != nullptr) {
+    // And we need some temporaries.  We will use REP MOVS{B,W,L}, so we need fixed registers.
+    locations->AddTemp(Location::CoreRegister(ESI));
+    locations->AddTemp(Location::CoreRegister(EDI));
+    locations->AddTemp(Location::CoreRegister(ECX));
   }
-
-  // And since we are already checking, check the length too.
-  if (length != nullptr) {
-    int32_t len = length->GetValue();
-    if (len < 0) {
-      // Just call as normal.
-      return;
-    }
-  }
-
-  // If source and destination are the same, fallback to native implementation: some overlapping
-  // copy regions must be copied in reverse and we can't know in all cases if it's needed.
-  SystemArrayCopyOptimizations optimizations(invoke);
-  if (optimizations.GetDestinationIsSource()) {
-    return;
-  }
-
-  // Okay, it is safe to generate inline code.
-  ArenaAllocator* allocator = invoke->GetBlock()->GetGraph()->GetAllocator();
-  LocationSummary* locations =
-      LocationSummary::Create(allocator, invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
-  // arraycopy(Object src, int srcPos, Object dest, int destPos, int length).
-  locations->SetInAt(0, Location::RequiresCoreRegister());
-  locations->SetInAt(1, Location::RegisterOrConstant(invoke->InputAt(1)));
-  locations->SetInAt(2, Location::RequiresCoreRegister());
-  locations->SetInAt(3, Location::RegisterOrConstant(invoke->InputAt(3)));
-  locations->SetInAt(4, Location::RegisterOrConstant(invoke->InputAt(4)));
-
-  // And we need some temporaries.  We will use REP MOVS{B,W,L}, so we need fixed registers.
-  locations->AddTemp(Location::CoreRegister(ESI));
-  locations->AddTemp(Location::CoreRegister(EDI));
-  locations->AddTemp(Location::CoreRegister(ECX));
 }
 
 template <typename LhsType>
@@ -867,6 +839,74 @@ static void CheckSystemArrayCopyPosition(X86Assembler* assembler,
   }
 }
 
+static void CheckSystemArrayCopyNullOrOverlap(HInvoke* invoke,
+                                              X86Assembler* assembler,
+                                              SlowPathCode* slow_path,
+                                              Register src,
+                                              Register dest,
+                                              Location src_pos,
+                                              Location dest_pos,
+                                              Location length) {
+  SystemArrayCopyOptimizations optimizations(invoke);
+  NearLabel conditions_on_positions_validated;
+
+  // If source and destination are the same, then the copied arrays may overlap.
+  // For overlapping arrays we can only guarantee correctness if `src_pos >= dst_pos`, otherwise
+  // copying the elements at the beginning of source array may clobber the elements at the end.
+  if (!optimizations.GetSourcePositionIsDestinationPosition()) {
+    if (src_pos.IsConstant()) {
+      int32_t src_pos_constant = src_pos.GetConstant()->AsIntConstant()->GetValue();
+      if (dest_pos.IsConstant()) {
+        int32_t dest_pos_constant = dest_pos.GetConstant()->AsIntConstant()->GetValue();
+        if (optimizations.GetDestinationIsSource()) {
+          // Checked when building locations.
+          DCHECK_GE(src_pos_constant, dest_pos_constant);
+        } else if (src_pos_constant < dest_pos_constant) {
+          __ cmpl(src, dest);
+          __ j(kEqual, slow_path->GetEntryLabel());
+        }
+      } else {
+        if (!optimizations.GetDestinationIsSource()) {
+          __ cmpl(src, dest);
+          __ j(kNotEqual, &conditions_on_positions_validated);
+        }
+        __ cmpl(dest_pos.AsRegister<Register>(), Immediate(src_pos_constant));
+        __ j(kGreater, slow_path->GetEntryLabel());
+      }
+    } else {
+      if (!optimizations.GetDestinationIsSource()) {
+        __ cmpl(src, dest);
+        __ j(kNotEqual, &conditions_on_positions_validated);
+      }
+      Register src_pos_reg = src_pos.AsRegister<Register>();
+      EmitCmplJLess(assembler, src_pos_reg, dest_pos, slow_path->GetEntryLabel());
+    }
+  }
+
+  __ Bind(&conditions_on_positions_validated);
+
+  if (!optimizations.GetSourceIsNotNull()) {
+    // Bail out if the source is null.
+    __ testl(src, src);
+    __ j(kEqual, slow_path->GetEntryLabel());
+  }
+
+  if (!optimizations.GetDestinationIsNotNull() && !optimizations.GetDestinationIsSource()) {
+    // Bail out if the destination is null.
+    __ testl(dest, dest);
+    __ j(kEqual, slow_path->GetEntryLabel());
+  }
+
+  // If the length is negative, bail out.
+  // We have already checked in the LocationsBuilder for the constant case.
+  if (!length.IsConstant() &&
+      !optimizations.GetCountIsSourceLength() &&
+      !optimizations.GetCountIsDestinationLength()) {
+    __ testl(length.AsRegister<Register>(), length.AsRegister<Register>());
+    __ j(kLess, slow_path->GetEntryLabel());
+  }
+}
+
 static void SystemArrayCopyPrimitive(HInvoke* invoke,
                                      X86Assembler* assembler,
                                      CodeGeneratorX86* codegen,
@@ -889,33 +929,10 @@ static void SystemArrayCopyPrimitive(HInvoke* invoke,
   SlowPathCode* slow_path = new (codegen->GetScopedAllocator()) IntrinsicSlowPathX86(invoke);
   codegen->AddSlowPath(slow_path);
 
-  SystemArrayCopyOptimizations optimizations(invoke);
-
-  // If we know at compile time that source and destination are the same, we should not intrinsify.
-  DCHECK(!optimizations.GetDestinationIsSource());
-  // If source and destination are the same, take the slow path. Overlapping copy regions must be
-  // copied in reverse and we can't know in all cases if it's needed.
-  __ cmpl(src, dest);
-  __ j(kEqual, slow_path->GetEntryLabel());
-
-  if (!optimizations.GetSourceIsNotNull()) {
-    // Bail out if the source is null.
-    __ testl(src, src);
-    __ j(kEqual, slow_path->GetEntryLabel());
-  }
-
-  if (!optimizations.GetDestinationIsNotNull()) {
-    // Bail out if the destination is null.
-    __ testl(dest, dest);
-    __ j(kEqual, slow_path->GetEntryLabel());
-  }
-
-  // If the length is negative, bail out.
-  // We have already checked in the LocationsBuilder for the constant case.
-  if (!length.IsConstant()) {
-    __ cmpl(length.AsRegister<Register>(), length.AsRegister<Register>());
-    __ j(kLess, slow_path->GetEntryLabel());
-  }
+  // Check that source and position are different, or if they are the same check that copy
+  // direction is backward. Also check for null pointers.
+  CheckSystemArrayCopyNullOrOverlap(
+      invoke, assembler, slow_path, src, dest, src_pos, dest_pos, length);
 
   // We need the count in ECX.
   if (length.IsConstant()) {
@@ -924,7 +941,7 @@ static void SystemArrayCopyPrimitive(HInvoke* invoke,
     __ movl(count, length.AsRegister<Register>());
   }
 
-  // Validity checks: source. Use src_base as a temporary register.
+  // Check that source position is within bounds. Use src_base as a temporary register.
   CheckSystemArrayCopyPosition(assembler,
                                src,
                                src_pos,
@@ -934,7 +951,7 @@ static void SystemArrayCopyPrimitive(HInvoke* invoke,
                                /*length_is_array_length=*/ false,
                                /*position_sign_checked=*/ false);
 
-  // Validity checks: dest. Use src_base as a temporary register.
+  // Check that destination position is within bounds. Use src_base as a temporary register.
   CheckSystemArrayCopyPosition(assembler,
                                dest,
                                dest_pos,
@@ -3274,62 +3291,13 @@ void IntrinsicCodeGeneratorX86::VisitSystemArrayCopy(HInvoke* invoke) {
   codegen_->AddSlowPath(intrinsic_slow_path);
 
   NearLabel conditions_on_positions_validated;
+
+  // Check that source and position are different, or if they are the same check that copy
+  // direction is backward. Also check for null pointers.
+  CheckSystemArrayCopyNullOrOverlap(
+      invoke, assembler, intrinsic_slow_path, src, dest, src_pos, dest_pos, length);
+
   SystemArrayCopyOptimizations optimizations(invoke);
-
-  // If source and destination are the same, we go to slow path if we need to do forward copying.
-  // We do not need to do this check if the source and destination positions are the same.
-  if (!optimizations.GetSourcePositionIsDestinationPosition()) {
-    if (src_pos.IsConstant()) {
-      int32_t src_pos_constant = src_pos.GetConstant()->AsIntConstant()->GetValue();
-      if (dest_pos.IsConstant()) {
-        int32_t dest_pos_constant = dest_pos.GetConstant()->AsIntConstant()->GetValue();
-        if (optimizations.GetDestinationIsSource()) {
-          // Checked when building locations.
-          DCHECK_GE(src_pos_constant, dest_pos_constant);
-        } else if (src_pos_constant < dest_pos_constant) {
-          __ cmpl(src, dest);
-          __ j(kEqual, intrinsic_slow_path->GetEntryLabel());
-        }
-      } else {
-        if (!optimizations.GetDestinationIsSource()) {
-          __ cmpl(src, dest);
-          __ j(kNotEqual, &conditions_on_positions_validated);
-        }
-        __ cmpl(dest_pos.AsRegister<Register>(), Immediate(src_pos_constant));
-        __ j(kGreater, intrinsic_slow_path->GetEntryLabel());
-      }
-    } else {
-      if (!optimizations.GetDestinationIsSource()) {
-        __ cmpl(src, dest);
-        __ j(kNotEqual, &conditions_on_positions_validated);
-      }
-      Register src_pos_reg = src_pos.AsRegister<Register>();
-      EmitCmplJLess(assembler, src_pos_reg, dest_pos, intrinsic_slow_path->GetEntryLabel());
-    }
-  }
-
-  __ Bind(&conditions_on_positions_validated);
-
-  if (!optimizations.GetSourceIsNotNull()) {
-    // Bail out if the source is null.
-    __ testl(src, src);
-    __ j(kEqual, intrinsic_slow_path->GetEntryLabel());
-  }
-
-  if (!optimizations.GetDestinationIsNotNull() && !optimizations.GetDestinationIsSource()) {
-    // Bail out if the destination is null.
-    __ testl(dest, dest);
-    __ j(kEqual, intrinsic_slow_path->GetEntryLabel());
-  }
-
-  // If the length is negative, bail out.
-  // We have already checked in the LocationsBuilder for the constant case.
-  if (!length.IsConstant() &&
-      !optimizations.GetCountIsSourceLength() &&
-      !optimizations.GetCountIsDestinationLength()) {
-    __ testl(length.AsRegister<Register>(), length.AsRegister<Register>());
-    __ j(kLess, intrinsic_slow_path->GetEntryLabel());
-  }
 
   // Validity checks: source.
   CheckSystemArrayCopyPosition(assembler,
