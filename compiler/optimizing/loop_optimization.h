@@ -109,6 +109,8 @@ class HLoopOptimization : public HOptimization {
     kNoWideSAD       = 1 << 12,  // no sum of absolute differences (SAD) with operand widening
     kNoDotProd       = 1 << 13,  // no dot product
     kNoIfCond        = 1 << 14,  // no if condition conversion
+    kNoAdd           = 1 << 15,  // no addition
+    kNoSub           = 1 << 16,  // no subtraction
   };
 
   /*

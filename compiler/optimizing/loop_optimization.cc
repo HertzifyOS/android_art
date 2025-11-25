@@ -1916,7 +1916,9 @@ bool HLoopOptimization::VectorizeUse(LoopNode* node,
              instruction->IsAnd() || instruction->IsOr()  || instruction->IsXor()) {
     // Deal with vector restrictions.
     if ((instruction->IsMul() && HasVectorRestrictions(restrictions, kNoMul)) ||
-        (instruction->IsDiv() && HasVectorRestrictions(restrictions, kNoDiv))) {
+        (instruction->IsDiv() && HasVectorRestrictions(restrictions, kNoDiv)) ||
+        (instruction->IsAdd() && HasVectorRestrictions(restrictions, kNoAdd)) ||
+        (instruction->IsSub() && HasVectorRestrictions(restrictions, kNoSub))) {
       return false;
     }
     // Accept binary operator for vectorizable operands.
@@ -2014,6 +2016,8 @@ bool HLoopOptimization::TrySetVectorType(DataType::Type type, uint64_t* restrict
       *restrictions |= kNoIfCond;
       switch (type) {
         case DataType::Type::kBool:
+          *restrictions |= kNoAdd | kNoSub;
+          FALLTHROUGH_INTENDED;
         case DataType::Type::kUint8:
         case DataType::Type::kInt8:
           *restrictions |= kNoDiv | kNoReduction | kNoDotProd;
@@ -2041,7 +2045,9 @@ bool HLoopOptimization::TrySetVectorType(DataType::Type type, uint64_t* restrict
                              kNoUnsignedHAdd |
                              kNoUnroundedHAdd |
                              kNoSAD |
-                             kNoIfCond;
+                             kNoIfCond |
+                             kNoAdd |
+                             kNoSub;
             return TrySetVectorLength(type, vector_length);
           case DataType::Type::kUint8:
           case DataType::Type::kInt8:
@@ -2083,6 +2089,8 @@ bool HLoopOptimization::TrySetVectorType(DataType::Type type, uint64_t* restrict
         *restrictions |= kNoIfCond;
         switch (type) {
           case DataType::Type::kBool:
+            *restrictions |= kNoAdd | kNoSub;
+            FALLTHROUGH_INTENDED;
           case DataType::Type::kUint8:
           case DataType::Type::kInt8:
             *restrictions |= kNoDiv;
@@ -2115,6 +2123,8 @@ bool HLoopOptimization::TrySetVectorType(DataType::Type type, uint64_t* restrict
       if (features->AsX86InstructionSetFeatures()->HasSSE4_1()) {
         switch (type) {
           case DataType::Type::kBool:
+            *restrictions |= kNoAdd | kNoSub;
+            FALLTHROUGH_INTENDED;
           case DataType::Type::kUint8:
           case DataType::Type::kInt8:
             *restrictions |= kNoMul |
