@@ -22,6 +22,7 @@
 #include "base/bit_utils.h"
 #include "base/casts.h"
 #include "base/logging.h"
+#include "base/sdk_version.h"
 #include "dex/dex_file-inl.h"
 #include "driver/compiler_options.h"
 #include "intrinsics_enum.h"
@@ -737,23 +738,102 @@ void HConstantFoldingVisitor::VisitTypeConversion(HTypeConversion* inst) {
   }
 }
 
+static bool IsUnmodifiableAndInitialized(ArtField* field, const CompilerOptions& compiler_options)
+    REQUIRES_SHARED(Locks::mutator_lock_) {
+  DCHECK(field->IsStatic());
+  DCHECK(field->IsFinal());
+
+  if (field->IsWriteProtected()) {
+    return false;
+  }
+
+  if (!field->GetDeclaringClass()->IsVisiblyInitialized()) {
+    return false;
+  }
+
+  // Can't use Runtime::GetSdkVersion in the compiler. See Runtime.sdk_version_ comment.
+  if (IsSdkVersionSetAndAtMost(compiler_options.GetAssumeValueOptions().SdkInt(), SdkVersion::kB)) {
+    return false;
+  }
+
+  if (IsSdkVersionSetAndAtMost(Runtime::Current()->GetTargetSdkVersion(), SdkVersion::kB)) {
+    return false;
+  }
+
+  return true;
+}
+
 void HConstantFoldingVisitor::VisitStaticFieldGet(HStaticFieldGet* instruction) {
   ArtField* field = instruction->GetFieldInfo().GetField();
   if (!field->IsFinal()) {
     return;
   }
 
+  // Handle kInt32 separately first, as it has a special case for assumed values.
+  if (instruction->GetFieldType() == DataType::Type::kInt32) {
+    int32_t assumed_value;
+    if (compiler_options_.GetAssumeValueOptions().MaybeGetAssumedValue(field, &assumed_value)) {
+      instruction->ReplaceWith(GetGraph()->GetIntConstant(assumed_value));
+      instruction->GetBlock()->RemoveInstruction(instruction);
+      return;
+    }
+  }
+
+  ScopedObjectAccess soa(Thread::Current());
+
+  if (!IsUnmodifiableAndInitialized(field, compiler_options_)) {
+    return;
+  }
+
+  HConstant* constant = nullptr;
   switch (instruction->GetFieldType()) {
+    case DataType::Type::kBool: {
+      uint8_t value = field->GetBoolean(field->GetDeclaringClass());
+      constant = GetGraph()->GetConstant(DataType::Type::kBool, value);
+      break;
+    }
+    case DataType::Type::kInt8: {
+      int8_t value = field->GetByte(field->GetDeclaringClass());
+      constant = GetGraph()->GetConstant(DataType::Type::kInt8, value);
+      break;
+    }
+    case DataType::Type::kUint16: {
+      uint16_t value = field->GetChar(field->GetDeclaringClass());
+      constant = GetGraph()->GetConstant(DataType::Type::kUint16, value);
+      break;
+    }
+     case DataType::Type::kInt16: {
+      int16_t value = field->GetShort(field->GetDeclaringClass());
+      constant = GetGraph()->GetConstant(DataType::Type::kInt16, value);
+      break;
+    }
     case DataType::Type::kInt32: {
-      int32_t assumed_value;
-      if (compiler_options_.GetAssumeValueOptions().MaybeGetAssumedValue(field, &assumed_value)) {
-        instruction->ReplaceWith(GetGraph()->GetIntConstant(assumed_value));
-        instruction->GetBlock()->RemoveInstruction(instruction);
-      }
+      uint32_t value = field->Get32(field->GetDeclaringClass());
+      constant = GetGraph()->GetIntConstant(value);
+      break;
+    }
+    case DataType::Type::kFloat32: {
+      float value = field->GetFloat(field->GetDeclaringClass());
+      constant = GetGraph()->GetFloatConstant(value);
+      break;
+    }
+    case DataType::Type::kInt64: {
+      uint64_t value = field->Get64(field->GetDeclaringClass());
+      constant = GetGraph()->GetLongConstant(static_cast<int64_t>(value));
+      break;
+    }
+    case DataType::Type::kFloat64: {
+      double value = field->GetDouble(field->GetDeclaringClass());
+      constant = GetGraph()->GetDoubleConstant(value);
       break;
     }
     default:
       break;
+  }
+
+  if (constant != nullptr) {
+    instruction->ReplaceWith(constant);
+    instruction->GetBlock()->RemoveInstruction(instruction);
   }
 }
 
