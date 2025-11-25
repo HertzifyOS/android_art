@@ -521,16 +521,10 @@ class ImageSpace::Relocator {
 
   // Relocate an app image mapped at `target_base` which may have been built
   // with a different base address.
-  // Note: This function visits objects of the image that's not part of the heap yet and reads
-  // only constant data from the boot image, so it does not need the mutator lock. However,
-  // since it's using many functions annotated with `REQUIRES_SHARED(Locks::mutator_lock_)`,
-  // we also annotate it and avoid the check in the caller with `NO_THREAD_SAFETY_ANALYSIS`.
-  // This way we keep the analysis active for any other locks we may want to acquire.
   template <PointerSize kPointerSize>
   static void RelocateAppImage(ArrayRef<const std::unique_ptr<ImageSpace>> spaces,
                                int64_t base_diff64,
-                               gc::accounting::ContinuousSpaceBitmap* patched_objects)
-      REQUIRES_SHARED(Locks::mutator_lock_);
+                               gc::accounting::ContinuousSpaceBitmap* patched_objects);
 
  private:
   class SimpleRelocateVisitor {
@@ -844,6 +838,12 @@ void ImageSpace::Relocator::RelocateAppImage(
     ArrayRef<const std::unique_ptr<ImageSpace>> spaces,
     int64_t base_diff64,
     gc::accounting::ContinuousSpaceBitmap* patched_objects) {
+  // Note: This function visits objects of the image that's not part of the heap yet and reads
+  // only constant data from the boot image, so it does not need the mutator lock. However,
+  // since it's using many functions annotated with `REQUIRES_SHARED(Locks::mutator_lock_)`,
+  // pretend that we acquire the reader access for the static analysis.
+  FakeReaderMutexLock fake_lock(*Locks::mutator_lock_);
+
   TimingLogger logger(__FUNCTION__, true, false);
   ScopedDebugDisallowReadBarriers sddrb(Thread::Current());
   DCHECK_EQ(spaces.size(), 1u);
@@ -1124,14 +1124,11 @@ class ImageSpace::Loader {
                                                           space->Begin(),
                                                           image_header.GetImageSize()));
         ArrayRef<const std::unique_ptr<ImageSpace>> spaces(&space, 1u);
-        // `NO_THREAD_SAFETY_ANALYSIS`: See `Relocator::RelocateAppImage()`.
-        [&]() NO_THREAD_SAFETY_ANALYSIS ALWAYS_INLINE {
-          if (pointer_size == PointerSize::k64) {
-            Relocator::RelocateAppImage<PointerSize::k64>(spaces, base_diff64, &patched_objects);
-          } else {
-            Relocator::RelocateAppImage<PointerSize::k32>(spaces, base_diff64, &patched_objects);
-          }
-        }();
+        if (pointer_size == PointerSize::k64) {
+          Relocator::RelocateAppImage<PointerSize::k64>(spaces, base_diff64, &patched_objects);
+        } else {
+          Relocator::RelocateAppImage<PointerSize::k32>(spaces, base_diff64, &patched_objects);
+        }
       }
 
       DCHECK_LE(boot_image_space_dependencies, boot_image_spaces.size());
