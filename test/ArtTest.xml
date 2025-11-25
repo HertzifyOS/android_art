@@ -15,5 +15,6 @@
 -->
 <configuration description="ART generic test runner">
     <option name="test-suite-tag" value="art-test"/>
+    <option name="test-suite-tag" value="art/target"/>
     <test class="com.android.tradefed.testtype.ArtTest"/>
 </configuration>

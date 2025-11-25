@@ -623,12 +623,16 @@ def create_ci_runner_scripts(out, mode, test_names):
   }
   args = [
     f"--run-test-option=--create-runner={out}",
+    f"--optimizing",
+    f"--interpreter",
+    f"--jit",
+    f"--baseline",
     f"-j={cpu_count()}",
     f"--{mode}",
   ]
   run([python, script] + args + test_names, env=envs, check=True)
   tests = {
-    "setup#compile-boot-image": {
+    "run-test.setup#compile-boot-image": {
       "adb push": [
         ["../apex/com.android.art", f"{DEVICE_DIR}/apex/com.android.art"],
         ["chroot.sh", f"{DEVICE_DIR}/chroot.sh"],
@@ -650,7 +654,7 @@ def create_ci_runner_scripts(out, mode, test_names):
     test_hash = runner.stem
     target_dir = f"{DEVICE_DIR}/test/{test_hash}"
     tests[full_name] = {
-      "dependencies": ["setup#compile-boot-image"],
+      "dependencies": ["run-test.setup#compile-boot-image"],
       "adb push": [
         [f"../{mode}/{test_name}", f"{target_dir}"],
         [str(runner.relative_to(out)), f"{target_dir}/run.sh"]
