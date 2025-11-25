@@ -23,6 +23,51 @@ import sys
 from typing import Callable, Dict, List, Optional
 
 
+# Define a more specific type for build variables, which are strings.
+BuildVarsDict = Dict[str, str]
+
+
+LEGACY_TEST_JARS_MAP: Dict[str, tuple[str, str]] = {
+    "core-tests": (
+        "libcore/core-tests/android_common/withres",
+        "core-tests.jar",
+    ),
+    "core-ojtests": (
+        "libcore/ojluni/src/test/core-ojtests/android_common/withres",
+        "core-ojtests.jar",
+    ),
+    "jsr166-tests": (
+        "libcore/jsr166-tests/android_common/javac",
+        "jsr166-tests.jar",
+    ),
+    "mockito-target": (
+        "external/dexmaker/mockito-target/android_common/withres",
+        "mockito-target.jar",
+    ),
+    "apache-harmony-jdwp-tests": (
+        "external/apache-harmony/jdwp/apache-harmony-jdwp-tests/"
+        "android_common/jarjar",
+        "apache-harmony-jdwp-tests.jar",
+    ),
+}
+
+
+def copy_legacy_test_jars_action(build_vars: BuildVarsDict):
+  """Copies legacy test JARs to their expected locations for vogar."""
+  out_dir = build_vars["OUT_DIR"]
+  soong_intermediates = os.path.join(out_dir, "soong", ".intermediates")
+  target_java_libraries = os.path.join(
+      out_dir, "target", "common", "obj", "JAVA_LIBRARIES"
+  )
+
+  for jar_name, (partial_path, jar_filename) in LEGACY_TEST_JARS_MAP.items():
+    source = os.path.join(soong_intermediates, partial_path, jar_filename)
+    target = os.path.join(
+        target_java_libraries, f"{jar_name}_intermediates", "classes.jar"
+    )
+    perform_copy(source, target)
+
+
 I18N_APEX = "com.android.i18n"
 TZDATA_APEX = "com.android.tzdata"
 CORE_IMG_JARS: List[str] = [
@@ -67,8 +112,6 @@ ART_HOST_CORE_SHARED_LIBRARIES: List[str] = ART_CORE_SHARED_LIBRARIES + [
     "libicui18n-host",
     "libicu_jni",
 ]
-# Define a more specific type for build variables, which are strings.
-BuildVarsDict = Dict[str, str]
 # A list of build variables that are essential for this script.
 # The script will exit if these variables are not found or are empty.
 REQUIRED_BUILD_VARS: List[str] = [
@@ -925,11 +968,19 @@ class Builder:
     )
     self.add_target(
         Target(
+            name="art-libcore-jdwp-test-jars",
+            make_targets=list(LEGACY_TEST_JARS_MAP.keys()),
+            action=copy_legacy_test_jars_action,
+        )
+    )
+    self.add_target(
+        Target(
             name="build-art-target-run-tests",
             dependencies=[
                 "build-art-target",
                 # ART_TARGET_PLATFORM_DEPENDENCIES
                 "art_target_platform_dependencies",
+                "art-libcore-jdwp-test-jars",
             ],
             make_targets=[
                 "art_test_target_run_test_dependencies",
