@@ -681,6 +681,7 @@ ScopedAStatus Artd::isAlive(bool* _aidl_return) {
 }
 
 ScopedAStatus Artd::stop() {
+  RETURN_FATAL_IF_NOT_PRE_REBOOT(options_);
   LOG(INFO) << "Stopping artd";
   exit(0);
 }
