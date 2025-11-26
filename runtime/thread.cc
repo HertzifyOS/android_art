@@ -5176,7 +5176,17 @@ int Thread::SetNativeNiceness(int niceness) {
 int Thread::GetNativeNiceness() const {
   errno = 0;
   int niceness = getpriority(PRIO_PROCESS, static_cast<id_t>(GetTid()));
-  CHECK(niceness != -1 || errno == 0) << " " << strerror(errno);
+  if (niceness == -1 && errno != 0) {
+    LOG(gAborting == 0 ? FATAL_WITHOUT_ABORT : ERROR)
+        << "getpriority() in GetNativeNiceness() failed: " << strerror(errno);
+    // This may mean the world is badly broken. Tread carefully, producing as much information as
+    // possible before crashing, one way or another.
+    LOG(gAborting == 0 ? FATAL_WITHOUT_ABORT : ERROR) << "\ttid: " << GetTid();
+    std::string name;
+    GetThreadName(name);
+    LOG(gAborting == 0 ? FATAL : ERROR) << "\tthread name: " << name;
+    niceness = 19;  // A valid result that will hopefully stand out.
+  }
   return niceness;
 }
 
