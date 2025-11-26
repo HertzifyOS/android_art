@@ -464,12 +464,19 @@ void Mutex::ExclusiveLock(Thread* self) {
       } else {
         // Failed to acquire, hang up.
         // We don't hold the mutex: GetExclusiveOwnerTid() is usually, but not always, correct.
-        ScopedContentionRecorder scr(this, SafeGetTid(self), GetExclusiveOwnerTid());
+        pid_t owner_tid = GetExclusiveOwnerTid();
         // Empirically, it appears important to spin again each time through the loop; if we
         // bother to go to sleep and wake up, we should be fairly persistent in trying for the
         // lock.
         if (!WaitBrieflyFor(&state_and_contenders_, self,
                             [](int32_t v) { return (v & kHeldMask) == 0; })) {
+          pid_t owner_tid2 = GetExclusiveOwnerTid();
+          if (owner_tid2 != 0) {
+            // Either owner_tid could be zero since the field is set while we are reading.
+            // Prefer the most recent nonzero value, if there is one.
+            owner_tid = owner_tid2;
+          }
+          ScopedContentionRecorder scr(this, SafeGetTid(self), owner_tid);
           // Increment contender count. We can't create enough threads for this to overflow.
           increment_contenders();
           // Make cur_state again reflect the expected value of state_and_contenders.
