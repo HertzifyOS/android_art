@@ -28,6 +28,13 @@ public final class SuspendEvents {
    */
   public static native void setupTest();
 
+  /**
+   * Sets up the suspension support for method entry / exit events. Must be called at the start
+   * of the test. It suspends the thread on the first event and logs the later events. Used to
+   * test that method exit callbacks are called only once on frame pop.
+   */
+  public static native void setupMethodExitTest();
+
   public static native void setupSuspendBreakpointFor(Executable meth, long loc, Thread thr);
   public static native void clearSuspendBreakpointFor(Thread thr);
 
@@ -38,6 +45,9 @@ public final class SuspendEvents {
   public static native void clearFieldSuspendFor(Thread thr);
 
   public static native void setupSuspendMethodEvent(Executable meth, boolean enter, Thread thr);
+  public static native void setupSuspendMethodEventWithCallback(Executable meth, boolean enter,
+                                                                Thread thr, Class klass,
+                                                                Executable callback);
   public static native void clearSuspendMethodEvent(Thread thr);
 
   public static native void setupSuspendExceptionEvent(
