@@ -32,14 +32,13 @@ from argparse import ArgumentParser
 from concurrent.futures import ThreadPoolExecutor
 from fcntl import lockf, LOCK_EX, LOCK_NB
 from importlib.machinery import SourceFileLoader
-from os import environ, getcwd, cpu_count
+from os import environ, getcwd
 from os.path import relpath
 from pathlib import Path
-from pprint import pprint
 from shutil import copytree, rmtree
-from subprocess import PIPE, run
+from subprocess import STDOUT, PIPE, run
 from tempfile import TemporaryDirectory, NamedTemporaryFile
-from typing import Dict, List, Union, Set, Optional
+from typing import Dict, List, Union, Set, Optional, Any
 from multiprocessing import cpu_count
 
 from globals import BOOTCLASSPATH
@@ -160,8 +159,8 @@ class BuildTestContext:
                        encoding=sys.stdout.encoding,
                        cwd=self.test_dir,
                        env=self.bash_env,
-                       stderr=subprocess.STDOUT,
-                       stdout=subprocess.PIPE)
+                       stderr=STDOUT,
+                       stdout=PIPE)
     if REPORT_SLOW_COMMANDS:
       m = re.search(r"([0-9\.]+)user", p.stdout)
       assert m, p.stdout
@@ -540,7 +539,9 @@ class BuildTestContext:
 # Create bash script that compiles the boot image on device.
 # This is currently only used for eng-prod testing (which is different
 # to the local and LUCI code paths that use buildbot-sync.sh script).
-def create_setup_script(is64: bool):
+def create_setup_script(bitness):
+  assert bitness in {32, 64}
+  is64 = bitness == 64
   out = "/data/local/tmp/art/apex/art_boot_images"
   isa = 'arm64' if is64 else 'arm'
   jar = BOOTCLASSPATH
@@ -563,7 +564,7 @@ def create_setup_script(is64: bool):
     f"--oat-file={out}/{isa}/boot.oat",
   ]
   return [
-    f"su root setenforce 0",
+    "su root setenforce 0",
     f"rm -rf {out}/{isa}",
     f"mkdir -p {out}/{isa}",
     " ".join(cmd),
@@ -573,38 +574,38 @@ def create_setup_script(is64: bool):
 # This can be used in CI to execute the tests without running `testrunner.py`.
 # This takes into account any custom behaviour defined in per-test `run.py`.
 # We generate distinct scripts for all of the pre-defined variants.
-def create_ci_runner_scripts(out, mode, test_names):
+def create_ci_runner_scripts(out, mode, test_names, bitness) -> Dict[str, Any]:
+  assert bitness in {32, 64}
   DEVICE_DIR = "/data/local/tmp/art"
-
-  out.mkdir(parents=True)
+  abi = "arm64-v8a" if bitness == 64 else "armeabi-v7a"
+  out.mkdir(parents=True, exist_ok=True)
+  old_files = set(Path(out).glob("*/*.sh"))
 
   # Very simple wrapper to isolate the test execution.
   # It is not full/proper chroot, and uses simpler solution for now.
   # It runs in 'unshare' and makes the mount points independent for this process.
   # This means we keep most of the file system as-is, but re-mount only ART apex.
   # (which is visible only to this process, so there is no unmount needed later)
-  chroot = out / "chroot.sh"
+  chroot = out / f"chroot.{bitness}.sh"
   chroot.write_text("\n".join([
     "#!/bin/sh",
     "set -e",
-    f"su root unshare --mount sh {DEVICE_DIR}/chroot2.sh $@",
+    f"su root unshare --mount sh {DEVICE_DIR}/chroot2.{bitness}.sh $@",
   ]))
-  chroot2 = out / "chroot2.sh"
+  chroot2 = out / f"chroot2.{bitness}.sh"
   chroot2.write_text("\n".join([
     "#!/bin/sh",
     "set -e",
     f"mount --bind {DEVICE_DIR}/apex/com.android.art /apex/com.android.art",
-    "script=$1",
-    "shift",
-    "sh $script $@",
+    "sh $@",
   ]))
 
-  setup = out / "setup.sh"
+  setup = out / f"setup.{bitness}.sh"
   setup_script = [
     "#!/bin/sh",
     "set -e",
     f"chmod +x {DEVICE_DIR}/apex/com.android.art/bin/*",
-  ] + create_setup_script(False) + create_setup_script(True)
+  ] + create_setup_script(bitness)
   setup.write_text("\n".join(setup_script))
   test_names = list(set(test_names) - TRADEFED_DISABLED)
   if not test_names:
@@ -623,29 +624,30 @@ def create_ci_runner_scripts(out, mode, test_names):
   }
   args = [
     f"--run-test-option=--create-runner={out}",
-    f"--optimizing",
-    f"--interpreter",
-    f"--jit",
-    f"--baseline",
+    "--optimizing",
+    "--interpreter",
+    "--jit",
+    "--baseline",
     f"-j={cpu_count()}",
     f"--{mode}",
+    f"--{bitness}",
   ]
   run([python, script] + args + test_names, env=envs, check=True)
-  tests = {
-    "run-test.setup#compile-boot-image": {
+  tests: Dict[str, Any] = {
+    f"run-test.setup#compile-boot-image.{bitness}": {
       "adb push": [
         ["../apex/com.android.art", f"{DEVICE_DIR}/apex/com.android.art"],
-        ["chroot.sh", f"{DEVICE_DIR}/chroot.sh"],
-        ["chroot2.sh", f"{DEVICE_DIR}/chroot2.sh"],
-        ["setup.sh", f"{DEVICE_DIR}/setup.sh"],
+        [f"{chroot.name}", f"{DEVICE_DIR}/{chroot.name}"],
+        [f"{chroot2.name}", f"{DEVICE_DIR}/{chroot2.name}"],
+        [f"{setup.name}", f"{DEVICE_DIR}/{setup.name}"],
       ],
       "adb shell": [
         ["rm", "-rf", f"{DEVICE_DIR}/test"],
-        ["sh", f"{DEVICE_DIR}/chroot.sh", f"{DEVICE_DIR}/setup.sh"],
+        ["sh", f"{DEVICE_DIR}/{chroot.name}", f"{DEVICE_DIR}/{setup.name}"],
       ],
     },
   }
-  for runner in Path(out).glob("*/*.sh"):
+  for runner in sorted(set(Path(out).glob("*/*.sh")) - old_files):
     test_name = runner.parent.name
     m = re.search("FULL_TEST_NAME=(.*)", runner.read_text())
     assert m, f"Can not find full test name of {test_name}"
@@ -654,12 +656,13 @@ def create_ci_runner_scripts(out, mode, test_names):
     test_hash = runner.stem
     target_dir = f"{DEVICE_DIR}/test/{test_hash}"
     tests[full_name] = {
-      "dependencies": ["run-test.setup#compile-boot-image"],
+      "tags": [abi, bitness],
+      "dependencies": [f"run-test.setup#compile-boot-image.{bitness}"],
       "adb push": [
         [f"../{mode}/{test_name}", f"{target_dir}"],
         [str(runner.relative_to(out)), f"{target_dir}/run.sh"]
       ],
-      "adb shell": [["sh", f"{DEVICE_DIR}/chroot.sh", f"{target_dir}/run.sh"]],
+      "adb shell": [["sh", f"{DEVICE_DIR}/{chroot.name}", f"{target_dir}/run.sh"]],
     }
   return tests
 
@@ -731,7 +734,9 @@ def main() -> None:
     os.chdir(android_build_top)
     test_names = [ctx.test_name for ctx in tests]
     dst = ziproot / "runner" / args.out.with_suffix(".tests.json").name
-    tests = create_ci_runner_scripts(dst.parent, args.mode, test_names)
+    tests: Dict[str, Any] = {}
+    for bitness in [32, 64]:
+      tests.update(create_ci_runner_scripts(dst.parent, args.mode, test_names, bitness))
     dst.write_text(json.dumps(tests, indent=2, sort_keys=True))
 
   # Create the final zip file which contains the content of the temporary directory.
