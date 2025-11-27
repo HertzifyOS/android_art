@@ -113,10 +113,8 @@ public class Main {
   //
   /// CHECK-START-ARM64: void Main.arraycopyCharDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
-  /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
-  /// CHECK-NEXT:     b.eq
-  /// CHECK-NEXT:     cbz <<reg1>>,
-  /// CHECK-NOT:      cbz <<reg2>>,
+  /// CHECK-NEXT:     cbz {{\w+}},
+  /// CHECK-NOT:      cbz {{\w+}},
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-ARM: void Main.arraycopyCharDstNonNull() disassembly (after)
@@ -185,10 +183,8 @@ public class Main {
   //
   /// CHECK-START-ARM64: void Main.arraycopyCharSameSrcDstBackward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
-  /// CHECK-NEXT:     adrp
-  /// CHECK-NEXT:     ldr
-  /// CHECK-NEXT:     ldr lr,
-  /// CHECK-NEXT:     blr lr
+  /// CHECK-NEXT:     cbz {{\w+}},
+  /// CHECK-NOT:      cbz {{\w+}},
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-ARM: void Main.arraycopyCharSameSrcDstBackward() disassembly (after)
@@ -220,10 +216,8 @@ public class Main {
   //
   /// CHECK-START-ARM64: void Main.arraycopyByteDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
-  /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
-  /// CHECK-NEXT:     b.eq
-  /// CHECK-NEXT:     cbz <<reg1>>,
-  /// CHECK-NOT:      cbz <<reg2>>,
+  /// CHECK-NEXT:     cbz {{\w+}},
+  /// CHECK-NOT:      cbz {{\w+}},
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-ARM: void Main.arraycopyByteDstNonNull() disassembly (after)
@@ -290,10 +284,8 @@ public class Main {
   //
   /// CHECK-START-ARM64: void Main.arraycopyByteSameSrcDstBackward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
-  /// CHECK-NEXT:     adrp
-  /// CHECK-NEXT:     ldr
-  /// CHECK-NEXT:     ldr lr,
-  /// CHECK-NEXT:     blr lr
+  /// CHECK-NEXT:     cbz {{\w+}},
+  /// CHECK-NOT:      cbz {{\w+}},
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-ARM: void Main.arraycopyByteSameSrcDstBackward() disassembly (after)
@@ -324,10 +316,8 @@ public class Main {
   //
   /// CHECK-START-ARM64: void Main.arraycopyIntDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
-  /// CHECK-NEXT:     cmp <<reg1:\w+>>, <<reg2:\w+>>
-  /// CHECK-NEXT:     b.eq
-  /// CHECK-NEXT:     cbz <<reg1>>,
-  /// CHECK-NOT:      cbz <<reg2>>,
+  /// CHECK-NEXT:     cbz {{\w+}},
+  /// CHECK-NOT:      cbz {{\w+}},
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-ARM: void Main.arraycopyIntDstNonNull() disassembly (after)
@@ -394,10 +384,8 @@ public class Main {
   //
   /// CHECK-START-ARM64: void Main.arraycopyIntSameSrcDstBackward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
-  /// CHECK-NEXT:     adrp
-  /// CHECK-NEXT:     ldr
-  /// CHECK-NEXT:     ldr lr,
-  /// CHECK-NEXT:     blr lr
+  /// CHECK-NEXT:     cbz {{\w+}},
+  /// CHECK-NOT:      cbz {{\w+}},
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-ARM: void Main.arraycopyIntSameSrcDstBackward() disassembly (after)
