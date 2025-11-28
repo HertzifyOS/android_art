@@ -719,10 +719,14 @@ HConstant* HGraph::GetConstant(DataType::Type type, int64_t value) {
   switch (type) {
     case DataType::Type::kBool:
       DCHECK(IsUint<1>(value));
-      FALLTHROUGH_INTENDED;
+      return GetIntConstant(static_cast<int32_t>(value));
     case DataType::Type::kUint8:
-    case DataType::Type::kInt8:
+      DCHECK(IsUint<8>(value));
+      return GetIntConstant(static_cast<int32_t>(value));
     case DataType::Type::kUint16:
+      DCHECK(IsUint<16>(value));
+      return GetIntConstant(static_cast<int32_t>(value));
+    case DataType::Type::kInt8:
     case DataType::Type::kInt16:
     case DataType::Type::kInt32:
       DCHECK(IsInt(DataType::Size(type) * kBitsPerByte, value));

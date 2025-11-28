@@ -990,12 +990,12 @@ void CodegenTest::TestVectorComparison(IfCondition condition,
 
 // Define tests ensuring that all types of conditions can be generated correctly and return the
 // expected result.
-#define DEFINE_CONDITION_TESTS(CondType)                                                         \
+#define DEFINE_CONDITION_TESTS(CondType, From, To)                                               \
 TEST_F(CodegenTest, ComparisonsVector##CondType) {                                               \
   std::unique_ptr<CompilerOptions> compiler_options =                                            \
       CommonCompilerTest::CreateCompilerOptions(InstructionSet::kArm64, "default", "sve");       \
-  for (int64_t i = -1; i <= 1; i++) {                                                            \
-    for (int64_t j = -1; j <= 1; j++) {                                                          \
+  for (int64_t i = From; i <= To; i++) {                                                         \
+    for (int64_t j = From; j <= To; j++) {                                                       \
       for (int cond = kCondFirst; cond <= kCondLast; cond++) {                                   \
         InitEntryMainExitGraph();                                                                \
         TestCodeGeneratorARM64 codegen(graph_, *compiler_options);                               \
@@ -1008,11 +1008,11 @@ TEST_F(CodegenTest, ComparisonsVector##CondType) {                              
     }                                                                                            \
   }                                                                                              \
 }
-DEFINE_CONDITION_TESTS(Uint8)
-DEFINE_CONDITION_TESTS(Int8)
-DEFINE_CONDITION_TESTS(Uint16)
-DEFINE_CONDITION_TESTS(Int16)
-DEFINE_CONDITION_TESTS(Int32)
+DEFINE_CONDITION_TESTS(Uint8, 0, 2)
+DEFINE_CONDITION_TESTS(Int8, -1, 1)
+DEFINE_CONDITION_TESTS(Uint16, 0, 2)
+DEFINE_CONDITION_TESTS(Int16, -1, 1)
+DEFINE_CONDITION_TESTS(Int32, -1, 1)
 #undef DEFINE_CONDITION_TESTS
 
 #endif
