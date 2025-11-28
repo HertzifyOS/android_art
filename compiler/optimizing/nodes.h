@@ -4094,6 +4094,8 @@ class HInvokePolymorphic final : public HInvoke {
     return needs_callsite_type_check_;
   }
 
+  bool VarHandleAccessorNeedsReturnTypeCheck();
+
   DECLARE_INSTRUCTION(InvokePolymorphic);
 
  protected:

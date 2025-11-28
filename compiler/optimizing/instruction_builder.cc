@@ -1304,21 +1304,6 @@ bool HInstructionBuilder::BuildInvoke(const Instruction& instruction,
   return HandleInvoke(invoke, operands, shorty, /* is_unresolved= */ false);
 }
 
-static bool VarHandleAccessorNeedsReturnTypeCheck(HInvoke* invoke, DataType::Type return_type) {
-  mirror::VarHandle::AccessModeTemplate access_mode_template =
-      mirror::VarHandle::GetAccessModeTemplateByIntrinsic(invoke->GetIntrinsic());
-
-  switch (access_mode_template) {
-    case mirror::VarHandle::AccessModeTemplate::kGet:
-    case mirror::VarHandle::AccessModeTemplate::kGetAndUpdate:
-    case mirror::VarHandle::AccessModeTemplate::kCompareAndExchange:
-      return return_type == DataType::Type::kReference;
-    case mirror::VarHandle::AccessModeTemplate::kSet:
-    case mirror::VarHandle::AccessModeTemplate::kCompareAndSet:
-      return false;
-  }
-}
-
 // This function initializes `VarHandleOptimizations`, does a number of static checks and disables
 // the intrinsic if some of the checks fail. This is necessary for the code generator to work (for
 // both the baseline and the optimizing compiler).
@@ -1501,26 +1486,23 @@ bool HInstructionBuilder::BuildInvokePolymorphic(uint32_t dex_pc,
 
   uint32_t number_of_other_inputs = is_invoke_exact ? 1u : 0u;
 
-  HInvoke* invoke = new (allocator_) HInvokePolymorphic(allocator_,
-                                                        number_of_arguments,
-                                                        operands.GetNumberOfOperands(),
-                                                        number_of_other_inputs,
-                                                        return_type,
-                                                        dex_pc,
-                                                        method_reference,
-                                                        resolved_method,
-                                                        resolved_method_reference,
-                                                        proto_idx);
+  HInvokePolymorphic* invoke = new (allocator_) HInvokePolymorphic(allocator_,
+                                                                   number_of_arguments,
+                                                                   operands.GetNumberOfOperands(),
+                                                                   number_of_other_inputs,
+                                                                   return_type,
+                                                                   dex_pc,
+                                                                   method_reference,
+                                                                   resolved_method,
+                                                                   resolved_method_reference,
+                                                                   proto_idx);
   if (!HandleInvoke(invoke, operands, shorty, /* is_unresolved= */ false)) {
     return false;
   }
 
   DCHECK_EQ(invoke->AsInvokePolymorphic()->IsMethodHandleInvokeExact(), is_invoke_exact);
 
-  if (invoke->GetIntrinsic() != Intrinsics::kNone &&
-      invoke->GetIntrinsic() != Intrinsics::kMethodHandleInvoke &&
-      invoke->GetIntrinsic() != Intrinsics::kMethodHandleInvokeExact &&
-      VarHandleAccessorNeedsReturnTypeCheck(invoke, return_type)) {
+  if (invoke->VarHandleAccessorNeedsReturnTypeCheck()) {
     // Type check is needed because VarHandle intrinsics do not type check the retrieved reference.
     ScopedObjectAccess soa(Thread::Current());
     ArtMethod* referrer = graph_->GetArtMethod();
