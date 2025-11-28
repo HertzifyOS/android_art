@@ -106,9 +106,8 @@ public class Main {
   //
   /// CHECK-START-RISCV64: void Main.arraycopyCharDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
-  /// CHECK-NEXT:     beq <<reg1:t\d+>>, <<reg2:a\d+>>,
-  /// CHECK-NEXT:     beqz <<reg1>>,
-  /// CHECK-NOT:      beqz <<reg2>>,
+  /// CHECK-NEXT:     beqz
+  /// CHECK-NOT:      beqz
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-ARM64: void Main.arraycopyCharDstNonNull() disassembly (after)
@@ -175,10 +174,8 @@ public class Main {
   //
   /// CHECK-START-RISCV64: void Main.arraycopyCharSameSrcDstBackward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyChar
-  /// CHECK-NEXT:     auipc a0, {{\d+}}
-  /// CHECK-NEXT:     {{lwu|ld}} a0, {{\d+}}(a0)
-  /// CHECK-NEXT:     ld ra, {{\d+}}(a0)
-  /// CHECK-NEXT:     c.jalr ra
+  /// CHECK-NEXT:     beqz
+  /// CHECK-NOT:      beqz
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-ARM64: void Main.arraycopyCharSameSrcDstBackward() disassembly (after)
@@ -209,9 +206,8 @@ public class Main {
   //
   /// CHECK-START-RISCV64: void Main.arraycopyByteDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
-  /// CHECK-NEXT:     beq <<reg1:t\d+>>, <<reg2:a\d+>>,
-  /// CHECK-NEXT:     beqz <<reg1>>,
-  /// CHECK-NOT:      beqz <<reg2>>,
+  /// CHECK-NEXT:     beqz
+  /// CHECK-NOT:      beqz
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-ARM64: void Main.arraycopyByteDstNonNull() disassembly (after)
@@ -276,10 +272,8 @@ public class Main {
   // Test case for Byte specialization when source and destination arrays are the same.
   /// CHECK-START-RISCV64: void Main.arraycopyByteSameSrcDstBackward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyByte
-  /// CHECK-NEXT:     auipc a0, {{\d+}}
-  /// CHECK-NEXT:     {{lwu|ld}} a0, {{\d+}}(a0)
-  /// CHECK-NEXT:     ld ra, {{\d+}}(a0)
-  /// CHECK-NEXT:     c.jalr ra
+  /// CHECK-NEXT:     beqz
+  /// CHECK-NOT:      beqz
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-ARM64: void Main.arraycopyByteSameSrcDstBackward() disassembly (after)
@@ -309,9 +303,8 @@ public class Main {
   //
   /// CHECK-START-RISCV64: void Main.arraycopyIntDstNonNull() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
-  /// CHECK-NEXT:     beq <<reg1:t\d+>>, <<reg2:a\d+>>,
-  /// CHECK-NEXT:     beqz <<reg1>>,
-  /// CHECK-NOT:      beqz <<reg2>>,
+  /// CHECK-NEXT:     beqz
+  /// CHECK-NOT:      beqz
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-ARM64: void Main.arraycopyIntDstNonNull() disassembly (after)
@@ -376,10 +369,8 @@ public class Main {
   // Test case for Int specialization when source and destination arrays are the same.
   /// CHECK-START-RISCV64: void Main.arraycopyIntSameSrcDstBackward() disassembly (after)
   /// CHECK:          InvokeStaticOrDirect intrinsic:SystemArrayCopyInt
-  /// CHECK-NEXT:     auipc a0, {{\d+}}
-  /// CHECK-NEXT:     {{lwu|ld}} a0, {{\d+}}(a0)
-  /// CHECK-NEXT:     ld ra, {{\d+}}(a0)
-  /// CHECK-NEXT:     c.jalr ra
+  /// CHECK-NEXT:     beqz
+  /// CHECK-NOT:      beqz
   /// CHECK:          ReturnVoid
   //
   /// CHECK-START-ARM64: void Main.arraycopyIntSameSrcDstBackward() disassembly (after)
