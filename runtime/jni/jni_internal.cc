@@ -1609,10 +1609,10 @@ class JNI {
         mirror::Field::CreateFromArtField(soa.Self(), f, /*force_resolve=*/ true);
     // Android Studio needs to be able to overwrite newly introduced fields in class redefinition
     // process.
-    if (Runtime::Current()->IsJavaDebuggableAtInit() &&
-        reflect_field->IsUnmodifiable() &&
-        !f->GetObject(f->GetDeclaringClass()).IsNull()) {
-      LOG(FATAL) << "Can't overwrite value of already initialized " << f->PrettyField();
+    if (Runtime::Current()->IsJavaDebuggableAtInit()) {
+      if (reflect_field->IsUnmodifiable() && !f->GetObject(f->GetDeclaringClass()).IsNull()) {
+        LOG(FATAL) << "Can't overwrite value of already initialized " << f->PrettyField();
+      }
     } else {
       if (reflect_field->IsUnmodifiable()) {
         LOG(FATAL) << "Can't overwrite value of " << f->PrettyField();
