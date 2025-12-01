@@ -1108,7 +1108,8 @@
           "2289-smali-invalid-rti",
           "2292-checker-smali-peek-poke-truncation",
           "2295-smali-duplicate-phis",
-          "2397-array-verification-edge-cases"
+          "2397-array-verification-edge-cases",
+          "2400-setstaticfield-uninitialized"
         ],
         "variant": "jvm",
         "bug": "b/73888836",
