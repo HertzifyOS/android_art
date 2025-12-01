@@ -241,6 +241,15 @@ char* GetUncompressedStringUTFChars(const uint16_t* chars, size_t length, char* 
   return dest;
 }
 
+bool IsUnmodifiable(ArtField* field) REQUIRES_SHARED(Locks::mutator_lock_) {
+  return field->IsUnmodifiable([field]() REQUIRES_SHARED(Locks::mutator_lock_) ALWAYS_INLINE {
+    // The field type should have been resolved by `FindFieldJNI()` before returning a `fieldID`.
+    ObjPtr<mirror::Class> field_type = field->LookupResolvedType();
+    DCHECK(field_type != nullptr);
+    return field_type;
+  });
+}
+
 }  // namespace
 
 // Consider turning this on when there is errors which could be related to JNI array copies such as
@@ -1605,17 +1614,13 @@ class JNI {
     CHECK_NON_NULL_ARGUMENT_RETURN_VOID(fid);
     ScopedObjectAccess soa(env);
     ArtField* f = jni::DecodeArtField<kEnableIndexIds>(fid);
-    ObjPtr<mirror::Field> reflect_field =
-        mirror::Field::CreateFromArtField(soa.Self(), f, /*force_resolve=*/ true);
     // Android Studio needs to be able to overwrite newly introduced fields in class redefinition
     // process.
-    if (Runtime::Current()->IsJavaDebuggableAtInit()) {
-      if (reflect_field->IsUnmodifiable() && !f->GetObject(f->GetDeclaringClass()).IsNull()) {
-        LOG(FATAL) << "Can't overwrite value of already initialized " << f->PrettyField();
-      }
-    } else {
-      if (reflect_field->IsUnmodifiable()) {
+    if (IsUnmodifiable(f)) {
+      if (!Runtime::Current()->IsJavaDebuggableAtInit()) {
         LOG(FATAL) << "Can't overwrite value of " << f->PrettyField();
+      } else if (!f->GetObject(f->GetDeclaringClass()).IsNull()) {
+        LOG(FATAL) << "Can't overwrite value of already initialized " << f->PrettyField();
       }
     }
     NotifySetObjectField(f, nullptr, java_value);
@@ -1681,17 +1686,13 @@ class JNI {
   CHECK_NON_NULL_ARGUMENT_RETURN_VOID(fid); \
   ScopedObjectAccess soa(env); \
   ArtField* f = jni::DecodeArtField<kEnableIndexIds>(fid); \
-  ObjPtr<mirror::Field> reflect_field = \
-    mirror::Field::CreateFromArtField(soa.Self(), f, /*force_resolve=*/ true); \
   /* Android Studio needs to be able to overwrite newly introduced fields in class redefinition */ \
   /* process. */ \
-  if (Runtime::Current()->IsJavaDebuggableAtInit()) { \
-    if (reflect_field->IsUnmodifiable() && !IsZero(f)) { \
-      LOG(FATAL) << "Can't overwrite value of already initialized " << f->PrettyField(); \
-    } \
-  } else { \
-    if (reflect_field->IsUnmodifiable()) { \
+  if (IsUnmodifiable(f)) { \
+    if (!Runtime::Current()->IsJavaDebuggableAtInit()) { \
       LOG(FATAL) << "Can't overwrite value of " << f->PrettyField(); \
+    } else if (!IsZero(f)) { \
+      LOG(FATAL) << "Can't overwrite value of already initialized " << f->PrettyField(); \
     } \
   } \
   NotifySetPrimitiveField(f, nullptr, JValue::FromPrimitive<decltype(value)>(value)); \

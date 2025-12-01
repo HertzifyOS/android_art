@@ -17,16 +17,12 @@
 #ifndef ART_RUNTIME_MIRROR_FIELD_INL_H_
 #define ART_RUNTIME_MIRROR_FIELD_INL_H_
 
-#include "class_root.h"
 #include "field.h"
 
-#include "art_field-inl.h"
 #include "class-alloc-inl.h"
 #include "class_root-inl.h"
 #include "object-inl.h"
-#include "base/sdk_version.h"
 #include "runtime.h"
-#include "well_known_classes.h"
 
 namespace art HIDDEN {
 
@@ -34,59 +30,6 @@ namespace mirror {
 
 inline ObjPtr<mirror::Class> Field::GetDeclaringClass() REQUIRES_SHARED(Locks::mutator_lock_) {
   return GetFieldObject<Class>(OFFSET_OF_OBJECT_MEMBER(Field, declaring_class_));
-}
-
-inline bool Field::IsUnmodifiable() REQUIRES_SHARED(Locks::mutator_lock_) {
-  if (!IsFinal()) {
-    return false;
-  }
-
-  ObjPtr<mirror::Class> declaring_class = GetDeclaringClass();
-  DCHECK(declaring_class != nullptr);
-
-  // Write-protected fields are `static final`, but can be modified nevertheless.
-  if (GetArtField()->IsWriteProtected()) {
-    return false;
-  }
-
-  if ((GetAccessFlags() & kAccMonotonic) != 0) {
-    return true;
-  }
-
-  // Before and on Android B any field could be overwritten using reflection with final fields in
-  // record classes being the only exception. For compatibility purposes allow apps targeting B
-  // or an older release to overwrite such fields.
-  uint32_t target_sdk_version = Runtime::Current()->GetTargetSdkVersion();
-  if (IsSdkVersionSetAndAtMost(target_sdk_version, SdkVersion::kB)) {
-    return false;
-  }
-
-  // `static final` fields with declared VarHandle, MethodHandle or Atomic*FieldUpdater types
-  // are unmodifiable on apps targeting C or higher.
-  ObjPtr<mirror::Class> field_type = GetType();
-  if (IsStatic() && field_type->IsBootStrapClassLoaded()) {
-    // These classes are abstract and exact implementations are exposed neither to apps
-    // nor in the platform, hence plain comparison instead of subtype checks.
-    if (field_type == GetClassRoot(ClassRoot::kJavaLangInvokeMethodHandle) ||
-        field_type == GetClassRoot(ClassRoot::kJavaLangInvokeVarHandle) ||
-        field_type == WellKnownClasses::ToClass(
-            WellKnownClasses::java_util_concurrent_atomic_AIFU) ||
-        field_type == WellKnownClasses::ToClass(
-            WellKnownClasses::java_util_concurrent_atomic_ALFU) ||
-        field_type == WellKnownClasses::ToClass(
-            WellKnownClasses::java_util_concurrent_atomic_ARFU)) {
-      return true;
-    }
-  }
-
-  // Make sure that OEMs code in bootclasspath won't be affected after ART module update.
-  uint32_t sdk_version = Runtime::Current()->GetSdkVersion();
-  if (IsSdkVersionSetAndAtMost(sdk_version, SdkVersion::kB)) {
-    return false;
-  }
-
-  // static final fields can't be modified once initialized.
-  return IsStatic();
 }
 
 inline Primitive::Type Field::GetTypeAsPrimitiveType() {

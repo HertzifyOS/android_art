@@ -340,6 +340,13 @@ ALWAYS_INLINE inline static void SetFieldValue(ObjPtr<mirror::Object> o,
   }
 }
 
+static bool IsUnmodifiable(ObjPtr<mirror::Field> field) REQUIRES_SHARED(Locks::mutator_lock_) {
+  return field->GetArtField()->IsUnmodifiable([field]() REQUIRES_SHARED(Locks::mutator_lock_) {
+    DCHECK(field->GetType() != nullptr);
+    return field->GetType();
+  });
+}
+
 ALWAYS_INLINE inline static bool ThrowIAEIfFieldIsNotOverwritable(ObjPtr<mirror::Field> field)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   // Write-protected fields can be modified via System.setIn/setOut/setErr methods only.
@@ -355,14 +362,14 @@ ALWAYS_INLINE inline static bool ThrowIAEIfFieldIsNotOverwritable(ObjPtr<mirror:
     if (IsSdkVersionSetAndAtMost(sdk_version, SdkVersion::kB)) {
       return false;
     }
-  } else if (!field->IsUnmodifiable()) {
+  } else if (!IsUnmodifiable(field)) {
     return false;
   }
   ThrowIllegalAccessException(
-          StringPrintf("Cannot set %s field %s of class %s",
-              PrettyJavaAccessFlags(field->GetAccessFlags()).c_str(),
-              ArtField::PrettyField(field->GetArtField()).c_str(),
-              field->GetDeclaringClass()->PrettyClass().c_str()).c_str());
+      StringPrintf("Cannot set %s field %s of class %s",
+          PrettyJavaAccessFlags(field->GetAccessFlags()).c_str(),
+          ArtField::PrettyField(field->GetArtField()).c_str(),
+          field->GetDeclaringClass()->PrettyClass().c_str()).c_str());
   return true;
 }
 
@@ -560,7 +567,7 @@ static jboolean Field_isMonotonic0(JNIEnv* env, jobject javaField) {
   ScopedObjectAccess soa(env);
   ObjPtr<mirror::Field> f = soa.Decode<mirror::Field>(javaField);
 
-  return f->IsUnmodifiable();
+  return IsUnmodifiable(f);
 }
 
 static JNINativeMethod gMethods[] = {
