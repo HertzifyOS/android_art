@@ -344,8 +344,8 @@ ALWAYS_INLINE inline static bool ThrowIAEIfFieldIsNotOverwritable(ObjPtr<mirror:
     REQUIRES_SHARED(Locks::mutator_lock_) {
   // Write-protected fields can be modified via System.setIn/setOut/setErr methods only.
   // However, before Android C, reflection and JNI APIs were allowed to modify them.
-  if (field->IsWriteProtected()) {
-    // See Field::IsMonotonic.
+  if (field->GetArtField()->IsWriteProtected()) {
+    // See `ArtField::IsUnmodifiable()`.
     uint32_t target_sdk_version = Runtime::Current()->GetTargetSdkVersion();
     if (IsSdkVersionSetAndAtMost(target_sdk_version, SdkVersion::kB)) {
       return false;

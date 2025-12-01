@@ -31,6 +31,7 @@
 #include "mirror/object-inl.h"
 #include "obj_ptr-inl.h"
 #include "thread-current-inl.h"
+#include "well_known_classes.h"
 
 namespace art HIDDEN {
 
@@ -478,6 +479,31 @@ inline void ArtField::SetMonotonicField() {
   DCHECK(IsFinal());
   uint32_t new_access_flags = access_flags_ | kAccMonotonic;
   SetAccessFlags(new_access_flags);
+}
+
+inline bool ArtField::IsWriteProtected() {
+  if (this == WellKnownClasses::java_lang_System_in ||
+      this == WellKnownClasses::java_lang_System_out ||
+      this == WellKnownClasses::java_lang_System_err) {
+    return true;
+  }
+  // TODO(b/423809429): some `static final` fields defined in android.os.Build and
+  // android.os.Build$VERSION are overwritten for App Compat reasons on dogfood builds.
+  // Once these fields are no longer modified checks below could be removed altogether as released
+  // Android versions should not modify these fields.
+  if (IsStatic() && IsFinal()) {
+    // No read barrier needed for reading chains of constant references for comparison
+    // with null and for reading constant primitive data.
+    ObjPtr<mirror::Class> declaring_class = GetDeclaringClass<kWithoutReadBarrier>();
+    if (!declaring_class->IsBootStrapClassLoaded()) {
+      return false;
+    }
+    if (declaring_class->DescriptorEquals("Landroid/os/Build;") ||
+        declaring_class->DescriptorEquals("Landroid/os/Build$VERSION;")) {
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // namespace art
