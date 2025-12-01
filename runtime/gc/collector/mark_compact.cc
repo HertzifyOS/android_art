@@ -1569,15 +1569,16 @@ void MarkCompact::MarkingPause() {
       TimingLogger::ScopedTiming t2("(Paused)StackScan", GetTimings());
       MutexLock mu2(thread_running_gc_, *Locks::runtime_shutdown_lock_);
       MutexLock mu3(thread_running_gc_, *Locks::thread_list_lock_);
-      std::list<Thread*> thread_list = runtime->GetThreadList()->GetList();
-      for (Thread* thread : thread_list) {
-        thread->VisitRoots(this, static_cast<VisitRootFlags>(0));
+      auto visit_stacks_callback = [](Thread* thread,
+                                      void* ctx) REQUIRES_SHARED(Locks::mutator_lock_) {
+        MarkCompact* mark_compact = static_cast<MarkCompact*>(ctx);
+        thread->VisitRoots(mark_compact, static_cast<VisitRootFlags>(0));
         DCHECK_EQ(thread->GetThreadLocalGcBuffer(), nullptr);
         // Need to revoke all the thread-local allocation stacks since we will
         // swap the allocation stacks (below) and don't want anybody to allocate
         // into the live stack.
         thread->RevokeThreadLocalAllocationStack();
-        bump_pointer_space_->RevokeThreadLocalBuffers(thread);
+        mark_compact->bump_pointer_space_->RevokeThreadLocalBuffers(thread);
         if (com::android::art::flags::weak_const_string()) {
           // When we end the pause, weak reference access shall be disabled until we sweep weaks.
           // Since we shall not be marking anymore, we cannot allow retrieving intern references
@@ -1585,7 +1586,8 @@ void MarkCompact::MarkingPause() {
           // them from the `InternTable` shall block until we enable weak reference access again.
           thread->GetInterpreterCache()->Clear(thread);
         }
-      }
+      };
+      runtime->GetThreadList()->ForEach(visit_stacks_callback, this);
     }
     ProcessMarkStack();
     // Fetch only the accumulated objects-allocated count as it is guaranteed to

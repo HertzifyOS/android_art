@@ -27,6 +27,8 @@ interface IArtd {
      *
      * Note that this will fail any ongoing call to the artd service. Therefore, it should only be
      * called when there is no ongoing call.
+     *
+     * For Pre-reboot Dexopt use only.
      */
     oneway void stop();
 

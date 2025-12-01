@@ -16,20 +16,21 @@
 
 #include "flow_analysis.h"
 
+#include "aconfig_guard_finder.h"
 #include "dex/bytecode_utils.h"
 #include "dex/class_accessor-inl.h"
 #include "dex/code_item_accessors-inl.h"
-#include "dex/dex_instruction-inl.h"
 #include "dex/dex_file-inl.h"
 #include "dex/dex_file_exception_helpers.h"
+#include "dex/dex_instruction-inl.h"
 #include "resolver.h"
 #include "veridex.h"
 
 namespace art {
 
-VeriFlowAnalysis::VeriFlowAnalysis(VeridexResolver* resolver,
-                                   const ClassAccessor::Method& method)
+VeriFlowAnalysis::VeriFlowAnalysis(VeridexResolver* resolver, const ClassAccessor::Method& method)
     : resolver_(resolver),
+      aconfig_guard_finder_(nullptr),
       method_id_(method.GetIndex()),
       code_item_accessor_(method.GetInstructionsAndData()),
       dex_registers_(code_item_accessor_.InsnsSizeInCodeUnits()),
@@ -225,7 +226,8 @@ void VeriFlowAnalysis::AnalyzeCode() {
       }
       const uint16_t* insns = code_item_accessor_.Insns() + dex_pc;
       const Instruction& inst = *Instruction::At(insns);
-      ProcessDexInstruction(inst);
+      ProcessDexInstruction(dex_pc, inst);
+      ProcessBranch(dex_pc, inst);
       SetVisited(dex_pc);
 
       int branch_flags = GetBranchFlags(inst);
@@ -256,7 +258,7 @@ void VeriFlowAnalysis::AnalyzeCode() {
   }
 }
 
-void VeriFlowAnalysis::ProcessDexInstruction(const Instruction& instruction) {
+void VeriFlowAnalysis::ProcessDexInstruction(uint32_t dex_pc, const Instruction& instruction) {
   switch (instruction.Opcode()) {
     case Instruction::CONST_4: {
       int32_t register_index = instruction.VRegA();
@@ -341,7 +343,7 @@ void VeriFlowAnalysis::ProcessDexInstruction(const Instruction& instruction) {
     case Instruction::INVOKE_STATIC:
     case Instruction::INVOKE_SUPER:
     case Instruction::INVOKE_VIRTUAL: {
-      last_result_ = AnalyzeInvoke(instruction, /* is_range= */ false);
+      last_result_ = AnalyzeInvoke(dex_pc, instruction, /* is_range= */ false);
       break;
     }
 
@@ -350,13 +352,16 @@ void VeriFlowAnalysis::ProcessDexInstruction(const Instruction& instruction) {
     case Instruction::INVOKE_STATIC_RANGE:
     case Instruction::INVOKE_SUPER_RANGE:
     case Instruction::INVOKE_VIRTUAL_RANGE: {
-      last_result_ = AnalyzeInvoke(instruction, /* is_range= */ true);
+      last_result_ = AnalyzeInvoke(dex_pc, instruction, /* is_range= */ true);
       break;
     }
 
     case Instruction::MOVE_RESULT:
     case Instruction::MOVE_RESULT_WIDE:
     case Instruction::MOVE_RESULT_OBJECT: {
+      if (last_result_.GetSource() == RegisterSource::kAconfigPackage) {
+        aconfig_package_registers_.insert(instruction.VRegA());
+      }
       UpdateRegister(instruction.VRegA(), last_result_);
       break;
     }
@@ -707,7 +712,13 @@ static uint32_t GetParameterAt(const Instruction& instruction,
   return is_range ? instruction.VRegC() + index : args[index];
 }
 
-RegisterValue FlowAnalysisCollector::AnalyzeInvoke(const Instruction& instruction, bool is_range) {
+RegisterValue FlowAnalysisCollector::AnalyzeInvoke(uint32_t dex_pc,
+                                                   const Instruction& instruction,
+                                                   bool is_range) {
+  if (aconfig_guard_finder_ != nullptr && aconfig_guard_finder_->IsPcGuarded(dex_pc)) {
+    uint32_t id = is_range ? instruction.VRegB_3rc() : instruction.VRegB_35c();
+    return GetReturnType(id);
+  }
   uint32_t id = is_range ? instruction.VRegB_3rc() : instruction.VRegB_35c();
   VeriMethod method = resolver_->GetMethod(id);
   uint32_t args[5];
@@ -764,7 +775,11 @@ void FlowAnalysisCollector::AnalyzeFieldSet([[maybe_unused]] const Instruction& 
   // There are no fields that escape reflection uses.
 }
 
-RegisterValue FlowAnalysisSubstitutor::AnalyzeInvoke(const Instruction& instruction,
+void FlowAnalysisCollector::ProcessBranch(uint32_t dex_pc ATTRIBUTE_UNUSED,
+                                          const Instruction& instruction ATTRIBUTE_UNUSED) {}
+
+RegisterValue FlowAnalysisSubstitutor::AnalyzeInvoke(uint32_t dex_pc ATTRIBUTE_UNUSED,
+                                                     const Instruction& instruction,
                                                      bool is_range) {
   uint32_t id = is_range ? instruction.VRegB_3rc() : instruction.VRegB_35c();
   MethodReference method(&resolver_->GetDexFile(), id);
@@ -795,5 +810,8 @@ RegisterValue FlowAnalysisSubstitutor::AnalyzeInvoke(const Instruction& instruct
 void FlowAnalysisSubstitutor::AnalyzeFieldSet([[maybe_unused]] const Instruction& instruction) {
   // TODO: analyze field sets.
 }
+
+void FlowAnalysisSubstitutor::ProcessBranch(uint32_t dex_pc ATTRIBUTE_UNUSED,
+                                            const Instruction& instruction ATTRIBUTE_UNUSED) {}
 
 }  // namespace art

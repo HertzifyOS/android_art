@@ -24,6 +24,7 @@
 #include <string_view>
 
 #include "base/mem_map.h"
+#include "dex/class_accessor-inl.h"
 #include "dex/dex_file.h"
 #include "dex/dex_file_loader.h"
 #include "hidden_api.h"
@@ -75,6 +76,7 @@ static const char* kImprecise = "--imprecise";
 static const char* kTargetSdkVersion = "--target-sdk-version=";
 static const char* kAppClassFilter = "--app-class-filter=";
 static const char* kExcludeApiListsOption = "--exclude-api-lists=";
+static const char* kIgnoreAconfigGuards = "--ignore-aconfig-guards";
 
 struct VeridexOptions {
   const char* dex_file = nullptr;
@@ -84,6 +86,7 @@ struct VeridexOptions {
   int target_sdk_version = 29; /* Q */
   std::vector<std::string> app_class_name_filter;
   std::vector<std::string> exclude_api_lists;
+  bool ignore_aconfig_guards = false;
 };
 
 static const char* Substr(const char* str, int index) {
@@ -113,6 +116,8 @@ static void ParseArgs(VeridexOptions* options, int argc, char** argv) {
     } else if (arg.starts_with(kExcludeApiListsOption)) {
       options->exclude_api_lists = android::base::Split(
           Substr(argv[i], strlen(kExcludeApiListsOption)), ",");
+    } else if (strcmp(argv[i], kIgnoreAconfigGuards) == 0) {
+      options->ignore_aconfig_guards = true;
     } else {
       LOG(ERROR) << "Unknown command line argument: " << argv[i];
     }
@@ -243,12 +248,28 @@ class Veridex {
     // Find and log uses of hidden APIs.
     HiddenApiStats stats;
 
-    HiddenApiFinder api_finder(hidden_api);
+    DependencyGraph dependency_graph;
+    if (options.ignore_aconfig_guards) {
+      dependency_graph.Build(app_resolvers);
+      for (const std::unique_ptr<VeridexResolver>& resolver : app_resolvers) {
+        for (ClassAccessor accessor : resolver->GetDexFile().GetClasses()) {
+          for (const ClassAccessor::Method& method : accessor.GetMethods()) {
+            if (method.GetCodeItem() != nullptr) {
+              AconfigGuardFinder aconfig_finder(resolver.get(), method, &dependency_graph);
+              aconfig_finder.Run();
+            }
+          }
+        }
+      }
+    }
+
+    HiddenApiFinder api_finder(hidden_api, options.ignore_aconfig_guards, &dependency_graph);
     api_finder.Run(app_resolvers, app_class_filter);
     api_finder.Dump(std::cout, &stats, !options.precise);
 
     if (options.precise) {
-      PreciseHiddenApiFinder precise_api_finder(hidden_api);
+      PreciseHiddenApiFinder precise_api_finder(
+          hidden_api, options.ignore_aconfig_guards, &dependency_graph);
       precise_api_finder.Run(app_resolvers, app_class_filter);
       precise_api_finder.Dump(std::cout, &stats);
     }

@@ -247,11 +247,15 @@ inline mirror::Object* Heap::AllocObjectWithAllocator(Thread* self,
   } else {
     DCHECK(!gc_stress_mode_);
   }
+  // TODO: consider getting rid of thread-suspension in TaskProcessor::AddTask()
+  // so that we can avoid handling move of 'obj' via stack-handle.
   if (UNLIKELY(need_gc == kNeedGc)) {
     // Do this only once thread suspension is allowed again, and we're done with kInstrumented.
     RequestConcurrentGCAndSaveObject(self, /*force_full=*/ false, starting_gc_num, &obj);
   } else if (UNLIKELY(need_gc == kNeedGcThresholdCheck)) {
     if (com::android::art::rw::flags::enable_time_based_gc_triggering()) {
+      StackHandleScope<1> hs(self);
+      HandleWrapperObjPtr<mirror::Object> wrapper(hs.NewHandleWrapper(&obj));
       RequestTimeBasedGcThresholdCheck(self);
     }
   }

@@ -17,13 +17,14 @@
 #ifndef ART_TOOLS_VERIDEX_HIDDEN_API_FINDER_H_
 #define ART_TOOLS_VERIDEX_HIDDEN_API_FINDER_H_
 
-#include "class_filter.h"
-#include "dex/method_reference.h"
-
 #include <iostream>
 #include <map>
 #include <set>
 #include <string>
+
+#include "aconfig_guard_finder.h"
+#include "class_filter.h"
+#include "dex/method_reference.h"
 
 namespace art {
 
@@ -36,7 +37,12 @@ class VeridexResolver;
  */
 class HiddenApiFinder {
  public:
-  explicit HiddenApiFinder(const HiddenApi& hidden_api) : hidden_api_(hidden_api) {}
+  explicit HiddenApiFinder(const HiddenApi& hidden_api,
+                           bool ignore_aconfig_guards,
+                           DependencyGraph* dependency_graph)
+      : hidden_api_(hidden_api),
+        ignore_aconfig_guards_(ignore_aconfig_guards),
+        dependency_graph_(dependency_graph) {}
 
   // Iterate over the dex files associated with the passed resolvers to report
   // hidden API uses.
@@ -52,11 +58,13 @@ class HiddenApiFinder {
   void DumpReferences(std::ostream& os, const std::vector<MethodReference>& references);
 
   const HiddenApi& hidden_api_;
+  const bool ignore_aconfig_guards_;
   std::set<std::string> classes_;
   std::set<std::string> strings_;
   std::map<std::string, std::vector<MethodReference>> reflection_locations_;
   std::map<std::string, std::vector<MethodReference>> method_locations_;
   std::map<std::string, std::vector<MethodReference>> field_locations_;
+  DependencyGraph* dependency_graph_;
 };
 
 }  // namespace art

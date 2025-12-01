@@ -674,4 +674,29 @@ TEST_F(DexFileLoaderTest, FileSizeTooSmallInHeader) {
   OpenAndVerify(kFileSizeTooSmallInHeader, /*expected_success=*/false);
 }
 
+TEST_F(DexFileLoaderTest, Sha1ToHex) {
+  // Test with a known SHA1 value.
+  DexFile::Sha1 sha1;
+  std::array<uint8_t, DexFile::kSha1DigestSize> data = {
+      0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
+      0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10,
+      0xa0, 0xb1, 0xc2, 0xd3
+  };
+  memcpy(sha1.data(), data.data(), DexFile::kSha1DigestSize);
+  std::array<char, DexFile::kSha1DigestSize * 2 + 1> hex = sha1.ToHex();
+  ASSERT_STREQ("0123456789abcdeffedcba9876543210a0b1c2d3", hex.data());
+
+  // Test with all zeros.
+  DexFile::Sha1 sha1_zeros;
+  memset(sha1_zeros.data(), 0, DexFile::kSha1DigestSize);
+  std::array<char, DexFile::kSha1DigestSize * 2 + 1> hex_zeros = sha1_zeros.ToHex();
+  ASSERT_STREQ("0000000000000000000000000000000000000000", hex_zeros.data());
+
+  // Test with all ones (0xff).
+  DexFile::Sha1 sha1_ones;
+  memset(sha1_ones.data(), 0xff, DexFile::kSha1DigestSize);
+  std::array<char, DexFile::kSha1DigestSize * 2 + 1> hex_ones = sha1_ones.ToHex();
+  ASSERT_STREQ("ffffffffffffffffffffffffffffffffffffffff", hex_ones.data());
+}
+
 }  // namespace art

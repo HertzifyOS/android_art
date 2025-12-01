@@ -61,12 +61,21 @@ void HiddenApiFinder::CollectAccesses(VeridexResolver* resolver,
   for (ClassAccessor accessor : dex_file.GetClasses()) {
     if (class_filter.Matches(accessor.GetDescriptorView())) {
       for (const ClassAccessor::Method& method : accessor.GetMethods()) {
+        std::unique_ptr<AconfigGuardFinder> aconfig_guard_finder;
+        if (ignore_aconfig_guards_ && method.GetCodeItem() != nullptr) {
+          aconfig_guard_finder =
+              std::make_unique<AconfigGuardFinder>(resolver, method, dependency_graph_);
+          aconfig_guard_finder->Run();
+        }
         CodeItemInstructionAccessor codes = method.GetInstructions();
         const uint32_t max_pc = codes.InsnsSizeInCodeUnits();
         for (const DexInstructionPcPair& inst : codes) {
           if (inst.DexPc() >= max_pc) {
             // We need to prevent abnormal access for outside of code
             break;
+          }
+          if (aconfig_guard_finder && aconfig_guard_finder->IsPcGuarded(inst.DexPc())) {
+            continue;
           }
 
           switch (inst->Opcode()) {

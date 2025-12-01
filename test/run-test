@@ -109,6 +109,7 @@ def make_tmp_dir():
   parent = Path(os.environ.get("TMPDIR", "/tmp")) / "art" / "test"
   parent.mkdir(parents=True, exist_ok=True)
   args = [a for a in sys.argv[1:] if not a.startswith("--create-runner")]
+  args += [os.environ.get("TARGET_ARCH", "")]
   hash = b32encode(sha1((" ".join(args)).encode()).digest()).decode().lower()[:6]
   for i in range(100):
     tmp_dir = parent / (f"{hash}" + (f"-{i}" if i > 0 else ""))
@@ -619,7 +620,7 @@ if True:
     ]
   if continuous_gc:
     run_args += [
-        "--runtime-option -Xgc:continuous_gc"
+        "--continuous-gc --runtime-option -Xgc:continuous_gc"
     ]
   if jvmti_redefine_stress:
     run_args += ["--no-app-image --jvmti-redefine-stress"]
