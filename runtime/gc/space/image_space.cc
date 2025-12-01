@@ -710,17 +710,19 @@ void ImageSpace::Relocator::RelocateBootImage(
       simple_patch_object_visitor.template PatchGcRoot</*kMayBeNull=*/ false>(
           &field.DeclaringClassRoot());
     }, space->Begin());
-    image_header.VisitPackedArtMethods([&](ArtMethod& method)
-        REQUIRES_SHARED(Locks::mutator_lock_) {
-      main_patch_object_visitor.PatchGcRoot(&method.DeclaringClassRoot());
-      if (!method.HasCodeItem()) {
-        void** data_address = PointerAddress(&method, ArtMethod::DataOffset(kPointerSize));
-        main_patch_object_visitor.PatchNativePointer(data_address);
-      }
-      void** entrypoint_address =
-          PointerAddress(&method, ArtMethod::EntryPointFromQuickCompiledCodeOffset(kPointerSize));
-      main_patch_object_visitor.PatchNativePointer(entrypoint_address);
-    }, space->Begin(), kPointerSize);
+    image_header.VisitPackedArtMethods(
+        [&](ArtMethod& method) REQUIRES_SHARED(Locks::mutator_lock_) {
+          main_patch_object_visitor.PatchGcRoot(&method.DeclaringClassRoot());
+          if (!method.HasCodeItem()) {
+            void** data_address = PointerAddress(&method, ArtMethod::DataOffset(kPointerSize));
+            main_patch_object_visitor.PatchNativePointer(data_address);
+          }
+          void** entrypoint_address = PointerAddress(
+              &method, ArtMethod::EntryPointFromQuickCompiledCodeOffset(kPointerSize));
+          main_patch_object_visitor.PatchNativePointer(entrypoint_address);
+        },
+        space->Begin(),
+        kPointerSize);
     image_header.VisitPackedImTables(main_relocate_visitor, space->Begin(), kPointerSize);
     image_header.VisitPackedImtConflictTables(main_relocate_visitor, space->Begin(), kPointerSize);
     image_header.VisitJniStubMethods</*kUpdate=*/ true>(main_relocate_visitor,
@@ -896,6 +898,10 @@ void ImageSpace::Relocator::RelocateAppImage(
       source_begin, oat_source_size, image_begin, base_diff, oat_diff);
   VLOG(image) << "Image forwarding: " << Dumpable<SplitRangeRelocateVisitor>(forward_image);
   VLOG(image) << "Code forwarding: " << Dumpable<SplitRangeRelocateVisitor>(forward_code);
+  PatchObjectVisitor<kPointerSize, SimpleRelocateVisitor> patch_boot_image_visitor(
+      forward_boot_image);
+  PatchObjectVisitor<kPointerSize, SimpleRelocateVisitor> patch_app_image_visitor(
+      forward_app_image);
   PatchObjectVisitor<kPointerSize, SplitRangeRelocateVisitor> patch_object_visitor(forward_image);
   if (fixup_image) {
     // First patch the image header.
@@ -909,7 +915,8 @@ void ImageSpace::Relocator::RelocateAppImage(
       TimingLogger::ScopedTiming timing("Fixup fields", &logger);
       image_header->VisitPackedArtFields(
           [&](ArtField& field) REQUIRES_SHARED(Locks::mutator_lock_) {
-            patch_object_visitor.template PatchGcRoot</*kMayBeNull=*/ false>(
+            // Fields always reference class in the current image.
+            patch_app_image_visitor.template PatchGcRoot</*kMayBeNull=*/ false>(
                 &field.DeclaringClassRoot());
           },
           space->Begin());
@@ -920,21 +927,30 @@ void ImageSpace::Relocator::RelocateAppImage(
           [&](ArtMethod& method) REQUIRES_SHARED(Locks::mutator_lock_) {
             // TODO: Consider a separate visitor for runtime vs normal methods.
             if (UNLIKELY(method.IsRuntimeMethod())) {
-              ImtConflictTable* table = method.GetImtConflictTable(kPointerSize);
-              if (table != nullptr) {
-                ImtConflictTable* new_table = forward_image(table);
-                if (table != new_table) {
-                  method.SetImtConflictTable(new_table, kPointerSize);
-                }
-              }
+              DCHECK(method.GetDeclaringClass<kWithoutReadBarrier>() == nullptr);
+              // Patch IMT conflict table pointer if any.
+              void** data_address = PointerAddress(&method, ArtMethod::DataOffset(kPointerSize));
+              patch_object_visitor.PatchNativePointer(data_address);
             } else {
               patch_object_visitor.PatchGcRoot(&method.DeclaringClassRoot());
-              if (method.IsNative()) {
-                const void* old_native_code = method.GetEntryPointFromJniPtrSize(kPointerSize);
-                const void* new_native_code = forward_code(old_native_code);
-                if (old_native_code != new_native_code) {
-                  method.SetEntryPointFromJniPtrSize(new_native_code, kPointerSize);
-                }
+              uint32_t access_flags = method.GetAccessFlags();
+              if (ArtMethod::IsNative(access_flags)) {
+                DCHECK(ArtMethod::IsInvokable(access_flags));
+                // Unlinked JNI entrypoint points to a trampoline in the boot image.
+                patch_boot_image_visitor.template PatchNativePointer</*kMayBeNull=*/ false>(
+                    PointerAddress(&method, ArtMethod::EntryPointFromJniOffset(kPointerSize)));
+              } else if (ArtMethod::IsInvokable(access_flags)) {
+                // The code item offset shall be changed to code item pointer by `ClassLinker`.
+                // TODO: Can we do this here to reduce the work we do with the mutator lock held?
+                DCHECK(method.HasCodeItem());
+              } else {
+                DCHECK(!method.HasCodeItem());
+                // TODO: Relocate single-implementation pointer, if any, with
+                //     patch_object_visitor.PatchNativePointer(
+                //         PointerAddress(&method, ArtMethod::DataOffset(kPointerSize)));
+                // There's a corresponding TODO where we clear it in `ImageWriter`.
+                // The runtime image also clears it but without a TODO comment.
+                DCHECK(method.GetDataPtrSize(kPointerSize) == nullptr);
               }
             }
             const void* old_code = method.GetEntryPointFromQuickCompiledCodePtrSize(kPointerSize);

@@ -931,9 +931,9 @@ class EXPORT ArtMethod final {
   }
 
   static bool NeedsCodeItem(uint32_t access_flags) {
-    return !IsNative(access_flags) &&
-           !IsAbstract(access_flags) &&
-           !IsDefaultConflicting(access_flags);
+    DCHECK_EQ(IsInvokable(access_flags),
+              !IsAbstract(access_flags) && !IsDefaultConflicting(access_flags));
+    return !IsNative(access_flags) && IsInvokable(access_flags);
   }
 
   void SetCodeItem(const dex::CodeItem* code_item)
