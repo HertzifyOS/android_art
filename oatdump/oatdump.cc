@@ -515,9 +515,9 @@ class OatDumper {
 
     // If set, adjust relative address to be searched
     if (options_.addr2instr_ != 0) {
-      resolved_addr2instr_ = options_.addr2instr_ + oat_header.GetExecutableOffset();
-      os << "SEARCH ADDRESS (executable offset + input):\n";
-      os << StringPrintf("0x%08zx\n\n", AdjustOffset(resolved_addr2instr_));
+      resolved_addr2instr_ = options_.addr2instr_;
+      os << "SEARCH ADDRESS:\n";
+      os << StringPrintf("0x%08x\n\n", resolved_addr2instr_);
     }
 
     // Dump .data.img.rel.ro entries.
@@ -1050,10 +1050,11 @@ class OatDumper {
     uint32_t code_offset = oat_method.GetCodeOffset();
     uint32_t code_size = oat_method.GetQuickCodeSize();
     if (resolved_addr2instr_ != 0) {
-      if (resolved_addr2instr_ > code_offset + code_size) {
-        return success;
-      } else {
+      if (resolved_addr2instr_ >= AdjustOffset(code_offset) &&
+          resolved_addr2instr_ < AdjustOffset(code_offset) + code_size) {
         *addr_found = true;  // stop analyzing file at next iteration
+      } else {
+        return success;
       }
     }
 
