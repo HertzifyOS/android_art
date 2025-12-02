@@ -1044,8 +1044,11 @@ void HInstruction::MoveBefore(HInstruction* cursor, bool do_checks) {
     DCHECK(!IsPhi());
     DCHECK(!IsControlFlow());
     DCHECK(CanBeMoved() ||
-           // HShouldDeoptimizeFlag can only be moved by CHAGuardOptimization.
-           IsShouldDeoptimizeFlag());
+           // `HShouldDeoptimizeFlag` can only be moved by `CHAGuardOptimization`.
+           IsShouldDeoptimizeFlag() ||
+           // `HCurrentMethod` can only be moved by `HGraph::InlineInto()` to the
+           // outer graph where it shall represent the outer method.
+           IsCurrentMethod());
     DCHECK(!cursor->IsPhi());
   }
 
