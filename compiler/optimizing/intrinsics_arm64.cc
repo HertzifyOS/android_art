@@ -5667,11 +5667,13 @@ static void GenerateVarHandleGetAndUpdate(HInvoke* invoke,
     // For floating point GetAndSet, do the GenerateGetAndUpdate() with core registers,
     // rather than moving between core and FP registers in the loop.
     arg = MoveToTempIfFpRegister(arg, value_type, masm, &temps);
-    if (is_fp && !arg.IsZero()) {
-      // We need a temporary register but we have already used a scratch register for
-      // the new value unless it is zero bit pattern (+0.0f or +0.0) and need another one
-      // in GenerateGetAndUpdate(). We have allocated a normal temporary to handle that.
-      old_value = CPURegisterFrom(locations->GetTemp(1u), load_store_type);
+    if (is_fp) {
+      // `old_value` needs to be a core register for `GenerateGetAndUpdate`. If the argument
+      // is zero bit pattern (+0.0f or +0.0), we can use a scratch register. Otherwise it's used
+      // by the argument, and we should use a temporary that has been allocated for nonzero case.
+      old_value = arg.IsZero()
+          ? (old_value.IsD() ? temps.AcquireX() : temps.AcquireW())
+          : CPURegisterFrom(locations->GetTemp(1u), load_store_type);
     } else if (value_type == DataType::Type::kReference && codegen->EmitBakerReadBarrier()) {
       // Load the old value initially to a scratch register.
       // We shall move it to `out` later with a read barrier.
