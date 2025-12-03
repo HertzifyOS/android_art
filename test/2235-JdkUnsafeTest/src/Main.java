@@ -107,6 +107,8 @@ public class Main {
     testCopyMemory(unsafe);
     testNullBasedAccessors(unsafe);
     testConstants(unsafe);
+    ensureJitCompiled(Main.class, "$noinline$testGetAndAdd");
+    $noinline$testGetAndAdd(unsafe);
   }
 
   private static void testArrayBaseOffset(Unsafe unsafe) {
@@ -740,7 +742,23 @@ public class Main {
         Unsafe.ARRAY_OBJECT_BASE_OFFSET,
         unsafe.arrayBaseOffset(Object[].class),
         "Object array offset");
-   }
+  }
+
+
+  private static class Holder {
+    long field;
+  }
+
+  private static void $noinline$testGetAndAdd(Unsafe unsafe) {
+    Holder obj = new Holder();
+    long val = 1L << 40 - 1;
+    check(unsafe.objectFieldOffset(Holder.class, "field"), 8, "unsafe.objectFieldOffset");
+    // Assuming that offset of `field` is 8 bytes and passing it as a constant value explicitly.
+    check(unsafe.getAndAddLong(obj, 8L, val), 0, "unsafe.getAndAddLong");
+    check(obj.field, val, "obj.field");
+    check(unsafe.getAndAddLong(obj, 8L, val), val, "unsafe.getAndAddLong");
+    check(obj.field, 2 * val, "obj.field");
+  }
 
   private static class TestClass {
     public int intVar = 0;
@@ -784,4 +802,6 @@ public class Main {
   private static native int vmJdkArrayIndexScale(Class<?> clazz);
   private static native long jdkUnsafeTestMalloc(long size);
   private static native void jdkUnsafeTestFree(long memory);
+
+  private native static void ensureJitCompiled(Class<?> clazz, String method);
 }

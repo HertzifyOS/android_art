@@ -2647,7 +2647,7 @@ void CreateUnsafeGetAndUpdateLocations(ArenaAllocator* allocator,
     locations->SetInAt(1, Location::CoreRegister(EBP));
     if (get_and_unsafe_op == GetAndUpdateOp::kAdd) {
       locations->AddTemp(Location::CoreRegister(EBP));  // We shall clobber EBP.
-      locations->SetInAt(2, Location::Any());  // Offset shall be on the stack.
+      locations->SetInAt(2, Location::Any());  // Offset is either on the stack or constant.
       locations->SetInAt(3, Location::CoreRegisterPair(ESI, EDI));
       locations->AddTemp(Location::CoreRegister(EBX));
       locations->AddTemp(Location::CoreRegister(ECX));
@@ -2762,11 +2762,17 @@ static void GenUnsafeGetAndUpdate(HInvoke* invoke,
     // Prepare the field address. Ignore the high 32 bits of the `offset`.
     Address field_address_low(kNoRegister, 0), field_address_high(kNoRegister, 0);
     if (get_and_update_op == GetAndUpdateOp::kAdd) {
-      DCHECK(offset.IsDoubleStackSlot());
-      __ addl(base, Address(ESP, offset.GetStackIndex()));  // Clobbers `base`.
       DCHECK(Location::CoreRegister(base).Equals(locations->GetTemp(0)));
-      field_address_low = Address(base, 0);
-      field_address_high = Address(base, 4);
+      if (offset.IsDoubleStackSlot()) {
+        __ addl(base, Address(ESP, offset.GetStackIndex()));  // Clobbers `base`.
+        field_address_low = Address(base, 0);
+        field_address_high = Address(base, 4);
+      } else {
+        DCHECK(offset.IsConstant());
+        int64_t offset_value = offset.GetConstant()->AsLongConstant()->GetValue();
+        field_address_low = Address(base, Low32Bits(offset_value));
+        field_address_high = Address(base, Low32Bits(offset_value) + 4u);
+      }
     } else {
       field_address_low = Address(base, offset.AsRegisterPairLow<Register>(), TIMES_1, 0);
       field_address_high = Address(base, offset.AsRegisterPairLow<Register>(), TIMES_1, 4);
