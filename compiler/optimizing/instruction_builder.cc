@@ -383,7 +383,7 @@ bool HInstructionBuilder::Build() {
       // If not inlining, add `HSuspendCheck` and also `HMethodEntryHook` if applicable.
       // It is OK to not add `HMethodEntryHook`s for inlined functions. In debug mode we
       // don't inline and in release mode method tracing is best effort so OK to avoid them.
-      if (dex_compilation_unit_ == outer_compilation_unit_) {
+      if (!IsBuildingInlinedGraph()) {
         AppendInstruction(new (allocator_) HSuspendCheck(0u));
         if (graph_->IsDebuggable() && code_generator_->GetCompilerOptions().IsJitCompiler()) {
           AppendInstruction(new (allocator_) HMethodEntryHook(0u));
@@ -1867,7 +1867,7 @@ bool HInstructionBuilder::IsInitialized(ObjPtr<mirror::Class> cls) const {
   // information to the builder. (We could also check if we're guaranteed a non-null instance
   // of `cls` at this location but that's outside the scope of the instruction builder.)
   bool is_subclass = IsSubClass(outer_compilation_unit_->GetCompilingClass().Get(), cls);
-  if (dex_compilation_unit_ != outer_compilation_unit_) {
+  if (IsBuildingInlinedGraph()) {
     is_subclass = is_subclass ||
                   IsSubClass(dex_compilation_unit_->GetCompilingClass().Get(), cls);
   }
@@ -2825,8 +2825,7 @@ bool HInstructionBuilder::LoadClassNeedsAccessCheck(dex::TypeIndex type_index,
     }
     // For inlined methods we also need to check if the compiling class
     // is public or in the same package as the inlined method's class.
-    if (dex_compilation_unit_ != outer_compilation_unit_ &&
-        (outer_class_def.access_flags_ & kAccPublic) == 0) {
+    if (IsBuildingInlinedGraph() && (outer_class_def.access_flags_ & kAccPublic) == 0) {
       DCHECK(dex_compilation_unit_->GetCompilingClass() != nullptr);
       SamePackageCompare same_package(*outer_compilation_unit_);
       if (!same_package(dex_compilation_unit_->GetCompilingClass().Get())) {
