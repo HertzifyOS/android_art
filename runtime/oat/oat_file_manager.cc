@@ -249,16 +249,6 @@ std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat(
         compilation_filter.c_str(),
         compilation_reason.c_str()));
 
-    const bool has_registered_app_info = Runtime::Current()->GetAppInfo()->HasRegisteredAppInfo();
-    const AppInfo::CodeType code_type =
-        Runtime::Current()->GetAppInfo()->GetRegisteredCodeType(dex_location);
-    // We only want to madvise primary/split dex artifacts as a startup optimization. However,
-    // as the code_type for those artifacts may not be set until the initial app info registration,
-    // we conservatively madvise everything until the app info registration is complete.
-    const bool should_madvise = !has_registered_app_info ||
-                                code_type == AppInfo::CodeType::kPrimaryApk ||
-                                code_type == AppInfo::CodeType::kSplitApk;
-
     // Proceed with oat file loading.
     std::unique_ptr<const OatFile> oat_file(oat_file_assistant->GetBestOatFile().release());
     VLOG(oat) << "OatFileAssistant(" << dex_location << ").GetBestOatFile()="
@@ -275,6 +265,7 @@ std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat(
           CompilerFilter::IsAotCompilationEnabled(oat_file->GetCompilerFilter());
       // Load the dex files from the oat file.
       bool added_image_space = false;
+      const bool should_madvise = runtime->ShouldMadviseForAppStartup(dex_location);
       if (should_madvise) {
         VLOG(oat) << "Madvising oat file: " << oat_file->GetLocation();
         size_t madvise_size_limit = runtime->GetMadviseWillNeedSizeOdex();

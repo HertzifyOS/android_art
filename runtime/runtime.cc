@@ -3447,21 +3447,6 @@ size_t Runtime::MadviseFileForRange(size_t madvise_size_limit_bytes,
   // TODO(b/359932564): Fix map_size_bytes adjustment to account for map_begin alignment.
   map_begin = AlignDown(map_begin, gPageSize);
   map_size_bytes = RoundUp(map_size_bytes, gPageSize);
-#ifdef ART_TARGET_ANDROID
-  // Short-circuit the madvise optimization for background processes. This
-  // avoids IO and memory contention with foreground processes, particularly
-  // those involving app startup.
-  // Note: We can only safely short-circuit the madvise on T+, as it requires
-  // the framework to always immediately notify ART of process states.
-  static const int kApiLevel = android_get_device_api_level();
-  const bool accurate_process_state_at_startup = kApiLevel >= __ANDROID_API_T__;
-  if (accurate_process_state_at_startup) {
-    const Runtime* runtime = Runtime::Current();
-    if (runtime != nullptr && !runtime->InJankPerceptibleProcessState()) {
-      return 0;
-    }
-  }
-#endif  // ART_TARGET_ANDROID
 
   // Ideal blockTransferSize for madvising files (128KiB)
   static constexpr size_t kIdealIoTransferSizeBytes = 128*1024;
@@ -3506,6 +3491,30 @@ size_t Runtime::MadviseFileForRange(size_t madvise_size_limit_bytes,
   DCHECK_LE(madvised_bytes, madvise_size_limit_bytes)
       << "Madvise should not have advised more than the requested size.";
   return madvised_bytes;
+}
+
+bool Runtime::ShouldMadviseForAppStartup(const char* dex_location) {
+  // Short-circuit the madvise optimization for background processes. This
+  // avoids IO and memory contention with foreground processes, particularly
+  // those involving app startup.
+  // Note: We can only safely short-circuit the madvise on T+, as it requires
+  // the framework to always immediately notify ART of process states.
+  const bool accurate_process_state_at_startup =
+      IsSdkVersionSetAndAtLeast(sdk_version_, SdkVersion::kT);
+  if (accurate_process_state_at_startup && !InJankPerceptibleProcessState()) {
+    return false;
+  }
+
+  if (!app_info_.HasRegisteredAppInfo()) {
+    // Conservatively madvise everything until app registration is complete and we can definitively
+    // distinguish between primary and secondary dex artifacts.
+    return true;
+  }
+
+  // Only madvise primary/split dex artifacts to reduce unnecessary faulting of unowned code that
+  // may not be on the critical path.
+  const AppInfo::CodeType code_type = app_info_.GetRegisteredCodeType(dex_location);
+  return code_type == AppInfo::CodeType::kPrimaryApk || code_type == AppInfo::CodeType::kSplitApk;
 }
 
 // Return whether a boot image has a profile. This means we'll need to pre-JIT

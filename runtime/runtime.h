@@ -1093,14 +1093,17 @@ class Runtime {
   // Requests madvise `WILLNEED` for the given file mapping range.
   //
   // Returns the actual number of bytes that were madvise'd. This is determined
-  // not only by the provided limit, but also the map region and the current
-  // process state (e.g., madvise may be short-circuited for low-pri processes).
+  // not only by the provided limit, but also the map region.
   // This will always be `<= madvise_size_limit_bytes`.
   static size_t MadviseFileForRange(size_t madvise_size_limit_bytes,
                                     size_t map_size_bytes,
                                     const uint8_t* map_begin,
                                     const uint8_t* map_end,
                                     const std::string& file_name);
+
+  // Whether to madvise runtime artifacts for the given dex location to optimize startup.
+  // We try to avoid madvise for 1) background process starts, and 2) secondary dex artifacts.
+  bool ShouldMadviseForAppStartup(const char* dex_location);
 
   const std::string& GetApexVersions() const {
     return apex_versions_;
@@ -1597,6 +1600,7 @@ class Runtime {
   // Note: See comments on GetFaultMessage.
   friend std::string GetFaultMessageForAbortLogging();
   friend class Dex2oatImageTest;
+  friend class RuntimeMadviseTest;
   friend class ScopedThreadPoolUsage;
   friend class OatFileAssistantTest;
   class SetupLinearAllocForZygoteFork;
