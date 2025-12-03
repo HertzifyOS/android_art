@@ -927,10 +927,7 @@ HInstruction* HGraph::InlineInto(HGraph* outer_graph, HInvoke* invoke) {
   move_or_replace_constants(&cached_long_constants_, &outer_graph->cached_long_constants_);
   move_or_replace_constants(&cached_double_constants_, &outer_graph->cached_double_constants_);
 
-  // Replace `HParameterValue` instructions with their real value and remove the
-  // `HSuspendCheck` and `HMethodEntryHook`, if any, as they hold environments.
-  // It is OK to ignore `HMethodEntryHook`s for inlined functions. In debug mode we don't
-  // inline and in release mode method tracing is best effort so OK to ignore them.
+  // Replace `HParameterValue` instructions with their real values.
   size_t parameter_index = 0u;
   size_t parameter_vreg_index = 0u;
   for (HInstructionIteratorPrefetchNext it(GetEntryBlock()->GetInstructions());
@@ -957,8 +954,6 @@ HInstruction* HGraph::InlineInto(HGraph* outer_graph, HInvoke* invoke) {
       parameter_vreg_index += DataType::Is64BitType(replacement->GetType()) ? 2u : 1u;
       parameter_index += 1u;
       current->ReplaceWith(replacement);
-    } else if (current->IsSuspendCheck() || current->IsMethodEntryHook()) {
-      GetEntryBlock()->RemoveInstruction(current);
     } else {
       // The entry block is left with some instructions without uses. We do not remove them.
       DCHECK(current->IsCurrentMethod() || current->IsConstant() || current->IsGoto())

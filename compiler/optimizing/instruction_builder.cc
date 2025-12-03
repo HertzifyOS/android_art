@@ -380,9 +380,14 @@ bool HInstructionBuilder::Build() {
 
     if (graph_->IsEntryBlock(current_block_)) {
       InitializeParameters();
-      AppendInstruction(new (allocator_) HSuspendCheck(0u));
-      if (graph_->IsDebuggable() && code_generator_->GetCompilerOptions().IsJitCompiler()) {
-        AppendInstruction(new (allocator_) HMethodEntryHook(0u));
+      // If not inlining, add `HSuspendCheck` and also `HMethodEntryHook` if applicable.
+      // It is OK to not add `HMethodEntryHook`s for inlined functions. In debug mode we
+      // don't inline and in release mode method tracing is best effort so OK to avoid them.
+      if (dex_compilation_unit_ == outer_compilation_unit_) {
+        AppendInstruction(new (allocator_) HSuspendCheck(0u));
+        if (graph_->IsDebuggable() && code_generator_->GetCompilerOptions().IsJitCompiler()) {
+          AppendInstruction(new (allocator_) HMethodEntryHook(0u));
+        }
       }
       AppendInstruction(new (allocator_) HGoto(0u));
       continue;
@@ -632,8 +637,8 @@ void HInstructionBuilder::UpdateLocal(uint32_t reg_number, HInstruction* stored_
 void HInstructionBuilder::InitializeParameters() {
   DCHECK(graph_->IsEntryBlock(current_block_));
 
-  // outer_compilation_unit_ is null only when unit testing.
-  if (outer_compilation_unit_ == nullptr) {
+  // The method index is `kDexNoIndex` only for unit tests.
+  if (dex_compilation_unit_->GetDexMethodIndex() == dex::kDexNoIndex) {
     return;
   }
 
