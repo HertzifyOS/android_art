@@ -67,6 +67,16 @@ TRADEFED_DISABLED = {
   "900-hello-plugin",
 }
 
+TRADEFED_VARIANTS = [
+    ["--debug", "--baseline"],
+    ["--debug", "--interpreter"],
+    ["--debug", "--jit", "--debuggable"],
+    ["--debug", "--jit"],
+    ["--debug", "--optimizing", "--debuggable"],
+    ["--debug", "--optimizing"],
+    ["--debug", "--speed-profile"],
+]
+
 # Debug option. Report commands that are taking a lot of user CPU time.
 REPORT_SLOW_COMMANDS = False
 
@@ -616,17 +626,14 @@ def create_ci_runner_scripts(out, mode, test_names, bitness, isa, tags) -> List[
     "TARGET_ARCH": isa,
     "TMPDIR": Path(getcwd()) / "tmp",
   }
-  args = [
-    f"--run-test-option=--create-runner={out}",
-    "--optimizing",
-    "--interpreter",
-    "--jit",
-    "--baseline",
-    f"-j={cpu_count()}",
-    f"--{mode}",
-    f"--{bitness}",
-  ]
-  run([python, script] + args + test_names, env=envs, check=True)
+  for variant in TRADEFED_VARIANTS :
+    args = [
+      f"--run-test-option=--create-runner={out}",
+      f"-j={cpu_count()}",
+      f"--{mode}",
+      f"--{bitness}",
+    ] + variant
+    run([python, script] + args + test_names, env=envs, check=True)
   tests: List[Dict[str, Any]] = [
     {
       "name": f"run-test-{isa}.setup#compile-boot-image",
