@@ -262,6 +262,12 @@ class EXPORT ArtField final {
   // Returns true if this field's value can change only once.
   // Any kAccMonotonic access flag set field is unmodifiable, but the opposite might not be true:
   // `static final` are unmodifiable for apps targeting Android C only.
+  //
+  // Note: In some cases, this function needs to check the field type. Callers use the
+  // `get_field_type` argument to specify how to retrieve it, whether it's by using
+  // `ArtField::LookupResolvedType()` for a previously resolved field type, or by
+  //  `Field::GetType()` when a corresponding reflection `Field` object is available.
+  // We currently do not support `ArtField::ResolveType()` as we do not handle failures.
   bool IsUnmodifiable(auto&& get_field_type) REQUIRES_SHARED(Locks::mutator_lock_);
 
  private:
