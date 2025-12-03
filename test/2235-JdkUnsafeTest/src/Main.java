@@ -535,7 +535,6 @@ public class Main {
       inputLongs[i] = ((long)i) + 1L;
     }
     long[] outputLongs = new long[size / longSize];
-    unsafe.copyMemory(inputLongs, 0, outputLongs, 0, size);
     unsafe.copyMemory(inputLongs, Unsafe.ARRAY_LONG_BASE_OFFSET,
                       outputLongs, Unsafe.ARRAY_LONG_BASE_OFFSET,
                       size);
@@ -549,7 +548,6 @@ public class Main {
       inputFloats[i] = ((float)i) + 0.5f;
     }
     float[] outputFloats = new float[size / floatSize];
-    unsafe.copyMemory(inputFloats, 0, outputFloats, 0, size);
     unsafe.copyMemory(inputFloats, Unsafe.ARRAY_FLOAT_BASE_OFFSET,
                       outputFloats, Unsafe.ARRAY_FLOAT_BASE_OFFSET,
                       size);
