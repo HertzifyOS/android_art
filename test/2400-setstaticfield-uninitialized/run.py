@@ -16,4 +16,6 @@
 
 
 def run(ctx, args):
+  # Test verifies behaviour of runtime when redefinition is enabled.
+  # Hence passing --debuggable flag.
   ctx.default_run(args, Xcompiler_option=["--debuggable"])
