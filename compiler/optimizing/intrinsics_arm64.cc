@@ -762,14 +762,13 @@ static void GenUnsafeGet(HInvoke* invoke,
 
   if (type == DataType::Type::kReference && codegen->EmitBakerReadBarrier()) {
     // UnsafeGetObject/UnsafeGetObjectVolatile with Baker's read barrier case.
-    Register temp = WRegisterFrom(locations->GetTemp(0));
     MacroAssembler* masm = codegen->GetVIXLAssembler();
     // Piggy-back on the field load path using introspection for the Baker read barrier.
     if (offset_loc.IsConstant()) {
       uint32_t offset = Int64FromLocation(offset_loc);
+      DCHECK_EQ(locations->GetTempCount(), ReadBarrierNeedsTemp(is_volatile, invoke));
       Location maybe_temp = ReadBarrierNeedsTemp(is_volatile, invoke)
           ? locations->GetTemp(0) : Location::NoLocation();
-      DCHECK_EQ(locations->GetTempCount(), ReadBarrierNeedsTemp(is_volatile, invoke));
       codegen->GenerateFieldLoadWithBakerReadBarrier(invoke,
                                                      trg_loc,
                                                      base.W(),
@@ -778,6 +777,7 @@ static void GenUnsafeGet(HInvoke* invoke,
                                                      /* needs_null_check= */ false,
                                                      is_volatile);
     } else {
+      Register temp = WRegisterFrom(locations->GetTemp(0));
       __ Add(temp, base, WRegisterFrom(offset_loc));  // Offset should not exceed 32 bits.
       codegen->GenerateFieldLoadWithBakerReadBarrier(invoke,
                                                      trg_loc,
