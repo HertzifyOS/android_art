@@ -357,7 +357,6 @@ class DexFileVerifier {
   bool CheckInterAnnotationSetItem();
   bool CheckInterClassDataItem();
   bool CheckInterAnnotationsDirectoryItem();
-  bool CheckInterCodeItem();
 
   bool CheckInterSectionIterate(size_t offset, uint32_t count, DexFile::MapItemType type);
   bool CheckInterSection();
@@ -1770,17 +1769,6 @@ bool DexFileVerifier::CheckIntraCodeItem() {
   uint32_t insns_size = accessor.InsnsSizeInCodeUnits();
   if (!CheckListSize(insns, insns_size, sizeof(uint16_t), "insns size")) {
     return false;
-  }
-
-  CodeItemDebugInfoAccessor debug_accessor(*dex_file_, code_item, /*unused*/0);
-  uint32_t debug_info_off = debug_accessor.DebugInfoOffset();
-  const size_t data_start = PtrToOffset(data_.begin());
-  const size_t data_end = PtrToOffset(data_.end());
-  if (debug_info_off != 0) {
-    if (debug_info_off < data_start || debug_info_off >= data_end) {
-      ErrorStringPrintf("Invalid debug_info_off: %x", debug_info_off);
-      return false;
-    }
   }
 
   // Grab the end of the insns if there are no try_items.
@@ -3371,18 +3359,6 @@ bool DexFileVerifier::CheckInterAnnotationsDirectoryItem() {
   return true;
 }
 
-bool DexFileVerifier::CheckInterCodeItem() {
-  const dex::CodeItem* code_item = reinterpret_cast<const dex::CodeItem*>(ptr_);
-  CodeItemDebugInfoAccessor debug_accessor(*dex_file_, code_item, /*unused*/0);
-  uint32_t debug_info_off = debug_accessor.DebugInfoOffset();
-  if (debug_info_off != 0) {
-    if (!CheckOffsetToTypeMap(debug_info_off, DexFile::kDexTypeDebugInfoItem)) {
-      return false;
-    }
-  }
-  return true;
-}
-
 bool DexFileVerifier::CheckInterSectionIterate(size_t offset,
                                                uint32_t count,
                                                DexFile::MapItemType type) {
@@ -3415,17 +3391,12 @@ bool DexFileVerifier::CheckInterSectionIterate(size_t offset,
       case DexFile::kDexTypeMethodHandleItem:
       case DexFile::kDexTypeMapList:
       case DexFile::kDexTypeTypeList:
+      case DexFile::kDexTypeCodeItem:
       case DexFile::kDexTypeStringDataItem:
       case DexFile::kDexTypeDebugInfoItem:
       case DexFile::kDexTypeAnnotationItem:
       case DexFile::kDexTypeEncodedArrayItem:
         break;
-      case DexFile::kDexTypeCodeItem: {
-        if (!CheckInterCodeItem()) {
-          return false;
-        }
-        break;
-      }
       case DexFile::kDexTypeHiddenapiClassData: {
         if (!CheckIntraHiddenapiClassData()) {
           return false;
