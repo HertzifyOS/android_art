@@ -779,58 +779,56 @@ void HConstantFoldingVisitor::VisitStaticFieldGet(HStaticFieldGet* instruction) 
     }
   }
 
+  ScopedObjectAccess soa(Thread::Current());
+
+  if (!IsUnmodifiableAndInitialized(field, compiler_options_)) {
+    return;
+  }
+
   HConstant* constant = nullptr;
-  {
-    ScopedObjectAccess soa(Thread::Current());
-
-    if (!IsUnmodifiableAndInitialized(field, compiler_options_)) {
-      return;
+  switch (instruction->GetFieldType()) {
+    case DataType::Type::kBool: {
+      uint8_t value = field->GetBoolean(field->GetDeclaringClass());
+      constant = GetGraph()->GetConstant(DataType::Type::kBool, value);
+      break;
     }
-
-    switch (instruction->GetFieldType()) {
-      case DataType::Type::kBool: {
-        uint8_t value = field->GetBoolean(field->GetDeclaringClass());
-        constant = GetGraph()->GetConstant(DataType::Type::kBool, value);
-        break;
-      }
-      case DataType::Type::kInt8: {
-        int8_t value = field->GetByte(field->GetDeclaringClass());
-        constant = GetGraph()->GetConstant(DataType::Type::kInt8, value);
-        break;
-      }
-      case DataType::Type::kUint16: {
-        uint16_t value = field->GetChar(field->GetDeclaringClass());
-        constant = GetGraph()->GetConstant(DataType::Type::kUint16, value);
-        break;
-      }
-      case DataType::Type::kInt16: {
-        int16_t value = field->GetShort(field->GetDeclaringClass());
-        constant = GetGraph()->GetConstant(DataType::Type::kInt16, value);
-        break;
-      }
-      case DataType::Type::kInt32: {
-        uint32_t value = field->Get32(field->GetDeclaringClass());
-        constant = GetGraph()->GetIntConstant(value);
-        break;
-      }
-      case DataType::Type::kFloat32: {
-        float value = field->GetFloat(field->GetDeclaringClass());
-        constant = GetGraph()->GetFloatConstant(value);
-        break;
-      }
-      case DataType::Type::kInt64: {
-        uint64_t value = field->Get64(field->GetDeclaringClass());
-        constant = GetGraph()->GetLongConstant(static_cast<int64_t>(value));
-        break;
-      }
-      case DataType::Type::kFloat64: {
-        double value = field->GetDouble(field->GetDeclaringClass());
-        constant = GetGraph()->GetDoubleConstant(value);
-        break;
-      }
-      default:
-        break;
+    case DataType::Type::kInt8: {
+      int8_t value = field->GetByte(field->GetDeclaringClass());
+      constant = GetGraph()->GetConstant(DataType::Type::kInt8, value);
+      break;
     }
+    case DataType::Type::kUint16: {
+      uint16_t value = field->GetChar(field->GetDeclaringClass());
+      constant = GetGraph()->GetConstant(DataType::Type::kUint16, value);
+      break;
+    }
+     case DataType::Type::kInt16: {
+      int16_t value = field->GetShort(field->GetDeclaringClass());
+      constant = GetGraph()->GetConstant(DataType::Type::kInt16, value);
+      break;
+    }
+    case DataType::Type::kInt32: {
+      uint32_t value = field->Get32(field->GetDeclaringClass());
+      constant = GetGraph()->GetIntConstant(value);
+      break;
+    }
+    case DataType::Type::kFloat32: {
+      float value = field->GetFloat(field->GetDeclaringClass());
+      constant = GetGraph()->GetFloatConstant(value);
+      break;
+    }
+    case DataType::Type::kInt64: {
+      uint64_t value = field->Get64(field->GetDeclaringClass());
+      constant = GetGraph()->GetLongConstant(static_cast<int64_t>(value));
+      break;
+    }
+    case DataType::Type::kFloat64: {
+      double value = field->GetDouble(field->GetDeclaringClass());
+      constant = GetGraph()->GetDoubleConstant(value);
+      break;
+    }
+    default:
+      break;
   }
 
   if (constant != nullptr) {
