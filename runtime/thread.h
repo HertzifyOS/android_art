@@ -2718,10 +2718,15 @@ class ScopedStackedShadowFramePusher {
 class ScopedDebugDisallowReadBarriers {
  public:
   explicit ScopedDebugDisallowReadBarriers(Thread* self) : self_(self) {
-    self_->ModifyDebugDisallowReadBarrier(1);
+    // Note: If there is no `Thread`, read barriers are not allowed.
+    if (kCheckDebugDisallowReadBarrierCount && self_ != nullptr) {
+      self_->ModifyDebugDisallowReadBarrier(1);
+    }
   }
   ~ScopedDebugDisallowReadBarriers() {
-    self_->ModifyDebugDisallowReadBarrier(-1);
+    if (kCheckDebugDisallowReadBarrierCount && self_ != nullptr) {
+      self_->ModifyDebugDisallowReadBarrier(-1);
+    }
   }
 
  private:
