@@ -764,13 +764,13 @@ static bool WaitOnceForSuspendBarrier(AtomicInteger* barrier,
 #else
 
 static bool WaitOnceForSuspendBarrier(AtomicInteger* barrier,
-                                      int32_t cur_val,
+                                      [[maybe_unused]] int32_t cur_val,
                                       uint64_t timeout_ns) {
   // In the normal case, aim for a couple of hundred milliseconds.
-  static constexpr unsigned kInnerIters =
+  static const unsigned innerIters =
       kShortSuspendTimeouts ? 1'000 : (timeout_ns / 1000) / kSuspendBarrierIters;
-  DCHECK_GE(kInnerIters, 1'000u);
-  for (int i = 0; i < kInnerIters; ++i) {
+  DCHECK_GE(innerIters, 1'000u);
+  for (unsigned i = 0; i < innerIters; ++i) {
     sched_yield();
     if (barrier->load(std::memory_order_acquire) == 0) {
       return false;
@@ -785,9 +785,7 @@ std::optional<std::string> ThreadList::WaitForSuspendBarrier(Thread* self,
                                                              AtomicInteger* barrier,
                                                              pid_t t,
                                                              int attempt_of_4) {
-#if ART_USE_FUTEXES
   const uint64_t start_time = NanoTime();
-#endif
   uint64_t timeout_ns =
       attempt_of_4 == 0 ? thread_suspend_timeout_ns_ : thread_suspend_timeout_ns_ / 4;
   static bool is_user_build = (android::base::GetProperty("ro.build.type", "") == "user");
