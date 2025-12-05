@@ -174,7 +174,6 @@ static inline bool IsUnsafeGetReference(HInvoke* invoke) {
 static inline bool IsUnsafeCASReference(HInvoke* invoke) {
   switch (invoke->GetIntrinsic()) {
     case Intrinsics::kUnsafeCASObject:
-    case Intrinsics::kJdkUnsafeCASObject:
     case Intrinsics::kJdkUnsafeCompareAndSetReference:
       return true;
     default:

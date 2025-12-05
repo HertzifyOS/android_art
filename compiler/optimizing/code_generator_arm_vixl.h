@@ -171,8 +171,7 @@ using VIXLUInt32Literal = vixl::aarch32::Literal<uint32_t>;
   V(MethodHandleInvoke)                                                    \
   /* OpenJDK 11 */                                                         \
   V(JdkUnsafeArrayBaseOffset)                                              \
-  V(JdkUnsafeCASLong) /* High register pressure */                         \
-  V(JdkUnsafeCompareAndSetLong)
+  V(JdkUnsafeCompareAndSetLong) /* High register pressure */
 
 ALWAYS_INLINE inline StoreOperandType GetStoreOperandType(DataType::Type type) {
   switch (type) {

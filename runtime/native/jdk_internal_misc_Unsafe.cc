@@ -90,14 +90,6 @@ static jboolean Unsafe_compareAndSetInt(JNIEnv* env, jobject, jobject javaObj, j
   return success ? JNI_TRUE : JNI_FALSE;
 }
 
-static jboolean Unsafe_compareAndSwapInt(JNIEnv* env, jobject obj, jobject javaObj, jlong offset,
-                                         jint expectedValue, jint newValue) {
-  // compareAndSetInt has the same semantics as compareAndSwapInt, except for
-  // being strict (volatile). Since this was implemented in a strict mode it can
-  // just call the volatile version unless it gets relaxed.
-  return Unsafe_compareAndSetInt(env, obj, javaObj, offset, expectedValue, newValue);
-}
-
 static jboolean Unsafe_compareAndSetLong(JNIEnv* env, jobject, jobject javaObj, jlong offset,
                                          jlong expectedValue, jlong newValue) {
   ScopedFastNativeObjectAccess soa(env);
@@ -124,14 +116,6 @@ static jlong Unsafe_compareAndExchangeLong(
       atomic_addr->CompareAndExchangeStrongSequentiallyConsistent(expectedValue, newValue);
 
   return found_value;
-}
-
-static jboolean Unsafe_compareAndSwapLong(JNIEnv* env, jobject obj, jobject javaObj, jlong offset,
-                                          jlong expectedValue, jlong newValue) {
-  // compareAndSetLong has the same semantics as compareAndSwapLong, except for
-  // being strict (volatile). Since this was implemented in a strict mode it can
-  // just call the volatile version unless it gets relaxed.
-  return Unsafe_compareAndSetLong(env, obj, javaObj, offset, expectedValue, newValue);
 }
 
 static jboolean Unsafe_compareAndSetReference(JNIEnv* env,
@@ -164,14 +148,6 @@ static jboolean Unsafe_compareAndSetReference(JNIEnv* env,
                                             CASMode::kStrong,
                                             std::memory_order_seq_cst);
   return success ? JNI_TRUE : JNI_FALSE;
-}
-
-static jboolean Unsafe_compareAndSwapObject(JNIEnv* env, jobject obj, jobject javaObj, jlong offset,
-                                            jobject javaExpectedValue, jobject javaNewValue) {
-  // compareAndSetReference has the same semantics as compareAndSwapObject, except for
-  // being strict (volatile). Since this was implemented in a strict mode it can
-  // just call the volatile version unless it gets relaxed.
-  return Unsafe_compareAndSetReference(env, obj, javaObj, offset, javaExpectedValue, javaNewValue);
 }
 
 static jint Unsafe_getInt(JNIEnv* env, jobject, jobject javaObj, jlong offset) {
@@ -728,10 +704,6 @@ static jobject Unsafe_allocateInstance(JNIEnv* env, jobject, jclass cls) {
 }
 
 static JNINativeMethod gMethods[] = {
-    FAST_NATIVE_METHOD(Unsafe, compareAndSwapInt, "(Ljava/lang/Object;JII)Z"),
-    FAST_NATIVE_METHOD(Unsafe, compareAndSwapLong, "(Ljava/lang/Object;JJJ)Z"),
-    FAST_NATIVE_METHOD(
-        Unsafe, compareAndSwapObject, "(Ljava/lang/Object;JLjava/lang/Object;Ljava/lang/Object;)Z"),
     FAST_NATIVE_METHOD(Unsafe, compareAndSetInt, "(Ljava/lang/Object;JII)Z"),
     FAST_NATIVE_METHOD(Unsafe, compareAndSetLong, "(Ljava/lang/Object;JJJ)Z"),
     FAST_NATIVE_METHOD(Unsafe, compareAndExchangeLong, "(Ljava/lang/Object;JJJ)J"),

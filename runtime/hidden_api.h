@@ -394,9 +394,6 @@ ALWAYS_INLINE inline uint32_t GetRuntimeFlags(ArtMethod* method)
       case Intrinsics::kUnsafeStoreFence:
       case Intrinsics::kUnsafeFullFence:
       case Intrinsics::kJdkUnsafeArrayBaseOffset:
-      case Intrinsics::kJdkUnsafeCASInt:
-      case Intrinsics::kJdkUnsafeCASLong:
-      case Intrinsics::kJdkUnsafeCASObject:
       case Intrinsics::kJdkUnsafeCompareAndSetInt:
       case Intrinsics::kJdkUnsafeCompareAndSetLong:
       case Intrinsics::kJdkUnsafeCompareAndSetReference:
