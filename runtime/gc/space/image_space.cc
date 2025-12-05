@@ -2296,7 +2296,7 @@ class ImageSpace::BootImageLoader {
                       bool allow_in_memory_compilation,
                       /*out*/std::vector<std::unique_ptr<ImageSpace>>* boot_image_spaces,
                       /*out*/MemMap* extra_reservation,
-                      /*out*/std::string* error_msg) REQUIRES_SHARED(Locks::mutator_lock_);
+                      /*out*/std::string* error_msg);
 
  private:
   bool LoadImage(
@@ -2306,7 +2306,7 @@ class ImageSpace::BootImageLoader {
       TimingLogger* logger,
       /*out*/std::vector<std::unique_ptr<ImageSpace>>* boot_image_spaces,
       /*out*/MemMap* extra_reservation,
-      /*out*/std::string* error_msg) REQUIRES_SHARED(Locks::mutator_lock_) {
+      /*out*/std::string* error_msg) {
     ArrayRef<const BootImageLayout::ImageChunk> chunks = layout.GetChunks();
     DCHECK(!chunks.empty());
     const uint32_t base_address = layout.GetBaseAddress();
@@ -2433,7 +2433,11 @@ class ImageSpace::BootImageLoader {
   }
 
   void DeduplicateInternedStrings(ArrayRef<const std::unique_ptr<ImageSpace>> spaces,
-                                  TimingLogger* logger) REQUIRES_SHARED(Locks::mutator_lock_) {
+                                  TimingLogger* logger) {
+    // Note: The heap does not exist yet, so the mutator lock is irrelevant. Pretend that we
+    // acquire the reader access for static analysis of calls to helper functions we need.
+    FakeReaderMutexLock fake_lock(*Locks::mutator_lock_);
+
     TimingLogger::ScopedTiming timing("DeduplicateInternedStrings", logger);
     DCHECK(!spaces.empty());
     size_t num_spaces = spaces.size();
@@ -2491,8 +2495,7 @@ class ImageSpace::BootImageLoader {
                                    android::base::unique_fd art_fd,
                                    TimingLogger* logger,
                                    /*inout*/MemMap* image_reservation,
-                                   /*out*/std::string* error_msg)
-      REQUIRES_SHARED(Locks::mutator_lock_) {
+                                   /*out*/std::string* error_msg) {
     if (art_fd.get() != -1) {
       VLOG(startup) << "Using image file " << image_filename.c_str() << " for image location "
                     << image_location << " for compiled extension";
@@ -2693,8 +2696,7 @@ class ImageSpace::BootImageLoader {
                       TimingLogger* logger,
                       /*inout*/std::vector<std::unique_ptr<ImageSpace>>* spaces,
                       /*inout*/MemMap* image_reservation,
-                      /*out*/std::string* error_msg)
-      REQUIRES_SHARED(Locks::mutator_lock_) {
+                      /*out*/std::string* error_msg) {
     // Make sure we destroy the spaces we created if we're returning an error.
     // Note that this can unmap part of the original `image_reservation`.
     class Guard {
