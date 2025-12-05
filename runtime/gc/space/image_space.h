@@ -516,8 +516,6 @@ class ImageSpace : public MemMapSpace {
 
  private:
   class BootImageLoader;
-  template <typename ReferenceVisitor>
-  class ClassTableVisitor;
   class Relocator;
   class RemapInternedStringsVisitor;
   class Loader;

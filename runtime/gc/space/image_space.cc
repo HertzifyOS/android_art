@@ -204,22 +204,6 @@ void ImageSpace::VerifyImageAllocations() {
   }
 }
 
-template <typename ReferenceVisitor>
-class ImageSpace::ClassTableVisitor final {
- public:
-  explicit ClassTableVisitor(const ReferenceVisitor& reference_visitor)
-      : reference_visitor_(reference_visitor) {}
-
-  void VisitRoot(mirror::CompressedReference<mirror::Object>* root) const
-      REQUIRES_SHARED(Locks::mutator_lock_) {
-    DCHECK(root->AsMirrorPtr() != nullptr);
-    root->Assign(reference_visitor_(root->AsMirrorPtr()));
-  }
-
- private:
-  ReferenceVisitor reference_visitor_;
-};
-
 class ImageSpace::RemapInternedStringsVisitor {
  public:
   explicit RemapInternedStringsVisitor(
@@ -386,6 +370,21 @@ class ImageSpace::Relocator {
     const uintptr_t bound_;
     const uintptr_t base_diff_;
     const uintptr_t current_diff_;
+  };
+
+  class ClassTableVisitor final {
+   public:
+    explicit ClassTableVisitor(const SplitRangeRelocateVisitor& reference_visitor)
+        : reference_visitor_(reference_visitor) {}
+
+    void VisitRoot(mirror::CompressedReference<mirror::Object>* root) const
+        REQUIRES_SHARED(Locks::mutator_lock_) {
+      DCHECK(root->AsMirrorPtr() != nullptr);
+      root->Assign(reference_visitor_(root->AsMirrorPtr()));
+    }
+
+   private:
+    SplitRangeRelocateVisitor reference_visitor_;
   };
 
   static void** PointerAddress(ArtMethod* method, MemberOffset offset) {
@@ -798,7 +797,7 @@ void ImageSpace::Relocator::RelocateImage(ArrayRef<const std::unique_ptr<ImageSp
       InternTable::UnorderedSet temp_set(data, /*make_copy_of_data=*/ false, &read_count);
       for (GcRoot<mirror::String>& root : temp_set) {
         // The intern table contains only strings in the current image.
-        root = GcRoot<mirror::String>(forward_image(root.Read<kWithoutReadBarrier>()));
+        root = GcRoot<mirror::String>(forward_current_image(root.Read<kWithoutReadBarrier>()));
       }
     }
 
