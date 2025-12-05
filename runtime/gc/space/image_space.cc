@@ -204,8 +204,197 @@ void ImageSpace::VerifyImageAllocations() {
   }
 }
 
+template <typename ReferenceVisitor>
+class ImageSpace::ClassTableVisitor final {
+ public:
+  explicit ClassTableVisitor(const ReferenceVisitor& reference_visitor)
+      : reference_visitor_(reference_visitor) {}
+
+  void VisitRoot(mirror::CompressedReference<mirror::Object>* root) const
+      REQUIRES_SHARED(Locks::mutator_lock_) {
+    DCHECK(root->AsMirrorPtr() != nullptr);
+    root->Assign(reference_visitor_(root->AsMirrorPtr()));
+  }
+
+ private:
+  ReferenceVisitor reference_visitor_;
+};
+
+class ImageSpace::RemapInternedStringsVisitor {
+ public:
+  explicit RemapInternedStringsVisitor(
+      const SafeMap<mirror::String*, mirror::String*>& intern_remap)
+      REQUIRES_SHARED(Locks::mutator_lock_)
+      : intern_remap_(intern_remap),
+        string_class_(GetStringClass()) {}
+
+  // Visitor for VisitReferences().
+  ALWAYS_INLINE void operator()(ObjPtr<mirror::Object> object,
+                                MemberOffset field_offset,
+                                [[maybe_unused]] bool is_static) const
+      REQUIRES_SHARED(Locks::mutator_lock_) {
+    ObjPtr<mirror::Object> old_value =
+        object->GetFieldObject<mirror::Object, kVerifyNone, kWithoutReadBarrier>(field_offset);
+    if (old_value != nullptr &&
+        old_value->GetClass<kVerifyNone, kWithoutReadBarrier>() == string_class_) {
+      auto it = intern_remap_.find(old_value->AsString().Ptr());
+      if (it != intern_remap_.end()) {
+        mirror::String* new_value = it->second;
+        object->SetFieldObjectWithoutWriteBarrier</*kTransactionActive=*/ false,
+                                                  /*kCheckTransaction=*/ true,
+                                                  kVerifyNone>(field_offset, new_value);
+      }
+    }
+  }
+  // Visitor for VisitReferences(), java.lang.ref.Reference case.
+  ALWAYS_INLINE void operator()(ObjPtr<mirror::Class> klass, ObjPtr<mirror::Reference> ref) const
+      REQUIRES_SHARED(Locks::mutator_lock_) {
+    DCHECK(klass->IsTypeOfReferenceClass());
+    this->operator()(ref, mirror::Reference::ReferentOffset(), /*is_static=*/ false);
+  }
+  // Ignore class native roots; not called from VisitReferences() for kVisitNativeRoots == false.
+  void VisitRootIfNonNull(
+      [[maybe_unused]] mirror::CompressedReference<mirror::Object>* root) const {}
+  void VisitRoot([[maybe_unused]] mirror::CompressedReference<mirror::Object>* root) const {}
+
+ private:
+  mirror::Class* GetStringClass() REQUIRES_SHARED(Locks::mutator_lock_) {
+    DCHECK(!intern_remap_.empty());
+    return intern_remap_.begin()->first->GetClass<kVerifyNone, kWithoutReadBarrier>();
+  }
+
+  const SafeMap<mirror::String*, mirror::String*>& intern_remap_;
+  mirror::Class* const string_class_;
+};
+
+class ImageSpace::Relocator {
+ public:
+  template <PointerSize kPointerSize>
+  static void RelocateBootImage(ArrayRef<const std::unique_ptr<ImageSpace>>& spaces,
+                                int64_t base_diff64) {
+    DCHECK(!spaces.empty());
+    gc::accounting::ContinuousSpaceBitmap patched_objects(
+        gc::accounting::ContinuousSpaceBitmap::Create(
+            "Marked objects",
+            spaces.front()->Begin(),
+            spaces.back()->End() - spaces.front()->Begin()));
+    const ImageHeader& base_header = spaces[0]->GetImageHeader();
+    size_t base_image_space_count = base_header.GetImageSpaceCount();
+    DCHECK_LE(base_image_space_count, spaces.size());
+    RelocateImage<kPointerSize>(spaces.SubArray(/*pos=*/ 0u, base_image_space_count),
+                                base_diff64,
+                                &patched_objects);
+
+    for (size_t i = base_image_space_count, size = spaces.size(); i != size; ) {
+      const ImageHeader& ext_header = spaces[i]->GetImageHeader();
+      size_t ext_image_space_count = ext_header.GetImageSpaceCount();
+      DCHECK_LE(ext_image_space_count, size - i);
+      RelocateImage<kPointerSize>(spaces.SubArray(/*pos=*/ i, ext_image_space_count),
+                                  base_diff64,
+                                  &patched_objects);
+      i += ext_image_space_count;
+    }
+  }
+
+  // Relocate an app image mapped at `target_base` which may have been built
+  // with a different base address.
+  template <PointerSize kPointerSize>
+  static void RelocateImage(ArrayRef<const std::unique_ptr<ImageSpace>> spaces,
+                            int64_t base_diff64,
+                            gc::accounting::ContinuousSpaceBitmap* patched_objects);
+
+ private:
+  template <PointerSize kPointerSize, typename Visitor>
+  class PatchObjectVisitor;
+
+  class SimpleRelocateVisitor {
+   public:
+    SimpleRelocateVisitor(uintptr_t begin, uintptr_t size, uintptr_t diff)
+        : begin_(begin), size_(size), diff_(diff) {}
+
+    template <typename T>
+    ALWAYS_INLINE T* operator()(T* src) const {
+      DCHECK(InSource(src));
+      uintptr_t raw_src = reinterpret_cast<uintptr_t>(src);
+      return reinterpret_cast<T*>(raw_src + diff_);
+    }
+
+    template <typename T>
+    ALWAYS_INLINE bool InSource(T* ptr) const {
+      uintptr_t raw_ptr = reinterpret_cast<uintptr_t>(ptr);
+      return raw_ptr - begin_ < size_;
+    }
+
+    template <typename T>
+    ALWAYS_INLINE bool InDest(T* ptr) const {
+      uintptr_t raw_ptr = reinterpret_cast<uintptr_t>(ptr);
+      uintptr_t src_ptr = raw_ptr - diff_;
+      return src_ptr - begin_ < size_;
+    }
+
+   private:
+    const uintptr_t begin_;
+    const uintptr_t size_;
+    const uintptr_t diff_;
+  };
+
+  class SplitRangeRelocateVisitor {
+   public:
+    SplitRangeRelocateVisitor(uintptr_t begin,
+                              uintptr_t size,
+                              uintptr_t bound,
+                              uintptr_t base_diff,
+                              uintptr_t current_diff)
+        : begin_(begin),
+          size_(size),
+          bound_(bound),
+          base_diff_(base_diff),
+          current_diff_(current_diff) {
+      DCHECK_IMPLIES(begin_ == bound_, base_diff == current_diff);
+      // The bound separates the boot image range and the extension range.
+      DCHECK_LE(bound_ - begin_, size_);
+    }
+
+    template <typename T>
+    ALWAYS_INLINE T* operator()(T* src) const {
+      DCHECK(InSource(src));
+      uintptr_t raw_src = reinterpret_cast<uintptr_t>(src);
+      uintptr_t diff = (raw_src < bound_) ? base_diff_ : current_diff_;
+      return reinterpret_cast<T*>(raw_src + diff);
+    }
+
+    template <typename T>
+    ALWAYS_INLINE bool InSource(T* ptr) const {
+      uintptr_t raw_ptr = reinterpret_cast<uintptr_t>(ptr);
+      return raw_ptr - begin_ < size_;
+    }
+
+    void Dump(std::ostream& os) const {
+      auto dump_range = [&os](uintptr_t begin, uintptr_t end, const char* tail) {
+        os << "[" << reinterpret_cast<const void*>(begin) << ","
+           << reinterpret_cast<const void*>(end) << ")" << tail;
+      };
+      dump_range(begin_, bound_, "->");
+      dump_range(begin_ + base_diff_, bound_ + base_diff_, ";");
+      dump_range(bound_, begin_ + size_, "->");
+      dump_range(bound_ + current_diff_, begin_ + size_ + current_diff_, "");
+    }
+
+   private:
+    const uintptr_t begin_;
+    const uintptr_t size_;
+    const uintptr_t bound_;
+    const uintptr_t base_diff_;
+    const uintptr_t current_diff_;
+  };
+
+  static void** PointerAddress(ArtMethod* method, MemberOffset offset) {
+    return reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(method) + offset.Uint32Value());
+  }
+};
+
 template <PointerSize kPointerSize, typename Visitor>
-class ImageSpace::PatchObjectVisitor final {
+class ImageSpace::Relocator::PatchObjectVisitor final {
  public:
   explicit PatchObjectVisitor(Visitor visitor)
       : visitor_(visitor) {}
@@ -423,192 +612,6 @@ class ImageSpace::PatchObjectVisitor final {
 
  private:
   Visitor visitor_;
-};
-
-template <typename ReferenceVisitor>
-class ImageSpace::ClassTableVisitor final {
- public:
-  explicit ClassTableVisitor(const ReferenceVisitor& reference_visitor)
-      : reference_visitor_(reference_visitor) {}
-
-  void VisitRoot(mirror::CompressedReference<mirror::Object>* root) const
-      REQUIRES_SHARED(Locks::mutator_lock_) {
-    DCHECK(root->AsMirrorPtr() != nullptr);
-    root->Assign(reference_visitor_(root->AsMirrorPtr()));
-  }
-
- private:
-  ReferenceVisitor reference_visitor_;
-};
-
-class ImageSpace::RemapInternedStringsVisitor {
- public:
-  explicit RemapInternedStringsVisitor(
-      const SafeMap<mirror::String*, mirror::String*>& intern_remap)
-      REQUIRES_SHARED(Locks::mutator_lock_)
-      : intern_remap_(intern_remap),
-        string_class_(GetStringClass()) {}
-
-  // Visitor for VisitReferences().
-  ALWAYS_INLINE void operator()(ObjPtr<mirror::Object> object,
-                                MemberOffset field_offset,
-                                [[maybe_unused]] bool is_static) const
-      REQUIRES_SHARED(Locks::mutator_lock_) {
-    ObjPtr<mirror::Object> old_value =
-        object->GetFieldObject<mirror::Object, kVerifyNone, kWithoutReadBarrier>(field_offset);
-    if (old_value != nullptr &&
-        old_value->GetClass<kVerifyNone, kWithoutReadBarrier>() == string_class_) {
-      auto it = intern_remap_.find(old_value->AsString().Ptr());
-      if (it != intern_remap_.end()) {
-        mirror::String* new_value = it->second;
-        object->SetFieldObjectWithoutWriteBarrier</*kTransactionActive=*/ false,
-                                                  /*kCheckTransaction=*/ true,
-                                                  kVerifyNone>(field_offset, new_value);
-      }
-    }
-  }
-  // Visitor for VisitReferences(), java.lang.ref.Reference case.
-  ALWAYS_INLINE void operator()(ObjPtr<mirror::Class> klass, ObjPtr<mirror::Reference> ref) const
-      REQUIRES_SHARED(Locks::mutator_lock_) {
-    DCHECK(klass->IsTypeOfReferenceClass());
-    this->operator()(ref, mirror::Reference::ReferentOffset(), /*is_static=*/ false);
-  }
-  // Ignore class native roots; not called from VisitReferences() for kVisitNativeRoots == false.
-  void VisitRootIfNonNull(
-      [[maybe_unused]] mirror::CompressedReference<mirror::Object>* root) const {}
-  void VisitRoot([[maybe_unused]] mirror::CompressedReference<mirror::Object>* root) const {}
-
- private:
-  mirror::Class* GetStringClass() REQUIRES_SHARED(Locks::mutator_lock_) {
-    DCHECK(!intern_remap_.empty());
-    return intern_remap_.begin()->first->GetClass<kVerifyNone, kWithoutReadBarrier>();
-  }
-
-  const SafeMap<mirror::String*, mirror::String*>& intern_remap_;
-  mirror::Class* const string_class_;
-};
-
-class ImageSpace::Relocator {
- public:
-  template <PointerSize kPointerSize>
-  static void RelocateBootImage(ArrayRef<const std::unique_ptr<ImageSpace>>& spaces,
-                                int64_t base_diff64) {
-    DCHECK(!spaces.empty());
-    gc::accounting::ContinuousSpaceBitmap patched_objects(
-        gc::accounting::ContinuousSpaceBitmap::Create(
-            "Marked objects",
-            spaces.front()->Begin(),
-            spaces.back()->End() - spaces.front()->Begin()));
-    const ImageHeader& base_header = spaces[0]->GetImageHeader();
-    size_t base_image_space_count = base_header.GetImageSpaceCount();
-    DCHECK_LE(base_image_space_count, spaces.size());
-    RelocateImage<kPointerSize>(spaces.SubArray(/*pos=*/ 0u, base_image_space_count),
-                                base_diff64,
-                                &patched_objects);
-
-    for (size_t i = base_image_space_count, size = spaces.size(); i != size; ) {
-      const ImageHeader& ext_header = spaces[i]->GetImageHeader();
-      size_t ext_image_space_count = ext_header.GetImageSpaceCount();
-      DCHECK_LE(ext_image_space_count, size - i);
-      RelocateImage<kPointerSize>(spaces.SubArray(/*pos=*/ i, ext_image_space_count),
-                                  base_diff64,
-                                  &patched_objects);
-      i += ext_image_space_count;
-    }
-  }
-
-  // Relocate an app image mapped at `target_base` which may have been built
-  // with a different base address.
-  template <PointerSize kPointerSize>
-  static void RelocateImage(ArrayRef<const std::unique_ptr<ImageSpace>> spaces,
-                            int64_t base_diff64,
-                            gc::accounting::ContinuousSpaceBitmap* patched_objects);
-
- private:
-  class SimpleRelocateVisitor {
-   public:
-    SimpleRelocateVisitor(uintptr_t begin, uintptr_t size, uintptr_t diff)
-        : begin_(begin), size_(size), diff_(diff) {}
-
-    template <typename T>
-    ALWAYS_INLINE T* operator()(T* src) const {
-      DCHECK(InSource(src));
-      uintptr_t raw_src = reinterpret_cast<uintptr_t>(src);
-      return reinterpret_cast<T*>(raw_src + diff_);
-    }
-
-    template <typename T>
-    ALWAYS_INLINE bool InSource(T* ptr) const {
-      uintptr_t raw_ptr = reinterpret_cast<uintptr_t>(ptr);
-      return raw_ptr - begin_ < size_;
-    }
-
-    template <typename T>
-    ALWAYS_INLINE bool InDest(T* ptr) const {
-      uintptr_t raw_ptr = reinterpret_cast<uintptr_t>(ptr);
-      uintptr_t src_ptr = raw_ptr - diff_;
-      return src_ptr - begin_ < size_;
-    }
-
-   private:
-    const uintptr_t begin_;
-    const uintptr_t size_;
-    const uintptr_t diff_;
-  };
-
-  class SplitRangeRelocateVisitor {
-   public:
-    SplitRangeRelocateVisitor(uintptr_t begin,
-                              uintptr_t size,
-                              uintptr_t bound,
-                              uintptr_t base_diff,
-                              uintptr_t current_diff)
-        : begin_(begin),
-          size_(size),
-          bound_(bound),
-          base_diff_(base_diff),
-          current_diff_(current_diff) {
-      DCHECK_IMPLIES(begin_ == bound_, base_diff == current_diff);
-      // The bound separates the boot image range and the extension range.
-      DCHECK_LE(bound_ - begin_, size_);
-    }
-
-    template <typename T>
-    ALWAYS_INLINE T* operator()(T* src) const {
-      DCHECK(InSource(src));
-      uintptr_t raw_src = reinterpret_cast<uintptr_t>(src);
-      uintptr_t diff = (raw_src < bound_) ? base_diff_ : current_diff_;
-      return reinterpret_cast<T*>(raw_src + diff);
-    }
-
-    template <typename T>
-    ALWAYS_INLINE bool InSource(T* ptr) const {
-      uintptr_t raw_ptr = reinterpret_cast<uintptr_t>(ptr);
-      return raw_ptr - begin_ < size_;
-    }
-
-    void Dump(std::ostream& os) const {
-      auto dump_range = [&os](uintptr_t begin, uintptr_t end, const char* tail) {
-        os << "[" << reinterpret_cast<const void*>(begin) << ","
-           << reinterpret_cast<const void*>(end) << ")" << tail;
-      };
-      dump_range(begin_, bound_, "->");
-      dump_range(begin_ + base_diff_, bound_ + base_diff_, ";");
-      dump_range(bound_, begin_ + size_, "->");
-      dump_range(bound_ + current_diff_, begin_ + size_ + current_diff_, "");
-    }
-
-   private:
-    const uintptr_t begin_;
-    const uintptr_t size_;
-    const uintptr_t bound_;
-    const uintptr_t base_diff_;
-    const uintptr_t current_diff_;
-  };
-
-  static void** PointerAddress(ArtMethod* method, MemberOffset offset) {
-    return reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(method) + offset.Uint32Value());
-  }
 };
 
 template <PointerSize kPointerSize>

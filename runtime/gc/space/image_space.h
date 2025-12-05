@@ -521,10 +521,6 @@ class ImageSpace : public MemMapSpace {
   class Relocator;
   class RemapInternedStringsVisitor;
   class Loader;
-  template <typename PatchObjectVisitor>
-  class PatchArtFieldVisitor;
-  template <PointerSize kPointerSize, typename Visitor>
-  class PatchObjectVisitor;
 
   DISALLOW_COPY_AND_ASSIGN(ImageSpace);
 };
