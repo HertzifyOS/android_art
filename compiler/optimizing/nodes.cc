@@ -1781,7 +1781,7 @@ bool HInvoke::CanBeNull() const {
   }
 }
 
-bool HInvokePolymorphic::VarHandleAccessorNeedsReturnTypeCheck() {
+bool HInvokePolymorphic::NeedsReturnTypeCheck() {
   if (GetIntrinsic() == Intrinsics::kNone ||
       GetIntrinsic() == Intrinsics::kMethodHandleInvoke ||
       GetIntrinsic() == Intrinsics::kMethodHandleInvokeExact) {

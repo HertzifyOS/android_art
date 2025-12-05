@@ -1502,7 +1502,7 @@ bool HInstructionBuilder::BuildInvokePolymorphic(uint32_t dex_pc,
 
   DCHECK_EQ(invoke->AsInvokePolymorphic()->IsMethodHandleInvokeExact(), is_invoke_exact);
 
-  if (invoke->VarHandleAccessorNeedsReturnTypeCheck()) {
+  if (invoke->NeedsReturnTypeCheck()) {
     // Type check is needed because VarHandle intrinsics do not type check the retrieved reference.
     ScopedObjectAccess soa(Thread::Current());
     ArtMethod* referrer = graph_->GetArtMethod();
