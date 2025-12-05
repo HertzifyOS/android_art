@@ -3996,9 +3996,11 @@ void Heap::GrowForUtilization(collector::GarbageCollector* collector_ran,
 }
 
 void Heap::ClampGrowthLimit() {
+  Thread* self = Thread::Current();
+  ScopedObjectAccess soa(self);
+  ScopedGCCriticalSection gcs(self, kGcCauseClampGrowthLimit, kCollectorTypeCriticalSection);
   // Use heap bitmap lock to guard against races with BindLiveToMarkBitmap.
-  ScopedObjectAccess soa(Thread::Current());
-  WriterMutexLock mu(soa.Self(), *Locks::heap_bitmap_lock_);
+  WriterMutexLock mu(self, *Locks::heap_bitmap_lock_);
   capacity_ = growth_limit_;
   for (const auto& space : continuous_spaces_) {
     if (space->IsMallocSpace()) {
