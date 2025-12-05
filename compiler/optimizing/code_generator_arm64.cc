@@ -3154,6 +3154,7 @@ void InstructionCodeGeneratorARM64::VisitArraySet(HArraySet* instruction) {
     // value is null (without an extra CompareAndBranchIfZero since we already checked if the
     // value is null for the type check).
     bool skip_marking_gc_card = false;
+    bool needs_do_store_jump = false;
     SlowPathCodeARM64* slow_path = nullptr;
     vixl::aarch64::Label skip_writing_card;
     if (!Register(value).IsZero()) {
@@ -3164,7 +3165,10 @@ void InstructionCodeGeneratorARM64::VisitArraySet(HArraySet* instruction) {
       if (can_value_be_null) {
         if (skip_marking_gc_card) {
           __ Cbz(Register(value), &skip_writing_card);
-        } else {
+        } else if (needs_type_check) {
+          // If !needs_type_check, do_store is the next instruction generated, so this branch
+          // instruction would do nothing.
+          needs_do_store_jump = true;
           __ Cbz(Register(value), &do_store);
         }
       }
@@ -3224,7 +3228,7 @@ void InstructionCodeGeneratorARM64::VisitArraySet(HArraySet* instruction) {
         }
       }
 
-      if (can_value_be_null && !skip_marking_gc_card) {
+      if (needs_do_store_jump) {
         DCHECK(do_store.IsLinked());
         __ Bind(&do_store);
       }
