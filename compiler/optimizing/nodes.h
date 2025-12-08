@@ -4066,7 +4066,8 @@ class HInvokePolymorphic final : public HInvoke {
                 resolved_method_reference,
                 kPolymorphic,
                 /* enable_intrinsic_opt= */ true),
-        proto_idx_(proto_idx) {}
+        proto_idx_(proto_idx),
+        needs_callsite_type_check_(true) {}
 
   bool IsClonable() const override { return true; }
 
@@ -4082,10 +4083,24 @@ class HInvokePolymorphic final : public HInvoke {
         InputAt(1)->GetType() == DataType::Type::kReference;
   }
 
+  void SkipCallSiteTypeCheck() {
+    DCHECK(IsMethodHandleInvokeExact());
+    DCHECK(needs_callsite_type_check_);
+    needs_callsite_type_check_ = false;
+  }
+
+  bool NeedsCallSiteTypeCheck() const {
+    DCHECK(IsMethodHandleInvokeExact());
+    return needs_callsite_type_check_;
+  }
+
+  bool NeedsReturnTypeCheck();
+
   DECLARE_INSTRUCTION(InvokePolymorphic);
 
  protected:
   dex::ProtoIndex proto_idx_;
+  bool needs_callsite_type_check_;
   DEFAULT_COPY_CONSTRUCTOR(InvokePolymorphic);
 };
 

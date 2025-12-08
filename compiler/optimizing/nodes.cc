@@ -41,6 +41,7 @@
 #include "intrinsics_list.h"
 #include "loop_information-inl.h"
 #include "mirror/class-inl.h"
+#include "mirror/var_handle.h"
 #include "scoped_thread_state_change-inl.h"
 #include "ssa_builder.h"
 
@@ -1044,8 +1045,11 @@ void HInstruction::MoveBefore(HInstruction* cursor, bool do_checks) {
     DCHECK(!IsPhi());
     DCHECK(!IsControlFlow());
     DCHECK(CanBeMoved() ||
-           // HShouldDeoptimizeFlag can only be moved by CHAGuardOptimization.
-           IsShouldDeoptimizeFlag());
+           // `HShouldDeoptimizeFlag` can only be moved by `CHAGuardOptimization`.
+           IsShouldDeoptimizeFlag() ||
+           // `HCurrentMethod` can only be moved by `HGraph::InlineInto()` to the
+           // outer graph where it shall represent the outer method.
+           IsCurrentMethod());
     DCHECK(!cursor->IsPhi());
   }
 
@@ -1774,6 +1778,27 @@ bool HInvoke::CanBeNull() const {
       return false;
     default:
       return GetType() == DataType::Type::kReference;
+  }
+}
+
+bool HInvokePolymorphic::NeedsReturnTypeCheck() {
+  if (GetIntrinsic() == Intrinsics::kNone ||
+      GetIntrinsic() == Intrinsics::kMethodHandleInvoke ||
+      GetIntrinsic() == Intrinsics::kMethodHandleInvokeExact) {
+    return false;
+  }
+
+  mirror::VarHandle::AccessModeTemplate access_mode_template =
+      mirror::VarHandle::GetAccessModeTemplateByIntrinsic(GetIntrinsic());
+
+  switch (access_mode_template) {
+    case mirror::VarHandle::AccessModeTemplate::kGet:
+    case mirror::VarHandle::AccessModeTemplate::kGetAndUpdate:
+    case mirror::VarHandle::AccessModeTemplate::kCompareAndExchange:
+      return GetType() == DataType::Type::kReference;
+    case mirror::VarHandle::AccessModeTemplate::kSet:
+    case mirror::VarHandle::AccessModeTemplate::kCompareAndSet:
+      return false;
   }
 }
 

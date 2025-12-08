@@ -255,6 +255,21 @@ class EXPORT ArtField final {
   // Returns true if a set-* instruction in the given method is allowable.
   ALWAYS_INLINE inline bool CanBeChangedBy(ArtMethod* method) REQUIRES_SHARED(Locks::mutator_lock_);
 
+  // Write-protected are static final fields whose value can be changed. There are only 3 of them.
+  // See https://docs.oracle.com/javase/specs/jls/se24/html/jls-17.html#jls-17.5.4.
+  bool IsWriteProtected() REQUIRES_SHARED(Locks::mutator_lock_);
+
+  // Returns true if this field's value can change only once.
+  // Any kAccMonotonic access flag set field is unmodifiable, but the opposite might not be true:
+  // `static final` are unmodifiable for apps targeting Android C only.
+  //
+  // Note: In some cases, this function needs to check the field type. Callers use the
+  // `get_field_type` argument to specify how to retrieve it, whether it's by using
+  // `ArtField::LookupResolvedType()` for a previously resolved field type, or by
+  //  `Field::GetType()` when a corresponding reflection `Field` object is available.
+  // We currently do not support `ArtField::ResolveType()` as we do not handle failures.
+  bool IsUnmodifiable(auto&& get_field_type) REQUIRES_SHARED(Locks::mutator_lock_);
+
  private:
   bool IsProxyField() REQUIRES_SHARED(Locks::mutator_lock_);
 

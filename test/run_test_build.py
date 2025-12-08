@@ -67,6 +67,16 @@ TRADEFED_DISABLED = {
   "900-hello-plugin",
 }
 
+TRADEFED_VARIANTS = [
+    ["--debug", "--baseline"],
+    ["--debug", "--interpreter"],
+    ["--debug", "--jit", "--debuggable"],
+    ["--debug", "--jit"],
+    ["--debug", "--optimizing", "--debuggable"],
+    ["--debug", "--optimizing"],
+    ["--debug", "--speed-profile"],
+]
+
 # Debug option. Report commands that are taking a lot of user CPU time.
 REPORT_SLOW_COMMANDS = False
 
@@ -572,7 +582,7 @@ def create_setup_script(bitness, isa):
 # This can be used in CI to execute the tests without running `testrunner.py`.
 # This takes into account any custom behaviour defined in per-test `run.py`.
 # We generate distinct scripts for all of the pre-defined variants.
-def create_ci_runner_scripts(out, mode, test_names, bitness, isa, tags) -> Dict[str, Any]:
+def create_ci_runner_scripts(out, mode, test_names, bitness, isa, tags) -> List[Dict[str, Any]]:
   assert bitness in {32, 64}
   DEVICE_DIR = "/data/local/tmp/art"
   out.mkdir(parents=True, exist_ok=True)
@@ -616,31 +626,29 @@ def create_ci_runner_scripts(out, mode, test_names, bitness, isa, tags) -> Dict[
     "TARGET_ARCH": isa,
     "TMPDIR": Path(getcwd()) / "tmp",
   }
-  args = [
-    f"--run-test-option=--create-runner={out}",
-    "--optimizing",
-    "--interpreter",
-    "--jit",
-    "--baseline",
-    f"-j={cpu_count()}",
-    f"--{mode}",
-    f"--{bitness}",
-  ]
-  run([python, script] + args + test_names, env=envs, check=True)
-  tests: Dict[str, Any] = {
-    f"run-test-{isa}.setup#compile-boot-image": {
-      "adb push": [
-        ["../apex/com.android.art", f"{DEVICE_DIR}/apex/com.android.art"],
-        [f"{chroot.name}", f"{DEVICE_DIR}/{chroot.name}"],
-        [f"{chroot2.name}", f"{DEVICE_DIR}/{chroot2.name}"],
-        [f"{setup.name}", f"{DEVICE_DIR}/{setup.name}"],
-      ],
-      "adb shell": [
-        ["rm", "-rf", f"{DEVICE_DIR}/test"],
-        ["sh", f"{DEVICE_DIR}/{chroot.name}", f"{DEVICE_DIR}/{setup.name}"],
+  for variant in TRADEFED_VARIANTS :
+    args = [
+      f"--run-test-option=--create-runner={out}",
+      f"-j={cpu_count()}",
+      f"--{mode}",
+      f"--{bitness}",
+    ] + variant
+    run([python, script] + args + test_names, env=envs, check=True)
+  tests: List[Dict[str, Any]] = [
+    {
+      "name": f"run-test-{isa}.setup#compile-boot-image",
+      "tags": tags,
+      "cmds": [
+        {"kind": "push", "args": ["../apex/com.android.art", f"{DEVICE_DIR}/apex/com.android.art"]},
+        {"kind": "push", "args": [f"{chroot.name}", f"{DEVICE_DIR}/{chroot.name}"]},
+        {"kind": "push", "args": [f"{chroot2.name}", f"{DEVICE_DIR}/{chroot2.name}"]},
+        {"kind": "push", "args": [f"{setup.name}", f"{DEVICE_DIR}/{setup.name}"]},
+        {"kind": "shell", "args": ["rm", "-rf", f"{DEVICE_DIR}/test"]},
+        {"kind": "shell", "args": ["sh", f"{DEVICE_DIR}/{chroot.name}",
+                                   f"{DEVICE_DIR}/{setup.name}"]},
       ],
     },
-  }
+  ]
   for runner in sorted(set(Path(out).glob("*/*.sh")) - old_files):
     test_name = runner.parent.name
     m = re.search("FULL_TEST_NAME=(.*)", runner.read_text())
@@ -649,15 +657,16 @@ def create_ci_runner_scripts(out, mode, test_names, bitness, isa, tags) -> Dict[
 
     test_hash = runner.stem
     target_dir = f"{DEVICE_DIR}/test/{test_hash}"
-    tests[full_name] = {
+    tests.append({
+      "name": full_name,
       "tags": tags,
-      "dependencies": [f"run-test-{isa}.setup#compile-boot-image"],
-      "adb push": [
-        [f"../{mode}/{test_name}", f"{target_dir}"],
-        [str(runner.relative_to(out)), f"{target_dir}/run.sh"]
+      "deps": [f"run-test-{isa}.setup#compile-boot-image"],
+      "cmds": [
+        {"kind": "push", "args": [f"../{mode}/{test_name}", f"{target_dir}"]},
+        {"kind": "push", "args": [str(runner.relative_to(out)), f"{target_dir}/run.sh"]},
+        {"kind": "shell", "args": ["sh", f"{DEVICE_DIR}/{chroot.name}", f"{target_dir}/run.sh"]},
       ],
-      "adb shell": [["sh", f"{DEVICE_DIR}/{chroot.name}", f"{target_dir}/run.sh"]],
-    }
+    })
   return tests
 
 # If we build just individual shard, we want to split the work among all the cores,
@@ -729,15 +738,15 @@ def main() -> None:
     test_names = [ctx.test_name for ctx in tests]
     out = ziproot / "runner"
     dst = out / args.out.with_suffix(".tests.json").name
-    tests: Dict[str, Any] = {}
+    tests: List[Dict[str, Any]] = []
     for bitness, isa, tags in [
         (32, "arm", ["armeabi-v7a"]),
         (64, "arm64", ["arm64-v8a"]),
         (32, "x86", ["x86"]),
         (64, "x86_64", ["x86_64"]),
       ]:
-      tests |= create_ci_runner_scripts(out, args.mode, test_names, bitness, isa, tags)
-    dst.write_text(json.dumps(tests, indent=2, sort_keys=True))
+      tests += create_ci_runner_scripts(out, args.mode, test_names, bitness, isa, tags)
+    dst.write_text(json.dumps(tests, indent=2))
 
   # Create the final zip file which contains the content of the temporary directory.
   soong_zip = android_build_top / args.soong_zip

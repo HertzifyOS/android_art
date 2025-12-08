@@ -57,7 +57,7 @@ if [[ $action = create ]]; then
     elif [[ "$TARGET_ARCH" = "arm64" ]]; then
         # Get EFI (ARM64)
         get_stable_binary \
-            e/edk2/qemu-efi-aarch64_2024.02-2ubuntu0.5_all.deb \
+            e/edk2/qemu-efi-aarch64_2024.02-2ubuntu0.7_all.deb \
             usr/share/qemu-efi-aarch64/QEMU_EFI.fd
 
         dd if=/dev/zero of=flash0.img bs=1M count=64

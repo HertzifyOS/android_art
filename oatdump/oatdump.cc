@@ -61,6 +61,7 @@
 #include "dex/code_item_accessors-inl.h"
 #include "dex/descriptors_names.h"
 #include "dex/dex_file-inl.h"
+#include "dex/dex_file_profile.h"
 #include "dex/dex_instruction-inl.h"
 #include "dex/string_reference.h"
 #include "dex/type_lookup_table.h"
@@ -515,9 +516,9 @@ class OatDumper {
 
     // If set, adjust relative address to be searched
     if (options_.addr2instr_ != 0) {
-      resolved_addr2instr_ = options_.addr2instr_ + oat_header.GetExecutableOffset();
-      os << "SEARCH ADDRESS (executable offset + input):\n";
-      os << StringPrintf("0x%08zx\n\n", AdjustOffset(resolved_addr2instr_));
+      resolved_addr2instr_ = options_.addr2instr_;
+      os << "SEARCH ADDRESS:\n";
+      os << StringPrintf("0x%08x\n\n", resolved_addr2instr_);
     }
 
     // Dump .data.img.rel.ro entries.
@@ -544,14 +545,17 @@ class OatDumper {
         continue;
       }
 
-      const DexLayoutSections* const layout_sections = oat_dex_file->GetDexLayoutSections();
-      if (layout_sections != nullptr) {
-        os << "Layout data\n";
-        os << *layout_sections;
-        os << "\n";
+      const DexProfileMetadata* const profile_metadata = oat_dex_file->GetDexProfileMetadata();
+      if (profile_metadata != nullptr) {
+        os << "Profile metadata for dex file " << std::setw(2) << i << " -"
+           << " Classes(startup: " << std::setw(5) << profile_metadata->num_startup_classes
+           << ", total: " << std::setw(5) << dex_file->NumClassDefs() << "),"
+           << " Methods(startup: " << std::setw(5) << profile_metadata->num_startup_methods
+           << ", total: " << std::setw(5) << dex_file->NumMethodIds() << ")\n";
       }
 
       if (!options_.dump_header_only_) {
+        os << "\n";
         DumpBssMappings(os,
                         dex_file,
                         oat_dex_file->GetMethodBssMapping(),
@@ -562,6 +566,7 @@ class OatDumper {
                         oat_dex_file->GetMethodTypeBssMapping());
       }
     }
+    os << "\n";
 
     if (!options_.dump_header_only_) {
       Runtime* const runtime = Runtime::Current();
@@ -1050,10 +1055,11 @@ class OatDumper {
     uint32_t code_offset = oat_method.GetCodeOffset();
     uint32_t code_size = oat_method.GetQuickCodeSize();
     if (resolved_addr2instr_ != 0) {
-      if (resolved_addr2instr_ > code_offset + code_size) {
-        return success;
-      } else {
+      if (resolved_addr2instr_ >= AdjustOffset(code_offset) &&
+          resolved_addr2instr_ < AdjustOffset(code_offset) + code_size) {
         *addr_found = true;  // stop analyzing file at next iteration
+      } else {
+        return success;
       }
     }
 

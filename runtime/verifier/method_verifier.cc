@@ -596,7 +596,6 @@ class MethodVerifierImpl : public ::art::verifier::MethodVerifier {
             AccessWidth kAccWidth,
             bool kIsStatic,
             bool kIsPrimitive>
-  ALWAYS_INLINE
   bool VerifyISFieldAccess(const Instruction* inst, uint16_t inst_data, Instruction::Code opcode)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
@@ -5238,9 +5237,9 @@ inline bool MethodVerifierImpl::VerifyPrimitivePut(RegType::Kind target_kind, ui
 }
 
 template <AccessType kAccType, AccessWidth kAccWidth, bool kIsPrimitive>
-bool MethodVerifierImpl::VerifyArrayAccess(const Instruction* inst,
-                                           uint16_t inst_data,
-                                           Instruction::Code opcode) {
+ALWAYS_INLINE inline bool MethodVerifierImpl::VerifyArrayAccess(const Instruction* inst,
+                                                                uint16_t inst_data,
+                                                                Instruction::Code opcode) {
   static_assert(kIsPrimitive || kAccWidth == AccessWidth::kVreg);
   uint16_t index_type_id = work_line_->GetRegisterTypeId(inst->VRegC_23x());
   if (UNLIKELY(index_type_id >= RegTypeCache::NumberOfRegKindCacheIds()) ||
@@ -5249,69 +5248,49 @@ bool MethodVerifierImpl::VerifyArrayAccess(const Instruction* inst,
     return false;
   }
 
-  // TODO: Avoid conversion to `insn_type` and work directly with template parameters and `opcode`.
-  RegType::Kind insn_kind;
-  if (!kIsPrimitive) {
-    insn_kind = RegType::Kind::kJavaLangObject;
-  } else if (kAccWidth == AccessWidth::kNarrow) {
+  auto narrow_opcode_kind = [=]() {
+    DCHECK(kAccWidth == AccessWidth::kNarrow);
+    // Register kinds Boolean, Byte, Char, Short are ordered as in get/put instructions.
     static constexpr Instruction::Code kBaseOpcode =
         (kAccType == AccessType::kGet) ? Instruction::AGET_BOOLEAN : Instruction::APUT_BOOLEAN;
-    // Boolean, Byte, Char, Short kinds are ordered as in get/put instructions.
-    insn_kind = enum_cast<RegType::Kind>(RegType::Kind::kBoolean + (opcode - kBaseOpcode));
-  } else if (kAccWidth == AccessWidth::kVreg) {
-    insn_kind = RegType::Kind::kInteger;
-  } else {
-    DCHECK(kAccWidth == AccessWidth::kWide);
-    insn_kind = RegType::Kind::kLongLo;
-  }
-  const RegType& insn_type = reg_types_.GetFromId(RegTypeCache::IdForRegKind(insn_kind));
+    return enum_cast<RegType::Kind>(RegType::Kind::kBoolean + (opcode - kBaseOpcode));
+  };
 
   const RegType& array_type = work_line_->GetRegisterType(this, inst->VRegB_23x());
   uint32_t vregA = inst->VRegA_23x(inst_data);
+  RegType::Kind kind = RegType::kConflict;
+  std::optional<uint16_t> type_id(std::nullopt);
   if (array_type.IsZeroOrNull()) {
+    // Null array class; this code path will fail at runtime. For aget, infer a merge-able type
+    // from the instruction. For aput, check that the given value matches the instruction.
+    // Note: this is, as usual, complicated by the fact that some of these instructions are not
+    //       fully typed and fit multiple register types.
     if (kAccType == AccessType::kGet) {
-      // Null array class; this code path will fail at runtime. Infer a merge-able type from the
-      // instruction type.
       if (!kIsPrimitive) {
-        work_line_->SetRegisterType<LockOp::kClear>(vregA, reg_types_.Null());
-      } else if (insn_type.IsInteger()) {
-        // We cannot use 'insn_type' as it could be a float array or an int array.
-        // Use integer constant which can serve as either `int` or `float`.
-        work_line_->SetRegisterType(vregA, RegType::kIntegerConstant);
-      } else if (insn_type.IsCategory1Types()) {
-        // Category 1
-        // The 'insn_type' is exactly the type we need.
-        work_line_->SetRegisterType<LockOp::kClear>(vregA, insn_type);
+        kind = RegType::kNull;
+      } else if (kAccWidth == AccessWidth::kNarrow) {
+        kind = narrow_opcode_kind();
+      } else if (kAccWidth == AccessWidth::kVreg) {
+        kind = RegType::kIntegerConstant;  // Serves as either `int` or `float`.
       } else {
-        // Category 2
-        work_line_->SetRegisterTypeWide(vregA, RegType::kConstantLo, RegType::kConstantHi);
+        DCHECK(kAccWidth == AccessWidth::kWide);
+        kind = RegType::kConstantLo;  // Serves as either `long` or `double`.
       }
-      return true;
     } else {
       DCHECK(kAccType == AccessType::kPut);
-      // Null array type; this code path will fail at runtime.
-      // Still check that the given value matches the instruction's type.
-      // Note: this is, as usual, complicated by the fact the the instruction isn't fully typed
-      //       and fits multiple register types.
-      const RegType* modified_reg_type = &insn_type;
-      if ((modified_reg_type == &reg_types_.Integer()) ||
-          (modified_reg_type == &reg_types_.LongLo())) {
-        // May be integer or float | long or double. Overwrite insn_type accordingly.
-        const RegType& value_type = work_line_->GetRegisterType(this, vregA);
-        if (modified_reg_type == &reg_types_.Integer()) {
-          if (&value_type == &reg_types_.Float()) {
-            modified_reg_type = &value_type;
-          }
-        } else {
-          if (&value_type == &reg_types_.DoubleLo()) {
-            modified_reg_type = &value_type;
-          }
-        }
-      }
-      if (kIsPrimitive) {
-        return VerifyPrimitivePut(modified_reg_type->GetKind(), vregA);
+      if (!kIsPrimitive) {
+        // `kind` shall not be used, leave it as `kConflict`.
+      } else if (kAccWidth == AccessWidth::kNarrow) {
+        kind = narrow_opcode_kind();
+      } else if (kAccWidth == AccessWidth::kVreg) {
+        kind = (work_line_->GetRegisterTypeId(vregA) == RegTypeCache::kFloatCacheId)
+            ? RegType::Kind::kFloat
+            : RegType::Kind::kInteger;
       } else {
-        return VerifyRegisterType(vregA, *modified_reg_type);
+        DCHECK(kAccWidth == AccessWidth::kWide);
+        kind = (work_line_->GetRegisterTypeId(vregA) == RegTypeCache::kDoubleLoCacheId)
+            ? RegType::Kind::kDoubleLo
+            : RegType::Kind::kLongLo;
       }
     }
   } else if (!array_type.IsArrayTypes()) {
@@ -5324,73 +5303,58 @@ bool MethodVerifierImpl::VerifyArrayAccess(const Instruction* inst,
       return false;
     } else {
       SoftFailArrayIsUnresolvedMergedReference(opcode, array_type);
+      // Approximate with java.lang.Object[].
       if (kAccType == AccessType::kGet) {
-        // Approximate with java.lang.Object[].
-        work_line_->SetRegisterType(vregA, RegType::Kind::kJavaLangObject);
-        return true;
-      } else {
-        DCHECK(kAccType == AccessType::kPut);
-        return VerifyRegisterType(vregA, insn_type);
-      }
+        kind = RegType::Kind::kJavaLangObject;
+      }  // else `kind` shall not be used, leave it as `kConflict`.
     }
   } else {
+    /* verify the class */
     const RegType& component_type = reg_types_.GetComponentType(array_type);
-    if (kAccType == AccessType::kGet) {
-      /* verify the class */
-      if (!component_type.IsReferenceTypes() && !kIsPrimitive) {
-        FailIncompatibleArrayType(opcode, array_type);
-        return false;
-      } else if (kIsPrimitive && !insn_type.Equals(component_type) &&
-                 !((insn_type.IsInteger() && component_type.IsFloat()) ||
-                 (insn_type.IsLongLo() && component_type.IsDoubleLo()))) {
-        FailIncompatibleArrayType(opcode, array_type);
-        return false;
-      } else {
-        // Use knowledge of the field type which is stronger than the type inferred from the
-        // instruction, which can't differentiate object types and ints from floats, longs from
-        // doubles.
-        if (!component_type.IsLowHalf()) {
-          work_line_->SetRegisterType<LockOp::kClear>(vregA, component_type);
-        } else {
-          work_line_->SetRegisterTypeWide(
-              vregA, component_type, component_type.HighHalf(&reg_types_));
-        }
-        return true;
-      }
+    bool instruction_compatible;
+    if (!kIsPrimitive) {
+      instruction_compatible = component_type.IsReferenceTypes();
+    } else if (kAccWidth == AccessWidth::kNarrow) {
+      instruction_compatible = (component_type.GetKind() == narrow_opcode_kind());
+    } else if (kAccWidth == AccessWidth::kVreg) {
+      instruction_compatible = (component_type.GetKind() == RegType::Kind::kInteger) ||
+                               (component_type.GetKind() == RegType::Kind::kFloat);
     } else {
-      DCHECK(kAccType == AccessType::kPut);
-      if (kIsPrimitive) {
-        bool instruction_compatible;
-        if (component_type.IsIntegralTypes()) {
-          instruction_compatible = component_type.Equals(insn_type);
-        } else if (component_type.IsFloat()) {
-          instruction_compatible = insn_type.IsInteger();  // no put-float, so expect put-int
-        } else if (component_type.IsLongLo()) {
-          instruction_compatible = insn_type.IsLongLo();
-        } else if (component_type.IsDoubleLo()) {
-          instruction_compatible = insn_type.IsLongLo();  // no put-double, so expect put-long
-        } else {
-          instruction_compatible = false;  // reference with primitive store
-        }
-        if (!instruction_compatible) {
-          // This is a global failure rather than a class change failure as the instructions and
-          // the descriptors for the type should have been consistent within the same file at
-          // compile time.
-          FailIncompatibleArrayType(opcode, array_type);
-          return false;
-        }
-        return VerifyPrimitivePut(component_type.GetKind(), vregA);
-      } else {
-        if (!component_type.IsReferenceTypes()) {
-          FailIncompatibleArrayType(opcode, array_type);
-          return false;
-        } else {
-          // The instruction agrees with the type of array, confirm the value to be stored does too
-          // Note: we use the instruction type (rather than the component type) for aput-object as
-          // incompatible classes will be caught at runtime as an array store exception
-          return VerifyRegisterType(vregA, insn_type);
-        }
-      }
+      DCHECK(kAccWidth == AccessWidth::kWide);
+      instruction_compatible = (component_type.GetKind() == RegType::Kind::kDoubleLo) ||
+                               (component_type.GetKind() == RegType::Kind::kLongLo);
+    }
+    if (!instruction_compatible) {
+      // This is a global failure rather than a class change failure as the instructions and
+      // the descriptors for the type should have been consistent within the same file at
+      // compile time.
+      FailIncompatibleArrayType(inst->Opcode(), array_type);
+      return false;
+    }
+    if (!kIsPrimitive && kAccType == AccessType::kGet) {
+      type_id.emplace(component_type.GetId());
+    }
+    kind = (kAccWidth == AccessWidth::kNarrow) ? narrow_opcode_kind() : component_type.GetKind();
+  }
+
+  if (kAccType == AccessType::kGet) {
+    if (kAccWidth == AccessWidth::kWide) {
+      work_line_->SetRegisterTypeWide(vregA, kind, RegType::ToHighHalf(kind));
+    } else {
+      // For `aget-object`, only edge cases should reach this code without `type_id` set.
+      work_line_->SetRegisterTypeId(
+          vregA, type_id.has_value() ? type_id.value() : RegTypeCache::IdForRegKind(kind));
+    }
+    return true;
+  } else {
+    DCHECK(kAccType == AccessType::kPut);
+    if (kIsPrimitive) {
+      return VerifyPrimitivePut(kind, vregA);
+    } else {
+      // The instruction agrees with the type of array, confirm the value to be stored does too
+      // Note: we use the instruction type (rather than the component type) for aput-object as
+      // incompatible classes will be caught at runtime as an array store exception
+      return VerifyRegisterType(vregA, reg_types_.JavaLangObject());
     }
   }
 }

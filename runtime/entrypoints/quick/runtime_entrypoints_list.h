@@ -211,9 +211,6 @@ enum class DeoptimizationKind;
   V(artResolveStringFromCode, REQUIRES_SHARED(Locks::mutator_lock_), mirror::String*,             \
       int32_t string_idx, Thread* self)                                                           \
                                                                                                   \
-  V(artDeoptimize, REQUIRES_SHARED(Locks::mutator_lock_), Context*,                               \
-      Thread* self,                                                                               \
-      bool skip_method_exit_callbacks)                                                            \
   V(artDeoptimizeFromCompiledCode, REQUIRES_SHARED(Locks::mutator_lock_), Context*,               \
       DeoptimizationKind kind,                                                                    \
       Thread* self)                                                                               \

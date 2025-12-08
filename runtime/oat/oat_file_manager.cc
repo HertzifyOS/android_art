@@ -20,7 +20,6 @@
 #include <sys/stat.h>
 
 #include <memory>
-#include <queue>
 #include <vector>
 
 #include "android-base/file.h"
@@ -40,6 +39,7 @@
 #include "dex/art_dex_file_loader.h"
 #include "dex/dex_file-inl.h"
 #include "dex/dex_file_loader.h"
+#include "dex/dex_file_profile.h"
 #include "dex/dex_file_tracking_registrar.h"
 #include "gc/scoped_gc_critical_section.h"
 #include "gc/space/image_space.h"
@@ -47,6 +47,7 @@
 #include "jit/jit.h"
 #include "jni/java_vm_ext.h"
 #include "jni/jni_internal.h"
+#include "madvise_utils.h"
 #include "mirror/class_loader.h"
 #include "mirror/object-inl.h"
 #include "oat_file.h"
@@ -193,6 +194,60 @@ bool OatFileManager::ShouldLoadAppImage() const {
   return true;
 }
 
+// Wrapper for optional heuristic on picking out startup-optimized dex files for madvise.
+//   * If `madvise_dex_using_profile` is disabled, falls back to sequential madvise.
+//.  * If profile metadata hints are missing, falls back to sequential madvise.
+//   * If the target dex has been optimized with accurate startup profiles, the heuristic should
+//     *generally* pick out only those startup dex files to madvise.
+//   * If the startup dex has *not* been optimized with startup profiles, the heuristic will pick
+//     out dex files based on effective startup class/method representation. In practice, this will
+//     often look like the naive greedy algorithm, with possibly a slightly different ordering.
+static std::vector<size_t> SelectDexFilesToMadvise(
+    const std::vector<std::unique_ptr<const DexFile>>& dex_files) {
+  auto default_greedy_selection = [&] {
+    std::vector<size_t> indices(dex_files.size());
+    std::iota(indices.begin(), indices.end(), 0);
+    return indices;
+  };
+  if (!com::android::art::rw::flags::madvise_dex_using_profile() || dex_files.empty()) {
+    return default_greedy_selection();
+  }
+
+  std::vector<DexFileMadviseMetadata> metadata;
+  metadata.reserve(dex_files.size());
+  bool has_startup_metadata = false;
+  for (size_t i = 0; i < dex_files.size(); ++i) {
+    const DexFile* dex_file = dex_files[i].get();
+    const OatDexFile* oat_dex_file = dex_file->GetOatDexFile();
+    const DexProfileMetadata* profile =
+        (oat_dex_file != nullptr) ? oat_dex_file->GetDexProfileMetadata() : nullptr;
+
+    if (profile == nullptr) {
+      // We require valid dex profile metadata for all dex when aggregating profile data.
+      // This should only happen when there's no backing OAT file.
+      VLOG(oat) << "Madvise - Missing OAT profile metadata for dex: " << dex_file->GetLocation();
+      return default_greedy_selection();
+    }
+
+    has_startup_metadata = has_startup_metadata || profile->num_startup_classes > 0 ||
+                           profile->num_startup_methods > 0;
+    metadata.push_back({.index = i,
+                        .num_startup_classes = profile->num_startup_classes,
+                        .num_classes = dex_file->NumClassDefs(),
+                        .num_startup_methods = profile->num_startup_methods,
+                        .num_methods = dex_file->NumMethodIds()});
+  }
+
+  // If no startup metadata was found (e.g., speed compilation), fall back to greedy madvise.
+  // In theory, a valid profile could completely lack any startup hints, but it's an edge case
+  // where it's fine to just fall back to the default greedy behavior.
+  if (!has_startup_metadata) {
+    return default_greedy_selection();
+  }
+
+  return art::SelectDexFilesToMadvise(std::move(metadata));
+}
+
 std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat(
     const char* dex_location,
     jobject class_loader,
@@ -249,16 +304,6 @@ std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat(
         compilation_filter.c_str(),
         compilation_reason.c_str()));
 
-    const bool has_registered_app_info = Runtime::Current()->GetAppInfo()->HasRegisteredAppInfo();
-    const AppInfo::CodeType code_type =
-        Runtime::Current()->GetAppInfo()->GetRegisteredCodeType(dex_location);
-    // We only want to madvise primary/split dex artifacts as a startup optimization. However,
-    // as the code_type for those artifacts may not be set until the initial app info registration,
-    // we conservatively madvise everything until the app info registration is complete.
-    const bool should_madvise = !has_registered_app_info ||
-                                code_type == AppInfo::CodeType::kPrimaryApk ||
-                                code_type == AppInfo::CodeType::kSplitApk;
-
     // Proceed with oat file loading.
     std::unique_ptr<const OatFile> oat_file(oat_file_assistant->GetBestOatFile().release());
     VLOG(oat) << "OatFileAssistant(" << dex_location << ").GetBestOatFile()="
@@ -275,6 +320,7 @@ std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat(
           CompilerFilter::IsAotCompilationEnabled(oat_file->GetCompilerFilter());
       // Load the dex files from the oat file.
       bool added_image_space = false;
+      const bool should_madvise = runtime->ShouldMadviseForAppStartup(dex_location);
       if (should_madvise) {
         VLOG(oat) << "Madvising oat file: " << oat_file->GetLocation();
         size_t madvise_size_limit = runtime->GetMadviseWillNeedSizeOdex();
@@ -401,7 +447,9 @@ std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat(
         error_msgs->push_back("Failed to open dex files from " + odex_location);
       } else if (should_madvise) {
         size_t madvise_size_limit = Runtime::Current()->GetMadviseWillNeedTotalDexSize();
-        for (const std::unique_ptr<const DexFile>& dex_file : dex_files) {
+        for (const size_t dex_file_index : SelectDexFilesToMadvise(dex_files)) {
+          DCHECK_LT(dex_file_index, dex_files.size());
+          const auto& dex_file = dex_files[dex_file_index];
           // Prefetch the dex file based on vdex size limit (name should
           // have been dex size limit).
           VLOG(oat) << "Madvising dex file: " << dex_file->GetLocation();

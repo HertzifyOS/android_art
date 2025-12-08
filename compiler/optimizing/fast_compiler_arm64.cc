@@ -453,6 +453,14 @@ class FastCompilerARM64 : public FastCompiler {
     }
   }
 
+  bool IsObject(uint32_t vreg_index) const {
+    if (vreg_index < kMaximumRegisters) {
+      return (object_register_mask_ &
+                  (1 << kAvailableCalleeSaveRegisters[vreg_index].GetCode())) != 0;
+    }
+    return object_stack_mask_.IsBitSet(GetStackSlot(vreg_index) / kVRegSize);
+  }
+
   // Mark whether dex register `vreg_index` can be null.
   void UpdateNonNullMask(uint32_t vreg_index, bool can_be_null) {
     if (can_be_null) {
@@ -1149,9 +1157,6 @@ Location FastCompilerARM64::GetExistingRegisterLocation(uint32_t reg, DataType::
       DCHECK(res);
       vreg_locations_[reg] = new_location;
     }
-    // The floating point value may have come from a zero constant, which we
-    // treat as object. Therefore, remove the flag if it is there.
-    UpdateLocal(reg, /* is_object= */ false, /* is_wide= */ DataType::Is64BitType(type));
     return new_location;
   }
 
@@ -1354,6 +1359,12 @@ bool FastCompilerARM64::GenerateFrame() {
           return false;
         }
         vreg_locations_[i] = new_location;
+        if (IsObject(i)) {
+          // The floating point value comes from a zero constant, which we
+          // treat as object. Therefore, ensure the core register associated to
+          // this dex register contains zero.
+          __ Mov(kAvailableCalleeSaveRegisters[i], vixl::aarch64::xzr);
+        }
       } else if (vreg_locations_[i].IsStackSlot()) {
         DCHECK(IsParameter(i));
         vreg_locations_[i] =

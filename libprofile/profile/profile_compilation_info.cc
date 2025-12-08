@@ -2699,6 +2699,10 @@ ProfileCompilationInfo::ProfileLoadStatus ProfileCompilationInfo::DexFileData::S
   return ProfileLoadStatus::kSuccess;
 }
 
+uint32_t ProfileCompilationInfo::DexFileData::CountStartupClasses() const {
+  return class_set.size();
+}
+
 uint32_t ProfileCompilationInfo::DexFileData::MethodsDataSize(
     /*out*/ uint16_t* method_flags,
     /*out*/ size_t* saved_bitmap_bit_size) const {
@@ -3003,6 +3007,16 @@ ProfileCompilationInfo::ProfileLoadStatus ProfileCompilationInfo::DexFileData::S
   }
   buffer.Advance(following_data_size);
   return ProfileLoadStatus::kSuccess;
+}
+
+uint32_t ProfileCompilationInfo::DexFileData::CountStartupMethods() const {
+  uint32_t num_startup_methods = 0;
+  for (uint32_t method_idx = 0; method_idx < num_method_ids; ++method_idx) {
+    if (GetHotnessInfo(method_idx).IsStartup()) {
+      ++num_startup_methods;
+    }
+  }
+  return num_startup_methods;
 }
 
 void ProfileCompilationInfo::DexFileData::WriteClassSet(

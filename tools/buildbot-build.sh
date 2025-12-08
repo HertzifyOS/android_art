@@ -63,13 +63,7 @@ if [[ $TARGET_ARCH = "riscv64" && ! ( -d frameworks/base ) ]]; then
 fi
 
 java_libraries_dir=${out_dir}/target/common/obj/JAVA_LIBRARIES
-libcore_tests_classpath="core-tests core-ojtests jsr166-tests mockito-target"
-libjdwp_tests_classpath="apache-harmony-jdwp-tests"
-common_targets="vogar ${libjdwp_tests_classpath} ${libcore_tests_classpath}"
-# Add classpath for libcore tests.
-for jar in ${libcore_tests_classpath} ; do
-  common_targets="$common_targets out/target/common/obj/JAVA_LIBRARIES/${jar}_intermediates/classes.jar"
-done
+common_targets="vogar"
 
 # These build targets have different names on device and host.
 specific_targets="libjavacoretests libwrapagentproperties libwrapagentpropertiesd"
@@ -161,6 +155,7 @@ build_targets_for_py=()
 
 build_targets_for_py+=(${common_targets})
 art_build_py_args+=("${j_arg}")
+art_build_py_args+=("--build-art-libcore-jdwp-test-jars")
 
 if [[ $build_host == "yes" ]]; then
   # Pass generic internal target flags to art_build.py

@@ -64,15 +64,6 @@ class MANAGED Field : public AccessibleObject {
     return (GetAccessFlags() & kAccVolatile) != 0;
   }
 
-  // Returns true if this field's value can change only once.
-  // Any kAccMonotonic access flag set field is unmodifiable, but the opposite might not be true:
-  // `static final` are unmodifiable for apps targeting Android C only.
-  bool IsUnmodifiable() REQUIRES_SHARED(Locks::mutator_lock_);
-
-  // Write-protected are static final fields whose value can be changed. There are only 3 of them.
-  // See https://docs.oracle.com/javase/specs/jls/se24/html/jls-17.html#jls-17.5.4.
-  bool IsWriteProtected() REQUIRES_SHARED(Locks::mutator_lock_);
-
   ALWAYS_INLINE Primitive::Type GetTypeAsPrimitiveType() REQUIRES_SHARED(Locks::mutator_lock_);
 
   ObjPtr<mirror::Class> GetType() REQUIRES_SHARED(Locks::mutator_lock_);

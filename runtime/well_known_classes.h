@@ -182,6 +182,7 @@ struct EXPORT WellKnownClasses {
   static ArtField* dalvik_system_VMRuntime_nonSdkApiUsageConsumer;
   static ArtField* dalvik_system_VirtualThreadParkedStates_frames;
   static ArtField* java_io_FileDescriptor_descriptor;
+  static ArtField* java_lang_invoke_MethodHandle_type;
   static ArtField* java_lang_ref_Reference_disableIntrinsic;
   static ArtField* java_lang_ref_Reference_slowPathEnabled;
   static ArtField* java_lang_ClassLoader_parent;

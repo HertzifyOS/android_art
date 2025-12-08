@@ -1105,6 +1105,10 @@ bool CodeGeneratorARM64::ShouldUseSVE() const {
   return GetInstructionSetFeatures().HasSVE();
 }
 
+bool CodeGeneratorARM64::ShouldUseLSE() const {
+  return GetInstructionSetFeatures().HasLSE();
+}
+
 size_t CodeGeneratorARM64::GetSIMDRegisterWidth() const {
   return SupportsPredicatedSIMD()
       ? GetInstructionSetFeatures().GetSVEVectorLength() / kBitsPerByte

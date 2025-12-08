@@ -24,6 +24,7 @@
 #include "class_linker-inl.h"
 #include "code_generator.h"
 #include "data_type-inl.h"
+#include "deoptimization_kind.h"
 #include "dex/bytecode_utils.h"
 #include "dex/dex_instruction-inl.h"
 #include "driver/compiler_options.h"
@@ -380,9 +381,14 @@ bool HInstructionBuilder::Build() {
 
     if (graph_->IsEntryBlock(current_block_)) {
       InitializeParameters();
-      AppendInstruction(new (allocator_) HSuspendCheck(0u));
-      if (graph_->IsDebuggable() && code_generator_->GetCompilerOptions().IsJitCompiler()) {
-        AppendInstruction(new (allocator_) HMethodEntryHook(0u));
+      // If not inlining, add `HSuspendCheck` and also `HMethodEntryHook` if applicable.
+      // It is OK to not add `HMethodEntryHook`s for inlined functions. In debug mode we
+      // don't inline and in release mode method tracing is best effort so OK to avoid them.
+      if (!IsBuildingInlinedGraph()) {
+        AppendInstruction(new (allocator_) HSuspendCheck(0u));
+        if (graph_->IsDebuggable() && code_generator_->GetCompilerOptions().IsJitCompiler()) {
+          AppendInstruction(new (allocator_) HMethodEntryHook(0u));
+        }
       }
       AppendInstruction(new (allocator_) HGoto(0u));
       continue;
@@ -632,8 +638,8 @@ void HInstructionBuilder::UpdateLocal(uint32_t reg_number, HInstruction* stored_
 void HInstructionBuilder::InitializeParameters() {
   DCHECK(graph_->IsEntryBlock(current_block_));
 
-  // outer_compilation_unit_ is null only when unit testing.
-  if (outer_compilation_unit_ == nullptr) {
+  // The method index is `kDexNoIndex` only for unit tests.
+  if (dex_compilation_unit_->GetDexMethodIndex() == dex::kDexNoIndex) {
     return;
   }
 
@@ -1298,21 +1304,6 @@ bool HInstructionBuilder::BuildInvoke(const Instruction& instruction,
   return HandleInvoke(invoke, operands, shorty, /* is_unresolved= */ false);
 }
 
-static bool VarHandleAccessorNeedsReturnTypeCheck(HInvoke* invoke, DataType::Type return_type) {
-  mirror::VarHandle::AccessModeTemplate access_mode_template =
-      mirror::VarHandle::GetAccessModeTemplateByIntrinsic(invoke->GetIntrinsic());
-
-  switch (access_mode_template) {
-    case mirror::VarHandle::AccessModeTemplate::kGet:
-    case mirror::VarHandle::AccessModeTemplate::kGetAndUpdate:
-    case mirror::VarHandle::AccessModeTemplate::kCompareAndExchange:
-      return return_type == DataType::Type::kReference;
-    case mirror::VarHandle::AccessModeTemplate::kSet:
-    case mirror::VarHandle::AccessModeTemplate::kCompareAndSet:
-      return false;
-  }
-}
-
 // This function initializes `VarHandleOptimizations`, does a number of static checks and disables
 // the intrinsic if some of the checks fail. This is necessary for the code generator to work (for
 // both the baseline and the optimizing compiler).
@@ -1489,32 +1480,29 @@ bool HInstructionBuilder::BuildInvokePolymorphic(uint32_t dex_pc,
   // MethodHandle.invokeExact intrinsic needs to check whether call-site matches with MethodHandle's
   // type. To do that, MethodType corresponding to the call-site is passed as an extra input.
   // Other invoke-polymorphic calls do not need it.
-  bool can_be_intrinsified =
+  bool is_invoke_exact =
       static_cast<Intrinsics>(resolved_method->GetIntrinsic()) ==
           Intrinsics::kMethodHandleInvokeExact;
 
-  uint32_t number_of_other_inputs = can_be_intrinsified ? 1u : 0u;
+  uint32_t number_of_other_inputs = is_invoke_exact ? 1u : 0u;
 
-  HInvoke* invoke = new (allocator_) HInvokePolymorphic(allocator_,
-                                                        number_of_arguments,
-                                                        operands.GetNumberOfOperands(),
-                                                        number_of_other_inputs,
-                                                        return_type,
-                                                        dex_pc,
-                                                        method_reference,
-                                                        resolved_method,
-                                                        resolved_method_reference,
-                                                        proto_idx);
+  HInvokePolymorphic* invoke = new (allocator_) HInvokePolymorphic(allocator_,
+                                                                   number_of_arguments,
+                                                                   operands.GetNumberOfOperands(),
+                                                                   number_of_other_inputs,
+                                                                   return_type,
+                                                                   dex_pc,
+                                                                   method_reference,
+                                                                   resolved_method,
+                                                                   resolved_method_reference,
+                                                                   proto_idx);
   if (!HandleInvoke(invoke, operands, shorty, /* is_unresolved= */ false)) {
     return false;
   }
 
-  DCHECK_EQ(invoke->AsInvokePolymorphic()->IsMethodHandleInvokeExact(), can_be_intrinsified);
+  DCHECK_EQ(invoke->AsInvokePolymorphic()->IsMethodHandleInvokeExact(), is_invoke_exact);
 
-  if (invoke->GetIntrinsic() != Intrinsics::kNone &&
-      invoke->GetIntrinsic() != Intrinsics::kMethodHandleInvoke &&
-      invoke->GetIntrinsic() != Intrinsics::kMethodHandleInvokeExact &&
-      VarHandleAccessorNeedsReturnTypeCheck(invoke, return_type)) {
+  if (invoke->NeedsReturnTypeCheck()) {
     // Type check is needed because VarHandle intrinsics do not type check the retrieved reference.
     ScopedObjectAccess soa(Thread::Current());
     ArtMethod* referrer = graph_->GetArtMethod();
@@ -1862,7 +1850,7 @@ bool HInstructionBuilder::IsInitialized(ObjPtr<mirror::Class> cls) const {
   // information to the builder. (We could also check if we're guaranteed a non-null instance
   // of `cls` at this location but that's outside the scope of the instruction builder.)
   bool is_subclass = IsSubClass(outer_compilation_unit_->GetCompilingClass().Get(), cls);
-  if (dex_compilation_unit_ != outer_compilation_unit_) {
+  if (IsBuildingInlinedGraph()) {
     is_subclass = is_subclass ||
                   IsSubClass(dex_compilation_unit_->GetCompilingClass().Get(), cls);
   }
@@ -2029,6 +2017,57 @@ bool HInstructionBuilder::HandleInvoke(HInvoke* invoke,
 
   AppendInstruction(invoke);
   latest_result_ = invoke;
+
+  if (invoke->IsInvokePolymorphic()) {
+    HInvokePolymorphic* invoke_polymorphic = invoke->AsInvokePolymorphic();
+
+    // invokeExact has to check that target method handle matches exactly with the call site type.
+    // Doing it in IR instead of intrinsics: IR can be reasoned about and eventually this check
+    // and const-method-type instructions could be eliminated.
+    // Skipping in OSR mode because it does not allow deoptimization nodes.
+    if (invoke_polymorphic->IsMethodHandleInvokeExact() && !graph_->IsCompilingOsr()) {
+      DCHECK(invoke->InputAt(invoke->GetNumberOfArguments())->IsLoadMethodType());
+      HLoadMethodType* load_method_type =
+          invoke->InputAt(invoke->GetNumberOfArguments())->AsLoadMethodType();
+
+      // Null check is done in SetupInvokeArguments.
+      HInstruction* receiver = invoke_polymorphic->InputAt(0);
+
+      // Ideally here should be a call to checkExactType(MethodHandle,MethodType).
+      // But the MethodHandle.type() call in that method can be deopted in some configurations
+      // and that is not handled well in the interpreter. Current implementation represents
+      // MethodHandle.type() as InstanceFieldGet instruction.
+      HInstanceFieldGet* method_handle_type;
+      {
+        ScopedObjectAccess soa(Thread::Current());
+        method_handle_type = new (allocator_) HInstanceFieldGet(
+          receiver,
+          WellKnownClasses::java_lang_invoke_MethodHandle_type,
+          DataType::Type::kReference,
+          WellKnownClasses::java_lang_invoke_MethodHandle_type->GetOffset(),
+          /*is_volatile=*/ false,
+          WellKnownClasses::java_lang_invoke_MethodHandle_type->GetDexFieldIndex(),
+          WellKnownClasses::java_lang_invoke_MethodHandle->GetDexClassDefIndex(),
+          WellKnownClasses::java_lang_invoke_MethodHandle->GetDexFile(),
+          invoke_polymorphic->GetDexPc());
+      }
+      current_block_->InsertInstructionBefore(method_handle_type, invoke_polymorphic);
+
+      HNotEqual* not_equal = new (allocator_) HNotEqual(method_handle_type, load_method_type);
+      current_block_->InsertInstructionBefore(not_equal, invoke_polymorphic);
+
+      HDeoptimize* deopt = new (allocator_) HDeoptimize(
+          allocator_,
+          not_equal,
+          DeoptimizationKind::kMethodHandleTypeMismatch,
+          invoke_polymorphic->GetDexPc());
+      current_block_->InsertInstructionBefore(deopt, invoke_polymorphic);
+      deopt->CopyEnvironmentFrom(invoke_polymorphic->GetEnvironment());
+
+      invoke_polymorphic->SkipCallSiteTypeCheck();
+      invoke_polymorphic->RemoveInputAt(invoke_polymorphic->GetNumberOfArguments());
+    }
+  }
 
   return true;
 }
@@ -2820,8 +2859,7 @@ bool HInstructionBuilder::LoadClassNeedsAccessCheck(dex::TypeIndex type_index,
     }
     // For inlined methods we also need to check if the compiling class
     // is public or in the same package as the inlined method's class.
-    if (dex_compilation_unit_ != outer_compilation_unit_ &&
-        (outer_class_def.access_flags_ & kAccPublic) == 0) {
+    if (IsBuildingInlinedGraph() && (outer_class_def.access_flags_ & kAccPublic) == 0) {
       DCHECK(dex_compilation_unit_->GetCompilingClass() != nullptr);
       SamePackageCompare same_package(*outer_compilation_unit_);
       if (!same_package(dex_compilation_unit_->GetCompilingClass().Get())) {

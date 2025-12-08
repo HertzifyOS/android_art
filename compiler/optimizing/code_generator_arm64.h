@@ -687,6 +687,8 @@ class CodeGeneratorARM64 : public CodeGenerator {
 
   bool SupportsPredicatedSIMD() const override { return ShouldUseSVE(); }
 
+  bool ShouldUseLSE() const;
+
   size_t GetSlowPathFPWidth() const override {
     return GetGraph()->HasSIMD()
         ? GetSIMDRegisterWidth()

@@ -25,7 +25,7 @@
 
 #include "android-base/logging.h"
 #include "android-base/stringprintf.h"
-
+#include "common_helper.h"
 #include "jni.h"
 #include "jvmti.h"
 #include "scoped_local_ref.h"
@@ -49,6 +49,7 @@ struct TestData {
   jrawMonitorID notify_monitor;
   jint frame_pop_offset;
   jmethodID frame_pop_setup_method;
+  jmethodID method_exit_callback;
   std::vector<std::string> interesting_classes;
   bool hit_location;
 
@@ -60,14 +61,19 @@ struct TestData {
            jobject field,
            jobject setup_meth,
            jint pop_offset,
+           jobject method_callback,
            const std::vector<std::string>&& interesting)
-      : target_loc(loc), target_method(meth != nullptr ? env->FromReflectedMethod(meth) : nullptr),
+      : target_loc(loc),
+        target_method(meth != nullptr ? env->FromReflectedMethod(meth) : nullptr),
         target_klass(reinterpret_cast<jclass>(env->NewGlobalRef(klass))),
         target_field(field != nullptr ? env->FromReflectedField(field) : nullptr),
         frame_pop_offset(pop_offset),
         frame_pop_setup_method(setup_meth != nullptr ? env->FromReflectedMethod(setup_meth)
                                                      : nullptr),
-        interesting_classes(interesting), hit_location(false) {
+        method_exit_callback(method_callback != nullptr ? env->FromReflectedMethod(method_callback)
+                                                        : nullptr),
+        interesting_classes(interesting),
+        hit_location(false) {
     JvmtiErrorToException(
         env, jvmti, jvmti->CreateRawMonitor("SuspendStopMonitor", &notify_monitor));
   }
@@ -176,6 +182,36 @@ void JNICALL cbMethodExit(jvmtiEnv* jvmti,
     return;
   }
   data->PerformSuspend(jvmti, env);
+}
+
+void suspendOnceCallback(jvmtiEnv* jvmti, JNIEnv* env, jthread thr, jmethodID method) {
+  TestData* data;
+  if (JvmtiErrorToException(
+          env, jvmti, jvmti->GetThreadLocalStorage(thr, reinterpret_cast<void**>(&data)))) {
+    return;
+  }
+  CHECK(data != nullptr);
+  if (method != data->target_method) {
+    return;
+  }
+  env->CallStaticVoidMethod(
+      data->target_klass, data->method_exit_callback, GetJavaMethod(jvmti, env, method));
+  if (!data->hit_location) {
+    data->PerformSuspend(jvmti, env);
+  }
+}
+
+void JNICALL cbMethodEntrySuspendOnce(jvmtiEnv* jvmti, JNIEnv* env, jthread thr, jmethodID method) {
+  suspendOnceCallback(jvmti, env, thr, method);
+}
+
+void JNICALL cbMethodExitSuspendOnce(jvmtiEnv* jvmti,
+                                     JNIEnv* env,
+                                     jthread thr,
+                                     jmethodID method,
+                                     [[maybe_unused]] jboolean was_popped_by_exception,
+                                     [[maybe_unused]] jvalue return_value) {
+  suspendOnceCallback(jvmti, env, thr, method);
 }
 
 void JNICALL cbFieldModification(jvmtiEnv* jvmti,
@@ -318,6 +354,34 @@ extern "C" JNIEXPORT void JNICALL Java_art_SuspendEvents_setupTest(JNIEnv* env,
   JvmtiErrorToException(env, jvmti_env, jvmti_env->SetEventCallbacks(&cb, sizeof(cb)));
 }
 
+extern "C" JNIEXPORT void JNICALL
+Java_art_SuspendEvents_setupMethodExitTest(JNIEnv* env, [[maybe_unused]] jclass klass) {
+  jvmtiCapabilities caps;
+  memset(&caps, 0, sizeof(caps));
+  // Most of these will already be there but might as well be complete.
+  caps.can_pop_frame = 1;
+  caps.can_force_early_return = 1;
+  caps.can_generate_single_step_events = 1;
+  caps.can_generate_breakpoint_events = 1;
+  caps.can_suspend = 1;
+  caps.can_generate_method_entry_events = 1;
+  caps.can_generate_method_exit_events = 1;
+  caps.can_generate_monitor_events = 1;
+  caps.can_generate_exception_events = 1;
+  caps.can_generate_frame_pop_events = 1;
+  caps.can_generate_field_access_events = 1;
+  caps.can_generate_field_modification_events = 1;
+  caps.can_redefine_classes = 1;
+  if (JvmtiErrorToException(env, jvmti_env, jvmti_env->AddCapabilities(&caps))) {
+    return;
+  }
+  jvmtiEventCallbacks cb;
+  memset(&cb, 0, sizeof(cb));
+  cb.MethodEntry = cbMethodEntrySuspendOnce;
+  cb.MethodExit = cbMethodExitSuspendOnce;
+  JvmtiErrorToException(env, jvmti_env, jvmti_env->SetEventCallbacks(&cb, sizeof(cb)));
+}
+
 static bool DeleteTestData(JNIEnv* env, jthread thr, TestData* data) {
   env->DeleteGlobalRef(data->target_klass);
   if (JvmtiErrorToException(env, jvmti_env, jvmti_env->SetThreadLocalStorage(thr, nullptr))) {
@@ -334,6 +398,7 @@ static TestData* SetupTestData(JNIEnv* env,
                                jobject field,
                                jobject setup_meth,
                                jint pop_offset,
+                               jobject method_exit_callback,
                                const std::vector<std::string>&& interesting_names) {
   void* data_ptr;
   TestData* data;
@@ -351,6 +416,7 @@ static TestData* SetupTestData(JNIEnv* env,
                                  field,
                                  setup_meth,
                                  pop_offset,
+                                 method_exit_callback,
                                  std::move(interesting_names));
   if (env->ExceptionCheck()) {
     env->DeleteGlobalRef(data->target_klass);
@@ -369,7 +435,7 @@ static TestData* SetupTestData(JNIEnv* env,
                                jint pop_offset) {
   std::vector<std::string> empty;
   return SetupTestData(
-      env, meth, loc, target_klass, field, setup_meth, pop_offset, std::move(empty));
+      env, meth, loc, target_klass, field, setup_meth, pop_offset, nullptr, std::move(empty));
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -395,7 +461,15 @@ Java_art_SuspendEvents_setupSuspendClassEvent(JNIEnv* env,
     return;
   }
   CHECK(data == nullptr) << "Data was not cleared!";
-  data = SetupTestData(env, nullptr, 0, nullptr, nullptr, nullptr, 0, std::move(names));
+  data = SetupTestData(env,
+                       nullptr,
+                       0,
+                       nullptr,
+                       nullptr,
+                       nullptr,
+                       0,
+                       /*method_exit_callback*/ nullptr,
+                       std::move(names));
   if (data == nullptr) {
     return;
   }
@@ -630,6 +704,36 @@ extern "C" JNIEXPORT void JNICALL Java_art_SuspendEvents_setupSuspendMethodEvent
   }
   CHECK(data == nullptr) << "Data was not cleared!";
   data = SetupTestData(env, method, 0, nullptr, nullptr, nullptr, 0);
+  if (data == nullptr) {
+    return;
+  }
+  if (JvmtiErrorToException(env, jvmti_env, jvmti_env->SetThreadLocalStorage(thr, data))) {
+    return;
+  }
+  JvmtiErrorToException(
+      env,
+      jvmti_env,
+      jvmti_env->SetEventNotificationMode(
+          JVMTI_ENABLE, enter ? JVMTI_EVENT_METHOD_ENTRY : JVMTI_EVENT_METHOD_EXIT, thr));
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_art_SuspendEvents_setupSuspendMethodEventWithCallback(JNIEnv* env,
+                                                           [[maybe_unused]] jclass klass,
+                                                           jobject method,
+                                                           jboolean enter,
+                                                           jthread thr,
+                                                           jclass target_class,
+                                                           jobject callback_method) {
+  TestData* data;
+  if (JvmtiErrorToException(
+          env, jvmti_env, jvmti_env->GetThreadLocalStorage(thr, reinterpret_cast<void**>(&data)))) {
+    return;
+  }
+  CHECK(data == nullptr) << "Data was not cleared!";
+  std::vector<std::string> empty;
+  data = SetupTestData(
+      env, method, 0, target_class, nullptr, nullptr, 0, callback_method, std::move(empty));
   if (data == nullptr) {
     return;
   }

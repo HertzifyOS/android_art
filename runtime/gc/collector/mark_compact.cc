@@ -1874,7 +1874,13 @@ void MarkCompact::MoveBlackDensePageForUpdate(uint8_t* page) {
   DCHECK(from_space_map_.HasAddress(page));
   uint8_t* to_page = GetToSpaceAddr(page);
   DCHECK_ALIGNED_PARAM(to_page, gPageSize);
-  DCHECK(HasAddress(to_page, moving_space_begin_, black_dense_end_));
+  DCHECK(HasAddress(to_page, moving_space_begin_, black_dense_end_))
+      << "page:" << static_cast<void*>(page) << " to_page:" << static_cast<void*>(to_page)
+      << " moving_space_begin:" << static_cast<void*>(moving_space_begin_)
+      << " moving_space_end:" << static_cast<void*>(moving_space_end_)
+      << " black_dense_end:" << static_cast<void*>(black_dense_end_)
+      << " from_space_begin:" << static_cast<void*>(from_space_begin_);
+
   size_t idx = DivideByPageSize(to_page - moving_space_begin_);
   DCHECK_LT(idx, moving_first_objs_count_);
   mirror::Object* first_obj = first_objs_moving_space_[idx].AsMirrorPtr();

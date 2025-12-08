@@ -69,6 +69,7 @@ class ReferenceTypePropagation::RTPVisitor final : public CRTPGraphVisitor<RTPVi
   void VisitUnresolvedInstanceFieldGet(HUnresolvedInstanceFieldGet* instr);
   void VisitUnresolvedStaticFieldGet(HUnresolvedStaticFieldGet* instr);
   void VisitInvoke(HInvoke* instr);
+  void VisitInvokePolymorphic(HInvokePolymorphic* instr);
   void VisitArrayGet(HArrayGet* instr);
   void VisitCheckCast(HCheckCast* instr);
   void VisitBoundType(HBoundType* instr);
@@ -851,11 +852,27 @@ void ReferenceTypePropagation::RTPVisitor::VisitInvoke(HInvoke* instr) {
   }
 
   ScopedObjectAccess soa(Thread::Current());
-  // FIXME: Treat InvokePolymorphic separately, as we can get a more specific return type from
-  // protoId than the one obtained from the resolved method.
   ArtMethod* method = instr->GetResolvedMethod();
   ObjPtr<mirror::Class> klass = (method == nullptr) ? nullptr : method->LookupResolvedReturnType();
   SetClassAsTypeInfo(instr, klass, /* is_exact= */ false);
+}
+
+void ReferenceTypePropagation::RTPVisitor::VisitInvokePolymorphic(HInvokePolymorphic* instr) {
+  if (instr->GetType() != DataType::Type::kReference) {
+    return;
+  }
+
+  if (instr->NeedsReturnTypeCheck()) {
+    // The type check will be emitted separately.
+    instr->SetReferenceTypeInfo(GetGraph()->GetInexactObjectRti());
+  } else {
+    // Trust the type from the proto.
+    const DexFile& dex_file = *instr->GetMethodReference().dex_file;
+    dex::ProtoIndex proto_idx = instr->GetProtoIndex();
+    const dex::ProtoId& proto_id = dex_file.GetProtoId(proto_idx);
+    dex::TypeIndex return_type_idx = proto_id.return_type_idx_;
+    UpdateReferenceTypeInfo(instr, return_type_idx, dex_file, /* is_exact= */ false);
+  }
 }
 
 void ReferenceTypePropagation::RTPVisitor::VisitArrayGet(HArrayGet* instr) {
