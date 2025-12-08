@@ -1928,62 +1928,6 @@ void AppImageLoadingHelper::HandleAppImageStrings(gc::space::ImageSpace* space) 
   }
 }
 
-static std::unique_ptr<const DexFile> OpenOatDexFile(const OatFile* oat_file,
-                                                     const char* location,
-                                                     std::string* error_msg)
-    REQUIRES_SHARED(Locks::mutator_lock_) {
-  DCHECK(error_msg != nullptr);
-  std::unique_ptr<const DexFile> dex_file;
-  const OatDexFile* oat_dex_file = oat_file->GetOatDexFile(location, error_msg);
-  if (oat_dex_file == nullptr) {
-    return std::unique_ptr<const DexFile>();
-  }
-  std::string inner_error_msg;
-  dex_file = oat_dex_file->OpenDexFile(&inner_error_msg);
-  if (dex_file == nullptr) {
-    *error_msg = StringPrintf("Failed to open dex file %s from within oat file %s error '%s'",
-                              location,
-                              oat_file->GetLocation().c_str(),
-                              inner_error_msg.c_str());
-    return std::unique_ptr<const DexFile>();
-  }
-
-  if (dex_file->GetLocationChecksum() != oat_dex_file->GetDexFileLocationChecksum()) {
-    CHECK(dex_file->GetSha1() != oat_dex_file->GetSha1());
-    *error_msg = StringPrintf("Checksums do not match for %s: %x vs %x",
-                              location,
-                              dex_file->GetLocationChecksum(),
-                              oat_dex_file->GetDexFileLocationChecksum());
-    return std::unique_ptr<const DexFile>();
-  }
-  CHECK(dex_file->GetSha1() == oat_dex_file->GetSha1());
-  return dex_file;
-}
-
-bool ClassLinker::OpenImageDexFiles(gc::space::ImageSpace* space,
-                                    std::vector<std::unique_ptr<const DexFile>>* out_dex_files,
-                                    std::string* error_msg) {
-  ScopedAssertNoThreadSuspension nts(__FUNCTION__);
-  const ImageHeader& header = space->GetImageHeader();
-  ObjPtr<mirror::Object> dex_caches_object = header.GetImageRoot(ImageHeader::kDexCaches);
-  DCHECK(dex_caches_object != nullptr);
-  ObjPtr<mirror::ObjectArray<mirror::DexCache>> dex_caches =
-      dex_caches_object->AsObjectArray<mirror::DexCache>();
-  const OatFile* oat_file = space->GetOatFile();
-  for (auto dex_cache : dex_caches->Iterate()) {
-    std::string dex_file_location(dex_cache->GetLocation()->ToModifiedUtf8());
-    std::unique_ptr<const DexFile> dex_file = OpenOatDexFile(oat_file,
-                                                             dex_file_location.c_str(),
-                                                             error_msg);
-    if (dex_file == nullptr) {
-      return false;
-    }
-    dex_cache->SetDexFile(dex_file.get());
-    out_dex_files->push_back(std::move(dex_file));
-  }
-  return true;
-}
-
 bool ClassLinker::OpenAndInitImageDexFiles(
     const gc::space::ImageSpace* space,
     Handle<mirror::ClassLoader> class_loader,
@@ -2016,7 +1960,7 @@ bool ClassLinker::OpenAndInitImageDexFiles(
     // is based on the former key. Later, `PatchDexCacheLocations` will replace the location in the
     // dex cache with the actual dex location, which is the latter key in the table.
     std::unique_ptr<const DexFile> dex_file =
-        OpenOatDexFile(oat_file, dex_file_location.c_str(), error_msg);
+        oat_file->OpenOatDexFile(dex_file_location.c_str(), error_msg);
     if (dex_file == nullptr) {
       return false;
     }

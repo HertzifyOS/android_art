@@ -133,6 +133,31 @@ const DexFile* OpenDexFile(const OatDexFile* oat_dex_file, std::string* error_ms
   return ret;
 }
 
+bool OpenImageDexFiles(gc::space::ImageSpace* space,
+                       std::vector<std::unique_ptr<const DexFile>>* out_dex_files,
+                       std::string* error_msg)
+    REQUIRES(!Locks::dex_lock_)
+    REQUIRES_SHARED(Locks::mutator_lock_) {
+  ScopedAssertNoThreadSuspension nts(__FUNCTION__);
+  const ImageHeader& header = space->GetImageHeader();
+  ObjPtr<mirror::Object> dex_caches_object = header.GetImageRoot(ImageHeader::kDexCaches);
+  DCHECK(dex_caches_object != nullptr);
+  ObjPtr<mirror::ObjectArray<mirror::DexCache>> dex_caches =
+      dex_caches_object->AsObjectArray<mirror::DexCache>();
+  const OatFile* oat_file = space->GetOatFile();
+  for (auto dex_cache : dex_caches->Iterate()) {
+    std::string dex_file_location(dex_cache->GetLocation()->ToModifiedUtf8());
+    std::unique_ptr<const DexFile> dex_file =
+        oat_file->OpenOatDexFile(dex_file_location.c_str(), error_msg);
+    if (dex_file == nullptr) {
+      return false;
+    }
+    dex_cache->SetDexFile(dex_file.get());
+    out_dex_files->push_back(std::move(dex_file));
+  }
+  return true;
+}
+
 template <typename ElfTypes>
 class OatSymbolizer final {
  public:
@@ -2484,7 +2509,7 @@ static int DumpImages(Runtime* runtime, OatDumperOptions* options, std::ostream*
     // Open dex files for the image.
     ScopedObjectAccess soa(Thread::Current());
     std::vector<std::unique_ptr<const DexFile>> dex_files;
-    if (!runtime->GetClassLinker()->OpenImageDexFiles(space.get(), &dex_files, &error_msg)) {
+    if (!OpenImageDexFiles(space.get(), &dex_files, &error_msg)) {
       LOG(ERROR) << "Failed to open app image dex files " << options->app_image_ << " with error "
                  << error_msg;
       return EXIT_FAILURE;
