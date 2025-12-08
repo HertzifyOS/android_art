@@ -361,53 +361,51 @@ std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat(
         StackHandleScope<1> hs(self);
         Handle<mirror::ClassLoader> h_loader(
             hs.NewHandle(soa.Decode<mirror::ClassLoader>(class_loader)));
-        // Can not load app image without class loader.
-        if (h_loader != nullptr) {
-          oat_file->SetAppImageBegin(image_space->Begin());
-          std::string temp_error_msg;
-          // Add image space has a race condition since other threads could be reading from the
-          // spaces array.
+        DCHECK(h_loader != nullptr);  // Non-null strong reference is decoded as non-null.
+        oat_file->SetAppImageBegin(image_space->Begin());
+        std::string temp_error_msg;
+        // Add image space has a race condition since other threads could be reading from the
+        // spaces array.
+        {
+          ScopedThreadSuspension sts(self, ThreadState::kSuspended);
+          gc::ScopedGCCriticalSection gcs(self,
+                                          gc::kGcCauseAddRemoveAppImageSpace,
+                                          gc::kCollectorTypeAddRemoveAppImageSpace);
+          ScopedSuspendAll ssa("Add image space");
+          runtime->GetHeap()->AddSpace(image_space.get());
+        }
+        {
+          ScopedTrace image_space_timing("Adding image space");
+          gc::space::ImageSpace* space_ptr = image_space.get();
+          added_image_space = runtime->GetClassLinker()->AddImageSpaces(
+              ArrayRef<gc::space::ImageSpace*>(&space_ptr, /*size=*/1),
+              h_loader,
+              context.get(),
+              /*out*/ &dex_files,
+              /*out*/ &temp_error_msg);
+        }
+        if (added_image_space) {
+          // Successfully added image space to heap, release the map so that it does not get
+          // freed.
+          image_space.release();  // NOLINT b/117926937
+
+          // Register for tracking.
+          for (const auto& dex_file : dex_files) {
+            dex::tracking::RegisterDexFile(dex_file.get());
+          }
+        } else {
+          LOG(INFO) << "Failed to add image file: " << temp_error_msg;
+          oat_file->SetAppImageBegin(nullptr);
+          dex_files.clear();
           {
             ScopedThreadSuspension sts(self, ThreadState::kSuspended);
             gc::ScopedGCCriticalSection gcs(self,
                                             gc::kGcCauseAddRemoveAppImageSpace,
                                             gc::kCollectorTypeAddRemoveAppImageSpace);
-            ScopedSuspendAll ssa("Add image space");
-            runtime->GetHeap()->AddSpace(image_space.get());
+            ScopedSuspendAll ssa("Remove image space");
+            runtime->GetHeap()->RemoveSpace(image_space.get());
           }
-          {
-            ScopedTrace image_space_timing("Adding image space");
-            gc::space::ImageSpace* space_ptr = image_space.get();
-            added_image_space = runtime->GetClassLinker()->AddImageSpaces(
-                ArrayRef<gc::space::ImageSpace*>(&space_ptr, /*size=*/1),
-                h_loader,
-                context.get(),
-                /*out*/ &dex_files,
-                /*out*/ &temp_error_msg);
-          }
-          if (added_image_space) {
-            // Successfully added image space to heap, release the map so that it does not get
-            // freed.
-            image_space.release();  // NOLINT b/117926937
-
-            // Register for tracking.
-            for (const auto& dex_file : dex_files) {
-              dex::tracking::RegisterDexFile(dex_file.get());
-            }
-          } else {
-            LOG(INFO) << "Failed to add image file: " << temp_error_msg;
-            oat_file->SetAppImageBegin(nullptr);
-            dex_files.clear();
-            {
-              ScopedThreadSuspension sts(self, ThreadState::kSuspended);
-              gc::ScopedGCCriticalSection gcs(self,
-                                              gc::kGcCauseAddRemoveAppImageSpace,
-                                              gc::kCollectorTypeAddRemoveAppImageSpace);
-              ScopedSuspendAll ssa("Remove image space");
-              runtime->GetHeap()->RemoveSpace(image_space.get());
-            }
-            // Non-fatal, don't update error_msg.
-          }
+          // Non-fatal, don't update error_msg.
         }
       }
       if (!added_image_space) {
