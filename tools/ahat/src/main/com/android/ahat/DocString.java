@@ -18,6 +18,7 @@ package com.android.ahat;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.time.Duration;
 
 /**
  * A class representing a small string of document content consisting of text,
@@ -171,6 +172,58 @@ class DocString {
       append(removed(format("%+,d", current - baseline)));
     }
     return this;
+  }
+
+  /**
+   * Standard formatted DocString for describing a duration.
+   *
+   * @param durationMs The duration in milliseconds.
+   * @return A formatted string representation of the duration.
+   */
+  public static DocString duration(long durationMs) {
+    if (durationMs == 0) {
+      return DocString.text("0 ms");
+    }
+
+    StringBuilder sb = new StringBuilder();
+    if (durationMs < 0) {
+      sb.append("-");
+      durationMs = -durationMs;
+    } else { // durationMs > 0
+      sb.append("+");
+    }
+
+    Duration duration = Duration.ofMillis(durationMs);
+    long hours = duration.toHours();
+    duration = duration.minusHours(hours);
+    long minutes = duration.toMinutes();
+    duration = duration.minusMinutes(minutes);
+    long seconds = duration.toSeconds();
+    duration = duration.minusSeconds(seconds);
+    long millis = duration.toMillis();
+
+    boolean hasLargerUnits = false;
+    if (hours > 0) {
+      sb.append(String.format("%,d h ", hours));
+      hasLargerUnits = true;
+    }
+
+    if (minutes > 0) {
+      sb.append(String.format("%,d m ", minutes));
+      hasLargerUnits = true;
+    }
+
+    if (seconds > 0) {
+      sb.append(String.format("%,d s ", seconds));
+      hasLargerUnits = true;
+    }
+
+    // Always show millis if no other unit was shown, or if millis > 0.
+    if (millis > 0 || !hasLargerUnits) {
+      sb.append(String.format("%,d ms", millis));
+    }
+
+    return DocString.text(sb.toString().trim());
   }
 
   public DocString appendLink(URI uri, DocString content) {

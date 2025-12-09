@@ -16,9 +16,10 @@
 
 package com.android.ahat;
 
+import com.android.ahat.heapdump.AhatBitmapInstance;
 import com.android.ahat.heapdump.AhatHeap;
 import com.android.ahat.heapdump.AhatInstance;
-import com.android.ahat.heapdump.AhatBitmapInstance;
+import com.android.ahat.heapdump.AhatMessageInstance;
 import com.android.ahat.heapdump.AhatSnapshot;
 import com.android.ahat.heapdump.Reachability;
 import com.android.ahat.heapdump.Size;
@@ -27,7 +28,6 @@ import java.io.IOException;
 import java.util.List;
 
 class OverviewHandler implements AhatHandler {
-
   private AhatSnapshot mSnapshot;
   private File mHprof;
   private File mBaseHprof;
@@ -106,5 +106,6 @@ class OverviewHandler implements AhatHandler {
       SizeTable.end(doc);
     }
   }
-}
 
+
+}
