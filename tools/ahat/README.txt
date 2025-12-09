@@ -49,6 +49,12 @@ Known Issues:
  * Line number decoding for allocations in proguarded classes.
 
 Release History:
+ 1.9 December, 2025
+   Show sample path and incoming references to unreachable instances.
+   Add option to sort allocations table by various columns.
+   Add support for reading large heap dumps (>2GB).
+   Add special handling for android.os.Message object instances.
+
  1.8 January 02, 2025
    Show string values of byte[] instances.
    Fix accounting for cleaned native registrations
@@ -152,4 +158,3 @@ Release History:
 
  0.1 July 30, 2015
    Initial Release
-
