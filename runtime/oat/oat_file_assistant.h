@@ -280,9 +280,6 @@ class OatFileAssistant {
                                     std::string* out_compilation_reason,
                                     OatFileAssistantContext* ofa_context = nullptr);
 
-  // Open and returns an image space associated with the oat file.
-  static std::unique_ptr<gc::space::ImageSpace> OpenImageSpace(const OatFile* oat_file);
-
   // Loads the dex files in the given oat file for the given dex location.
   // The oat file should be up to date for the given dex location.
   // This loads multiple dex files in the case of multidex.
