@@ -338,8 +338,7 @@ void SsaLivenessAnalysis::ComputeLiveRanges() {
              phi_it.Advance()) {
           HInstruction* phi = phi_it.Current();
           HInstruction* input = phi->InputAt(phi_input_index);
-          if (com::android::art::flags::reg_alloc_spill_slot_reuse() &&
-              input->GetLiveInterval()->GetUses().empty()) {
+          if (input->GetLiveInterval()->GetUses().empty()) {
             // If the `input` has no recorded uses yet, the `phi` use shall be its last use
             // (we visit blocks in reverse linear order) and the `input` dies at the end of
             // the `block`. Record the `phi` interval as a hint to try using the same spill

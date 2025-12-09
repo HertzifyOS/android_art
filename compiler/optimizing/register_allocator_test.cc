@@ -870,9 +870,6 @@ TEST_F(RegisterAllocatorTest, SpillInactive) {
 }
 
 TEST_F(RegisterAllocatorTest, ReuseSpillSlots) {
-  if (!com::android::art::flags::reg_alloc_spill_slot_reuse()) {
-    GTEST_SKIP() << "Improved spill slot reuse disabled.";
-  }
   HBasicBlock* return_block = InitEntryMainExitGraph();
   auto [start, left, right] = CreateDiamondPattern(return_block);
   HInstruction* obj = MakeParam(DataType::Type::kReference);
@@ -953,9 +950,6 @@ TEST_F(RegisterAllocatorTest, ReuseSpillSlots) {
 }
 
 TEST_F(RegisterAllocatorTest, ReuseSpillSlotGaps) {
-  if (!com::android::art::flags::reg_alloc_spill_slot_reuse()) {
-    GTEST_SKIP() << "Improved spill slot reuse disabled.";
-  }
   HBasicBlock* return_block = InitEntryMainExitGraph();
   auto [pre_header, header, body] = CreateWhileLoop(return_block);
 
@@ -1019,9 +1013,6 @@ TEST_F(RegisterAllocatorTest, ReuseSpillSlotGaps) {
 // is not split when checking if the spill slot can be used. Indeed, it can be split
 // and we must use the sibling to determine the lifetime end.
 TEST_F(RegisterAllocatorTest, ReuseSpillSlotsUnavailableWithSplitPhiInterval) {
-  if (!com::android::art::flags::reg_alloc_spill_slot_reuse()) {
-    GTEST_SKIP() << "Improved spill slot reuse disabled.";
-  }
   if (!com::android::art::flags::reg_alloc_no_output_overlap()) {
     GTEST_SKIP() << "Improved `Location::kNoOutputOverlap` handling disabled.";
   }
@@ -1111,9 +1102,6 @@ TEST_F(RegisterAllocatorTest, ReuseSpillSlotsUnavailableWithSplitPhiInterval) {
 // search hint was pointing to the second part of the split live range and we missed
 // overlaps when trying to reuse a spill slot. Bug: 426785078
 TEST_F(RegisterAllocatorTest, SplitSpillSlotLiveRangeHint) {
-  if (!com::android::art::flags::reg_alloc_spill_slot_reuse()) {
-    GTEST_SKIP() << "Improved spill slot reuse disabled.";
-  }
   // Create a graph with a three-way switch to blocks `left`, `mid` and `right`,
   // and a diamond pattern in the `left` block with branch blocks `left_left`
   // and `left_right` and merging to `left_end`. The linear order shall have
