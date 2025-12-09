@@ -676,7 +676,7 @@ void ProfileSaver::GetClassesAndMethodsHelper::UpdateProfile(const std::set<std:
   size_t number_of_hot_methods = 0u;
   size_t number_of_sampled_methods = 0u;
 
-  uint16_t initial_value = Runtime::Current()->GetJITOptions()->GetWarmupThreshold();
+  uint16_t initial_value = jit::Jit::GetInitialHotnessThreshold();
   auto get_method_flags = [&](ArtMethod& method) {
     // Mark methods as hot if they are marked as such (warm for the runtime
     // means hot for the profile).

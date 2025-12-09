@@ -372,8 +372,9 @@ static void ForceJitCompiled(Thread* self,
     if (jit->TryPatternMatch(method, CompilationKind::kBaseline)) {
       return;
     }
-    jit->MaybeEnqueueCompilation(method, self);
+    jit->EnqueueBaselineCompilation(method, self);
   } else {
+    ScopedObjectAccess soa(self);
     jit->EnqueueOptimizedCompilation(method, self);
   }
   do {

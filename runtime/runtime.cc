@@ -2952,18 +2952,19 @@ void Runtime::RegisterAppInfo(const std::string& package_name,
                               const std::string& profile_output_filename,
                               const std::string& ref_profile_filename,
                               int32_t code_type) {
+  AppInfo::CodeType internal_code_type = AppInfo::FromVMRuntimeConstants(code_type);
   app_info_.RegisterAppInfo(
       package_name,
       code_paths,
       profile_output_filename,
       ref_profile_filename,
-      AppInfo::FromVMRuntimeConstants(code_type));
+      internal_code_type);
 
   if (AreMetricsInitialized()) {
     metrics_reporter_->NotifyAppInfoUpdated(&app_info_);
   }
 
-  if (jit_.get() == nullptr) {
+  if (jit_ == nullptr) {
     // We are not JITing. Nothing to do.
     return;
   }
@@ -2980,6 +2981,8 @@ void Runtime::RegisterAppInfo(const std::string& package_name,
     LOG(WARNING) << "JIT profile information will not be recorded: code paths is empty.";
     return;
   }
+
+  jit_->RegisterAppInfo(internal_code_type, app_info_.GetCompilerFilter(code_paths[0]));
 
   // Framework calls this method for all split APKs. Ignore the calls for the ones with no dex code
   // so that we don't unnecessarily create profiles for them or write bootclasspath profiling info

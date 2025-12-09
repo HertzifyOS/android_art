@@ -707,13 +707,16 @@ class JitCompileTask final : public Task {
               compilation_kind_,
               /* prejit= */ (kind_ == TaskKind::kPreCompile));
           if (!success && compilation_kind_ == CompilationKind::kFast) {
-            // Currently, the fast compiler doesn't support some methods, so
+            // For the few methods that the fast compiler doesn't support,
             // fallback to baseline compilation.
             Runtime::Current()->GetJit()->CompileMethodInternal(
               method_,
               self,
               CompilationKind::kBaseline,
               /* prejit= */ (kind_ == TaskKind::kPreCompile));
+            // We also set the method as warm, as there won't be a fast to
+            // baseline transition.
+            method_->SetPreviouslyWarm();
           }
           break;
         }
@@ -1256,10 +1259,39 @@ void Jit::RegisterDexFiles(const std::vector<std::unique_ptr<const DexFile>>& de
   }
 }
 
+static bool SupportsFastCompiler() {
+  return kRuntimeISA == InstructionSet::kArm64 &&
+      com::android::art::flags::fast_baseline_compiler();
+}
+
+uint16_t Jit::GetInitialHotnessThreshold() {
+  Runtime* runtime = Runtime::Current();
+  Jit* jit = runtime->GetJit();
+  if (jit == nullptr || !jit->UseFastCompiler()) {
+    return runtime->GetJITOptions()->GetWarmupThreshold();
+  }
+  static constexpr uint16_t kFastThreshold = 4;
+  return kFastThreshold;
+}
+
+void Jit::RegisterAppInfo(AppInfo::CodeType code_type, const std::string& compiler_filter) {
+  if (!SupportsFastCompiler() || code_type != AppInfo::CodeType::kPrimaryApk) {
+    return;
+  }
+  CompilerFilter::Filter filter;
+  if (CompilerFilter::ParseCompilerFilter(compiler_filter.c_str(), &filter) &&
+      CompilerFilter::IsAotCompilationEnabled(filter)) {
+    return;
+  }
+  use_fast_compiler_ = true;
+}
+
 void Jit::AddCompileTask(Thread* self,
                          ArtMethod* method,
                          CompilationKind compilation_kind) {
-  thread_pool_->AddTask(self, method, compilation_kind);
+  if (thread_pool_ != nullptr) {
+    thread_pool_->AddTask(self, method, compilation_kind);
+  }
 }
 
 bool Jit::CompileMethodFromProfile(Thread* self,
@@ -1437,18 +1469,9 @@ bool Jit::IgnoreSamplesForMethod(ArtMethod* method) REQUIRES_SHARED(Locks::mutat
 }
 
 void Jit::EnqueueOptimizedCompilation(ArtMethod* method, Thread* self) {
-  // Note the hotness counter will be reset by the compiled code.
-
-  if (thread_pool_ == nullptr) {
-    return;
-  }
-
-  const void* entry_point = method->GetEntryPointFromQuickCompiledCode();
   // Check if we already have optimized code. We might still be executing baseline code even
   // when we have optimized code.
-  if (GetCodeCache()->ContainsPc(entry_point) &&
-      CodeInfo::IsOptimized(
-          OatQuickMethodHeader::FromEntryPoint(entry_point)->GetOptimizedCodeInfoPtr())) {
+  if (GetCodeCache()->HasCompiledCodeFor(method, self, CompilationKind::kOptimized)) {
     return;
   }
 
@@ -1456,6 +1479,8 @@ void Jit::EnqueueOptimizedCompilation(ArtMethod* method, Thread* self) {
   // hotness threshold. If we're not only using the baseline compiler, enqueue a compilation
   // task that will compile optimize the method.
   if (!options_->UseBaselineCompiler()) {
+    VLOG(jit) << "Method " << method->PrettyMethod()
+              << " reached threadshold from baseline to optimizing";
     AddCompileTask(self, method, CompilationKind::kOptimized);
   }
 }
@@ -1466,32 +1491,15 @@ void Jit::EnqueueBaselineCompilation(ArtMethod* method, Thread* self) {
   method->ResetCounter(Runtime::Current()->GetJITOptions()->GetWarmupThreshold());
   method->SetPreviouslyWarm();
 
-  if (thread_pool_ == nullptr) {
-    return;
-  }
-
-  const void* entry_point = method->GetEntryPointFromQuickCompiledCode();
   // Check if we already have non-fast code. We might still be executing fast code even
   // when we have optimized code.
-  if (GetCodeCache()->ContainsPc(entry_point) &&
-      !CodeInfo::IsFast(
-          OatQuickMethodHeader::FromEntryPoint(entry_point)->GetOptimizedCodeInfoPtr())) {
-    if (VLOG_IS_ON(jit)) {
-      VLOG(jit)
-          << "Not adding " << method->PrettyMethod()
-          << " to JIT queue as it is already compiled "
-          << CodeInfo::GetCompilationKind(
-                 OatQuickMethodHeader::FromEntryPoint(entry_point)->GetOptimizedCodeInfoPtr());
-    }
+  if (GetCodeCache()->HasCompiledCodeFor(method, self, CompilationKind::kBaseline)) {
     return;
   }
 
   VLOG(jit) << "Method " << method->PrettyMethod() << " reached threadshold from fast to baseline";
-  if (GetCodeCache()->CanAllocateProfilingInfo()) {
-    AddCompileTask(self, method, CompilationKind::kBaseline);
-  } else {
-    AddCompileTask(self, method, CompilationKind::kOptimized);
-  }
+  DCHECK(GetCodeCache()->CanAllocateProfilingInfo());
+  AddCompileTask(self, method, CompilationKind::kBaseline);
 }
 
 class ScopedSetRuntimeThread {
@@ -1785,66 +1793,22 @@ void Jit::MaybeEnqueueCompilation(ArtMethod* method, Thread* self) {
       }
     }
   } else {
-    // Mark the method as warm for the profile saver.
-    method->SetPreviouslyWarm();
+    if (!UseFastCompiler()) {
+      // Mark the method as warm for the profile saver.
+      method->SetPreviouslyWarm();
+    } else if (!Runtime::Current()->GetStartupCompleted()) {
+      // If startup hasn't completed yet, avoid JIT compiling to not be in the
+      // way of startup.
+      return;
+    }
   }
 
   if (!method->IsNative() && GetCodeCache()->CanAllocateProfilingInfo()) {
-    AddCompileTask(self, method, CompilationKind::kBaseline);
+    AddCompileTask(
+        self, method, UseFastCompiler() ? CompilationKind::kFast : CompilationKind::kBaseline);
   } else {
     AddCompileTask(self, method, CompilationKind::kOptimized);
   }
-}
-
-void Jit::MaybeEnqueueFastCompilation(ArtMethod* method, Thread* self) {
-  if (thread_pool_ == nullptr) {
-    return;
-  }
-
-  if (!Runtime::Current()->GetStartupCompleted()) {
-    return;
-  }
-
-  if (!self->IsJitSensitiveThread()) {
-    return;
-  }
-
-  if (JitAtFirstUse()) {
-    // Tests might request JIT on first use (compiled synchronously in the interpreter).
-    return;
-  }
-
-  if (!UseJitCompilation()) {
-    return;
-  }
-
-  if (IgnoreSamplesForMethod(method)) {
-    return;
-  }
-
-  if (GetCodeCache()->ContainsPc(method->GetEntryPointFromQuickCompiledCode())) {
-    return;
-  }
-
-  // Check if we have precompiled this method.
-  if (UNLIKELY(method->IsPreCompiled())) {
-    if (!method->StillNeedsClinitCheck()) {
-      const void* entry_point = code_cache_->GetSavedEntryPointOfPreCompiledMethod(method);
-      if (entry_point != nullptr) {
-        Runtime::Current()->GetInstrumentation()->UpdateMethodsCode(method, entry_point);
-      }
-    }
-    return;
-  }
-
-  // Fast compiler doesn't support generating shared code for the zygote.
-  if (!GetCodeCache()->CanAllocateProfilingInfo()) {
-    return;
-  }
-
-  DCHECK(!method->IsMemorySharedMethod());
-  DCHECK(!method->IsNative());
-  AddCompileTask(self, method, CompilationKind::kFast);
 }
 
 bool Jit::CompileMethod(ArtMethod* method,
@@ -1859,7 +1823,8 @@ bool Jit::CompileMethod(ArtMethod* method,
         MutexLock mu(self, lock_);
         shared_method_info_map_[method].previously_warm = true;
       }
-    } else {
+    } else if (!UseFastCompiler()) {
+      // We set the method as warm when being baseline compiled.
       method->SetPreviouslyWarm();
     }
   }
