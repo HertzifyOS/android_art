@@ -147,8 +147,7 @@ class ImageSpace : public MemMapSpace {
                             bool allow_in_memory_compilation,
                             const std::string& apex_versions,
                             /*out*/ std::vector<std::unique_ptr<ImageSpace>>* boot_image_spaces,
-                            /*out*/ MemMap* extra_reservation)
-      REQUIRES_SHARED(Locks::mutator_lock_);
+                            /*out*/ MemMap* extra_reservation);
 
   // Try to open an existing app image space for an oat file,
   // using the boot image spaces from the current Runtime.
