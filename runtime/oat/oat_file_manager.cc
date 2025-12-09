@@ -364,6 +364,15 @@ std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat(
         }
       }
       if (image_space != nullptr) {
+        ScopedTrace image_space_timing("Opening image dex files");
+        std::string temp_error_msg;
+        if (!image_space->OpenAndSetDexFiles(&dex_files, &temp_error_msg)) {
+          LOG(INFO) << "Failed to open image dex files: " << temp_error_msg;
+          dex_files.clear();
+          image_space.reset();
+        }
+      }
+      if (image_space != nullptr) {
         ScopedObjectAccess soa(self);
         StackHandleScope<1> hs(self);
         Handle<mirror::ClassLoader> h_loader(
@@ -383,12 +392,11 @@ std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat(
         }
         {
           ScopedTrace image_space_timing("Adding image space");
-          gc::space::ImageSpace* space_ptr = image_space.get();
-          added_image_space = runtime->GetClassLinker()->AddImageSpaces(
-              ArrayRef<gc::space::ImageSpace*>(&space_ptr, /*size=*/1),
+          added_image_space = runtime->GetClassLinker()->AddImageSpace(
+              image_space.get(),
               h_loader,
               context.get(),
-              /*out*/ &dex_files,
+              dex_files,
               /*out*/ &temp_error_msg);
         }
         if (added_image_space) {
