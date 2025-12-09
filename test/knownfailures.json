@@ -700,6 +700,12 @@
         "description": [ "The test expects native-allocation GCs to finish within certain time-limit." ]
     },
     {
+        "tests": ["638-checker-inline-cache-intrinsic"],
+        "variant": "continuous-gc",
+	"bug": "b/462460429",
+        "description": [ "Temporarily disabling the test until the bug is fixed." ]
+    },
+    {
         "tests": ["099-vmdebug"],
         "variant": "continuous-gc",
 	"bug": "b/462513344",
