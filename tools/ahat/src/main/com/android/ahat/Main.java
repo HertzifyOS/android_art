@@ -191,9 +191,10 @@ public class Main {
     server.createContext("/rooted", new AhatHttpHandler(new RootedHandler(ahat)));
     server.createContext("/object", new AhatHttpHandler(new ObjectHandler(ahat)));
     server.createContext("/objects", new AhatHttpHandler(new ObjectsHandler(ahat)));
-    server.createContext("/loopers", new AhatHttpHandler(new LoopersHandler(ahat)));
     server.createContext("/site", new AhatHttpHandler(new SiteHandler(ahat)));
+    server.createContext("/loopers", new AhatHttpHandler(new LoopersHandler(ahat)));
     server.createContext("/bitmap", new AhatHttpHandler(new BitmapHandler(ahat)));
+    server.createContext("/bitmaps", new AhatHttpHandler(new BitmapsHandler(ahat)));
     server.createContext("/array", new AhatHttpHandler(new ArrayHandler(ahat)));
     server.createContext(
         "/style.css", new AhatHttpHandler(new StaticHandler("etc/style.css", "text/css")));

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright (C) 2025 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,15 +22,29 @@ import java.io.File;
 import java.io.IOException;
 import org.junit.Test;
 
-public class OverviewHandlerTest {
+public class HandlersTest {
 
   @Test
-  public void noCrash() throws IOException {
+  public void overviewNoCrash() throws IOException {
     AhatSnapshot snapshot = TestDump.getTestDump().getAhatSnapshot();
     AhatHandler handler = new OverviewHandler(snapshot,
         new File("my.hprof.file"),
         new File("my.base.hprof.file"),
         Reachability.SOFT);
+    TestHandler.testNoCrash(handler, "http://localhost:7100");
+  }
+
+  @Test
+  public void loopersNoCrash() throws IOException {
+    AhatSnapshot snapshot = TestDump.getTestDump().getAhatSnapshot();
+    AhatHandler handler = new LoopersHandler(snapshot);
+    TestHandler.testNoCrash(handler, "http://localhost:7100");
+  }
+
+  @Test
+  public void bitmapsNoCrash() throws IOException {
+    AhatSnapshot snapshot = TestDump.getTestDump().getAhatSnapshot();
+    AhatHandler handler = new BitmapsHandler(snapshot);
     TestHandler.testNoCrash(handler, "http://localhost:7100");
   }
 }
