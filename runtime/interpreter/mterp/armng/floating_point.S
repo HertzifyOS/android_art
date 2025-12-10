@@ -178,9 +178,9 @@
      */
     /* op vAA, vBB, vCC */
     FETCH r0, 1                         @ r0<- CCBB
-    mov     r4, rINST, lsr #8           @ r4<- AA
+    lsrs    r4, rINST, #(8-2)           @ r4<- AA << 2; opcodes 2d-30 have highest two bits clear
     and     r2, r0, #255                @ r2<- BB
-    mov     r3, r0, lsr #8              @ r3<- CC
+    lsrs    r3, r0, #8                  @ r3<- CC; set flags to use 16-bit encoding (same above)
     VREG_INDEX_TO_ADDR r2, r2           @ r2<- &vBB
     VREG_INDEX_TO_ADDR r3, r3           @ r3<- &vCC
     GET_VREG_FP_BY_ADDR $sd1, r2        @ sd1<- vBB
@@ -194,7 +194,7 @@
     mov$cond r0, #1                     @ if ($cond) r0<- 1
     it      eq
     moveq   r0, #0                      @ (equal) r0<- 0
-    SET_VREG r0, r4                     @ vAA<- r0
+    SET_VREG_PRESCALED r0, r4, s="s"    @ vAA<- r0; set flags to use 16-bit encoding.
     GOTO_OPCODE                         @ jump to next instruction
 
 %def op_cmpg_double():

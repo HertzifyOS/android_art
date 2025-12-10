@@ -197,6 +197,11 @@
     mov     \reg, #0
     str     \reg, [rREFS, \vreg, lsl #2]
 .endm
+.macro SET_VREG_PRESCALED reg, scaled_vreg, s=""
+    str     \reg, [rFP, \scaled_vreg]
+    mov\s   \reg, #0
+    str     \reg, [rREFS, \scaled_vreg]
+.endm
 .macro SET_VREG_OBJECT reg, vreg
     str     \reg, [rFP, \vreg, lsl #2]
     str     \reg, [rREFS, \vreg, lsl #2]
