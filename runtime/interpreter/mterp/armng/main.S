@@ -213,21 +213,11 @@
 .macro SET_VREG_WIDE_BY_ADDR reg0, reg1, addr
     stmia \addr, {\reg0, \reg1}
 .endm
-.macro GET_VREG_FLOAT sreg, vreg
-    ldr  \vreg, [rFP, \vreg, lsl #2]
-    vmov \sreg, \vreg
+.macro GET_VREG_FP_BY_ADDR fpreg, addr
+    vldr \fpreg, [\addr]
 .endm
-.macro GET_VREG_FLOAT_BY_ADDR reg, addr
-    vldr \reg, [\addr]
-.endm
-.macro SET_VREG_FLOAT_BY_ADDR reg, addr
-    vstr \reg, [\addr]
-.endm
-.macro GET_VREG_DOUBLE_BY_ADDR reg, addr
-    vldr \reg, [\addr]
-.endm
-.macro SET_VREG_DOUBLE_BY_ADDR reg, addr
-    vstr \reg, [\addr]
+.macro SET_VREG_FP_BY_ADDR fpreg, addr
+    vstr \fpreg, [\addr]
 .endm
 .macro SET_VREG_SHADOW reg, vreg
     str     \reg, [rREFS, \vreg, lsl #2]
@@ -721,7 +711,8 @@
     FETCH_B ip, 0, 1
     and ip, ip, #0xf
 8:
-    GET_VREG_FLOAT \sreg, ip
+    GET_VREG ip, ip
+    vmov \sreg, ip
 .endm
 
 // Puts the next int/long/object argument in the expected register,
