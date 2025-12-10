@@ -5345,6 +5345,31 @@ class HFieldAccess : public HInstruction {
   DataType::Type GetFieldType() const { return field_info_.GetFieldType(); }
   bool IsVolatile() const { return field_info_.IsVolatile(); }
 
+  Handle<mirror::Object> GetConstantValue() const {
+    DCHECK(HasConstantValue());
+    return value_;
+  }
+
+  bool HasConstantValue() const {
+    return value_.GetReference() != nullptr;
+  }
+
+  void SetConstantValue(Handle<mirror::Object> new_value) {
+    if (kIsDebugBuild) {
+      CHECK(GetFieldInfo().GetField()->IsFinal());
+      CHECK(IsStaticFieldGet() || IsInstanceFieldGet());
+      CHECK(!new_value.IsNull());
+    }
+    value_ = new_value;
+  }
+
+  bool CanBeNull() const override {
+    DCHECK_EQ(GetFieldType(), DataType::Type::kReference);
+    // null-s are represented as NullConstant nodes and value_ does not hold null references
+    // once it was set.
+    return !HasConstantValue();
+  }
+
   DECLARE_ABSTRACT_INSTRUCTION(FieldAccess);
 
  protected:
@@ -5352,6 +5377,7 @@ class HFieldAccess : public HInstruction {
 
  private:
   const FieldInfo field_info_;
+  Handle<mirror::Object> value_;
 };
 
 class HInstanceFieldGet final : public HExpression<1, HFieldAccess> {

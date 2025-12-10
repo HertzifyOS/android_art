@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import java.util.Objects;
+
 public final class Main {
 
     private static final boolean BOOLEAN = Values.BOOLEAN;
@@ -39,6 +41,9 @@ public final class Main {
     private static final double DOUBLE_NAN = DoubleValues.NAN;
     private static final double DOUBLE_NON_CANONICAL_NAN = DoubleValues.NON_CANONICAL_NAN;
 
+    private static final Integer BOXED_INT = Values.INT;
+    private static final Integer BOXED_INT_NULL = Values.NULL_INTEGER;
+
     public static final class Values {
         static volatile boolean BOOLEAN;
         static volatile byte BYTE;
@@ -46,6 +51,7 @@ public final class Main {
         static volatile short SHORT;
         static volatile int INT;
         static volatile long LONG;
+        static volatile Integer NULL_INTEGER = null;
 
         static {
             BOOLEAN = true;
@@ -107,6 +113,9 @@ public final class Main {
 
         ensureJitCompiled(Main.class, "$noinline$testDouble");
         $noinline$testDouble();
+
+        ensureJitCompiled(Main.class, "$noinline$testInteger");
+        $noinline$testInteger();
     }
 
     private static void $noinline$testBoolean() {
@@ -138,9 +147,37 @@ public final class Main {
     }
 
     private static void $noinline$testInt() {
-        int actual = INT;
-        if (actual != Values.INT) {
-            throw new AssertionError("Expected: " + Values.INT + ", got: " + actual);
+        assertEquals(INT, Values.INT);
+    }
+
+    private static void $noinline$testInteger() {
+        assertEquals(BOXED_INT.intValue(), Values.INT);
+        assertThrowsNPE(() -> BOXED_INT_NULL.intValue());
+    }
+
+    private static void assertEquals(int actual, int expected) {
+        if (actual != expected) {
+            throw new AssertionError("Expected: " + expected + ", got: " + actual);
+        }
+    }
+
+    private interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
+    private static void assertThrowsNPE(ThrowingRunnable subject) {
+        Objects.requireNonNull(subject);
+        boolean observedNpe = false;
+        try {
+            subject.run();
+        } catch (NullPointerException expected) {
+            observedNpe = true;
+        } catch (Exception e) {
+            throw new AssertionError("Expected NPE, got: ", e);
+        }
+
+        if (!observedNpe) {
+            throw new AssertionError("Expected NPE, but nothing was thrown");
         }
     }
 
