@@ -42,7 +42,7 @@ namespace mirror {
 static constexpr bool kEnableFullArraysAtStartup = false;
 
 void DexCache::Initialize(const DexFile* dex_file, ObjPtr<ClassLoader> class_loader) {
-  DCHECK(GetDexFile() == nullptr);
+  DCHECK(GetDexFile() == nullptr || GetDexFile() == dex_file);
   DCHECK(GetStrings() == nullptr);
   DCHECK(GetResolvedTypes() == nullptr);
   DCHECK(GetResolvedMethods() == nullptr);

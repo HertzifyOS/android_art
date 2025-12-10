@@ -190,22 +190,15 @@ class ClassLinker {
                             std::vector<std::unique_ptr<const DexFile>>&& additional_dex_files)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
-  // Add image spaces to the class linker, may fix up classloader fields and dex cache fields.
-  // The dex files that were newly opened for the space are placed in the out argument `dex_files`.
+  // Add an image space to the class linker, may fix up classloader fields and dex cache fields.
   // Returns true if the operation succeeded.
-  // The space must be already added to the heap before calling AddImageSpace since we need to
-  // properly handle read barriers and object marking.
-  bool AddImageSpaces(ArrayRef<gc::space::ImageSpace*> spaces,
-                      Handle<mirror::ClassLoader> class_loader,
-                      ClassLoaderContext* context,
-                      /*out*/ std::vector<std::unique_ptr<const DexFile>>* dex_files,
-                      /*out*/ std::string* error_msg) REQUIRES(!Locks::dex_lock_)
-      REQUIRES_SHARED(Locks::mutator_lock_);
-
-  EXPORT bool OpenImageDexFiles(gc::space::ImageSpace* space,
-                                std::vector<std::unique_ptr<const DexFile>>* out_dex_files,
-                                std::string* error_msg)
-      REQUIRES(!Locks::dex_lock_)
+  // The space must be already added to the heap before calling `AddImageSpace()` since we need
+  // to properly handle read barriers and object marking.
+  bool AddImageSpace(gc::space::ImageSpace* space,
+                     Handle<mirror::ClassLoader> class_loader,
+                     ClassLoaderContext* context,
+                     const std::vector<std::unique_ptr<const DexFile>>& dex_files,
+                     std::string* error_msg) REQUIRES(!Locks::dex_lock_)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   // Finds a class by its descriptor, loading it if necessary.
@@ -1404,19 +1397,6 @@ class ClassLinker {
   ObjPtr<mirror::IfTable> GetArrayIfTable() REQUIRES_SHARED(Locks::mutator_lock_);
   LengthPrefixedArray<ArtField>* GetEmptyFieldArray() REQUIRES_SHARED(Locks::mutator_lock_);
   LengthPrefixedArray<ArtMethod>* GetEmptyMethodArray() REQUIRES_SHARED(Locks::mutator_lock_);
-
-  bool OpenAndInitImageDexFiles(const gc::space::ImageSpace* space,
-                                Handle<mirror::ClassLoader> class_loader,
-                                std::vector<std::unique_ptr<const DexFile>>* out_dex_files,
-                                std::string* error_msg) REQUIRES(!Locks::dex_lock_)
-      REQUIRES_SHARED(Locks::mutator_lock_);
-
-  bool AddImageSpace(gc::space::ImageSpace* space,
-                     Handle<mirror::ClassLoader> class_loader,
-                     ClassLoaderContext* context,
-                     const std::vector<std::unique_ptr<const DexFile>>& dex_files,
-                     std::string* error_msg) REQUIRES(!Locks::dex_lock_)
-      REQUIRES_SHARED(Locks::mutator_lock_);
 
   std::vector<const DexFile*> boot_class_path_;
   std::vector<std::unique_ptr<const DexFile>> boot_dex_files_;

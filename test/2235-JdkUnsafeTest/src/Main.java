@@ -115,7 +115,7 @@ public class Main {
 
     testArrayBaseOffset(unsafe);
     testArrayIndexScale(unsafe);
-    testGetAndPutAndCAS(unsafe);
+    testGetAndPut(unsafe);
     testCompareAndSet(unsafe);
     testGetAndPutVolatile(unsafe);
     testGetAcquireAndPutRelease(unsafe);
@@ -186,7 +186,7 @@ public class Main {
         "Unsafe.arrayIndexScale(Object[])");
   }
 
-  private static void testGetAndPutAndCAS(Unsafe unsafe) throws NoSuchFieldException {
+  private static void testGetAndPut(Unsafe unsafe) throws NoSuchFieldException {
     TestClass t = new TestClass();
 
     int intValue = 12345678;
@@ -212,81 +212,6 @@ public class Main {
     unsafe.putObject(t, objectOffset, objectValue);
     check(t.objectVar, objectValue, "Unsafe.putObject(Object, long, Object)");
     check(unsafe.getObject(t, objectOffset), objectValue, "Unsafe.getObject(Object, long)");
-
-    if (unsafe.compareAndSwapInt(t, intOffset, 0, 1)) {
-      System.out.println("Unexpectedly succeeding compareAndSwapInt(t, intOffset, 0, 1)");
-    }
-    if (!unsafe.compareAndSwapInt(t, intOffset, intValue, 0)) {
-      System.out.println(
-          "Unexpectedly not succeeding compareAndSwapInt(t, intOffset, intValue, 0)");
-    }
-    if (!unsafe.compareAndSwapInt(t, intOffset, 0, 1)) {
-      System.out.println("Unexpectedly not succeeding compareAndSwapInt(t, intOffset, 0, 1)");
-    }
-    // Exercise jdk.internal.misc.Unsafe.compareAndSwapInt using the same
-    // integer (1) for the `expectedValue` and `newValue` arguments.
-    if (!unsafe.compareAndSwapInt(t, intOffset, 1, 1)) {
-      System.out.println("Unexpectedly not succeeding compareAndSwapInt(t, intOffset, 1, 1)");
-    }
-
-    if (unsafe.compareAndSwapLong(t, longOffset, 0, 1)) {
-      System.out.println("Unexpectedly succeeding compareAndSwapLong(t, longOffset, 0, 1)");
-    }
-    if (!unsafe.compareAndSwapLong(t, longOffset, longValue, 0)) {
-      System.out.println(
-          "Unexpectedly not succeeding compareAndSwapLong(t, longOffset, longValue, 0)");
-    }
-    if (!unsafe.compareAndSwapLong(t, longOffset, 0, 1)) {
-      System.out.println("Unexpectedly not succeeding compareAndSwapLong(t, longOffset, 0, 1)");
-    }
-    // Exercise jdk.internal.misc.Unsafe.compareAndSwapLong using the same
-    // integer (1) for the `expectedValue` and `newValue` arguments.
-    if (!unsafe.compareAndSwapLong(t, longOffset, 1, 1)) {
-      System.out.println("Unexpectedly not succeeding compareAndSwapLong(t, longOffset, 1, 1)");
-    }
-
-    // We do not use `null` as argument to jdk.internal.misc.Unsafe.compareAndSwapObject
-    // in those tests, as this value is not affected by heap poisoning
-    // (which uses address negation to poison and unpoison heap object
-    // references).  This way, when heap poisoning is enabled, we can
-    // better exercise its implementation within that method.
-    if (unsafe.compareAndSwapObject(t, objectOffset, new Object(), new Object())) {
-      System.out.println("Unexpectedly succeeding " +
-          "compareAndSwapObject(t, objectOffset, new Object(), new Object())");
-    }
-    Object objectValue2 = new Object();
-    if (!unsafe.compareAndSwapObject(t, objectOffset, objectValue, objectValue2)) {
-      System.out.println("Unexpectedly not succeeding " +
-          "compareAndSwapObject(t, objectOffset, objectValue, objectValue2)");
-    }
-    Object objectValue3 = new Object();
-    if (!unsafe.compareAndSwapObject(t, objectOffset, objectValue2, objectValue3)) {
-      System.out.println("Unexpectedly not succeeding " +
-          "compareAndSwapObject(t, objectOffset, objectValue2, objectValue3)");
-    }
-    // Exercise jdk.internal.misc.Unsafe.compareAndSwapObject using the same
-    // object (`objectValue3`) for the `expectedValue` and `newValue` arguments.
-    if (!unsafe.compareAndSwapObject(t, objectOffset, objectValue3, objectValue3)) {
-      System.out.println("Unexpectedly not succeeding " +
-          "compareAndSwapObject(t, objectOffset, objectValue3, objectValue3)");
-    }
-    // Exercise jdk.internal.misc.Unsafe.compareAndSwapObject using the same
-    // object (`t`) for the `obj` and `newValue` arguments.
-    if (!unsafe.compareAndSwapObject(t, objectOffset, objectValue3, t)) {
-      System.out.println(
-          "Unexpectedly not succeeding compareAndSwapObject(t, objectOffset, objectValue3, t)");
-    }
-    // Exercise jdk.internal.misc.Unsafe.compareAndSwapObject using the same
-    // object (`t`) for the `obj`, `expectedValue` and `newValue` arguments.
-    if (!unsafe.compareAndSwapObject(t, objectOffset, t, t)) {
-      System.out.println("Unexpectedly not succeeding compareAndSwapObject(t, objectOffset, t, t)");
-    }
-    // Exercise jdk.internal.misc.Unsafe.compareAndSwapObject using the same
-    // object (`t`) for the `obj` and `expectedValue` arguments.
-    if (!unsafe.compareAndSwapObject(t, objectOffset, t, new Object())) {
-      System.out.println(
-          "Unexpectedly not succeeding compareAndSwapObject(t, objectOffset, t, new Object())");
-    }
   }
 
   private static void testCompareAndSet(Unsafe unsafe) throws NoSuchFieldException {
@@ -347,7 +272,7 @@ public class Main {
     }
     check(t.longVar, 1, "Unsafe.compareAndSetLong(Object, long, long, long) - gets set to same");
 
-    // We do not use `null` as argument to jdk.internal.misc.Unsafe.compareAndSwapObject
+    // We do not use `null` as argument to jdk.internal.misc.Unsafe.compareAndSetObject
     // in those tests, as this value is not affected by heap poisoning
     // (which uses address negation to poison and unpoison heap object
     // references).  This way, when heap poisoning is enabled, we can
@@ -1340,17 +1265,17 @@ public class Main {
     long lastElementOffset = 12 + 4 * (length - 1);
 
     int val = ThreadLocalRandom.current().nextInt();
-    check(unsafe.compareAndSwapInt(holder, fieldOffset, 0, val), true, "unsafe.casint");
+    check(unsafe.compareAndSetInt(holder, fieldOffset, 0, val), true, "unsafe.casint");
     check(holder.intField, val, "unsafe.casint");
-    check(unsafe.compareAndSwapInt(holder, fieldOffset, val, 0), true, "unsafe.castint");
+    check(unsafe.compareAndSetInt(holder, fieldOffset, val, 0), true, "unsafe.castint");
 
     check(unsafe.compareAndSetInt(holder, fieldOffset, 0, val), true, "unsafe.casint");
     check(holder.intField, val, "unsafe.casint");
     check(unsafe.compareAndSetInt(holder, fieldOffset, val, 0), true, "unsafe.castint");
 
-    check(unsafe.compareAndSwapInt(arr, lastElementOffset, 0, val), true, "unsafe.casint");
+    check(unsafe.compareAndSetInt(arr, lastElementOffset, 0, val), true, "unsafe.casint");
     check(arr[length - 1], val, "unsafe.casint");
-    check(unsafe.compareAndSwapInt(arr, lastElementOffset, val, 0), true, "unsafe.casint");
+    check(unsafe.compareAndSetInt(arr, lastElementOffset, val, 0), true, "unsafe.casint");
 
     check(unsafe.compareAndSetInt(arr, lastElementOffset, 0, val), true, "unsafe.casint");
     check(arr[length - 1], val, "unsafe.casint");
@@ -1370,17 +1295,17 @@ public class Main {
     long lastElementOffset = 12 + 4 + 8 * (length - 1);
 
     long val = ThreadLocalRandom.current().nextLong();
-    check(unsafe.compareAndSwapLong(holder, fieldOffset, 0, val), true, "unsafe.caslong");
+    check(unsafe.compareAndSetLong(holder, fieldOffset, 0, val), true, "unsafe.caslong");
     check(holder.longField, val, "unsafe.caslong");
-    check(unsafe.compareAndSwapLong(holder, fieldOffset, val, 0), true, "unsafe.caslong");
+    check(unsafe.compareAndSetLong(holder, fieldOffset, val, 0), true, "unsafe.caslong");
 
     check(unsafe.compareAndSetLong(holder, fieldOffset, 0, val), true, "unsafe.caslong");
     check(holder.longField, val, "unsafe.caslong");
     check(unsafe.compareAndSetLong(holder, fieldOffset, val, 0), true, "unsafe.caslong");
 
-    check(unsafe.compareAndSwapLong(arr, lastElementOffset, 0, val), true, "unsafe.caslong");
+    check(unsafe.compareAndSetLong(arr, lastElementOffset, 0, val), true, "unsafe.caslong");
     check(arr[length - 1], val, "unsafe.caslong");
-    check(unsafe.compareAndSwapLong(arr, lastElementOffset, val, 0), true, "unsafe.caslong");
+    check(unsafe.compareAndSetLong(arr, lastElementOffset, val, 0), true, "unsafe.caslong");
 
     check(unsafe.compareAndSetLong(arr, lastElementOffset, 0, val), true, "unsafe.caslong");
     check(arr[length - 1], val, "unsafe.caslong");
@@ -1398,17 +1323,17 @@ public class Main {
 
     Object obj = new Object();
 
-    check(unsafe.compareAndSwapObject(holder, fieldOffset, null, obj), true, "unsafe.casref");
+    check(unsafe.compareAndSetReference(holder, fieldOffset, null, obj), true, "unsafe.casref");
     check(holder.obj, obj, "unsafe.casreference");
-    check(unsafe.compareAndSwapObject(holder, fieldOffset, obj, null), true, "unsafe.casref");
+    check(unsafe.compareAndSetReference(holder, fieldOffset, obj, null), true, "unsafe.casref");
 
     check(unsafe.compareAndSetReference(holder, fieldOffset, null, obj), true, "unsafe.casref");
     check(holder.obj, obj, "unsafe.casreference");
     check(unsafe.compareAndSetReference(holder, fieldOffset, obj, null), true, "unsafe.casref");
 
-    check(unsafe.compareAndSwapObject(arr, lastElementOffset, null, obj), true, "unsafe.casref");
+    check(unsafe.compareAndSetReference(arr, lastElementOffset, null, obj), true, "unsafe.casref");
     check(arr[length - 1], obj, "unsafe.casref");
-    check(unsafe.compareAndSwapObject(arr, lastElementOffset, obj, null), true, "unsafe.casref");
+    check(unsafe.compareAndSetReference(arr, lastElementOffset, obj, null), true, "unsafe.casref");
 
     check(unsafe.compareAndSetReference(arr, lastElementOffset, null, obj), true, "unsafe.casref");
     check(arr[length - 1], obj, "unsafe.casref");

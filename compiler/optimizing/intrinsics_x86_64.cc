@@ -2309,29 +2309,14 @@ static void CreateUnsafeCASLocations(ArenaAllocator* allocator,
 }
 
 void IntrinsicLocationsBuilderX86_64::VisitUnsafeCASInt(HInvoke* invoke) {
-  VisitJdkUnsafeCASInt(invoke);
-}
-
-void IntrinsicLocationsBuilderX86_64::VisitUnsafeCASLong(HInvoke* invoke) {
-  VisitJdkUnsafeCASLong(invoke);
-}
-
-void IntrinsicLocationsBuilderX86_64::VisitUnsafeCASObject(HInvoke* invoke) {
-  VisitJdkUnsafeCASObject(invoke);
-}
-
-void IntrinsicLocationsBuilderX86_64::VisitJdkUnsafeCASInt(HInvoke* invoke) {
-  // `jdk.internal.misc.Unsafe.compareAndSwapInt` has compare-and-set semantics (see javadoc).
   VisitJdkUnsafeCompareAndSetInt(invoke);
 }
 
-void IntrinsicLocationsBuilderX86_64::VisitJdkUnsafeCASLong(HInvoke* invoke) {
-  // `jdk.internal.misc.Unsafe.compareAndSwapLong` has compare-and-set semantics (see javadoc).
+void IntrinsicLocationsBuilderX86_64::VisitUnsafeCASLong(HInvoke* invoke) {
   VisitJdkUnsafeCompareAndSetLong(invoke);
 }
 
-void IntrinsicLocationsBuilderX86_64::VisitJdkUnsafeCASObject(HInvoke* invoke) {
-  // `jdk.internal.misc.Unsafe.compareAndSwapObject` has compare-and-set semantics (see javadoc).
+void IntrinsicLocationsBuilderX86_64::VisitUnsafeCASObject(HInvoke* invoke) {
   VisitJdkUnsafeCompareAndSetReference(invoke);
 }
 
@@ -2635,29 +2620,14 @@ static void GenCAS(DataType::Type type, HInvoke* invoke, CodeGeneratorX86_64* co
 }
 
 void IntrinsicCodeGeneratorX86_64::VisitUnsafeCASInt(HInvoke* invoke) {
-  VisitJdkUnsafeCASInt(invoke);
-}
-
-void IntrinsicCodeGeneratorX86_64::VisitUnsafeCASLong(HInvoke* invoke) {
-  VisitJdkUnsafeCASLong(invoke);
-}
-
-void IntrinsicCodeGeneratorX86_64::VisitUnsafeCASObject(HInvoke* invoke) {
-  VisitJdkUnsafeCASObject(invoke);
-}
-
-void IntrinsicCodeGeneratorX86_64::VisitJdkUnsafeCASInt(HInvoke* invoke) {
-  // `jdk.internal.misc.Unsafe.compareAndSwapInt` has compare-and-set semantics (see javadoc).
   VisitJdkUnsafeCompareAndSetInt(invoke);
 }
 
-void IntrinsicCodeGeneratorX86_64::VisitJdkUnsafeCASLong(HInvoke* invoke) {
-  // `jdk.internal.misc.Unsafe.compareAndSwapLong` has compare-and-set semantics (see javadoc).
+void IntrinsicCodeGeneratorX86_64::VisitUnsafeCASLong(HInvoke* invoke) {
   VisitJdkUnsafeCompareAndSetLong(invoke);
 }
 
-void IntrinsicCodeGeneratorX86_64::VisitJdkUnsafeCASObject(HInvoke* invoke) {
-  // `jdk.internal.misc.Unsafe.compareAndSwapObject` has compare-and-set semantics (see javadoc).
+void IntrinsicCodeGeneratorX86_64::VisitUnsafeCASObject(HInvoke* invoke) {
   VisitJdkUnsafeCompareAndSetReference(invoke);
 }
 

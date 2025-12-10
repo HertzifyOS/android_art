@@ -955,9 +955,7 @@ void RegisterAllocatorLinearScan::LinearScan::Run() {
     }
 
     // For a Phi which has all inputs in the same spill slot as its spill slot hint, use that hint.
-    if (com::android::art::flags::reg_alloc_spill_slot_reuse() &&
-        current->HasSpillSlotHint() &&
-        TryUsingSpillSlotHint(current)) {
+    if (current->HasSpillSlotHint() && TryUsingSpillSlotHint(current)) {
       continue;
     }
 
@@ -1745,27 +1743,25 @@ void RegisterAllocatorLinearScan::LinearScan::AllocateSpillSlotFor(LiveInterval*
   size_t slot = 0;
   bool used_hint = false;
 
-  if (com::android::art::flags::reg_alloc_spill_slot_reuse()) {
-    LiveInterval* hint_phi_interval = parent->GetHintPhiInterval();
-    // If the immediate hint Phi does not have a spill hint, we could try to follow the
-    // hint Phi chain to a Phi that does. However, we would need to make sure we don't go
-    // over a Phi loop forever. And we would need to investigate if the additional spill
-    // slot sharing we can find this way is worth the increase in compilation time.
-    if (hint_phi_interval != nullptr && hint_phi_interval->HasSpillSlotOrHint()) {
-      size_t hint = hint_phi_interval->GetSpillSlotHint();
-      DCHECK_LE(hint + number_of_spill_slots_needed, spill_slots->size());
-      ArrayRef<SpillSlotData> range =
-          ArrayRef<SpillSlotData>(*spill_slots).SubArray(hint, number_of_spill_slots_needed);
-      if (std::all_of(range.begin(),
-                      range.end(),
-                      [=](SpillSlotData& data) { return data.CanUseFor(parent, start, end); })) {
-        // Update slots and use the hint.
-        for (SpillSlotData& data : range) {
-          data.UseFor(interval, end);
-        }
-        used_hint = true;
-        slot = hint;
+  LiveInterval* hint_phi_interval = parent->GetHintPhiInterval();
+  // If the immediate hint Phi does not have a spill hint, we could try to follow the
+  // hint Phi chain to a Phi that does. However, we would need to make sure we don't go
+  // over a Phi loop forever. And we would need to investigate if the additional spill
+  // slot sharing we can find this way is worth the increase in compilation time.
+  if (hint_phi_interval != nullptr && hint_phi_interval->HasSpillSlotOrHint()) {
+    size_t hint = hint_phi_interval->GetSpillSlotHint();
+    DCHECK_LE(hint + number_of_spill_slots_needed, spill_slots->size());
+    ArrayRef<SpillSlotData> range =
+        ArrayRef<SpillSlotData>(*spill_slots).SubArray(hint, number_of_spill_slots_needed);
+    if (std::all_of(range.begin(),
+                    range.end(),
+                    [=](SpillSlotData& data) { return data.CanUseFor(parent, start, end); })) {
+      // Update slots and use the hint.
+      for (SpillSlotData& data : range) {
+        data.UseFor(interval, end);
       }
+      used_hint = true;
+      slot = hint;
     }
   }
 
@@ -1805,12 +1801,9 @@ void RegisterAllocatorLinearScan::LinearScan::AllocateSpillSlotFor(LiveInterval*
   // that is when we know the number of spill slots for each type.
   parent->SetSpillSlot(slot);
 
-  if (com::android::art::flags::reg_alloc_spill_slot_reuse()) {
-    LiveInterval* hint_phi_interval = parent->GetHintPhiInterval();
-    while (hint_phi_interval != nullptr && !hint_phi_interval->HasSpillSlotOrHint()) {
-      hint_phi_interval->SetSpillSlotHint(slot);
-      hint_phi_interval = hint_phi_interval->GetHintPhiInterval();
-    }
+  while (hint_phi_interval != nullptr && !hint_phi_interval->HasSpillSlotOrHint()) {
+    hint_phi_interval->SetSpillSlotHint(slot);
+    hint_phi_interval = hint_phi_interval->GetHintPhiInterval();
   }
 }
 

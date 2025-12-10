@@ -38,21 +38,26 @@ public class AhatSnapshot implements Diffable<AhatSnapshot> {
   private AhatSnapshot mBaseline = this;
 
   private AhatBitmapInstance.BitmapDumpData mBitmapDumpData = null;
+  private AhatMessageInstance.MessageDumpData mMessageDumpData = null;
+  private long mUptimeMillis = 0;
 
   AhatSnapshot(SuperRoot root,
                Instances<AhatInstance> instances,
                List<AhatHeap> heaps,
                Site rootSite,
                Progress progress,
-               Reachability retained) {
+               Reachability retained,
+               long uptimeMillis) {
     mSuperRoot = root;
     mInstances = instances;
     mHeaps = heaps;
     mRootSite = rootSite;
+    mUptimeMillis = uptimeMillis;
 
     AhatInstance.computeReachability(mSuperRoot, mInstances, progress, mInstances.size());
 
     mBitmapDumpData = AhatBitmapInstance.findBitmapDumpData(mSuperRoot, mInstances);
+    mMessageDumpData = AhatMessageInstance.findMessageDumpData(mInstances, progress, mInstances.size());
 
     for (AhatInstance inst : mInstances) {
       // Add this instance to its site.
@@ -222,5 +227,23 @@ public class AhatSnapshot implements Diffable<AhatSnapshot> {
    */
   public List<List<AhatBitmapInstance>> findDuplicateBitmaps() {
     return AhatBitmapInstance.findDuplicates(mBitmapDumpData);
+  }
+
+  /**
+   * Returns the message dump data.
+   *
+   * @return the message dump data
+   */
+  public AhatMessageInstance.MessageDumpData getMessageDumpData() {
+    return mMessageDumpData;
+  }
+
+  /**
+   * Returns the uptime millis reference.
+   *
+   * @return the uptime in milliseconds
+   */
+  public long getUptimeMillis() {
+    return mUptimeMillis;
   }
 }

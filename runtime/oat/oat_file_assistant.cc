@@ -893,21 +893,6 @@ OatFileAssistant::OatFileInfo& OatFileAssistant::GetBestInfo() {
   return empty_info_;
 }
 
-std::unique_ptr<gc::space::ImageSpace> OatFileAssistant::OpenImageSpace(const OatFile* oat_file) {
-  DCHECK(oat_file != nullptr);
-  std::string art_file = ReplaceFileExtension(oat_file->GetLocation(), kArtExtension);
-  if (art_file.empty()) {
-    return nullptr;
-  }
-  std::string error_msg;
-  std::unique_ptr<gc::space::ImageSpace> ret =
-      gc::space::ImageSpace::CreateFromAppImage(art_file.c_str(), oat_file, &error_msg);
-  if (ret == nullptr && (VLOG_IS_ON(image) || OS::FileExists(art_file.c_str()))) {
-    LOG(INFO) << "Failed to open app image " << art_file.c_str() << " " << error_msg;
-  }
-  return ret;
-}
-
 bool OatFileAssistant::OatFileInfo::IsOatLocation() const { return is_oat_location_; }
 
 const std::string* OatFileAssistant::OatFileInfo::Filename() const { return &filename_; }

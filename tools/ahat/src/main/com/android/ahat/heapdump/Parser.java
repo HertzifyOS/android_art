@@ -19,7 +19,6 @@ package com.android.ahat.heapdump;
 import com.android.ahat.progress.NullProgress;
 import com.android.ahat.progress.Progress;
 import com.android.ahat.proguard.ProguardMap;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.BufferUnderflowException;
@@ -60,6 +59,7 @@ public class Parser {
   private ProguardMap map = new ProguardMap();
   private Progress progress = new NullProgress();
   private Reachability retained = Reachability.SOFT;
+  private long uptimeMillis = 0;
 
   /**
    * Creates an hprof Parser that parses a heap dump from a byte buffer.
@@ -118,7 +118,6 @@ public class Parser {
     this.retained = retained;
     return this;
   }
-
   /**
    * Parse the heap dump.
    *
@@ -144,7 +143,7 @@ public class Parser {
    * @throws HprofFormatException if the heap dump is not properly formatted
    */
   public static AhatSnapshot parseHeapDump(File hprof, ProguardMap map)
-    throws IOException, HprofFormatException {
+      throws IOException, HprofFormatException {
     return new Parser(hprof).map(map).parse();
   }
 
@@ -158,7 +157,7 @@ public class Parser {
    * @throws HprofFormatException if the heap dump is not properly formatted
    */
   public static AhatSnapshot parseHeapDump(ByteBuffer hprof, ProguardMap map)
-    throws IOException, HprofFormatException {
+      throws IOException, HprofFormatException {
     return new Parser(hprof).map(map).parse();
   }
 
@@ -169,7 +168,7 @@ public class Parser {
       StringBuilder format = new StringBuilder();
       int b;
       while ((b = hprof.getU1()) != 0) {
-        format.append((char)b);
+        format.append((char) b);
       }
 
       idSize = hprof.getU4();
@@ -210,6 +209,7 @@ public class Parser {
         int tag = hprof.getU1();
         int time = hprof.getU4();
         int recordLength = hprof.getU4();
+        // LINT.IfChange(hprof-tags)
         switch (tag) {
           case 0x01: { // STRING
             long id = hprof.getId();
@@ -254,12 +254,9 @@ public class Parser {
             int classSerialNumber = hprof.getU4();
             int lineNumber = hprof.getU4();
 
-            ProguardMap.Frame frame = map.getFrame(
-                classNamesBySerial.get(classSerialNumber),
-                strings.get(methodNameStringId),
-                strings.get(methodSignatureStringId),
-                strings.get(methodFileNameStringId),
-                lineNumber);
+            ProguardMap.Frame frame = map.getFrame(classNamesBySerial.get(classSerialNumber),
+                strings.get(methodNameStringId), strings.get(methodSignatureStringId),
+                strings.get(methodFileNameStringId), lineNumber);
             frames.put(frameId, frame);
             break;
           }
@@ -277,7 +274,13 @@ public class Parser {
             break;
           }
 
-          case 0x0C:   // HEAP DUMP
+          case 0xA0: { // ART CLOCK_MONOTONIC
+            final long uptimeNanos = hprof.getLong();
+            uptimeMillis = uptimeNanos / 1_000_000;
+            break;
+          }
+
+          case 0x0C: // HEAP DUMP
           case 0x1C: { // HEAP DUMP SEGMENT
             long endOfRecord = hprof.tell() + recordLength;
             if (classById == null) {
@@ -512,7 +515,8 @@ public class Parser {
                       obj.initialize(data);
                       break;
                     }
-                    default: throw new AssertionError("unsupported enum member");
+                    default:
+                      throw new AssertionError("unsupported enum member");
                   }
                   break;
                 }
@@ -576,6 +580,7 @@ public class Parser {
             hprof.skip(recordLength);
             break;
         }
+        // LINT.ThenChange(//depot/google3/art/runtime/hprof/hprof.cc:hprof-tags)
       }
       progress.done();
 
@@ -628,7 +633,7 @@ public class Parser {
         // Fixup the instance based on its type using the temporary data we
         // saved during the first pass over the heap dump.
         if (inst instanceof AhatClassInstance) {
-          ClassInstData data = (ClassInstData)inst.getTemporaryUserData();
+          ClassInstData data = (ClassInstData) inst.getTemporaryUserData();
           inst.setTemporaryUserData(null);
 
           // Compute the size of the fields array in advance to avoid
@@ -647,31 +652,32 @@ public class Parser {
               fields[i++] = hprof.getValue(field.type, mInstances);
             }
           }
-          ((AhatClassInstance)inst).initialize(fields);
+          ((AhatClassInstance) inst).initialize(fields);
         } else if (inst instanceof AhatClassObj) {
-          ClassObjData data = (ClassObjData)inst.getTemporaryUserData();
+          ClassObjData data = (ClassObjData) inst.getTemporaryUserData();
           inst.setTemporaryUserData(null);
           AhatInstance loader = mInstances.get(data.classLoaderId);
           for (int i = 0; i < data.staticFields.length; ++i) {
             FieldValue field = data.staticFields[i];
             if (field.value instanceof DeferredInstanceValue) {
-              DeferredInstanceValue deferred = (DeferredInstanceValue)field.value;
+              DeferredInstanceValue deferred = (DeferredInstanceValue) field.value;
               data.staticFields[i] = new FieldValue(
                   field.name, field.type, Value.pack(mInstances.get(deferred.getId())));
             }
           }
-          ((AhatClassObj)inst).initialize(loader, data.staticFields);
+          ((AhatClassObj) inst).initialize(loader, data.staticFields);
+
         } else if (inst instanceof AhatArrayInstance && inst.getTemporaryUserData() != null) {
           // TODO: Have specialized object array instance and check for that
           // rather than checking for the presence of user data?
-          ObjArrayData data = (ObjArrayData)inst.getTemporaryUserData();
+          ObjArrayData data = (ObjArrayData) inst.getTemporaryUserData();
           inst.setTemporaryUserData(null);
           AhatInstance[] array = new AhatInstance[data.length];
           hprof.seek(data.position);
           for (int i = 0; i < data.length; i++) {
             array[i] = mInstances.get(hprof.getId());
           }
-          ((AhatArrayInstance)inst).initialize(array);
+          ((AhatArrayInstance) inst).initialize(array);
         }
       }
       progress.done();
@@ -679,7 +685,8 @@ public class Parser {
 
     hprof = null;
     roots = null;
-    return new AhatSnapshot(superRoot, mInstances, heaps.heaps, rootSite, progress, retained);
+    return new AhatSnapshot(
+        superRoot, mInstances, heaps.heaps, rootSite, progress, retained, uptimeMillis);
   }
 
   private static class RootData {
@@ -702,7 +709,7 @@ public class Parser {
   }
 
   private static class ObjArrayData {
-    public int length;          // Number of array elements.
+    public int length; // Number of array elements.
     public long position; // Position in hprof file containing element data.
 
     public ObjArrayData(int length, long position) {
@@ -745,13 +752,15 @@ public class Parser {
       return String.format("0x%08x", mId);
     }
 
-    @Override public int hashCode() {
+    @Override
+    public int hashCode() {
       return Objects.hash(mId);
     }
 
-    @Override public boolean equals(Object other) {
+    @Override
+    public boolean equals(Object other) {
       if (other instanceof DeferredInstanceValue) {
-        DeferredInstanceValue value = (DeferredInstanceValue)other;
+        DeferredInstanceValue value = (DeferredInstanceValue) other;
         return mId == value.mId;
       }
       return false;
@@ -829,7 +838,7 @@ public class Parser {
 
       long max = Math.max(mMaxKey, key);
       long min = Math.min(mMinKey, key);
-      int count = (int)(max + 1 - min);
+      int count = (int) (max + 1 - min);
       if (count > mValues.length) {
         Object[] values = new Object[2 * count];
 
@@ -855,18 +864,18 @@ public class Parser {
     public T get(long key) throws HprofFormatException {
       T value = null;
       if (mValues != null && key >= mMinKey && key <= mMaxKey) {
-        value = (T)mValues[indexOf(key)];
+        value = (T) mValues[indexOf(key)];
       }
 
       if (value == null) {
-        throw new HprofFormatException(String.format(
-              "%s with id 0x%x referenced before definition", mElementType, key));
+        throw new HprofFormatException(
+            String.format("%s with id 0x%x referenced before definition", mElementType, key));
       }
       return value;
     }
 
     private int indexOf(long key) {
-      return ((int)(key - mKeyAt0) + mValues.length) % mValues.length;
+      return ((int) (key - mKeyAt0) + mValues.length) % mValues.length;
     }
   }
 
@@ -900,8 +909,8 @@ public class Parser {
     public T get(long key) throws HprofFormatException {
       T value = mValues.get(key);
       if (value == null) {
-        throw new HprofFormatException(String.format(
-              "%s with id 0x%x referenced before definition", mElementType, key));
+        throw new HprofFormatException(
+            String.format("%s with id 0x%x referenced before definition", mElementType, key));
       }
       return value;
     }
@@ -1102,11 +1111,8 @@ public class Parser {
       return read(8).getLong();
     }
 
-    private static Type[] TYPES = new Type[] {
-      null, null, Type.OBJECT, null,
-        Type.BOOLEAN, Type.CHAR, Type.FLOAT, Type.DOUBLE,
-        Type.BYTE, Type.SHORT, Type.INT, Type.LONG
-    };
+    private static Type[] TYPES = new Type[] {null, null, Type.OBJECT, null, Type.BOOLEAN,
+        Type.CHAR, Type.FLOAT, Type.DOUBLE, Type.BYTE, Type.SHORT, Type.INT, Type.LONG};
 
     public Type getType() throws HprofFormatException, IOException {
       int id = getU1();
@@ -1131,16 +1137,26 @@ public class Parser {
      */
     public Value getValue(Type type, Instances instances) throws IOException {
       switch (type) {
-        case OBJECT:  return Value.pack(instances.get(getId()));
-        case BOOLEAN: return Value.pack(getBool());
-        case CHAR: return Value.pack(getChar());
-        case FLOAT: return Value.pack(getFloat());
-        case DOUBLE: return Value.pack(getDouble());
-        case BYTE: return Value.pack(getByte());
-        case SHORT: return Value.pack(getShort());
-        case INT: return Value.pack(getInt());
-        case LONG: return Value.pack(getLong());
-        default: throw new AssertionError("unsupported enum member");
+        case OBJECT:
+          return Value.pack(instances.get(getId()));
+        case BOOLEAN:
+          return Value.pack(getBool());
+        case CHAR:
+          return Value.pack(getChar());
+        case FLOAT:
+          return Value.pack(getFloat());
+        case DOUBLE:
+          return Value.pack(getDouble());
+        case BYTE:
+          return Value.pack(getByte());
+        case SHORT:
+          return Value.pack(getShort());
+        case INT:
+          return Value.pack(getInt());
+        case LONG:
+          return Value.pack(getLong());
+        default:
+          throw new AssertionError("unsupported enum member");
       }
     }
 
@@ -1151,16 +1167,26 @@ public class Parser {
      */
     public Value getDeferredValue(Type type) throws IOException {
       switch (type) {
-        case OBJECT: return new DeferredInstanceValue(getId());
-        case BOOLEAN: return Value.pack(getBool());
-        case CHAR: return Value.pack(getChar());
-        case FLOAT: return Value.pack(getFloat());
-        case DOUBLE: return Value.pack(getDouble());
-        case BYTE: return Value.pack(getByte());
-        case SHORT: return Value.pack(getShort());
-        case INT: return Value.pack(getInt());
-        case LONG: return Value.pack(getLong());
-        default: throw new AssertionError("unsupported enum member");
+        case OBJECT:
+          return new DeferredInstanceValue(getId());
+        case BOOLEAN:
+          return Value.pack(getBool());
+        case CHAR:
+          return Value.pack(getChar());
+        case FLOAT:
+          return Value.pack(getFloat());
+        case DOUBLE:
+          return Value.pack(getDouble());
+        case BYTE:
+          return Value.pack(getByte());
+        case SHORT:
+          return Value.pack(getShort());
+        case INT:
+          return Value.pack(getInt());
+        case LONG:
+          return Value.pack(getLong());
+        default:
+          throw new AssertionError("unsupported enum member");
       }
     }
   }
@@ -1183,16 +1209,35 @@ public class Parser {
       // If there was an array type signature to start, then interpret the
       // class name as a type signature.
       switch (name.charAt(0)) {
-        case 'Z': name = "boolean"; break;
-        case 'B': name = "byte"; break;
-        case 'C': name = "char"; break;
-        case 'S': name = "short"; break;
-        case 'I': name = "int"; break;
-        case 'J': name = "long"; break;
-        case 'F': name = "float"; break;
-        case 'D': name = "double"; break;
-        case 'L': name = name.substring(1, name.length() - 1); break;
-        default: throw new HprofFormatException("Invalid type signature in class name: " + name);
+        case 'Z':
+          name = "boolean";
+          break;
+        case 'B':
+          name = "byte";
+          break;
+        case 'C':
+          name = "char";
+          break;
+        case 'S':
+          name = "short";
+          break;
+        case 'I':
+          name = "int";
+          break;
+        case 'J':
+          name = "long";
+          break;
+        case 'F':
+          name = "float";
+          break;
+        case 'D':
+          name = "double";
+          break;
+        case 'L':
+          name = name.substring(1, name.length() - 1);
+          break;
+        default:
+          throw new HprofFormatException("Invalid type signature in class name: " + name);
       }
     }
 

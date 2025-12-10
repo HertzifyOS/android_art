@@ -83,8 +83,6 @@
   V(UnsafePutOrderedObject, "Lsun/misc/Unsafe;", "putOrderedObject", "(Ljava/lang/Object;JLjava/lang/Object;)V") \
   V(JdkUnsafeCompareAndSetLong, "Ljdk/internal/misc/Unsafe;", "compareAndSetLong", "(Ljava/lang/Object;JJJ)Z") \
   V(JdkUnsafeCompareAndSetReference, "Ljdk/internal/misc/Unsafe;", "compareAndSetReference", "(Ljava/lang/Object;JLjava/lang/Object;Ljava/lang/Object;)Z") \
-  V(JdkUnsafeCompareAndSwapLong, "Ljdk/internal/misc/Unsafe;", "compareAndSwapLong", "(Ljava/lang/Object;JJJ)Z") \
-  V(JdkUnsafeCompareAndSwapObject, "Ljdk/internal/misc/Unsafe;", "compareAndSwapObject", "(Ljava/lang/Object;JLjava/lang/Object;Ljava/lang/Object;)Z") \
   V(JdkUnsafeGetReferenceVolatile, "Ljdk/internal/misc/Unsafe;", "getReferenceVolatile", "(Ljava/lang/Object;J)Ljava/lang/Object;") \
   V(JdkUnsafePutReferenceVolatile, "Ljdk/internal/misc/Unsafe;", "putReferenceVolatile", "(Ljava/lang/Object;JLjava/lang/Object;)V") \
   V(IntegerParseInt, "Ljava/lang/Integer;", "parseInt", "(Ljava/lang/String;)I") \
@@ -121,7 +119,6 @@
   V(UnsafeGetArrayIndexScaleForComponentType, "Lsun/misc/Unsafe;", "getArrayIndexScaleForComponentType", "(Ljava/lang/Class;)I") \
   V(JdkUnsafeAddressSize, "Ljdk/internal/misc/Unsafe;", "addressSize", "()I") \
   V(JdkUnsafeCompareAndSetInt, "Ljdk/internal/misc/Unsafe;", "compareAndSetInt", "(Ljava/lang/Object;JII)Z") \
-  V(JdkUnsafeCompareAndSwapInt, "Ljdk/internal/misc/Unsafe;", "compareAndSwapInt", "(Ljava/lang/Object;JII)Z") \
   V(JdkUnsafeGetIntVolatile, "Ljdk/internal/misc/Unsafe;", "getIntVolatile", "(Ljava/lang/Object;J)I") \
   V(JdkUnsafePutReference, "Ljdk/internal/misc/Unsafe;", "putReference", "(Ljava/lang/Object;JLjava/lang/Object;)V") \
   V(JdkUnsafeStoreFence, "Ljdk/internal/misc/Unsafe;", "storeFence", "()V") \

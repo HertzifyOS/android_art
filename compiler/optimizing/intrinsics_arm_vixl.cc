@@ -4077,18 +4077,9 @@ static void GenUnsafeCas(HInvoke* invoke, DataType::Type type, CodeGeneratorARMV
 }
 
 void IntrinsicLocationsBuilderARMVIXL::VisitUnsafeCASInt(HInvoke* invoke) {
-  VisitJdkUnsafeCASInt(invoke);
-}
-void IntrinsicLocationsBuilderARMVIXL::VisitUnsafeCASObject(HInvoke* invoke) {
-  VisitJdkUnsafeCASObject(invoke);
-}
-
-void IntrinsicLocationsBuilderARMVIXL::VisitJdkUnsafeCASInt(HInvoke* invoke) {
-  // `jdk.internal.misc.Unsafe.compareAndSwapInt` has compare-and-set semantics (see javadoc).
   VisitJdkUnsafeCompareAndSetInt(invoke);
 }
-void IntrinsicLocationsBuilderARMVIXL::VisitJdkUnsafeCASObject(HInvoke* invoke) {
-  // `jdk.internal.misc.Unsafe.compareAndSwapObject` has compare-and-set semantics (see javadoc).
+void IntrinsicLocationsBuilderARMVIXL::VisitUnsafeCASObject(HInvoke* invoke) {
   VisitJdkUnsafeCompareAndSetReference(invoke);
 }
 
@@ -4105,18 +4096,9 @@ void IntrinsicLocationsBuilderARMVIXL::VisitJdkUnsafeCompareAndSetReference(HInv
 }
 
 void IntrinsicCodeGeneratorARMVIXL::VisitUnsafeCASInt(HInvoke* invoke) {
-  VisitJdkUnsafeCASInt(invoke);
-}
-void IntrinsicCodeGeneratorARMVIXL::VisitUnsafeCASObject(HInvoke* invoke) {
-  VisitJdkUnsafeCASObject(invoke);
-}
-
-void IntrinsicCodeGeneratorARMVIXL::VisitJdkUnsafeCASInt(HInvoke* invoke) {
-  // `jdk.internal.misc.Unsafe.compareAndSwapInt` has compare-and-set semantics (see javadoc).
   VisitJdkUnsafeCompareAndSetInt(invoke);
 }
-void IntrinsicCodeGeneratorARMVIXL::VisitJdkUnsafeCASObject(HInvoke* invoke) {
-  // `jdk.internal.misc.Unsafe.compareAndSwapObject` has compare-and-set semantics (see javadoc).
+void IntrinsicCodeGeneratorARMVIXL::VisitUnsafeCASObject(HInvoke* invoke) {
   VisitJdkUnsafeCompareAndSetReference(invoke);
 }
 

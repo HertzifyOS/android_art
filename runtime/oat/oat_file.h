@@ -333,6 +333,10 @@ class OatFile {
                                   /*out*/ std::string* error_msg = nullptr) const
       REQUIRES(!secondary_lookup_lock_);
 
+  EXPORT std::unique_ptr<const DexFile> OpenOatDexFile(const char* location,
+                                                       std::string* error_msg) const
+      REQUIRES(!secondary_lookup_lock_);
+
   const std::vector<const OatDexFile*>& GetOatDexFiles() const {
     return oat_dex_files_storage_;
   }

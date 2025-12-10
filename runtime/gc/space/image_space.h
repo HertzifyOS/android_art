@@ -162,6 +162,10 @@ class ImageSpace : public MemMapSpace {
       ArrayRef<ImageSpace* const> boot_image_spaces,
       std::string* error_msg) REQUIRES(!Locks::mutator_lock_);
 
+  // Open dex files and set `DexCache::dex_file_`s to point to them.
+  bool OpenAndSetDexFiles(std::vector<std::unique_ptr<const DexFile>>* out_dex_files,
+                          std::string* error_msg) const;
+
   // Checks whether we have a primary boot image on the disk.
   static bool IsBootClassPathOnDisk(InstructionSet image_isa);
 

@@ -1476,14 +1476,27 @@ bool ClassLinker::InitFromBootImage(std::string* error_msg) {
   runtime->SetSentinel(boot_image_live_objects->Get(ImageHeader::kClearedJniWeakSentinel));
   DCHECK(runtime->GetSentinel().Read()->GetClass() == GetClassRoot<mirror::Object>(this));
 
-  // Boot class loader, use a null handle.
-  if (!AddImageSpaces(ArrayRef<gc::space::ImageSpace*>(spaces),
-                      ScopedNullHandle<mirror::ClassLoader>(),
-                      /*context=*/nullptr,
-                      &boot_dex_files_,
-                      error_msg)) {
-    return false;
+  std::vector<std::vector<std::unique_ptr<const DexFile>>> dex_files_by_space_index;
+  for (const gc::space::ImageSpace* space : spaces) {
+    std::vector<std::unique_ptr<const DexFile>> space_dex_files;
+    if (!space->OpenAndSetDexFiles(/*out*/ &space_dex_files, error_msg)) {
+      return false;
+    }
+    dex_files_by_space_index.push_back(std::move(space_dex_files));
   }
+  // Boot class loader, use a null handle.
+  ScopedNullHandle<mirror::ClassLoader> class_loader;
+  // This must be done in a separate loop after all dex files are initialized because there can be
+  // references from an image space to another image space that comes after it.
+  for (size_t i = 0u, size = spaces.size(); i != size; ++i) {
+    std::vector<std::unique_ptr<const DexFile>>& space_dex_files = dex_files_by_space_index[i];
+    if (!AddImageSpace(spaces[i], class_loader, /*context=*/nullptr, space_dex_files, error_msg)) {
+      return false;
+    }
+    // Append opened dex files at the end of `boot_dex_files_`.
+    std::move(space_dex_files.begin(), space_dex_files.end(), std::back_inserter(boot_dex_files_));
+  }
+
   // We never use AOT code for debuggable.
   if (!runtime->IsJavaDebuggable()) {
     for (gc::space::ImageSpace* space : spaces) {
@@ -1928,113 +1941,6 @@ void AppImageLoadingHelper::HandleAppImageStrings(gc::space::ImageSpace* space) 
   }
 }
 
-static std::unique_ptr<const DexFile> OpenOatDexFile(const OatFile* oat_file,
-                                                     const char* location,
-                                                     std::string* error_msg)
-    REQUIRES_SHARED(Locks::mutator_lock_) {
-  DCHECK(error_msg != nullptr);
-  std::unique_ptr<const DexFile> dex_file;
-  const OatDexFile* oat_dex_file = oat_file->GetOatDexFile(location, error_msg);
-  if (oat_dex_file == nullptr) {
-    return std::unique_ptr<const DexFile>();
-  }
-  std::string inner_error_msg;
-  dex_file = oat_dex_file->OpenDexFile(&inner_error_msg);
-  if (dex_file == nullptr) {
-    *error_msg = StringPrintf("Failed to open dex file %s from within oat file %s error '%s'",
-                              location,
-                              oat_file->GetLocation().c_str(),
-                              inner_error_msg.c_str());
-    return std::unique_ptr<const DexFile>();
-  }
-
-  if (dex_file->GetLocationChecksum() != oat_dex_file->GetDexFileLocationChecksum()) {
-    CHECK(dex_file->GetSha1() != oat_dex_file->GetSha1());
-    *error_msg = StringPrintf("Checksums do not match for %s: %x vs %x",
-                              location,
-                              dex_file->GetLocationChecksum(),
-                              oat_dex_file->GetDexFileLocationChecksum());
-    return std::unique_ptr<const DexFile>();
-  }
-  CHECK(dex_file->GetSha1() == oat_dex_file->GetSha1());
-  return dex_file;
-}
-
-bool ClassLinker::OpenImageDexFiles(gc::space::ImageSpace* space,
-                                    std::vector<std::unique_ptr<const DexFile>>* out_dex_files,
-                                    std::string* error_msg) {
-  ScopedAssertNoThreadSuspension nts(__FUNCTION__);
-  const ImageHeader& header = space->GetImageHeader();
-  ObjPtr<mirror::Object> dex_caches_object = header.GetImageRoot(ImageHeader::kDexCaches);
-  DCHECK(dex_caches_object != nullptr);
-  ObjPtr<mirror::ObjectArray<mirror::DexCache>> dex_caches =
-      dex_caches_object->AsObjectArray<mirror::DexCache>();
-  const OatFile* oat_file = space->GetOatFile();
-  for (auto dex_cache : dex_caches->Iterate()) {
-    std::string dex_file_location(dex_cache->GetLocation()->ToModifiedUtf8());
-    std::unique_ptr<const DexFile> dex_file = OpenOatDexFile(oat_file,
-                                                             dex_file_location.c_str(),
-                                                             error_msg);
-    if (dex_file == nullptr) {
-      return false;
-    }
-    dex_cache->SetDexFile(dex_file.get());
-    out_dex_files->push_back(std::move(dex_file));
-  }
-  return true;
-}
-
-bool ClassLinker::OpenAndInitImageDexFiles(
-    const gc::space::ImageSpace* space,
-    Handle<mirror::ClassLoader> class_loader,
-    std::vector<std::unique_ptr<const DexFile>>* out_dex_files,
-    std::string* error_msg) {
-  DCHECK(out_dex_files != nullptr);
-  const bool app_image = class_loader != nullptr;
-  const ImageHeader& header = space->GetImageHeader();
-  ObjPtr<mirror::Object> dex_caches_object = header.GetImageRoot(ImageHeader::kDexCaches);
-  DCHECK(dex_caches_object != nullptr);
-  Thread* const self = Thread::Current();
-  StackHandleScope<3> hs(self);
-  Handle<mirror::ObjectArray<mirror::DexCache>> dex_caches(
-      hs.NewHandle(dex_caches_object->AsObjectArray<mirror::DexCache>()));
-  const OatFile* oat_file = space->GetOatFile();
-  if (oat_file->GetOatHeader().GetDexFileCount() !=
-      static_cast<uint32_t>(dex_caches->GetLength())) {
-    *error_msg =
-        "Dex cache count and dex file count mismatch while trying to initialize from image";
-    return false;
-  }
-
-  for (auto dex_cache : dex_caches.Iterate<mirror::DexCache>()) {
-    std::string dex_file_location = dex_cache->GetLocation()->ToModifiedUtf8();
-    // At this point, the location in the dex cache (from `--dex-location` passed to dex2oat) is not
-    // necessarily the actual dex location on device. `OpenOatDexFile` uses the table
-    // `OatFile::oat_dex_files_` to find the dex file. For each dex file, the table contains two
-    // keys corresponding to it, one from the oat header (from `--dex-location` passed to dex2oat)
-    // and the other being the actual dex location on device, unless they are the same. The lookup
-    // is based on the former key. Later, `PatchDexCacheLocations` will replace the location in the
-    // dex cache with the actual dex location, which is the latter key in the table.
-    std::unique_ptr<const DexFile> dex_file =
-        OpenOatDexFile(oat_file, dex_file_location.c_str(), error_msg);
-    if (dex_file == nullptr) {
-      return false;
-    }
-
-    {
-      // Native fields are all null.  Initialize them.
-      WriterMutexLock mu(self, *Locks::dex_lock_);
-      dex_cache->Initialize(dex_file.get(), class_loader.Get());
-    }
-    if (!app_image) {
-      // Register dex files, keep track of existing ones that are conflicts.
-      AppendToBootClassPath(dex_file.get(), dex_cache);
-    }
-    out_dex_files->push_back(std::move(dex_file));
-  }
-  return true;
-}
-
 // Helper class for ArtMethod checks when adding an image. Keeps all required functionality
 // together and caches some intermediate results.
 template <PointerSize kPointerSize>
@@ -2251,11 +2157,12 @@ bool ClassLinker::AddImageSpace(gc::space::ImageSpace* space,
       uint32_t* checksums = reinterpret_cast<uint32_t*>(
           reinterpret_cast<uint8_t*>(oat_header) + oat_header->GetHeaderSize());
       for (uint32_t i = 0; i  < oat_header->GetDexFileCount(); ++i) {
-        uint32_t dex_checksum = dex_files.at(i)->GetHeader().checksum_;
+        DCHECK_LT(i, dex_files.size());
+        uint32_t dex_checksum = dex_files[i]->GetHeader().checksum_;
         if (checksums[i] != dex_checksum) {
           *error_msg = StringPrintf(
               "Image and dex file checksums did not match for %s: image has %d, dex file has %d",
-              dex_files.at(i)->GetLocation().c_str(),
+              dex_files[i]->GetLocation().c_str(),
               checksums[i],
               dex_checksum);
           return false;
@@ -2333,6 +2240,23 @@ bool ClassLinker::AddImageSpace(gc::space::ImageSpace* space,
       } else {
         ImageChecker<PointerSize::k32>::CheckObjects(heap, space);
       }
+    }
+  }
+
+  size_t num_dex_files = dex_files.size();
+  DCHECK_EQ(num_dex_files, dchecked_integral_cast<size_t>(dex_caches->GetLength()));
+  {
+    WriterMutexLock mu(self, *Locks::dex_lock_);
+    for (uint32_t i = 0, num_dex_caches = dex_files.size(); i != num_dex_caches; ++i) {
+      ObjPtr<mirror::DexCache> dex_cache = dex_caches->GetWithoutChecks(i);
+      dex_cache->Initialize(dex_files[i].get(), class_loader.Get());
+    }
+  }
+
+  if (!app_image) {
+    // Register dex files.
+    for (uint32_t i = 0; i != num_dex_files; ++i) {
+      AppendToBootClassPath(dex_files[i].get(), dex_caches->GetWithoutChecks(i));
     }
   }
 
@@ -2488,32 +2412,6 @@ bool ClassLinker::AddImageSpace(gc::space::ImageSpace* space,
   }
 
   VLOG(class_linker) << "Adding image space took " << PrettyDuration(NanoTime() - start_time);
-  return true;
-}
-
-bool ClassLinker::AddImageSpaces(ArrayRef<gc::space::ImageSpace*> spaces,
-                                 Handle<mirror::ClassLoader> class_loader,
-                                 ClassLoaderContext* context,
-                                 /*out*/ std::vector<std::unique_ptr<const DexFile>>* dex_files,
-                                 /*out*/ std::string* error_msg) {
-  std::vector<std::vector<std::unique_ptr<const DexFile>>> dex_files_by_space_index;
-  for (const gc::space::ImageSpace* space : spaces) {
-    std::vector<std::unique_ptr<const DexFile>> space_dex_files;
-    if (!OpenAndInitImageDexFiles(space, class_loader, /*out*/ &space_dex_files, error_msg)) {
-      return false;
-    }
-    dex_files_by_space_index.push_back(std::move(space_dex_files));
-  }
-  // This must be done in a separate loop after all dex files are initialized because there can be
-  // references from an image space to another image space that comes after it.
-  for (size_t i = 0u, size = spaces.size(); i != size; ++i) {
-    std::vector<std::unique_ptr<const DexFile>>& space_dex_files = dex_files_by_space_index[i];
-    if (!AddImageSpace(spaces[i], class_loader, context, space_dex_files, error_msg)) {
-      return false;
-    }
-    // Append opened dex files at the end.
-    std::move(space_dex_files.begin(), space_dex_files.end(), std::back_inserter(*dex_files));
-  }
   return true;
 }
 

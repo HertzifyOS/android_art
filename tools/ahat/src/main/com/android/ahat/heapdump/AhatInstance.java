@@ -410,6 +410,24 @@ public abstract class AhatInstance implements Diffable<AhatInstance> {
   }
 
   /**
+   * Returns true if this instance is a message instance.
+   * @return true if this instance is a message instance
+   */
+  public boolean isMessageInstance() {
+    return false;
+  }
+
+  /**
+   * Returns this as an AhatMessageInstance if this is an AhatMessageInstance.
+   * Returns null if this is not an AhatMessageInstance.
+   *
+   * @return this instance as a message instance
+   */
+  public AhatMessageInstance asMessageInstance() {
+    return null;
+  }
+
+  /**
    * Returns the <code>referent</code> associated with this instance.
    * This is only relevant for instances of java.lang.ref.Reference or its
    * subclasses. Returns null if the instance has no referent associated with

@@ -94,6 +94,36 @@ public class DumpedStuff extends SuperDumpedStuff {
 
     bitmapOne = new Bitmap(100, 200, 0xDEADBEEF, bigArray);
     bitmapTwo = new Bitmap(100, 200, 0xBEEFDEAD, bigArray);
+
+    // Initialize Looper/Handler/Messages
+    looper = new android.os.Looper();
+    looper.mThread = Thread.currentThread();
+    looper.mQueue = new android.os.MessageQueue();
+
+    handler = new android.os.Handler();
+    handler.mLooper = looper;
+    handler.mQueue = looper.mQueue;
+
+    message1 = new android.os.Message();
+    message1.when = 1000;
+    message1.target = handler;
+    message1.what = 42;
+
+    barrierMessage = new android.os.Message();
+    barrierMessage.when = 1500;
+    barrierMessage.target = null; // barrier
+    barrierMessage.arg1 = 123; // token
+
+    message2 = new android.os.Message();
+    message2.when = 2000;
+    message2.target = handler;
+    message2.what = 43;
+
+    // Link them in queue
+    looper.mQueue.mMessages = message1;
+    message1.next = barrierMessage;
+    barrierMessage.next = message2;
+    message2.next = null;
   }
 
   public static class ObjectTree {
@@ -236,6 +266,12 @@ public class DumpedStuff extends SuperDumpedStuff {
   Object fakeBinderService = new FakeBinderService();
   Object binderToken = new android.os.Binder();
   Object namedBinderToken = new android.os.Binder("awesomeToken");
+
+  public android.os.Looper looper;
+  public android.os.Handler handler;
+  public android.os.Message message1;
+  public android.os.Message message2;
+  public android.os.Message barrierMessage;
 
   Object unreachableAnchor = new Object();
 

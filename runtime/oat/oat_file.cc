@@ -2316,6 +2316,36 @@ const OatDexFile* OatFile::GetOatDexFile(const char* dex_location, std::string* 
   return oat_dex_file;
 }
 
+std::unique_ptr<const DexFile> OatFile::OpenOatDexFile(const char* location,
+                                                       std::string* error_msg) const {
+  DCHECK(error_msg != nullptr);
+  std::unique_ptr<const DexFile> dex_file;
+  const OatDexFile* oat_dex_file = GetOatDexFile(location, error_msg);
+  if (oat_dex_file == nullptr) {
+    return std::unique_ptr<const DexFile>();
+  }
+  std::string inner_error_msg;
+  dex_file = oat_dex_file->OpenDexFile(&inner_error_msg);
+  if (dex_file == nullptr) {
+    *error_msg = StringPrintf("Failed to open dex file %s from within oat file %s error '%s'",
+                              location,
+                              GetLocation().c_str(),
+                              inner_error_msg.c_str());
+    return std::unique_ptr<const DexFile>();
+  }
+
+  if (dex_file->GetLocationChecksum() != oat_dex_file->GetDexFileLocationChecksum()) {
+    CHECK(dex_file->GetSha1() != oat_dex_file->GetSha1());
+    *error_msg = StringPrintf("Checksums do not match for %s: %x vs %x",
+                              location,
+                              dex_file->GetLocationChecksum(),
+                              oat_dex_file->GetDexFileLocationChecksum());
+    return std::unique_ptr<const DexFile>();
+  }
+  CHECK(dex_file->GetSha1() == oat_dex_file->GetSha1());
+  return dex_file;
+}
+
 OatDexFile::OatDexFile(const OatFile* oat_file,
                        const std::string& dex_file_location,
                        const std::string& canonical_dex_file_location,

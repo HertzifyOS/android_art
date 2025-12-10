@@ -493,7 +493,7 @@ def benchmark_selector(benchmark_to_run):
   else:
     return (
         [BenchUnsafe(UNSAFE_CAS, static, vartype, method)
-            for method in ["compareAndSwap", "compareAndSet"]
+            for method in ["compareAndSet"]
             for static in [True, False]
             for vartype in ["int", "String"]])
 
