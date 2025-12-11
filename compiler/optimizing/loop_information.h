@@ -130,8 +130,12 @@ class HLoopInformation final : public ArenaObject<kArenaAllocLoopInfo> {
 
  private:
   // Internal recursive implementation of `Populate`.
-  void PopulateRecursive(HBasicBlock* block);
-  void PopulateIrreducibleRecursive(HBasicBlock* block, ArenaBitVector* finalized);
+  void PopulateRecursive(HBasicBlock* block,
+                         const ArenaSafeMap<HBasicBlock*, ArenaSet<HBasicBlock*>>& blocks_in_catch);
+  void PopulateIrreducibleRecursive(
+      HBasicBlock* block,
+      ArenaBitVector* finalized,
+      const ArenaSafeMap<HBasicBlock*, ArenaSet<HBasicBlock*>>& blocks_in_catch);
 
   // Set the loop information in the `block`. Overrides the `block`'s current
   // loop information if it is an outer loop of the loop information `*this`.

@@ -1672,8 +1672,12 @@ size_t TraceWriter::FlushEntriesFormatV1(
         method_trace_entries, entry_index, record, has_thread_cpu_clock, has_wall_clock);
 
     auto [method_id, is_new_method] = GetMethodEncoding(record.method);
-    if (is_new_method && trace_output_mode_ == TraceOutputMode::kStreaming) {
-      RecordMethodInfoV1(method_infos.find(record.method)->second, method_id);
+    if (is_new_method) {
+      if (trace_output_mode_ == TraceOutputMode::kStreaming) {
+        RecordMethodInfoV1(method_infos.find(record.method)->second, method_id);
+      } else {
+        methods_list_.emplace(method_id, method_infos.find(record.method)->second);
+      }
     }
 
     DCHECK_LT(buffer_index + record_size, buffer_size_);
@@ -1904,8 +1908,8 @@ void TraceWriter::EncodeEventBlockHeader(uint8_t* ptr,
 
 void TraceWriter::DumpMethodList(std::ostream& os) {
   MutexLock mu(Thread::Current(), trace_writer_lock_);
-  for (auto const& entry : art_method_id_map_) {
-    os << GetMethodLine(GetMethodInfoLine(entry.first), entry.second);
+  for (auto const& entry : methods_list_) {
+    os << GetMethodLine(entry.second, entry.first);
   }
 }
 

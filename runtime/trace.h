@@ -372,10 +372,13 @@ class TraceWriter {
   // The clock source for this tracing.
   const TraceClockSource clock_source_;
 
-  // Map of thread ids and names. This is used only in non-streaming mode, since we have to dump
-  // information about all threads in one block. In streaming mode, thread info is recorded directly
-  // in the file when we see the first even from this thread.
+  // threads_list_ and methods_list_ are used only in non-streaming mode, since we have to dump
+  // information about all threads / methods in one block. In streaming mode, the information is
+  // recorded directly in the file when we see the first event.
+  // Map of thread ids to names.
   SafeMap<uint16_t, std::string> threads_list_;
+  // Map of method ids to names.
+  std::unordered_map<uint32_t, std::string> methods_list_;
 
   // Map from ArtMethod* to index.
   std::unordered_map<ArtMethod*, uint32_t> art_method_id_map_ GUARDED_BY(trace_writer_lock_);
