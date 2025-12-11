@@ -319,6 +319,7 @@ void InternTable::SweepInternTableWeaks(IsMarkedVisitor* visitor) {
 }
 
 void InternTable::Table::Remove(ObjPtr<mirror::String> s, uint32_t hash) {
+  DCHECK(Locks::mutator_lock_->IsSharedHeld(Thread::Current()));
   // Note: We can remove weak interns even from frozen tables when promoting to strong interns.
   // We can remove strong interns only for a transaction rollback.
   for (InternalTable& table : tables_) {
@@ -335,7 +336,7 @@ FLATTEN
 ObjPtr<mirror::String> InternTable::Table::Find(ObjPtr<mirror::String> s,
                                                 uint32_t hash,
                                                 size_t num_searched_frozen_tables) {
-  Locks::intern_table_lock_->AssertHeld(Thread::Current());
+  DCHECK(Locks::mutator_lock_->IsSharedHeld(Thread::Current()));
   auto mid = tables_.begin() + num_searched_frozen_tables;
   for (Table::InternalTable& table : MakeIterationRange(tables_.begin(), mid)) {
     DCHECK(table.set_.FindWithHash(GcRoot<mirror::String>(s), hash) == table.set_.end());
@@ -375,6 +376,7 @@ void InternTable::Table::AddNewTable() {
 }
 
 void InternTable::Table::Insert(ObjPtr<mirror::String> s, uint32_t hash) {
+  DCHECK(Locks::mutator_lock_->IsSharedHeld(Thread::Current()));
   // Always insert the last table, the image tables are before and we avoid inserting into these
   // to prevent dirty pages.
   DCHECK(!tables_.empty());

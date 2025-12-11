@@ -997,7 +997,10 @@ class ImageSpace::Loader {
         ArrayRef<ImageSpace* const> old_spaces =
             boot_image_spaces.SubArray(/*pos=*/ boot_image_space_dependencies);
         SafeMap<mirror::String*, mirror::String*> intern_remap;
-        ScopedObjectAccess soa(Thread::Current());
+        // Note: This `space` is not yet part of the heap and we're reading only
+        // constant data from the boot image, so we do not really need the mutator
+        // lock here. Pretend to acquire the reader access for static analysis.
+        FakeReaderMutexLock fake_lock(*Locks::mutator_lock_);
         RemoveInternTableDuplicates(old_spaces, space.get(), &intern_remap);
         if (!intern_remap.empty()) {
           RemapInternedStringDuplicates(intern_remap, space.get());
@@ -2434,8 +2437,8 @@ class ImageSpace::BootImageLoader {
 
   void DeduplicateInternedStrings(ArrayRef<const std::unique_ptr<ImageSpace>> spaces,
                                   TimingLogger* logger) {
-    // Note: The heap does not exist yet, so the mutator lock is irrelevant. Pretend that we
-    // acquire the reader access for static analysis of calls to helper functions we need.
+    // Note: These `spaces` are not yet part of the heap, so we do not need the mutator lock.
+    // Pretend to acquire the reader access for static analysis.
     FakeReaderMutexLock fake_lock(*Locks::mutator_lock_);
 
     TimingLogger::ScopedTiming timing("DeduplicateInternedStrings", logger);
