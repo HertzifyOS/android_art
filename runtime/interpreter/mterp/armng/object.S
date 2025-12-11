@@ -371,16 +371,22 @@
 %  fetch_from_thread_cache("r0", miss_label=slow_path)
 .L${opcode}_resume:
    ldr     r1, [r0, #ART_FIELD_OFFSET_OFFSET]
-   lsr     r2, rINST, #8               // r2 <- A
+   lsrs    r2, rINST, #8               // r2 <- A; set flags to use 16-bit encoding
    ldr     r0, [r0, #ART_FIELD_DECLARING_CLASS_OFFSET]
-   TEST_IF_MARKING .L${opcode}_read_barrier
+%  if wide:
+     movs    r3, #0                    // r3 <- 0; set flags to use 16-bit encoding
+     TEST_IF_MARKING_RZERO r3, .L${opcode}_read_barrier
+%  else:
+     TEST_IF_MARKING .L${opcode}_read_barrier
+%  pass
 .L${opcode}_resume_after_read_barrier:
 %  if wide:
      add     r0, r0, r1
+     PRESCALE_VREG r2, r2, s="s"       // r2 <- A << 2; set flags to use 16-bit encoding
      ldrd    r0, r1, [r0]
-     CLEAR_SHADOW_PAIR r2, ip, lr
-     VREG_INDEX_TO_ADDR r2, r2
-     SET_VREG_WIDE_BY_ADDR r0, r1, r2  // fp[A] <- value
+     CLEAR_SHADOW_PAIR_PRESCALED_RZERO r2, r3, r4, s="s"  // set flags to use 16-bit encoding
+     VREG_INDEX_TO_ADDR_PRESCALED r2, r2
+     SET_VREG_WIDE_BY_ADDR r0, r1, r2, wb="!"  // fp[A] <- value; write-back to use 16-bit encoding
 %  elif is_object:
      $load   r0, [r0, r1]
      UNPOISON_HEAP_REF r0
@@ -393,16 +399,9 @@
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
+%  if not (is_object or wide):
 .L${opcode}_read_barrier:
-   bl      art_quick_read_barrier_mark_reg00
-%  if is_object:
-     ldr     r0, [r0, r1]
-     UNPOISON_HEAP_REF r0
-.L${opcode}_mark_after_load:
-     // Here, we know the marking register is set.
      bl      art_quick_read_barrier_mark_reg00
-     b       .L${opcode}_after_reference_load
-%  else:
      b       .L${opcode}_resume_after_read_barrier
 
 %def op_sget_slow_path(load, wide, is_object):
@@ -454,6 +453,18 @@
 .L${opcode}_slow_path_read_barrier:
    bl      art_quick_read_barrier_mark_reg00
    b       .L${opcode}_slow_path_resume_after_read_barrier
+%  if is_object or wide:
+.L${opcode}_read_barrier:
+     bl      art_quick_read_barrier_mark_reg00
+%    if is_object:
+       ldr     r0, [r0, r1]
+       UNPOISON_HEAP_REF r0
+.L${opcode}_mark_after_load:
+       // Here, we know the marking register is set.
+       bl      art_quick_read_barrier_mark_reg00
+       b       .L${opcode}_after_reference_load
+%    else:
+       b       .L${opcode}_resume_after_read_barrier
 
 %def op_sget_wide():
 %  op_sget(load="ldr", wide=True)
