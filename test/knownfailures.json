@@ -700,16 +700,27 @@
         "description": [ "The test expects native-allocation GCs to finish within certain time-limit." ]
     },
     {
-        "tests": ["638-checker-inline-cache-intrinsic"],
+        "tests": ["638-checker-inline-cache-intrinsic",
+                  "566-polymorphic-inlining"
+        ],
         "variant": "continuous-gc",
+        "env_vars": {"ART_USE_READ_BARRIER": "true"},
         "bug": "b/462460429",
         "description": [ "We do not update inline caches while marking. Under continuous-gc, ",
                          "we may never update inline caches as needed by this test to pass." ]
     },
     {
+        "tests": ["961-default-iface-resolution-gen"],
+        "variant": "continuous-gc",
+        "bug": "b/463783831",
+        "env_vars": {"ART_USE_READ_BARRIER": "true"},
+        "description": [ "Lock-order violation only in case of CC." ]
+    },
+    {
         "tests": ["099-vmdebug"],
         "variant": "continuous-gc",
-	"bug": "b/462513344",
+        "bug": "b/462513344",
+        "env_vars": {"ART_USE_READ_BARRIER": "false"},
         "description": [ "Objects-freed calculation for young CMC GCs needs to be fixed." ]
     },
     {
@@ -722,7 +733,8 @@
     {
         "tests": ["2031-zygote-compiled-frame-deopt"],
         "variant": "continuous-gc",
-	"bug": "b/463464286",
+        "bug": "b/463464286",
+        "env_vars": {"ART_USE_READ_BARRIER": "false"},
         "description": [ "Deadlock between marking-pause and reclaim-phase of CMC as we have a ",
 			 "window not holding the mutator-lock, wherein another thread can acquire ",
 			 "mutator-lock exclusively and then wait for weak-ref access." ]
