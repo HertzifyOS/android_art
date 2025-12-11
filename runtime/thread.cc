@@ -2572,11 +2572,7 @@ Thread::DumpOrder Thread::DumpStack(std::ostream& os,
     uint64_t nanotime = NanoTime();
     // If we're currently in native code, dump that stack before dumping the managed stack.
     if (dump_native_stack && (dump_for_abort || force_dump_stack || ShouldShowNativeStack(this))) {
-      ArtMethod* method =
-          GetCurrentMethod(nullptr,
-                           /*check_suspended=*/ !force_dump_stack,
-                           /*abort_on_error=*/ !(dump_for_abort || force_dump_stack));
-      DumpNativeStack(os, unwinder, GetTid(), "  native: ", method);
+      DumpNativeStack(os, unwinder, GetTid(), "  native: ");
     }
     dump_order = DumpJavaStack(os,
                                /*check_suspended=*/ !force_dump_stack,
