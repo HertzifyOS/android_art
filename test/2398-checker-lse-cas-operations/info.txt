@@ -1,1 +1,1 @@
-Test LSE CAS operations.
+Test LSE CAS and atomic operations.
