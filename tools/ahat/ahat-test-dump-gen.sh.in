@@ -35,7 +35,7 @@ AHAT_TEST_DUMP_JAR=@AHAT_TEST_DUMP_JAR@
 AHAT_TEST_DUMP_MAP=$(dirname ${AHAT_TEST_DUMP_JAR})/../proguard_dictionary
 
 # Build required dependencies.
-./art/tools/buildbot-build.sh
+./art/tools/buildbot-build.sh --host --skip-run-tests-build
 m libahat-test-jni
 
 # test-dump.hprof
