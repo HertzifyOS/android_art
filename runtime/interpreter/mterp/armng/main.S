@@ -331,6 +331,9 @@
     cmp rMR, \rzero
     bne \label
 .endm
+.macro TEST_IF_MARKING_CBZ rmr, label
+    cbnz \rmr, \label
+.endm
 
 // Expects:
 // - ip and lr to be available.
@@ -1429,14 +1432,12 @@
    .endif
 .endm
 
-.macro WRITE_BARRIER_IF_OBJECT is_object, value, holder, label, tmp
+.macro WRITE_BARRIER_IF_OBJECT is_object, value, holder, label, tmp, tmp2="ip", s=""
    .if \is_object
-     // In T32, we would use `SMART_CBZ \value, \label`
-     cmp     \value, #0
-     beq     \label
-     ldr     ip, [rSELF, #THREAD_CARD_TABLE_OFFSET]
-     lsr     \tmp, \holder, #CARD_TABLE_CARD_SHIFT
-     strb    ip, [ip, \tmp]
+     SMART_CBZ \value, \label
+     ldr     \tmp2, [rSELF, #THREAD_CARD_TABLE_OFFSET]
+     lsr\s   \tmp, \holder, #CARD_TABLE_CARD_SHIFT
+     strb    \tmp2, [\tmp2, \tmp]
 \label:
 %    pass
    .endif
@@ -1739,15 +1740,18 @@ OAT_ENTRY ExecuteNterpImpl
 %def opcode_pre():
 %   pass
 
-%def fetch_from_thread_cache(dest_reg, miss_label):
+%def fetch_from_thread_cache(dest_reg, miss_label, wb=False, tmp="ip", tmp2="ip"):
    // Fetch some information from the thread cache.
-   // Uses ip and lr as temporaries.
-   add      ip, rSELF, #THREAD_INTERPRETER_CACHE_OFFSET       // cache address
+   // Uses `tmp`, `tmp2` (must differ from `tmp` for write-back) and `lr` as temporaries.
+   add      ${tmp2}, rSELF, #THREAD_INTERPRETER_CACHE_OFFSET  // cache address
    ubfx     lr, rPC, #THREAD_INTERPRETER_CACHE_KEY_LOW_BIT, #THREAD_INTERPRETER_CACHE_SIZE_LOG2
-                                           // entry index
-   add      ip, ip, lr, lsl #3             // entry address within the cache
-   ldrd     ip, ${dest_reg}, [ip]          // entry key (pc), value (field/method/etc.)
-   cmp      ip, rPC
+                                              // entry index
+   add      ${tmp2}, ${tmp2}, lr, lsl #3      // entry address within the cache
+%  if wb:
+     ldmia ${tmp2}!, {${tmp}, ${dest_reg}}    // 16-bit instruction if all regs are low.
+%  else:
+     ldrd     ${tmp}, ${dest_reg}, [${tmp2}]  // entry key (pc), value (field/method/etc.)
+   cmp      ${tmp}, rPC
    bne      ${miss_label}
 
 %def footer():

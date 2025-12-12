@@ -172,27 +172,33 @@
 %def op_iget(load="ldr", wide=False, is_object=False):
 %  slow_path = add_slow_path(op_iget_slow_path, load, wide, is_object)
    // Fast-path which gets the field from thread-local cache.
-%  fetch_from_thread_cache("r0", miss_label=slow_path)
+%  fetch_from_thread_cache("r1", miss_label=slow_path, wb=wide or is_object, tmp="r0", tmp2="r2")
 .L${opcode}_resume:
-   lsr     r2, rINST, #12              // r2<- B
+%  if wide or is_object:
+     lsrs    r2, rINST, #12            // r2<- B; set flags to use 16-bit encoding
+%  else:
+     lsr     r2, rINST, #12            // r2<- B
    GET_VREG r3, r2                     // r3<- object we're operating on
    ubfx    r2, rINST, #8, #4           // r2<- A
    cmp     r3, #0
    beq     common_errNullObject        // object was null
 %  if wide:
-     add     r3, r3, r0
-     ldrd    r0, r1, [r3]
-     CLEAR_SHADOW_PAIR r2, ip, lr
-     VREG_INDEX_TO_ADDR r2, r2
-     SET_VREG_WIDE_BY_ADDR r0, r1, r2  // fp[A] <- value
+     PRESCALE_VREG r2, r2, s="s"       // set flags to use 16-bit encoding
+     add     r1, r1, r3
+     CLEAR_SHADOW_PAIR_PRESCALED r2, r0, r3, s="s"  // set flags to use 16-bit encoding
+     ldm     r1, {r0, r1}              // use 16-bit LDM instead of 32-bit LDRD
+     VREG_INDEX_TO_ADDR_PRESCALED r2, r2
+     SET_VREG_WIDE_BY_ADDR r0, r1, r2, wb="!"  // fp[A] <- value; write-back to use 16-bit encoding
 %  elif is_object:
-     $load   r0, [r3, r0]
+     $load   r0, [r3, r1]
      UNPOISON_HEAP_REF r0
-     TEST_IF_MARKING .L${opcode}_read_barrier
+     mov     r3, rMR                   // MOV+CBZ is 4B (`cmp rMR, #0` + BNE is 6B).
+     TEST_IF_MARKING_CBZ r3, .L${opcode}_read_barrier
 .L${opcode}_resume_after_read_barrier:
-     SET_VREG_OBJECT r0, r2            // fp[A] <- value
+     PRESCALE_VREG r2, r2, s="s"       // set flags to use 16-bit encoding
+     SET_VREG_OBJECT_PRESCALED r0, r2  // fp[A] <- value
 %  else:
-     $load   r0, [r3, r0]
+     $load   r0, [r3, r1]
      SET_VREG r0, r2                   // fp[A] <- value
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
@@ -212,8 +218,8 @@
    ldr     r0, [r0, ART_METHOD_DECLARING_CLASS_OFFSET]
    mov     r1, rPC
    bl      NterpGetLocalInstanceField
-   cmp     r0, #0
-   bge     .L${opcode}_resume
+   movs    r1, r0
+   bpl     .L${opcode}_resume
 .L${opcode}_slow_path_continue:
    mov     r0, rSELF
    ldr     r1, [sp]
@@ -221,8 +227,8 @@
    mov     r3, rFP
    EXPORT_PC
    bl      nterp_get_instance_field_offset
-   cmp     r0, #0
-   bge     .L${opcode}_resume
+   movs    r1, r0
+   bpl     .L${opcode}_resume
    CLEAR_INSTANCE_VOLATILE_MARKER r0
    lsr     r2, rINST, #12              // r2<- B
    GET_VREG r3, r2                     // r3<- object we're operating on
@@ -270,12 +276,15 @@
 %def op_iput(store="str", wide=False, is_object=False):
 %  slow_path = add_slow_path(op_iput_slow_path, store, wide, is_object)
 %  if not wide:
-     ubfx    r4, rINST, #8, #4           // r4<- A
-     GET_VREG r4, r4                     // r4 <- v[A]
+     ubfx    r4, rINST, #8, #4         // r4<- A
+     GET_VREG r4, r4                   // r4 <- v[A]
    // Fast-path which gets the field from thread-local cache.
 %  fetch_from_thread_cache("r0", miss_label=slow_path)
 .L${opcode}_resume:
-   lsr     r1, rINST, #12              // r1<- B
+%  if is_object:
+     lsrs    r1, rINST, #12            // r1<- B; set flags to use 16-bit encoding
+%  else:
+     lsr     r1, rINST, #12            // r1<- B
    GET_VREG r1, r1                     // vB (object we're operating on)
    cmp     r1, #0
    beq     common_errNullObject
@@ -288,7 +297,8 @@
 %  else:
      POISON_HEAP_REF_IF_OBJECT $is_object, r4
      $store  r4, [r1, r0]
-     WRITE_BARRIER_IF_OBJECT $is_object, r4, r1, .L${opcode}_skip_write_barrier, r0
+     // Use low register temps and set flags to use 16-bit encodings.
+     WRITE_BARRIER_IF_OBJECT $is_object, r4, r1, .L${opcode}_skip_write_barrier, r0, r2, s="s"
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
@@ -491,11 +501,12 @@
      lsr     r4, rINST, #8             // r4 <- A
      GET_VREG r4, r4                   // r4 <- v[A]
    // Fast-path which gets the field from thread-local cache.
-%  fetch_from_thread_cache("r0", miss_label=slow_path)
+%  fetch_from_thread_cache("r1", miss_label=slow_path, wb=is_object, tmp="r0", tmp2="r2")
 .L${opcode}_resume:
-   ldr     r1, [r0, #ART_FIELD_OFFSET_OFFSET]
-   ldr     r0, [r0, #ART_FIELD_DECLARING_CLASS_OFFSET]
-   TEST_IF_MARKING .L${opcode}_read_barrier
+   ldr     r0, [r1, #ART_FIELD_DECLARING_CLASS_OFFSET]
+   mov     r3, rMR                     // MOV+CBZ is 4B (`cmp rMR, #0` + BNE is 6B).
+   ldr     r1, [r1, #ART_FIELD_OFFSET_OFFSET]
+   TEST_IF_MARKING_CBZ r3, .L${opcode}_read_barrier
 .L${opcode}_resume_after_read_barrier:
 %  if wide:
      lsr     r2, rINST, #8             // r2 <- A
@@ -506,7 +517,8 @@
 %  else:
      POISON_HEAP_REF_IF_OBJECT $is_object, r4
      $store  r4, [r0, r1]
-     WRITE_BARRIER_IF_OBJECT $is_object, r4, r0, .L${opcode}_skip_write_barrier, r1
+     // Use low register temps and set flags to use 16-bit encodings.
+     WRITE_BARRIER_IF_OBJECT $is_object, r4, r0, .L${opcode}_skip_write_barrier, r1, r2, s="s"
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
@@ -527,7 +539,7 @@
      bl      NterpGetLocalStaticFieldForSPutObject
 %  else:
      bl      NterpGetLocalStaticField
-   cmp     r0, #0
+   movs     r1, r0
    bne     .L${opcode}_resume
 .L${opcode}_slow_path_continue:
    mov     r0, rSELF
@@ -543,6 +555,7 @@
      // Reload the value as it may have moved.
      lsr     r4, rINST, #8             // r4 <- A
      GET_VREG r4, r4                   // r4 <- v[A]
+   mov     r1, r0
    tst     r0, #1
    beq     .L${opcode}_resume
    CLEAR_STATIC_VOLATILE_MARKER r0
