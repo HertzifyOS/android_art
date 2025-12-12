@@ -64,13 +64,6 @@ struct CmdlineType<AssumeValueOptions> : CmdlineTypeParser<AssumeValueOptions> {
       return Result::Failure(std::string("Invalid --assume-value value: '") + args + "'");
     }
 
-    if (!com::android::art::rw::flags::assume_value_sdk_int()) {
-      // Feature disabled, silently ignore setting the value. Note that if we ever add additional
-      // support beyond for more assumed values beyond SDK_INT, this will need to be adjusted.
-      static_assert(AssumeValueSignatures::kSignatures.size() == 1);
-      return Result::SuccessNoValue();
-    }
-
     auto known_signature = AssumeValueSignatures::Lookup(class_descriptor, member_name);
     if (known_signature == AssumeValueSignatures::kSdkInt) {
       assume_value_options.SetSdkInt(parsed_value.GetValue());

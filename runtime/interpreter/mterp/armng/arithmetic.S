@@ -335,9 +335,9 @@
      */
     /* cmp-long vAA, vBB, vCC */
     FETCH r0, 1                         @ r0<- CCBB
-    mov     r4, rINST, lsr #8           @ r4<- AA
+    lsrs    r4, rINST, #(8-2)           @ r4<- AA << 2; opcode 31 has highest two bits clear
     and     r2, r0, #255                @ r2<- BB
-    mov     r3, r0, lsr #8              @ r3<- CC
+    lsrs    r3, r0, #8                  @ r3<- CC; set flags to use 16-bit encoding (same above)
     VREG_INDEX_TO_ADDR r2, r2           @ r2<- &fp[BB]
     VREG_INDEX_TO_ADDR r3, r3           @ r3<- &fp[CC]
     GET_VREG_WIDE_BY_ADDR r0, r1, r2    @ r0/r1<- vBB/vBB+1
@@ -352,7 +352,7 @@
     it      eq
     moveq   r3, #0
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
-    SET_VREG r3, r4                     @ vAA<- ip
+    SET_VREG_PRESCALED r3, r4, s="s"    @ vAA<- r3; set flags to use 16-bit encoding.
     PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     GOTO_OPCODE                         @ jump to next instruction
 

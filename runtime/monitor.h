@@ -227,10 +227,9 @@ class Monitor {
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   static void FailedUnlock(ObjPtr<mirror::Object> obj,
-                           uint32_t expected_owner_thread_id,
+                           Thread* expected_owner,
                            uint32_t found_owner_thread_id,
-                           Monitor* mon)
-      REQUIRES(!Locks::thread_list_lock_)
+                           Monitor* mon) REQUIRES(!Locks::thread_list_lock_)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   // Try to lock without blocking, returns true if we acquired the lock.
@@ -407,11 +406,6 @@ class Monitor {
 
   // Get owning method and dex pc for the given thread, if available.
   void GetLockOwnerInfo(/*out*/ArtMethod** method, /*out*/uint32_t* dex_pc, Thread* t);
-
-  // Do the same, while holding the monitor. There are no concurrent updates.
-  void GetLockOwnerInfoLocked(/*out*/ArtMethod** method, /*out*/uint32_t* dex_pc,
-                              uint32_t thread_id)
-      REQUIRES(monitor_lock_);
 
   // We never clear lock_owner method and dex pc. Since it often reflects
   // ownership when we last detected contention, it may be inconsistent with owner_

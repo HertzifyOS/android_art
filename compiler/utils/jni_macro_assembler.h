@@ -297,6 +297,10 @@ class JNIMacroAssemblerFwd : public JNIMacroAssembler<kPointerSize> {
  protected:
   explicit JNIMacroAssemblerFwd(ArenaAllocator* allocator) : asm_(allocator) {}
 
+  template <typename FeaturesT>
+  JNIMacroAssemblerFwd(ArenaAllocator* allocator, const FeaturesT* features)
+      : asm_(allocator, features) {}
+
   T asm_;
 };
 

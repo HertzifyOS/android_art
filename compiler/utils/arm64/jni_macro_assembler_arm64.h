@@ -39,12 +39,15 @@
 #pragma GCC diagnostic pop
 
 namespace art HIDDEN {
+
+class Arm64InstructionSetFeatures;
+
 namespace arm64 {
 
 class Arm64JNIMacroAssembler final : public JNIMacroAssemblerFwd<Arm64Assembler, PointerSize::k64> {
  public:
-  explicit Arm64JNIMacroAssembler(ArenaAllocator* allocator)
-      : JNIMacroAssemblerFwd(allocator) {}
+  Arm64JNIMacroAssembler(ArenaAllocator* allocator, const Arm64InstructionSetFeatures* features)
+      : JNIMacroAssemblerFwd(allocator, features) {}
 
   ~Arm64JNIMacroAssembler();
 

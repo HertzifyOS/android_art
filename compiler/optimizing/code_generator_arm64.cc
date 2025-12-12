@@ -1366,6 +1366,12 @@ void CodeGeneratorARM64::MaybeRecordTraceEvent(bool is_method_entry) {
   }
 
   HGraph* graph = GetGraph();
+  if (graph->IsCompilingOsr()) {
+    // Don't record method exits for osr compilations because we don't support
+    // method entry events for nterp / switch interpreter.
+    return;
+  }
+
   // Don't instrument methods that are unlikely to be long running
   if (!graph->HasLoops() &&
       !graph->HasMonitorOperations() &&
