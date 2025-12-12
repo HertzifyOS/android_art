@@ -511,7 +511,12 @@ class DeoptimizeStackVisitor final : public StackVisitor {
       } else {
         HandleOptimizingDeoptimization(method, new_frame, updated_vregs);
       }
-      new_frame->SetSkipMethodExitEvents(!supports_exit_events);
+      if (!new_frame->GetSkipMethodExitEvents()) {
+        // Don't reset if we already set the skip method exit events. When
+        // popping a frame, jvmti sets this bit to avoid any exit events from
+        // being sent. We shouldn't overwrite that here.
+        new_frame->SetSkipMethodExitEvents(!supports_exit_events);
+      }
       // If we are deoptimizing after method exit callback we shouldn't call the method exit
       // callbacks again for the top frame. We may have to deopt after the callback if the callback
       // either throws or performs other actions that require a deopt.

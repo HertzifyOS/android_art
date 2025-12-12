@@ -58,6 +58,9 @@ public final class SuspendEvents {
       int offset, Executable breakpointFunction, Thread thr);
   public static native void clearSuspendPopFrameEvent(Thread thr);
 
+  public static native void enableMethodExitEvents(Class klass, Executable callback, Thread thr);
+  public static native void disableExceptionEvents(Thread thr);
+
   public static final int EVENT_TYPE_CLASS_LOAD = 55;
   public static final int EVENT_TYPE_CLASS_PREPARE = 56;
   public static native void setupSuspendClassEvent(
@@ -66,6 +69,8 @@ public final class SuspendEvents {
 
   public static native void setupWaitForNativeCall(Thread thr);
   public static native void clearWaitForNativeCall(Thread thr);
+
+  public static native void clearTestData(Thread thr);
 
   /**
    * Waits for the given thread to be suspended.
