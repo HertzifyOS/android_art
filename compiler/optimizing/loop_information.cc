@@ -59,8 +59,7 @@ void HLoopInformation::Remove(HBasicBlock* block) {
   block_mask_.ClearBit(block->GetBlockId());
 }
 
-void HLoopInformation::PopulateRecursive(
-    HBasicBlock* block, const ArenaSafeMap<HBasicBlock*, ArenaSet<HBasicBlock*>>& blocks_in_catch) {
+void HLoopInformation::PopulateRecursive(HBasicBlock* block) {
   if (block_mask_.IsBitSet(block->GetBlockId())) {
     return;
   }
@@ -75,35 +74,12 @@ void HLoopInformation::PopulateRecursive(
       contains_irreducible_loop_ = true;
     }
   }
-
-  const bool is_catch_block = block->IsCatchBlock();
-  if (is_catch_block) {
-    auto it = blocks_in_catch.find(block);
-    if (it != blocks_in_catch.end()) {
-      const ArenaSet<HBasicBlock*>& try_blocks = it->second;
-      for (HBasicBlock* try_block : try_blocks) {
-        PopulateRecursive(try_block, blocks_in_catch);
-      }
-    }
-  }
-
   for (HBasicBlock* predecessor : block->GetPredecessors()) {
-    if (is_catch_block) {
-      DCHECK(predecessor->EndsWithTryBoundary());
-      if (predecessor->GetLastInstruction()->AsTryBoundary()->IsEntry()) {
-        // Predecessors that are try entries cannot flow to the catch block as they are outside of
-        // the try.
-        continue;
-      }
-    }
-    PopulateRecursive(predecessor, blocks_in_catch);
+    PopulateRecursive(predecessor);
   }
 }
 
-void HLoopInformation::PopulateIrreducibleRecursive(
-    HBasicBlock* block,
-    ArenaBitVector* finalized,
-    const ArenaSafeMap<HBasicBlock*, ArenaSet<HBasicBlock*>>& blocks_in_catch) {
+void HLoopInformation::PopulateIrreducibleRecursive(HBasicBlock* block, ArenaBitVector* finalized) {
   size_t block_id = block->GetBlockId();
 
   // If `block` is in `finalized`, we know its membership in the loop has been
@@ -120,7 +96,7 @@ void HLoopInformation::PopulateIrreducibleRecursive(
     // Note that we cannot use GetPreHeader, as the loop may have not been populated
     // yet.
     HBasicBlock* pre_header = block->GetPredecessors()[0];
-    PopulateIrreducibleRecursive(pre_header, finalized, blocks_in_catch);
+    PopulateIrreducibleRecursive(pre_header, finalized);
     if (block_mask_.IsBitSet(pre_header->GetBlockId())) {
       MarkInLoop(block);
       block_mask_.SetBit(block_id);
@@ -129,43 +105,20 @@ void HLoopInformation::PopulateIrreducibleRecursive(
 
       HLoopInformation* info = block->GetLoopInformation();
       for (HBasicBlock* back_edge : info->GetBackEdges()) {
-        PopulateIrreducibleRecursive(back_edge, finalized, blocks_in_catch);
+        PopulateIrreducibleRecursive(back_edge, finalized);
       }
     }
   } else {
     // Visit all predecessors. If one predecessor is part of the loop, this
     // block is also part of this loop.
-    auto process_predecessor = [&](HBasicBlock* predecessor) ALWAYS_INLINE {
-      PopulateIrreducibleRecursive(predecessor, finalized, blocks_in_catch);
+    for (HBasicBlock* predecessor : block->GetPredecessors()) {
+      PopulateIrreducibleRecursive(predecessor, finalized);
       if (!is_finalized && block_mask_.IsBitSet(predecessor->GetBlockId())) {
         MarkInLoop(block);
         block_mask_.SetBit(block_id);
         finalized->SetBit(block_id);
         is_finalized = true;
       }
-    };
-
-    const bool is_catch_block = block->IsCatchBlock();
-    if (is_catch_block) {
-      auto it = blocks_in_catch.find(block);
-      if (it != blocks_in_catch.end()) {
-        const ArenaSet<HBasicBlock*>& try_blocks = it->second;
-        for (HBasicBlock* try_block : try_blocks) {
-          process_predecessor(try_block);
-        }
-      }
-    }
-
-    for (HBasicBlock* predecessor : block->GetPredecessors()) {
-      if (is_catch_block) {
-        DCHECK(predecessor->EndsWithTryBoundary());
-        if (predecessor->GetLastInstruction()->AsTryBoundary()->IsEntry()) {
-          // Predecessors that are try entries cannot flow to the catch block as they are outside of
-          // the try.
-          continue;
-        }
-      }
-      process_predecessor(predecessor);
     }
   }
 
@@ -188,27 +141,6 @@ void HLoopInformation::Populate() {
 
   bool is_irreducible_loop = HasBackEdgeNotDominatedByHeader();
 
-  // Precompute catch block to try blocks mapping
-  ArenaSafeMap<HBasicBlock*, ArenaSet<HBasicBlock*>> blocks_in_catch(
-      graph->GetAllocator()->Adapter(kArenaAllocLoopInfo));
-
-  if (graph->HasTryCatch()) {
-    for (HBasicBlock* block : graph->GetReversePostOrderSkipEntryBlock()) {
-      if (!block->IsTryBlock()) {
-        continue;
-      }
-      const HTryBoundary& try_entry = block->GetTryCatchInformation()->GetTryEntry();
-      ArrayRef<HBasicBlock* const> handlers = try_entry.GetBlock()->GetExceptionalSuccessors();
-      for (HBasicBlock* handler : handlers) {
-        DCHECK(handler->IsCatchBlock());
-        ArenaSet<HBasicBlock*>& try_blocks = blocks_in_catch.GetOrCreate(handler, [&]() {
-          return ArenaSet<HBasicBlock*>(graph->GetAllocator()->Adapter(kArenaAllocLoopInfo));
-        });
-        try_blocks.insert(block);
-      }
-    }
-  }
-
   if (is_irreducible_loop) {
     // Allocate memory from local ScopedArenaAllocator.
     ScopedArenaAllocator allocator(graph->GetArenaStack());
@@ -220,11 +152,11 @@ void HLoopInformation::Populate() {
     visited.SetBit(header_->GetBlockId());
 
     for (HBasicBlock* back_edge : GetBackEdges()) {
-      PopulateIrreducibleRecursive(back_edge, &visited, blocks_in_catch);
+      PopulateIrreducibleRecursive(back_edge, &visited);
     }
   } else {
     for (HBasicBlock* back_edge : GetBackEdges()) {
-      PopulateRecursive(back_edge, blocks_in_catch);
+      PopulateRecursive(back_edge);
     }
   }
 

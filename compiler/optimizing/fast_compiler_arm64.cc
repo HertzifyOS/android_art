@@ -2698,7 +2698,7 @@ bool FastCompilerARM64::DoPut(const MemOperand& base,
     case Instruction::SPUT: {
       if (is_volatile) {
         if (src.IsFpuRegister()) {
-          temp = overwrite_holder ? holder : temps.AcquireW();
+          temp = overwrite_holder ? holder.W() : temps.AcquireW();
           __ Fmov(temp, SRegisterFrom(src));
           __ stlr(temp, mem);
         } else {

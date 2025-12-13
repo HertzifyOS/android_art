@@ -68,9 +68,14 @@
 
 .end method
 
-# Regression test that used to trigger a crash in LiveInterval::AddBackEdgeUses
-# since that method was expecting irreducible loops to have a valid linear
-# order, which we don't guarantee.
+## CHECK-START: int IrreducibleLoop.liveness2(boolean, boolean, boolean, int) builder (after)
+## CHECK-DAG:     Mul loop:<<Loop:B\d+>>
+## CHECK-DAG:     Not loop:<<Loop>>
+
+## CHECK-START: int IrreducibleLoop.liveness2(boolean, boolean, boolean, int) liveness (after)
+## CHECK-DAG:     Mul liveness:<<LPreEntry2:\d+>>
+## CHECK-DAG:     Not liveness:<<LBackEdge1:\d+>>
+## CHECK-EVAL:    <<LBackEdge1>> < <<LPreEntry2>>
 
 .method public liveness2(ZZZI)I
     .registers 10

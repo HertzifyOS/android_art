@@ -26,7 +26,9 @@
 #include "dex/dex_file-inl.h"
 #include "driver/compiler_options.h"
 #include "intrinsics_enum.h"
+#include "obj_ptr.h"
 #include "optimizing/data_type.h"
+#include "handle_cache-inl.h"
 #include "optimizing/nodes.h"
 
 namespace art HIDDEN {
@@ -832,6 +834,21 @@ void HConstantFoldingVisitor::VisitStaticFieldGet(HStaticFieldGet* instruction) 
         uint64_t raw_bits = field->Get64(field->GetDeclaringClass());
         double value = bit_cast<double, uint64_t>(raw_bits);
         constant = GetGraph()->GetDoubleConstant(value);
+        break;
+      }
+      case DataType::Type::kReference: {
+        if (instruction->HasConstantValue()) {
+          DCHECK_EQ(field->GetObject(field->GetDeclaringClass().Ptr()),
+                    instruction->GetConstantValue().Get());
+        } else {
+          ObjPtr<mirror::Object> obj = field->GetObject(field->GetDeclaringClass());
+          if (obj.IsNull()) {
+            constant = GetGraph()->GetNullConstant();
+          } else {
+            instruction->SetConstantValue(
+                GetGraph()->GetHandleCache()->GetHandles()->NewHandle(obj));
+          }
+        }
         break;
       }
       default:

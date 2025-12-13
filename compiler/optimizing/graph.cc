@@ -188,18 +188,17 @@ GraphAnalysisResult HGraph::BuildDominatorTree() {
   // (5) Compute the dominance information and the reverse post order.
   ComputeDominanceInformation();
 
-  // (6) Precompute per-block try membership before AnalyzeLoops as it needs this information for
-  //     the implicit edges between try blocks and its corresponding catch blocks.
-  //     The SSA builder also needs the information to build catch block phis from values of
-  //     locals at throwing instructions inside try blocks.
-  ComputeTryBlockInformation();
-
-  // (7) Analyze loops discovered through back edge analysis, and
+  // (6) Analyze loops discovered through back edge analysis, and
   //     set the loop information on each block.
   GraphAnalysisResult result = AnalyzeLoops();
   if (result != kAnalysisSuccess) {
     return result;
   }
+
+  // (7) Precompute per-block try membership before entering the SSA builder,
+  //     which needs the information to build catch block phis from values of
+  //     locals at throwing instructions inside try blocks.
+  ComputeTryBlockInformation();
 
   return kAnalysisSuccess;
 }

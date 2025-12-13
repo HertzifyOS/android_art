@@ -211,7 +211,8 @@ void RegisterAllocationResolver::Resolve(ArrayRef<HInstruction* const> safepoint
           Location location = Location::FpuRegisterPair(reg, temp->GetHighRegister());
           locations->SetTempAt(temp_index, location);
         } else {
-          locations->SetTempAt(temp_index, Location::FpuRegister(reg));
+          DCHECK(temp->HasRegisters());
+          locations->SetTempAt(temp_index, GetLocation(temp));
         }
         break;
 
@@ -224,6 +225,9 @@ void RegisterAllocationResolver::Resolve(ArrayRef<HInstruction* const> safepoint
 
 void RegisterAllocationResolver::UpdateSafepointLiveRegisters(
     ArrayRef<HInstruction* const> safepoints) {
+  // If the codegen has overlapping FPVec registers, we may want to update both the FP and Vec
+  // registers as live
+  bool has_overlapping_fp_vec_registers = codegen_->HasOverlappingFPVecRegisters();
   for (HInstruction* instruction : liveness_.GetInstructionsFromSsaIndexes()) {
     size_t remaining_safepoints = instruction->GetLiveInterval()->GetNumSafepointsAfter();
     uint32_t RegisterSet::* register_field_accessor =
@@ -237,14 +241,28 @@ void RegisterAllocationResolver::UpdateSafepointLiveRegisters(
         continue;
       }
       uint32_t register_mask = current->GetRegisters();
-      remaining_safepoints = current->ForCoveredSafepoints(
-          safepoints,
-          remaining_safepoints,
-          [register_field_accessor, register_mask](HInstruction* safepoint) ALWAYS_INLINE {
-            RegisterSet* live_registers = safepoint->GetLocations()->GetLiveRegisters();
-            (live_registers->*register_field_accessor) |= register_mask;
-            return true;
-          });
+      if (!has_overlapping_fp_vec_registers ||
+          current->NumberOfSpillSlotsNeeded() <= 2) {
+        remaining_safepoints = current->ForCoveredSafepoints(
+            safepoints,
+            remaining_safepoints,
+            [register_field_accessor, register_mask](HInstruction* safepoint) ALWAYS_INLINE {
+              RegisterSet* live_registers = safepoint->GetLocations()->GetLiveRegisters();
+              (live_registers->*register_field_accessor) |= register_mask;
+              return true;
+            });
+      } else {
+        remaining_safepoints = current->ForCoveredSafepoints(
+            safepoints,
+            remaining_safepoints,
+            [register_mask](
+                HInstruction* safepoint) ALWAYS_INLINE {
+              RegisterSet* live_registers = safepoint->GetLocations()->GetLiveRegisters();
+              live_registers->AddFpuRegisterSet(register_mask);
+              live_registers->AddVecRegisterSet(register_mask);
+              return true;
+            });
+      }
     }
   }
 }
@@ -681,7 +699,7 @@ void RegisterAllocationResolver::InsertMoveAfter(HInstruction* instruction,
   AddMove(move, source, destination, instruction, instruction->GetType());
 }
 
-Location RegisterAllocationResolver::GetLocation(LiveInterval* interval) {
+Location RegisterAllocationResolver::GetLocation(LiveInterval* interval) const {
   DCHECK(!interval->IsFixed());
   if (interval->HasRegisters()) {
     uint32_t reg = interval->GetRegisterOrLowRegister();
@@ -689,6 +707,13 @@ Location RegisterAllocationResolver::GetLocation(LiveInterval* interval) {
       if (interval->IsPair()) {
         return Location::FpuRegisterPair(reg, interval->GetHighRegister());
       } else {
+        if (codegen_->HasOverlappingFPVecRegisters()) {
+          // For vector operation we want to embedd the vector length in the Location info
+          // Determine if location is a vector by getting needed spill slots
+          size_t needed_spill_slots = interval->NumberOfSpillSlotsNeeded();
+          needed_spill_slots = (needed_spill_slots > 2) ? needed_spill_slots : 0;
+          return Location::FpuRegister(reg, needed_spill_slots * kVRegSize);
+        }
         return Location::FpuRegister(reg);
       }
     } else {
