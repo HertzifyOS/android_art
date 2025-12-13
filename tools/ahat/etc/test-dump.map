@@ -1,113 +1,115 @@
 # compiler: R8
-# compiler_version: 9.1.6-dev
+# compiler_version: 9.1.13-dev
 # min_api: 36
-# compiler_hash: 7447737e5c1476984153723cc04aa0972d7d094c
+# compiler_hash: 7627cbbeb60773baf10d691576a62f4257add330
 # common_typos_disable
 # {"id":"com.android.tools.r8.mapping","version":"2.2"}
-# pg_map_id: 70374578514f958280301b40635dc91465831282e6c594bf0c9b33c42b554ab4
-# pg_map_hash: SHA-256 70374578514f958280301b40635dc91465831282e6c594bf0c9b33c42b554ab4
+# pg_map_id: 1d99ed8ca70ccf4eaed8698c1986e3711aa3ce582154de8d89e1d6a1b59c4557
+# pg_map_hash: SHA-256 1d99ed8ca70ccf4eaed8698c1986e3711aa3ce582154de8d89e1d6a1b59c4557
 DumpedStuff -> DumpedStuff:
 # {"id":"sourceFile","fileName":"DumpedStuff.java"}
-    java.lang.ref.WeakReference aShortWeakPathToSamplePathObject -> A
-    java.lang.ref.WeakReference aWeakRefToGcRoot -> B
-    java.lang.ref.SoftReference aSoftChain -> C
-    java.lang.Object[] basicStringRef -> D
-    DumpedStuff$AddedObject addedObject -> E
-      # {"id":"com.android.tools.r8.residualsignature","signature":"La;"}
-    DumpedStuff$UnchangedObject unchangedObject -> F
-      # {"id":"com.android.tools.r8.residualsignature","signature":"Lp;"}
-    DumpedStuff$RemovedObject removedObject -> G
-      # {"id":"com.android.tools.r8.residualsignature","signature":"Ln;"}
-    DumpedStuff$ModifiedObject modifiedObject -> H
-      # {"id":"com.android.tools.r8.residualsignature","signature":"Lk;"}
-    DumpedStuff$StackSmasher stackSmasher -> I
-      # {"id":"com.android.tools.r8.residualsignature","signature":"Lo;"}
-    DumpedStuff$StackSmasher stackSmasherAdded -> J
-      # {"id":"com.android.tools.r8.residualsignature","signature":"Lo;"}
-    int[] modifiedArray -> K
-    java.lang.Object objectAllocatedAtKnownSite -> L
-    java.lang.Object objectAllocatedAtKnownSubSite -> M
-    android.os.IBinder correctBinderProxy -> N
-      # {"id":"com.android.tools.r8.residualsignature","signature":"La/d;"}
-    android.os.IBinder imposedBinderProxy -> O
-      # {"id":"com.android.tools.r8.residualsignature","signature":"La/d;"}
-    android.os.IBinder carriedBinderProxy -> P
-      # {"id":"com.android.tools.r8.residualsignature","signature":"La/d;"}
-    java.lang.Object correctBinderProxyObject -> Q
-    java.lang.Object impostorBinderProxyObject -> R
-    java.lang.Object carrierBinderProxyObject -> S
-    java.lang.Object binderService -> T
-    java.lang.Object fakeBinderService -> U
-    java.lang.Object binderToken -> V
-    java.lang.Object namedBinderToken -> W
-    android.os.Looper looper -> X
-      # {"id":"com.android.tools.r8.residualsignature","signature":"La/e;"}
-    android.os.Handler handler -> Y
-      # {"id":"com.android.tools.r8.residualsignature","signature":"La/c;"}
-    android.os.Message message1 -> Z
-      # {"id":"com.android.tools.r8.residualsignature","signature":"La/f;"}
-    android.os.Message message2 -> a0
-      # {"id":"com.android.tools.r8.residualsignature","signature":"La/f;"}
-    android.os.Message barrierMessage -> b0
-      # {"id":"com.android.tools.r8.residualsignature","signature":"La/f;"}
-    java.lang.Object unreachableAnchor -> c0
-    java.lang.String basicString -> d
-    java.lang.String modifiedStaticField -> d0
-    java.lang.String nonAscii -> e
-    java.lang.String embeddedZero -> f
-    char[] charArray -> g
-    byte[] byteString -> h
-    byte[] byteNotString -> i
-    byte[] byteEmpty -> j
-    java.lang.String nullString -> k
-    java.lang.Object anObject -> l
-    java.lang.Object aCleanedObject -> m
-    java.lang.Runnable aCleanerThunk -> n
-    DumpedStuff$Reference aReference -> o
-      # {"id":"com.android.tools.r8.residualsignature","signature":"Lm;"}
-    java.lang.ref.ReferenceQueue referenceQueue -> p
-    java.lang.ref.PhantomReference aPhantomReference -> q
-    java.lang.ref.WeakReference aWeakReference -> r
-    java.lang.ref.WeakReference aNullReferentReference -> s
-    java.lang.ref.SoftReference aSoftReference -> t
-    DumpedStuff$Reference reachabilityReferenceChain -> u
-      # {"id":"com.android.tools.r8.residualsignature","signature":"Lm;"}
-    byte[] bigArray -> v
-    android.graphics.Bitmap bitmapOne -> w
-      # {"id":"com.android.tools.r8.residualsignature","signature":"Landroid/graphics/b;"}
-    android.graphics.Bitmap bitmapTwo -> x
-      # {"id":"com.android.tools.r8.residualsignature","signature":"Landroid/graphics/b;"}
-    DumpedStuff$ObjectTree[] gcPathArray -> y
+    DumpedStuff$ObjectTree[] gcPathArray -> A
       # {"id":"com.android.tools.r8.residualsignature","signature":"[Ll;"}
-    DumpedStuff$Reference aLongStrongPathToSamplePathObject -> z
+    DumpedStuff$Reference aLongStrongPathToSamplePathObject -> B
       # {"id":"com.android.tools.r8.residualsignature","signature":"Lm;"}
-    1:6:void <clinit>():292:292 -> <clinit>
+    java.lang.ref.WeakReference aShortWeakPathToSamplePathObject -> C
+    java.lang.ref.WeakReference aWeakRefToGcRoot -> D
+    java.lang.ref.SoftReference aSoftChain -> E
+    java.lang.Object[] basicStringRef -> F
+    DumpedStuff$AddedObject addedObject -> G
+      # {"id":"com.android.tools.r8.residualsignature","signature":"La;"}
+    DumpedStuff$UnchangedObject unchangedObject -> H
+      # {"id":"com.android.tools.r8.residualsignature","signature":"Lp;"}
+    DumpedStuff$RemovedObject removedObject -> I
+      # {"id":"com.android.tools.r8.residualsignature","signature":"Ln;"}
+    DumpedStuff$ModifiedObject modifiedObject -> J
+      # {"id":"com.android.tools.r8.residualsignature","signature":"Lk;"}
+    DumpedStuff$StackSmasher stackSmasher -> K
+      # {"id":"com.android.tools.r8.residualsignature","signature":"Lo;"}
+    DumpedStuff$StackSmasher stackSmasherAdded -> L
+      # {"id":"com.android.tools.r8.residualsignature","signature":"Lo;"}
+    int[] modifiedArray -> M
+    java.lang.Object objectAllocatedAtKnownSite -> N
+    java.lang.Object objectAllocatedAtKnownSubSite -> O
+    android.os.IBinder correctBinderProxy -> P
+      # {"id":"com.android.tools.r8.residualsignature","signature":"La/d;"}
+    android.os.IBinder imposedBinderProxy -> Q
+      # {"id":"com.android.tools.r8.residualsignature","signature":"La/d;"}
+    android.os.IBinder carriedBinderProxy -> R
+      # {"id":"com.android.tools.r8.residualsignature","signature":"La/d;"}
+    java.lang.Object correctBinderProxyObject -> S
+    java.lang.Object impostorBinderProxyObject -> T
+    java.lang.Object carrierBinderProxyObject -> U
+    java.lang.Object binderService -> V
+    java.lang.Object fakeBinderService -> W
+    java.lang.Object binderToken -> X
+    java.lang.Object namedBinderToken -> Y
+    android.os.Looper looper -> Z
+      # {"id":"com.android.tools.r8.residualsignature","signature":"La/e;"}
+    android.os.Handler handler -> a0
+      # {"id":"com.android.tools.r8.residualsignature","signature":"La/c;"}
+    android.os.Message message1 -> b0
+      # {"id":"com.android.tools.r8.residualsignature","signature":"La/f;"}
+    android.os.Message message2 -> c0
+      # {"id":"com.android.tools.r8.residualsignature","signature":"La/f;"}
+    java.lang.String basicString -> d
+    android.os.Message barrierMessage -> d0
+      # {"id":"com.android.tools.r8.residualsignature","signature":"La/f;"}
+    java.lang.String duplicateString1 -> e
+    java.lang.Object unreachableAnchor -> e0
+    java.lang.String duplicateString2 -> f
+    java.lang.String modifiedStaticField -> f0
+    java.lang.String nonAscii -> g
+    java.lang.String embeddedZero -> h
+    char[] charArray -> i
+    byte[] byteString -> j
+    byte[] byteNotString -> k
+    byte[] byteEmpty -> l
+    java.lang.String nullString -> m
+    java.lang.Object anObject -> n
+    java.lang.Object aCleanedObject -> o
+    java.lang.Runnable aCleanerThunk -> p
+    DumpedStuff$Reference aReference -> q
+      # {"id":"com.android.tools.r8.residualsignature","signature":"Lm;"}
+    java.lang.ref.ReferenceQueue referenceQueue -> r
+    java.lang.ref.PhantomReference aPhantomReference -> s
+    java.lang.ref.WeakReference aWeakReference -> t
+    java.lang.ref.WeakReference aNullReferentReference -> u
+    java.lang.ref.SoftReference aSoftReference -> v
+    DumpedStuff$Reference reachabilityReferenceChain -> w
+      # {"id":"com.android.tools.r8.residualsignature","signature":"Lm;"}
+    byte[] bigArray -> x
+    android.graphics.Bitmap bitmapOne -> y
+      # {"id":"com.android.tools.r8.residualsignature","signature":"Landroid/graphics/b;"}
+    android.graphics.Bitmap bitmapTwo -> z
+      # {"id":"com.android.tools.r8.residualsignature","signature":"Landroid/graphics/b;"}
+    1:6:void <clinit>():294:294 -> <clinit>
     1:1:void <init>(boolean):45:45 -> <init>
-    2:11:void <init>(boolean):217:226 -> <init>
-    12:17:void <init>(boolean):228:233 -> <init>
-    18:20:void <init>(boolean):236:238 -> <init>
-    21:22:void <init>(boolean):245:246 -> <init>
-    23:23:void <init>(boolean):249:249 -> <init>
-    24:29:void <init>(boolean):258:263 -> <init>
-    30:33:void <init>(boolean):265:268 -> <init>
-    34:34:void <init>(boolean):276:276 -> <init>
-    35:35:void <init>(boolean):46:46 -> <init>
-    36:36:void <init>(boolean):49:49 -> <init>
-    37:37:void <init>(boolean):51:51 -> <init>
-    38:40:void <init>(boolean):55:57 -> <init>
-    41:42:void <init>(boolean):60:61 -> <init>
-    43:45:void <init>(boolean):65:67 -> <init>
-    46:53:void <init>(boolean):70:77 -> <init>
-    54:56:void <init>(boolean):82:84 -> <init>
-    57:59:void <init>(boolean):87:89 -> <init>
-    60:60:void <init>(boolean):93:93 -> <init>
-    61:62:void <init>(boolean):95:96 -> <init>
-    63:65:void <init>(boolean):99:101 -> <init>
-    66:68:void <init>(boolean):103:105 -> <init>
-    69:72:void <init>(boolean):107:110 -> <init>
-    73:76:void <init>(boolean):112:115 -> <init>
-    77:80:void <init>(boolean):117:120 -> <init>
-    81:84:void <init>(boolean):123:126 -> <init>
+    2:13:void <init>(boolean):217:228 -> <init>
+    14:19:void <init>(boolean):230:235 -> <init>
+    20:22:void <init>(boolean):238:240 -> <init>
+    23:24:void <init>(boolean):247:248 -> <init>
+    25:25:void <init>(boolean):251:251 -> <init>
+    26:31:void <init>(boolean):260:265 -> <init>
+    32:35:void <init>(boolean):267:270 -> <init>
+    36:36:void <init>(boolean):278:278 -> <init>
+    37:37:void <init>(boolean):46:46 -> <init>
+    38:38:void <init>(boolean):49:49 -> <init>
+    39:39:void <init>(boolean):51:51 -> <init>
+    40:42:void <init>(boolean):55:57 -> <init>
+    43:44:void <init>(boolean):60:61 -> <init>
+    45:47:void <init>(boolean):65:67 -> <init>
+    48:55:void <init>(boolean):70:77 -> <init>
+    56:58:void <init>(boolean):82:84 -> <init>
+    59:61:void <init>(boolean):87:89 -> <init>
+    62:62:void <init>(boolean):93:93 -> <init>
+    63:64:void <init>(boolean):95:96 -> <init>
+    65:67:void <init>(boolean):99:101 -> <init>
+    68:70:void <init>(boolean):103:105 -> <init>
+    71:74:void <init>(boolean):107:110 -> <init>
+    75:78:void <init>(boolean):112:115 -> <init>
+    79:82:void <init>(boolean):117:120 -> <init>
+    83:86:void <init>(boolean):123:126 -> <init>
     1:8:void allocateObjectAtOverriddenSite():42:42 -> b
     1:7:void allocateObjectAtKnownSite():30:30 -> c
     8:10:void allocateObjectAtKnownSite():31:31 -> c
@@ -115,8 +117,8 @@ DumpedStuff -> DumpedStuff:
     14:16:void allocateObjectAtKnownSite():33:33 -> c
     17:20:void allocateObjectAtKnownSite():34:34 -> c
     1:8:void allocateObjectAtKnownSubSite():38:38 -> d
-    1:39:void shouldNotGc():281:281 -> e
-    40:47:void shouldNotGc():288:288 -> e
+    1:39:void shouldNotGc():283:283 -> e
+    40:47:void shouldNotGc():290:290 -> e
 DumpedStuff$AddedObject -> a:
 # {"id":"sourceFile","fileName":"DumpedStuff.java"}
     1:4:void <init>():139:139 -> <init>
@@ -267,7 +269,7 @@ android.os.Handler -> a.c:
       # {"id":"com.android.tools.r8.residualsignature","signature":"La/e;"}
     android.os.MessageQueue mQueue -> b
       # {"id":"com.android.tools.r8.residualsignature","signature":"La/g;"}
-    1:4:void <init>():3:3 -> <init>
+    1:4:void <init>():19:19 -> <init>
 android.os.IBinder -> a.d:
 # {"id":"sourceFile","fileName":"IBinder.java"}
 android.os.Looper -> a.e:
@@ -275,7 +277,7 @@ android.os.Looper -> a.e:
     android.os.MessageQueue mQueue -> a
       # {"id":"com.android.tools.r8.residualsignature","signature":"La/g;"}
     java.lang.Thread mThread -> b
-    1:4:void <init>():3:3 -> <init>
+    1:4:void <init>():19:19 -> <init>
 android.os.Message -> a.f:
 # {"id":"sourceFile","fileName":"Message.java"}
     long when -> a
@@ -289,7 +291,7 @@ android.os.Message -> a.f:
     int arg2 -> g
     int what -> h
     long insertSeq -> i
-    1:4:void <init>():3:3 -> <init>
+    1:4:void <init>():19:19 -> <init>
 android.os.MessageQueue -> a.g:
 # {"id":"sourceFile","fileName":"MessageQueue.java"}
     android.os.Message mMessages -> a

@@ -29,7 +29,9 @@ class Menu {
       .append(" - ")
       .appendLink(DocString.uri("bitmaps"), DocString.text("bitmaps"))
       .append(" - ")
-      .appendLink(DocString.uri("loopers"), DocString.text("loopers"));
+      .appendLink(DocString.uri("loopers"), DocString.text("loopers"))
+      .append(" - ")
+      .appendLink(DocString.uri("strings"), DocString.text("strings"));
 
   /**
    * Returns the menu as a DocString.

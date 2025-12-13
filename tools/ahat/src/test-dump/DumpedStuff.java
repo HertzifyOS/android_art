@@ -215,6 +215,8 @@ public class DumpedStuff extends SuperDumpedStuff {
   }
 
   public String basicString = "hello, world";
+  public String duplicateString1 = new String("duplicate");
+  public String duplicateString2 = new String("duplicate");
   public String nonAscii = "Sigma (Ʃ) is not ASCII";
   public String embeddedZero = "embedded\0...";  // Non-ASCII for string compression purposes.
   public char[] charArray = "char thing".toCharArray();

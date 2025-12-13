@@ -47,4 +47,11 @@ public class HandlersTest {
     AhatHandler handler = new BitmapsHandler(snapshot);
     TestHandler.testNoCrash(handler, "http://localhost:7100");
   }
+
+  @Test
+  public void stringsNoCrash() throws IOException {
+    AhatSnapshot snapshot = TestDump.getTestDump().getAhatSnapshot();
+    AhatHandler handler = new StringsHandler(snapshot);
+    TestHandler.testNoCrash(handler, "http://localhost:7100/strings");
+  }
 }

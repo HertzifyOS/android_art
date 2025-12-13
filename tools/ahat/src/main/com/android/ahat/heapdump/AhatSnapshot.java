@@ -18,7 +18,10 @@ package com.android.ahat.heapdump;
 
 import com.android.ahat.dominators.Dominators;
 import com.android.ahat.progress.Progress;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A parsed heap dump.
@@ -39,6 +42,7 @@ public class AhatSnapshot implements Diffable<AhatSnapshot> {
 
   private AhatBitmapInstance.BitmapDumpData mBitmapDumpData = null;
   private AhatMessageInstance.MessageDumpData mMessageDumpData = null;
+  private List<List<AhatInstance>> mDuplicateStrings = null;
   private long mUptimeMillis = 0;
 
   AhatSnapshot(SuperRoot root,
@@ -58,6 +62,7 @@ public class AhatSnapshot implements Diffable<AhatSnapshot> {
 
     mBitmapDumpData = AhatBitmapInstance.findBitmapDumpData(mSuperRoot, mInstances);
     mMessageDumpData = AhatMessageInstance.findMessageDumpData(mInstances, progress, mInstances.size());
+    mDuplicateStrings = findDuplicateStrings(mInstances, progress);
 
     for (AhatInstance inst : mInstances) {
       // Add this instance to its site.
@@ -245,5 +250,43 @@ public class AhatSnapshot implements Diffable<AhatSnapshot> {
    */
   public long getUptimeMillis() {
     return mUptimeMillis;
+  }
+
+  /**
+   * Returns duplicate strings in this snapshot
+   *
+   * @return list of duplicate strings
+   */
+  public List<List<AhatInstance>> getDuplicateStrings() {
+    return mDuplicateStrings;
+  }
+
+  private static List<List<AhatInstance>> findDuplicateStrings(
+      Instances<AhatInstance> instances, Progress progress) {
+    progress.start("Analyzing strings", instances.size());
+    Map<String, List<AhatInstance>> strings = new HashMap<>();
+    for (AhatInstance inst : instances) {
+      if (inst.isInstanceOfClass("java.lang.String")) {
+        String value = inst.asString();
+        if (value != null) {
+          List<AhatInstance> list = strings.get(value);
+          if (list == null) {
+            list = new ArrayList<>();
+            strings.put(value, list);
+          }
+          list.add(inst);
+        }
+      }
+      progress.advance();
+    }
+    progress.done();
+
+    List<List<AhatInstance>> duplicates = new ArrayList<>();
+    for (List<AhatInstance> list : strings.values()) {
+      if (list.size() > 1) {
+        duplicates.add(list);
+      }
+    }
+    return duplicates;
   }
 }

@@ -25,7 +25,7 @@ import org.junit.runners.Suite;
     HandlersTest.class, HtmlEscaperTest.class, InstanceTest.class, NativeAllocationTest.class,
     ObjectHandlerTest.class, ObjectsHandlerTest.class, PerformanceTest.class,
     ProguardMapTest.class, RootedHandlerTest.class, QueryTest.class, RiTest.class,
-    SiteHandlerTest.class, SiteTest.class, SorterTest.class})
+    SiteHandlerTest.class, SiteTest.class, SorterTest.class, StringsTest.class})
 
 public class AhatTestSuite {
   public static void main(String[] args) {
