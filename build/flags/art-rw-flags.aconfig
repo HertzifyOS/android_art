@@ -121,3 +121,12 @@ flag {
   is_fixed_read_only: false
   is_exported: false
 }
+
+flag {
+  name: "lower_young_gc_throughput_expectation"
+  namespace: "art_performance"
+  description: "Lower the expectation of 2x throughput from young GCs to reduce zram reads"
+  bug: "469158682"
+  is_fixed_read_only: false
+  is_exported: false
+}
