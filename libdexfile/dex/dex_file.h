@@ -75,10 +75,6 @@ class DexFileContainer {
   virtual const uint8_t* End() const = 0;
   size_t Size() const { return End() - Begin(); }
 
-  // TODO: Remove. This is only used by dexlayout to override the data section of the dex header,
-  //       and redirect it to intermediate memory buffer at completely unrelated memory location.
-  virtual ArrayRef<const uint8_t> Data() const { return {}; }
-
   bool IsZip() const { return is_zip_; }
   void SetIsZip() { is_zip_ = true; }
   virtual bool IsFileMap() const { return false; }
