@@ -864,8 +864,18 @@ END art_quick_do_long_jump
      * x0 holds the possibly null object to lock.
      */
 ENTRY art_quick_lock_object
-    LOCK_OBJECT_FAST_PATH x0, art_quick_lock_object_no_inline, /*can_be_null*/ 1
+    LOCK_OBJECT_FAST_PATH x0, art_quick_lock_object_no_inline, /*can_be_null*/ 1, /*use_lse*/ 0
 END art_quick_lock_object
+
+    /*
+     * Entry from managed code that tries to lock the object in a fast path and
+     * calls `artLockObjectFromCode()` for the difficult cases, may block for GC.
+     * x0 holds the possibly null object to lock.
+     * Used only if runtime LSE support is detected.
+     */
+ENTRY art_quick_lock_object_lse
+    LOCK_OBJECT_FAST_PATH x0, art_quick_lock_object_no_inline, /*can_be_null*/ 1, /*use_lse*/ 1
+END art_quick_lock_object_lse
 
     /*
      * Entry from managed code that calls `artLockObjectFromCode()`, may block for GC.
@@ -888,8 +898,18 @@ END art_quick_lock_object_no_inline
      * x0 holds the possibly null object to unlock.
      */
 ENTRY art_quick_unlock_object
-    UNLOCK_OBJECT_FAST_PATH x0, art_quick_unlock_object_no_inline, /*can_be_null*/ 1
+    UNLOCK_OBJECT_FAST_PATH x0, art_quick_unlock_object_no_inline, /*can_be_null*/ 1, /*use_lse*/ 0
 END art_quick_unlock_object
+
+    /*
+     * Entry from managed code that tries to unlock the object in a fast path and calls
+     * `artUnlockObjectFromCode()` for the difficult cases and delivers exception on failure.
+     * x0 holds the possibly null object to unlock.
+     * Used only if runtime LSE support is detected.
+     */
+ENTRY art_quick_unlock_object_lse
+    UNLOCK_OBJECT_FAST_PATH x0, art_quick_unlock_object_no_inline, /*can_be_null*/ 1, /*use_lse*/ 1
+END art_quick_unlock_object_lse
 
     /*
      * Entry from managed code that calls `artUnlockObjectFromCode()`
