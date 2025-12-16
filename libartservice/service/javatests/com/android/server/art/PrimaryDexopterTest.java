@@ -608,6 +608,8 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
 
         // The ref profile is usable but shouldn't be used.
         makeProfileUsable(mRefProfile);
+        // The split profile is usable and should be used.
+        makeProfileUsable(mSplit0RefProfile);
 
         makeProfileUsable(mDmProfile);
 
@@ -635,8 +637,15 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
                 ProfilePath.tmpProfilePath(mPublicOutputProfile.profilePath),
                 true /* isOtherReadable */);
 
-        checkDexoptWithNoProfile(verify(mArtd), mSplit0DexPath, "arm64", "speed");
-        checkDexoptWithNoProfile(verify(mArtd), mSplit0DexPath, "arm", "speed");
+        verify(mArtd).getDexoptNeeded(eq(mSplit0DexPath), eq("arm64"), any(), eq("speed-profile"),
+                eq(mDefaultDexoptTrigger), any());
+        checkDexoptWithProfile(verify(mArtd), mSplit0DexPath, "arm64", mSplit0RefProfile,
+                false /* isOtherReadable */);
+
+        verify(mArtd).getDexoptNeeded(eq(mSplit0DexPath), eq("arm"), any(), eq("speed-profile"),
+                eq(mDefaultDexoptTrigger), any());
+        checkDexoptWithProfile(verify(mArtd), mSplit0DexPath, "arm", mSplit0RefProfile,
+                false /* isOtherReadable */);
 
         verifyProfileNotUsed(mRefProfile);
         verifyProfileNotUsed(mPrebuiltProfile);

@@ -1461,6 +1461,16 @@ TEST_F(ArtdTest, dexoptOutputNotOtherReadable) {
   CheckOtherReadable(scratch_path_ + "/a/oat/arm64/b.vdex", false);
 }
 
+TEST_F(ArtdTest, dexoptOutputNotOtherReadableExceptVdex) {
+  output_artifacts_.permissionSettings.fileFsPermission.isOtherReadable = false;
+  dex_file_other_readable_ = true;  // APk is other-readable.
+  profile_other_readable_ = false;
+  EXPECT_CALL(*mock_exec_utils_, DoExecAndReturnCode(_, _, _)).WillOnce(Return(0));
+  RunDexopt();
+  CheckOtherReadable(scratch_path_ + "/a/oat/arm64/b.odex", false);
+  CheckOtherReadable(scratch_path_ + "/a/oat/arm64/b.vdex", true);
+}
+
 TEST_F(ArtdTest, dexoptUidMismatch) {
   output_artifacts_.permissionSettings.fileFsPermission.uid = 12345;
   output_artifacts_.permissionSettings.fileFsPermission.isOtherReadable = false;

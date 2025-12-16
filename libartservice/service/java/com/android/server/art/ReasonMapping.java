@@ -161,27 +161,6 @@ public class ReasonMapping {
     }
 
     /**
-     * Loads the compiler filter from the system property for:
-     * - shared libraries
-     * - apps used by other apps without a dex metadata file
-     *
-     * @throws IllegalStateException if the system property value is invalid
-     *
-     * @hide
-     */
-    @NonNull
-    public static String getCompilerFilterForShared() {
-        // "shared" is technically not a compilation reason, but the compiler filter is defined as a
-        // system property as if "shared" is a reason.
-        String value = getCompilerFilterForReason("shared");
-        if (DexFile.isProfileGuidedCompilerFilter(value)) {
-            throw new IllegalStateException(
-                    "Compiler filter for 'shared' must not be profile guided, got '" + value + "'");
-        }
-        return value;
-    }
-
-    /**
      * Returns the priority for the given reason.
      *
      * @throws IllegalArgumentException if the reason is invalid

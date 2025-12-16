@@ -151,12 +151,21 @@ public abstract class Dexopter<DexInfoType extends DetailedDexInfo> {
                     }
 
                     if (needsToBeShared) {
+                        // If the app is shared, then try first to initialize the reference profile
+                        // from the external profile, to allow other apps to use the generated
+                        // artifacts and run in the speed-profile mode.
                         InitProfileResult result = initReferenceProfile(
                                 dexInfo, dmInfo.config().getEnableEmbeddedProfile());
                         profile = result.profile();
                         isOtherReadable = result.isOtherReadable();
                         externalProfileErrors = result.externalProfileErrors();
-                    } else {
+                    }
+
+                    if (profile == null) {
+                        // Even if the app needs to be shared with no external profile, we still
+                        // can use the local profile if available and make the artifacts private to
+                        // the app, while allowing other apps to run in "verify" mode by making the
+                        // vdex public if the dex file is public.
                         InitProfileResult result = getOrInitReferenceProfile(
                                 dexInfo, dmInfo.config().getEnableEmbeddedProfile());
                         profile = result.profile();
@@ -177,13 +186,8 @@ public abstract class Dexopter<DexInfoType extends DetailedDexInfo> {
                         // and dex2oat already makes this transformation. However, we need to
                         // explicitly make this transformation here to guide the later decisions
                         // such as whether the artifacts can be public and whether dexopt is needed.
-                        compilerFilter = printAdjustCompilerFilterReason(compilerFilter,
-                                needsToBeShared ? ReasonMapping.getCompilerFilterForShared()
-                                                : "verify",
-                                "there is no valid profile"
-                                        + (needsToBeShared ? " and the package needs to be shared"
-                                                           : ""),
-                                dexInfo.dexPath());
+                        compilerFilter = printAdjustCompilerFilterReason(compilerFilter, "verify",
+                                "there is no valid profile", dexInfo.dexPath());
                         session.setCompilerFilter(compilerFilter);
                     }
                 }
@@ -193,7 +197,6 @@ public abstract class Dexopter<DexInfoType extends DetailedDexInfo> {
 
                 boolean canBePublic = (!isProfileGuidedCompilerFilter || isOtherReadable)
                         && isDexFilePublic(dexInfo);
-                Utils.check(Utils.implies(needsToBeShared, canBePublic));
                 PermissionSettings permissionSettings = getPermissionSettings(dexInfo, canBePublic);
 
                 DexoptOptions dexoptOptions =
@@ -219,7 +222,7 @@ public abstract class Dexopter<DexInfoType extends DetailedDexInfo> {
                         var options = GetDexoptNeededOptions.builder()
                                               .setProfileMerged(profileMerged)
                                               .setFlags(mParams.getFlags())
-                                              .setNeedsToBePublic(needsToBeShared)
+                                              .setNeedsToBePublic(canBePublic)
                                               .build();
 
                         if (mInjector.isPreReboot()) {
