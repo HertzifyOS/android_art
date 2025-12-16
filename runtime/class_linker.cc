@@ -2297,7 +2297,7 @@ bool ClassLinker::AddImageSpace(gc::space::ImageSpace* space,
 
     ScopedTrace trace("AppImage:UpdateCodeItemAndNterp");
     bool can_use_nterp = interpreter::CanRuntimeUseNterp();
-    uint16_t hotness_threshold = runtime->GetJITOptions()->GetWarmupThreshold();
+    uint16_t hotness_threshold = jit::Jit::GetInitialHotnessThreshold();
     header.VisitPackedArtMethods([&](ArtMethod& method) REQUIRES_SHARED(Locks::mutator_lock_) {
       // In the image, the `data` pointer field of the ArtMethod contains the code
       // item offset. Change this to the actual pointer to the code item.
@@ -4035,7 +4035,7 @@ class ClassLinker::LoadClassHelper {
       Runtime* runtime, const DexFile& dex_file, bool is_interface)
       : runtime_(runtime),
         dex_file_(dex_file),
-        hotness_count_(runtime->GetJITOptions()->GetWarmupThreshold()),
+        hotness_count_(jit::Jit::GetInitialHotnessThreshold()),
         is_aot_compiler_(runtime->IsAotCompiler()),
         is_interface_(is_interface),
         stack_(runtime->GetArenaPool()),

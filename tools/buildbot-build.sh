@@ -216,6 +216,9 @@ if [[ $build_target == "yes" ]]; then
   # Although the simulator is run on the host, we reuse the target build to
   # build the target run tests on the host.
   if [[ -n "${ART_USE_SIMULATOR}" ]]; then
+    # libartd-simulator should not be linked to any other library as it will be dynamically linked
+    # at runtime. This avoids cyclic dependencies with libart.
+    build_targets_for_py+=("libartd-simulator")
     art_build_py_args+=("--build-art-simulator")
   fi
 fi

@@ -43,8 +43,8 @@ class ArtMethod;
 class ClassLinker;
 class DexFile;
 class OatDexFile;
+class OatFile;
 class RootVisitor;
-struct RuntimeArgumentMap;
 union JValue;
 
 namespace mirror {
@@ -65,11 +65,6 @@ class JitOptions;
 static constexpr int16_t kJitCheckForOSR = -1;
 static constexpr int16_t kJitHotnessDisabled = -2;
 static constexpr uint16_t kIndividualSharedMethodHotnessThreshold = 0x3f;
-
-// The frequency at which we are going to check if we want to do fast
-// compilation. Only the main thread will request fast compilations.
-static constexpr int16_t kFastCompilerFrequencyCheck = 1024;
-static_assert(IsPowerOfTwo(kFastCompilerFrequencyCheck), "Must be a power of two");
 
 // Implemented and provided by the compiler library.
 class JitCompilerInterface {
@@ -380,6 +375,8 @@ class Jit {
   // at the point of loading the dex files.
   void RegisterDexFiles(const std::vector<std::unique_ptr<const DexFile>>& dex_files,
                         jobject class_loader);
+  // Register the compiler filter for the given type of code.
+  void RegisterAppInfo(AppInfo::CodeType code_type, const std::string& compiler_filter);
 
   // Called by the compiler to know whether it can directly encode the
   // method/class/string.
@@ -399,13 +396,12 @@ class Jit {
   // class path methods.
   void NotifyZygoteCompilationDone();
 
-  EXPORT void EnqueueOptimizedCompilation(ArtMethod* method, Thread* self);
+  EXPORT void EnqueueOptimizedCompilation(ArtMethod* method, Thread* self)
+      REQUIRES_SHARED(Locks::mutator_lock_);
   EXPORT void EnqueueBaselineCompilation(ArtMethod* method, Thread* self)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   EXPORT void MaybeEnqueueCompilation(ArtMethod* method, Thread* self)
-      REQUIRES_SHARED(Locks::mutator_lock_);
-  EXPORT void MaybeEnqueueFastCompilation(ArtMethod* method, Thread* self)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   EXPORT static bool TryPatternMatch(ArtMethod* method, CompilationKind compilation_kind)
@@ -413,6 +409,9 @@ class Jit {
 
   // Get a snapshot of the current info for a shared method. The argument must be a shared method.
   SharedMethodInfo GetSharedMethodInfo(ArtMethod* method);
+
+  bool UseFastCompiler() const { return use_fast_compiler_; }
+  static uint16_t GetInitialHotnessThreshold();
 
  private:
   Jit(JitCodeCache* code_cache, JitOptions* options);
@@ -458,6 +457,7 @@ class Jit {
   Mutex boot_completed_lock_;
   bool boot_completed_ GUARDED_BY(boot_completed_lock_) = false;
   std::deque<Task*> tasks_after_boot_ GUARDED_BY(boot_completed_lock_);
+  bool use_fast_compiler_ = false;
 
   // Performance monitoring.
   CumulativeLogger cumulative_timings_;

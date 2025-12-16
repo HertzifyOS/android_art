@@ -19,6 +19,7 @@
 #include "arch/arm64/asm_support_arm64.h"
 #include "arch/instruction_set.h"
 #include "base/memory_region.h"
+#include "base/utils.h"
 #include "entrypoints/quick/runtime_entrypoints_list.h"
 
 #include "code_simulator_container.h"
@@ -50,21 +51,36 @@ Simulator* BasicCodeSimulatorArm64::CreateNewInstructionSimulator(SimStack::Allo
   return new Simulator(decoder_.get(), stdout, std::move(stack));
 }
 
-static constexpr size_t kSimulatorLimitGuardSize = 2 * kPageSize;
-
 void BasicCodeSimulatorArm64::InitInstructionSimulator(size_t stack_size) {
   SimStack stack_builder;
-  stack_builder.SetLimitGuardSize(kSimulatorLimitGuardSize);
   stack_builder.SetUsableSize(stack_size);
-  SimStack::Allocated stack = stack_builder.Allocate();
 
+  // Protected regions are added for the simulator, in Thread::InstallImplicitProtection(),
+  // allowing implicit stack overflow checks that access this region to be caught and handled by
+  // the fault handler. Therefore disable the stack guards that are setup by default in the
+  // simulator to avoid throwing errors when accessing this region.
+  stack_builder.SetLimitGuardSize(0);
+  stack_builder.SetBaseGuardSize(0);
+
+  // Align the stack to a page so we can install protected regions using mprotect.
+  stack_builder.AlignToBytesLog2(log2(MemMap::GetPageSize()));
+
+  SimStack::Allocated stack = stack_builder.Allocate();
   instruction_simulator_.reset(CreateNewInstructionSimulator(std::move(stack)));
   instruction_simulator_->SetVectorLengthInBits(kArm64DefaultSVEVectorLength);
   instruction_simulator_->DisableGCSCheck();
   instruction_simulator_->SetDebuggerEnabled(kSimDebuggerEnabled);
+
+  // The debugger or trace macro-instructions may enable tracing dynamically, so always enable
+  // coloured tracing.
+  instruction_simulator_->SetColouredTrace(true);
   if (VLOG_IS_ON(simulator)) {
-    instruction_simulator_->SetColouredTrace(true);
-    instruction_simulator_->SetTraceParameters(LOG_DISASM | LOG_WRITE | LOG_REGS);
+    // Only trace the main thread. Multiple threads tracing simulation at the same time can ruin
+    // the output trace, making it difficult to read.
+    // TODO(Simulator): Support tracing multiple threads at the same time.
+    if (::art::GetTid() == static_cast<uint32_t>(getpid())) {
+      instruction_simulator_->SetTraceParameters(LOG_DISASM | LOG_WRITE | LOG_REGS);
+    }
   }
 }
 
@@ -177,6 +193,57 @@ ARTSimulator* CodeSimulatorArm64::GetSimulator() {
 
 Simulator* CodeSimulatorArm64::CreateNewInstructionSimulator(SimStack::Allocated&& stack) {
   return new ARTSimulator(decoder_.get(), stdout, std::move(stack));
+}
+
+void CodeSimulatorArm64::Invoke(ArtMethod* method,
+                                uint32_t* args,
+                                uint32_t args_size_in_bytes,
+                                Thread* self,
+                                JValue* result,
+                                const char* shorty,
+                                bool isStatic)
+    REQUIRES_SHARED(Locks::mutator_lock_) {
+  // ARM64 simulator only supports 64-bit host machines. Because:
+  //   1) vixl simulator is not tested on 32-bit host machines.
+  //   2) Data structures in ART have different representations for 32/64-bit machines.
+  DCHECK_EQ(sizeof(args), sizeof(int64_t));
+
+  if (VLOG_IS_ON(simulator)) {
+    VLOG(simulator) << "\nVIXL_SIMULATOR simulate: " << method->PrettyMethod();
+  }
+
+  /*  extern "C"
+   *     void art_quick_invoke_static_stub(ArtMethod *method,   x0
+   *                                       uint32_t  *args,     x1
+   *                                       uint32_t argsize,    w2
+   *                                       Thread *self,        x3
+   *                                       JValue *result,      x4
+   *                                       char   *shorty);     x5 */
+  ARTSimulator* simulator = GetSimulator();
+  size_t arg_no = 0;
+  simulator->WriteXRegister(arg_no++, reinterpret_cast<uint64_t>(method));
+  simulator->WriteXRegister(arg_no++, reinterpret_cast<uint64_t>(args));
+  simulator->WriteWRegister(arg_no++, args_size_in_bytes);
+  simulator->WriteXRegister(arg_no++, reinterpret_cast<uint64_t>(self));
+  simulator->WriteXRegister(arg_no++, reinterpret_cast<uint64_t>(result));
+  simulator->WriteXRegister(arg_no++, reinterpret_cast<uint64_t>(shorty));
+
+  // The simulator will stop (and return from RunFrom) when it encounters pc == 0.
+  simulator->WriteLr(0);
+
+  int64_t quick_code = isStatic ? reinterpret_cast<int64_t>(GetQuickInvokeStaticStub())
+                                : reinterpret_cast<int64_t>(GetQuickInvokeStub());
+
+  DCHECK_NE(quick_code, 0);
+  RunFrom(quick_code);
+}
+
+int64_t CodeSimulatorArm64::GetStackPointer() {
+  return GetSimulator()->get_sp();
+}
+
+uint8_t* CodeSimulatorArm64::GetStackBaseInternal() {
+  return GetSimulator()->GetStackBase();
 }
 
 #endif

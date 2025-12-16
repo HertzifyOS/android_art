@@ -267,6 +267,8 @@ std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat(
   std::vector<std::unique_ptr<const DexFile>> dex_files;
   std::unique_ptr<ClassLoaderContext> context(
       ClassLoaderContext::CreateContextForClassLoader(class_loader, dex_elements));
+  AppInfo::CodeType code_type = AppInfo::CodeType::kUnknown;
+  std::string compilation_filter;
 
   // If the class_loader is null there's not much we can do. This happens if a dex files is loaded
   // directly with DexFile APIs instead of using class loaders.
@@ -285,7 +287,6 @@ std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat(
     // oat file as GetBestOatFile used below, and in doing so it already pre-populates
     // some OatFileAssistant internal fields.
     std::string odex_location;
-    std::string compilation_filter;
     std::string compilation_reason;
     std::string odex_status;
     OatFileAssistant::Location ignored_location;
@@ -537,7 +538,7 @@ std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat(
       }
     }
 
-    Runtime::Current()->GetAppInfo()->RegisterOdexStatus(
+    code_type = runtime->GetAppInfo()->RegisterOdexStatus(
         dex_location,
         compilation_filter,
         compilation_reason,
@@ -559,15 +560,18 @@ std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat(
       error_msgs->push_back("Failed to open dex files from " + std::string(dex_location)
                             + " because: " + error_msg);
     }
+    code_type = runtime->GetAppInfo()->GetRegisteredCodeType(dex_location);
   }
 
-  if (Runtime::Current()->GetJit() != nullptr) {
-    Runtime::Current()->GetJit()->RegisterDexFiles(dex_files, class_loader);
+  jit::Jit* jit = runtime->GetJit();
+  if (jit != nullptr) {
+    jit->RegisterDexFiles(dex_files, class_loader);
+    jit->RegisterAppInfo(code_type, compilation_filter);
   }
 
   // Now that we loaded the dex/odex files, notify the runtime.
   // Note that we do this everytime we load dex files.
-  Runtime::Current()->NotifyDexFileLoaded();
+  runtime->NotifyDexFileLoaded();
 
   return dex_files;
 }
