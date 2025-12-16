@@ -785,10 +785,24 @@ class CompilationFilterForRestrictedMode
   bool GraphRejected() const { return has_unsupported_instructions_; }
 
  private:
-  void VisitInstruction(HInstruction*) {
-    // Currently we don't support compiling methods unless they were annotated with $compile$.
-    RejectGraph();
+  // All the instructions will execute the following delegate visitor unless they are specifically
+  // supported by concrete visitors below.
+  void VisitInstruction(HInstruction* instruction) {
+    LocationSummary* locations = instruction->GetLocations();
+    if (locations != nullptr && locations->CanCall()) {
+      RejectGraph();
+    }
   }
+
+  //
+  // Concrete visitors; they do nothing inside hence allowing the instructions types.
+  //
+
+  void VisitSuspendCheck(HSuspendCheck*) {}
+  void VisitDeoptimize(HDeoptimize*) {}
+  void VisitInvokeVirtual(HInvokeVirtual*) {}
+  void VisitInvokeStaticOrDirect(HInvokeStaticOrDirect*) {}
+
   void RejectGraph() {
     has_unsupported_instructions_ = true;
   }

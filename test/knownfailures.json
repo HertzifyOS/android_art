@@ -1751,8 +1751,10 @@
     {
         "tests": ["044-proxy",
                   "046-reflect",
+                  "064-field-access",
                   "178-app-image-native-method",
                   "693-vdex-inmem-loader-evict",
+                  "800-smali",
                   "938-load-transform-bcp",
                   "1914-get-local-instance",
                   "1939-proxy-frames",
@@ -1761,7 +1763,15 @@
         "description": ["TODO: Investigate reasons for these failures of the ART simulator."]
     },
     {
-        "tests": ["2042-reference-processing",
+        "tests": ["107-int-math2",
+                  "018-stack-overflow",
+                  "004-SignalTest"],
+        "env_vars": {"ART_USE_SIMULATOR": "true"},
+        "description": ["TODO: Implement implicit stack overflow checks for the ART simulator."]
+    },
+    {
+        "tests": ["2029-contended-monitors",
+                  "2042-reference-processing",
                   "2043-reference-pauses"],
         "env_vars": {"ART_USE_SIMULATOR": "true"},
         "description": ["Intermittent timeout failures on the ART simulator due to the overheads",
@@ -1774,5 +1784,12 @@
                         " simulator/thread. This file is used in Simulator::CanReadMemory to",
                         " determine whether certain memory addresses are accessible without",
                         " generating a fault."]
+    },
+    {
+        "tests": ["2237-checker-simulator"],
+        "variant": "jvm",
+        "description": ["Test for ART simulator, not very useful for jvm. The exepectations",
+                        "are slightly different so the test needs a special expectations",
+                        "file to work on jvm and not worth the additional bookkeeping."]
     }
 ]
