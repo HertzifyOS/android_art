@@ -31,6 +31,7 @@ def main():
 
       TEST_BUILD_COMMON_ARGS = "$(location run_test_build.py) --out $(out) " +
           "--bootclasspath $(location :art-run-test-bootclasspath) " +
+          "--systemmodule $(location :art-run-test-system-module{.zip}) " +
           "--d8 $(location d8) " +
           "--jasmin $(location jasmin) " +
           "--rewrapper $(location rewrapper) " +
@@ -118,6 +119,7 @@ def main():
                 "jvmti-common/*.java",
                 "utils/python/**/*.py",
                 ":art-run-test-bootclasspath",
+                ":art-run-test-system-module{.zip}",
                 ":development_docs",
                 ":ow2-asm",
                 ":ojluni-AbstractCollection",

@@ -32,6 +32,15 @@ java_library {
     ],
 }
 
+java_system_modules {
+    name: "art-run-test-system-module",
+    visibility: ["//visibility:public"],
+    libs: [
+        "art-run-test-bootclasspath",
+        "libcore-string-concat-stub",
+    ],
+}
+
 android_app_certificate {
     name: "com.android.art.certificate",
     certificate: "com.android.art",

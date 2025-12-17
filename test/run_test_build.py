@@ -84,6 +84,7 @@ class BuildTestContext:
   def __init__(self, args, android_build_top, test_dir):
     self.android_build_top = android_build_top.absolute()
     self.bootclasspath = args.bootclasspath.absolute()
+    self.systemmodule = args.systemmodule.absolute()
     self.test_name = test_dir.name
     self.test_dir = test_dir.absolute()
     self.mode = args.mode
@@ -345,12 +346,20 @@ class BuildTestContext:
       args = self.javac_args.split(" ") + javac_args
       args += ["-implicit:none", "-encoding", "utf8", "-d", dst_dir]
       args += ["-source", javac_source_arg, "-target", javac_target_arg]
-      if not self.jvm and float(javac_target_arg) < 17.0:
-        args += ["-bootclasspath", self.bootclasspath]
+      if not self.jvm:
+        # Use the bootclasspath/system module that contains libcore classes
+        if float(javac_target_arg) < 17.0:
+          args += ["-bootclasspath", self.bootclasspath]
+        else:
+          module_zip = Path(self.systemmodule)
+          module_dir = module_zip.parent / module_zip.stem
+          zipfile.ZipFile(module_zip, "r").extractall(module_dir)
+          args += ["--system", module_dir]
       if javac_classpath:
         args += ["-classpath", javac_classpath]
       for src_dir in src_dirs:
         args += sorted(src_dir.glob("**/*.java"))
+
       self.javac(args)
       javac_post = Path("javac_post.sh")
       if javac_post.exists():
@@ -691,6 +700,7 @@ def main() -> None:
   parser.add_argument("--out", type=Path, help="Final zip file")
   parser.add_argument("--mode", choices=["host", "jvm", "target"])
   parser.add_argument("--bootclasspath", type=Path)
+  parser.add_argument("--systemmodule", type=Path)
   parser.add_argument("--d8", type=Path)
   parser.add_argument("--hiddenapi", type=Path)
   parser.add_argument("--jasmin", type=Path)
