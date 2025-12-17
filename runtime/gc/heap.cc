@@ -153,7 +153,10 @@ DEFINE_RUNTIME_DEBUG_FLAG(Heap, kStressCollectorTransition);
 // with mutator threads (lower pauses, use less memory bandwidth). The value
 // (1.0) for non-generational GC case is fixed and shall never change.
 static double GetStickyGcThroughputAdjustment(bool use_generational_gc) {
-  return use_generational_gc ? 0.5 : 1.0;
+  return !com::android::art::rw::flags::lower_young_gc_throughput_expectation() &&
+                 use_generational_gc
+             ? 0.5
+             : 1.0;
 }
 // Whether or not we compact the zygote in PreZygoteFork.
 static constexpr bool kCompactZygote = kMovingCollector;

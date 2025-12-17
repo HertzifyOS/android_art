@@ -2135,7 +2135,7 @@ void MarkCompact::UpdateStaticFieldsReferences(mirror::Class* klass, Visitor& vi
         } else {
           // We read correct vtable length. Proceed with that.
         }
-      } else {
+      } else if (IsValidFd(uffd_)) {
         // This is the rare case in which the page preceding the one being updated started after
         // num_reference_static_fields_ and ended before the class-end and contains embedded
         // vtable-length. It may also contain the static references on it. But it will not cause
@@ -2303,7 +2303,7 @@ void MarkCompact::UpdateInstanceFieldsReferences(mirror::Object* obj,
           DCHECK_LT(state, static_cast<uint8_t>(PageState::kProcessedAndMapping));
           DCHECK_NE(state, static_cast<uint8_t>(PageState::kProcessed));
           DCHECK_NE(state, static_cast<uint8_t>(PageState::kUnprocessed));
-        } else {
+        } else if (IsValidFd(uffd_)) {
           // This case is probably never going to happen, where there is at
           // least one non-overlapping page between reference_instance_offsets_
           // and last word of overflow-bitmap. Such page(s) can have static
@@ -4326,7 +4326,7 @@ void MarkCompact::CompactionPause() {
       // place and that the classes/dex-caches in immune-spaces may have allocations
       // (ArtMethod/ArtField arrays, dex-cache array, etc.) in the
       // non-userfaultfd visited private-anonymous mappings. Visit them here.
-      ImmuneSpaceUpdateObjVisitor visitor(this, has_zygote_space);
+      ImmuneSpaceUpdateObjVisitor visitor(this, has_zygote_space && IsValidFd(uffd_));
       if (table != nullptr) {
         table->ProcessCards();
         table->VisitObjects(ImmuneSpaceUpdateObjVisitor::Callback, &visitor);

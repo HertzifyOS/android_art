@@ -118,6 +118,13 @@ class ARTSimulator final : public Simulator {
     RegisterBranchInterception(artQuickProxyInvokeHandler);
     RegisterBranchInterception(artInvokeObsoleteMethod);
     RegisterBranchInterception(artMethodExitHook);
+    RegisterBranchInterception(artAllocArrayFromCodeResolvedRosAlloc);
+    RegisterBranchInterception(artTestSuspendFromCode);
+    RegisterBranchInterception(artAllocObjectFromCodeInitializedRosAlloc);
+    RegisterBranchInterception(artAllocObjectFromCodeResolvedRosAlloc);
+    RegisterBranchInterception(artResolveTypeFromCode);
+    RegisterBranchInterception(artThrowClassCastExceptionForObject);
+    RegisterBranchInterception(artInstanceOfFromCode);
 
     RegisterBranchInterception(artArm64SimulatorGenericJNIPlaceholder,
                                [this]([[maybe_unused]] uint64_t addr)
