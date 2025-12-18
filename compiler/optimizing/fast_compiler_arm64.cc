@@ -563,6 +563,10 @@ class FastCompilerARM64 : public FastCompiler {
     return true;
   }
 
+  bool ThrowsIntoCatchHandler(const Instruction& instruction) {
+    return GetCodeItemAccessor().TriesSize() != 0 && IsThrowingDexInstruction(instruction);
+  }
+
   // Method being compiled.
   ArtMethod* method_;
 
@@ -881,8 +885,7 @@ bool FastCompilerARM64::ProcessBlock(uint32_t dex_pc) {
 
     // If the instruction can throw, emulate a branch to each catch handler by
     // updating dex register masks.
-    if (GetCodeItemAccessor().TriesSize() != 0 &&
-        (Instruction::FlagsOf(pair.Inst().Opcode()) & Instruction::kThrow) != 0) {
+    if (ThrowsIntoCatchHandler(pair.Inst())) {
       const dex::TryItem* try_item = GetCodeItemAccessor().FindTryItem(pair.DexPc());
       if (try_item != nullptr) {
         for (CatchHandlerIterator iterator(GetCodeItemAccessor(), *try_item);
@@ -4008,8 +4011,7 @@ bool FastCompilerARM64::ProcessBlockForMasks(uint32_t dex_pc) {
     const Instruction& instruction = pair.Inst();
 
     // If the instruction can throw, emulate a branch to each catch handler.
-    if (GetCodeItemAccessor().TriesSize() != 0 &&
-        (Instruction::FlagsOf(instruction.Opcode()) & Instruction::kThrow) != 0) {
+    if (ThrowsIntoCatchHandler(instruction)) {
       const dex::TryItem* try_item = GetCodeItemAccessor().FindTryItem(pair.DexPc());
       if (try_item != nullptr) {
         for (CatchHandlerIterator iterator(GetCodeItemAccessor(), *try_item);

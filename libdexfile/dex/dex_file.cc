@@ -251,7 +251,6 @@ ArrayRef<const uint8_t> DexFile::GetDataRange(const uint8_t* data, DexFileContai
   size_t size = container->End() - data;
   if (size >= sizeof(StandardDexFile::Header) && StandardDexFile::IsMagicValid(data)) {
     auto header = reinterpret_cast<const DexFile::Header*>(data);
-    CHECK_EQ(container->Data().size(), 0u) << "Unsupported for standard dex";
     if (size >= sizeof(HeaderV41) && header->header_size_ >= sizeof(HeaderV41)) {
       auto headerV41 = reinterpret_cast<const DexFile::HeaderV41*>(data);
       data -= headerV41->header_offset_;  // Allow underflow and later overflow.

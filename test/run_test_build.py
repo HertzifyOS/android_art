@@ -68,13 +68,13 @@ TRADEFED_DISABLED = {
 }
 
 TRADEFED_VARIANTS = [
-    ["--debug", "--baseline"],
-    ["--debug", "--interpreter"],
-    ["--debug", "--jit", "--debuggable"],
-    ["--debug", "--jit"],
-    ["--debug", "--optimizing", "--debuggable"],
+    # ["--debug", "--baseline"],
+    # ["--debug", "--interpreter"],
+    # ["--debug", "--jit", "--debuggable"],
+    # ["--debug", "--jit"],
+    # ["--debug", "--optimizing", "--debuggable"],
     ["--debug", "--optimizing"],
-    ["--debug", "--speed-profile"],
+    # ["--debug", "--speed-profile"],
 ]
 
 # Debug option. Report commands that are taking a lot of user CPU time.
