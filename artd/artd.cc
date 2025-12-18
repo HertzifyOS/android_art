@@ -2360,6 +2360,20 @@ Result<void> Artd::PreRebootInitDeriveClasspath(const std::string& path) {
 
 Result<bool> Artd::PreRebootInitBootImages(ArtdCancellationSignal* cancellation_signal) {
   CmdlineBuilder args = OR_RETURN(GetArtExecCmdlineBuilder());
+
+  // A clean view of the new system partition prepared by dexopt_chroot_setup, disregarding the
+  // /system/etc overrides, to make sure odrefresh gets the new boot image profile and other files
+  // in /system/etc.
+  unique_fd new_system_dir;
+  if (OS::DirectoryExists("/mnt/new_system")) {
+    // odrefresh doesn't have the SELinux permission to find files under `/mnt` in chroot, so we
+    // open the directory and pass it as a dirfd to odrefresh.
+    new_system_dir = OR_RETURN_WITH_CONTEXT(OpenDirectory("/mnt/new_system"),
+                                            "Failed to open the clean system view");
+    args.Add("--env=ANDROID_ROOT=/proc/self/fd/%d", new_system_dir.get())
+        .Add("--keep-fds=%d", new_system_dir.get());
+  }
+
   args.Add("--")
       .Add(OR_RETURN(BuildArtBinPath("odrefresh")))
       .Add("--only-boot-images")
