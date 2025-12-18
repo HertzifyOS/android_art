@@ -1512,6 +1512,23 @@ void HLoopOptimization::VectorizeTraditional(LoopNode* node,
                                        LoopAnalysisInfo::kNoUnrollingFactor);
   }
 
+// TODO: Refactor to avoid arch-specific details here
+//       Since we have to add arch-specific instruction here, need arch defined macro.
+//       May be separate arch_loop_helper implementations into loop_analysis_arch.cc,
+//       instead of a shared file like loop_analysis.cc
+#if defined(ART_ENABLE_CODEGEN_x86_64)
+  if (arch_loop_helper_->NeedsVectorRegisterClear()) {
+    // No more BB are inserted at the exit of vloop
+    // Add the HX86Clear at the exit of the vloop
+    // This is required for X86 when switching out of AVX2 context
+    HBasicBlock* vloop_header = preheader_for_vector_loop->GetSingleSuccessor();
+    DCHECK(vloop_header != nullptr);
+    HBasicBlock* vloop_exit = vloop_header->GetSuccessors()[0];
+    vloop_exit->InsertInstructionBefore(new (global_allocator_) HX86Clear(),
+                                        vloop_exit->GetLastInstruction());
+  }
+#endif
+
   FinalizeVectorization(node);
 }
 
@@ -2121,6 +2138,7 @@ bool HLoopOptimization::TrySetVectorType(DataType::Type type, uint64_t* restrict
       // Allow vectorization for SSE4.1-enabled X86 devices only (128-bit SIMD).
       *restrictions |= kNoIfCond;
       if (features->AsX86InstructionSetFeatures()->HasSSE4_1()) {
+        bool is_supported_type = true;
         switch (type) {
           case DataType::Type::kBool:
             *restrictions |= kNoAdd | kNoSub;
@@ -2135,7 +2153,7 @@ bool HLoopOptimization::TrySetVectorType(DataType::Type type, uint64_t* restrict
                              kNoUnroundedHAdd |
                              kNoSAD |
                              kNoDotProd;
-            return TrySetVectorLength(type, 16);
+            break;
           case DataType::Type::kUint16:
             *restrictions |= kNoDiv |
                              kNoAbs |
@@ -2143,29 +2161,38 @@ bool HLoopOptimization::TrySetVectorType(DataType::Type type, uint64_t* restrict
                              kNoUnroundedHAdd |
                              kNoSAD |
                              kNoDotProd;
-            return TrySetVectorLength(type, 8);
+            break;
           case DataType::Type::kInt16:
             *restrictions |= kNoDiv |
                              kNoAbs |
                              kNoSignedHAdd |
                              kNoUnroundedHAdd |
                              kNoSAD;
-            return TrySetVectorLength(type, 8);
+            break;
           case DataType::Type::kInt32:
             *restrictions |= kNoDiv | kNoSAD;
-            return TrySetVectorLength(type, 4);
+            break;
           case DataType::Type::kInt64:
             *restrictions |= kNoMul | kNoDiv | kNoShr | kNoAbs | kNoSAD;
-            return TrySetVectorLength(type, 2);
+            break;
           case DataType::Type::kFloat32:
             *restrictions |= kNoReduction;
-            return TrySetVectorLength(type, 4);
+            break;
           case DataType::Type::kFloat64:
             *restrictions |= kNoReduction;
-            return TrySetVectorLength(type, 2);
+            break;
           default:
+            is_supported_type = false;
             break;
         }  // switch type
+        if (is_supported_type) {
+          // Remove ABS restriction for 64-bit
+          if (compiler_options_->GetInstructionSet() == InstructionSet::kX86_64) {
+            *restrictions &= ~kNoAbs;
+          }
+          DCHECK_EQ(simd_register_size_ % DataType::Size(type), 0U);
+          return TrySetVectorLength(type, simd_register_size_ / DataType::Size(type));
+        }
       }
       return false;
     default:

@@ -45,13 +45,19 @@ public class Main {
   //
   /// CHECK-ELSE:
   //
-  ///     CHECK-DAG: <<L2:j\d+>>    LongConstant 2               loop:none
+  //      Check 256-bit & 128-bit vectorization
+  ///     CHECK-IF: hasIsaFeature("avx2")
+  ///         CHECK-DAG: <<LC:j\d+>>    LongConstant 4               loop:none
+  ///     CHECK-ELSE:
+  ///         CHECK-DAG: <<LC:j\d+>>    LongConstant 2               loop:none
+  ///     CHECK-FI:
+  //
   ///     CHECK-DAG: <<Rep:d\d+>>   VecReplicateScalar [<<Get>>] loop:none
   ///     CHECK-DAG: <<Set:d\d+>>   VecSetScalars [<<L1>>]       loop:none
   ///     CHECK-DAG: <<Phi1:j\d+>>  Phi [<<L0>>,{{j\d+}}]        loop:<<Loop:B\d+>> outer_loop:none
   ///     CHECK-DAG: <<Phi2:d\d+>>  Phi [<<Set>>,{{d\d+}}]       loop:<<Loop>>      outer_loop:none
   ///     CHECK-DAG:                VecAdd [<<Phi2>>,<<Rep>>]    loop:<<Loop>>      outer_loop:none
-  ///     CHECK-DAG:                Add [<<Phi1>>,<<L2>>]        loop:<<Loop>>      outer_loop:none
+  ///     CHECK-DAG:                Add [<<Phi1>>,<<LC>>]        loop:<<Loop>>      outer_loop:none
   //
   /// CHECK-FI:
   // Similar as `longInductionReduction` from `656-checker-simd-opt`, but with a trip count bigger than uint32_t
