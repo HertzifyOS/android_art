@@ -209,6 +209,10 @@
     str     \reg, [rFP, \vreg, lsl #2]
     str     \reg, [rREFS, \vreg, lsl #2]
 .endm
+.macro SET_VREG_OBJECT_PRESCALED reg, scaled_vreg
+    str     \reg, [rFP, \scaled_vreg]
+    str     \reg, [rREFS, \scaled_vreg]
+.endm
 .macro SET_VREG_FLOAT reg, vreg, tmpreg
     add     \tmpreg, rFP, \vreg, lsl #2
     vstr    \reg, [\tmpreg]

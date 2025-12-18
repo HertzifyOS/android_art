@@ -9,10 +9,13 @@
    b NterpCommonInvokeCustomRange
 
 %def invoke_direct_or_super(helper="", range=False, is_super=False):
+   // The slow path fits in the handler for `invoke-super{,/range}`.
+%  slow_path = '1f' if is_super else add_slow_path( \
+%      invoke_direct_or_super_slow_path, range, is_super)
    EXPORT_PC
    // Fast-path which gets the method from thread-local cache.
-%  fetch_from_thread_cache("r0", miss_label="2f")
-1:
+%  fetch_from_thread_cache("r0", miss_label=slow_path)
+.L${opcode}_resume:
    // Load the first argument (the 'this' pointer).
    FETCH r1, 2
 %  if not range:
@@ -21,17 +24,21 @@
    cmp r1, #0
    beq common_errNullObject    // bail if null
    b $helper
-2:
+%  if is_super:
+1:
+%    invoke_direct_or_super_slow_path(range, is_super)
+
+%def invoke_direct_or_super_slow_path(range, is_super):
    mov r0, rSELF
    ldr r1, [sp]
    mov r2, rPC
    mov r3, rFP
    bl nterp_get_method
 %  if is_super:
-     b 1b
+     b .L${opcode}_resume
 %  else:
      tst r0, #1
-     beq 1b
+     beq .L${opcode}_resume
      and r0, r0, #-2 // Remove the extra bit that marks it's a String.<init> method.
 %    if range:
        b NterpHandleStringInitRange
@@ -72,7 +79,7 @@
    b NterpCommonInvokePolymorphicRange
 
 %def invoke_interface(range=False):
-%  slow_path = add_slow_path(op_invoke_interface_slow_path)
+%  slow_path = add_slow_path(op_invoke_interface_slow_path, range)
    EXPORT_PC
    // Fast-path which gets the method from thread-local cache.
 %  fetch_from_thread_cache("r4", miss_label=slow_path)
@@ -89,9 +96,9 @@
    // - If the first bit is set, this is a method on j.l.Object
    // - If the second bit is set, this is a default method.
    tst r4, #3
-   bne 2f
+   bne .L${opcode}_slow_path_edge_cases
    ldrh r3, [r4, #ART_METHOD_IMT_INDEX_OFFSET]
-1:
+.L${opcode}_resume_with_imt_index:
    ldr r2, [r2, #MIRROR_CLASS_IMT_PTR_OFFSET_32]
    ldr r0, [r2, r3, lsl #2]
 %  if range:
@@ -99,13 +106,22 @@
 %  else:
      b NterpCommonInvokeInterface
 %  pass
-2:
+
+%def op_invoke_interface_slow_path(range):
+   mov r0, rSELF
+   ldr r1, [sp]
+   mov r2, rPC
+   mov r3, rFP
+   bl nterp_get_method
+   mov r4, r0
+   b .L${opcode}_resume
+.L${opcode}_slow_path_edge_cases:
    tst r4, #1
    bne 3f
    and r4, r4, #-4
    ldrh r3, [r4, #ART_METHOD_METHOD_INDEX_OFFSET]
    and r3, r3, #ART_METHOD_IMT_MASK
-   b 1b
+   b .L${opcode}_resume_with_imt_index
 3:
    lsr r4, r4, #16
    add r2, r2, #MIRROR_CLASS_VTABLE_OFFSET_32
@@ -114,15 +130,6 @@
      b NterpCommonInvokeInstanceRange
 %  else:
      b NterpCommonInvokeInstance
-
-%def op_invoke_interface_slow_path():
-   mov r0, rSELF
-   ldr r1, [sp]
-   mov r2, rPC
-   mov r3, rFP
-   bl nterp_get_method
-   mov r4, r0
-   b .L${opcode}_resume
 
 %def op_invoke_interface():
 %  invoke_interface()
@@ -152,17 +159,17 @@
 %def invoke_virtual(helper="", range=False):
    EXPORT_PC
    // Fast-path which gets the vtable offset from thread-local cache.
-%  fetch_from_thread_cache("r2", miss_label="2f")
+%  fetch_from_thread_cache("r0", miss_label="2f")
 1:
    FETCH r1, 2
 %  if not range:
      and r1, r1, #0xf
    GET_VREG r1, r1
    // Note: if r1 is null, this will be handled by our SIGSEGV handler.
-   ldr r0, [r1, #MIRROR_OBJECT_CLASS_OFFSET]
-   UNPOISON_HEAP_REF r0
-   add r0, r0, #MIRROR_CLASS_VTABLE_OFFSET_32
-   ldr r0, [r0, r2, lsl #2]
+   ldr r2, [r1, #MIRROR_OBJECT_CLASS_OFFSET]
+   UNPOISON_HEAP_REF r2
+   add r2, r2, #MIRROR_CLASS_VTABLE_OFFSET_32
+   ldr r0, [r2, r0, lsl #2]
    b $helper
 2:
    mov r0, rSELF
@@ -170,7 +177,6 @@
    mov r2, rPC
    mov r3, rFP
    bl nterp_get_method
-   mov r2, r0
    b 1b
 
 %def op_invoke_virtual():
