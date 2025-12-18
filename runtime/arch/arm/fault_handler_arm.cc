@@ -24,6 +24,7 @@
 #include "base/logging.h"  // For VLOG.
 #include "base/macros.h"
 #include "base/pointer_size.h"
+#include "interpreter/mterp/nterp.h"
 #include "runtime_globals.h"
 #include "thread-current-inl.h"
 
@@ -61,6 +62,22 @@ uintptr_t FaultManager::GetFaultSp(void* context) {
   return mc->arm_sp;
 }
 
+// Nterp details needed to check for `aget*`/`aput*` opcode handlers and export the dex PC.
+extern "C" HIDDEN void nterp7_op_nop();
+extern "C" HIDDEN void nterp7_op_aget();
+static constexpr size_t kNterpAgetAputHandlersSize =
+    (/* aget */ 7 + /* aput */ 7) * interpreter::kNterpHandlerSize;
+static constexpr size_t kNterpExportedDexPcOffset = 8;  // Below refs.
+
+static uintptr_t nterp_op_aget_start() {
+  // There are eight nterp handler sets, 36KiB apart, and we're using the one that's 32KiB-aligned.
+  uintptr_t op_nop = reinterpret_cast<uintptr_t>(nterp7_op_nop);
+  uintptr_t op_aget = reinterpret_cast<uintptr_t>(nterp7_op_aget);
+  uintptr_t num_sets_to_subtract = (op_nop >> 12) & 7u;
+  DCHECK_ALIGNED(op_nop - num_sets_to_subtract * 36 * KB - /* thumb mode */ 1u, 32 * KB);
+  return op_aget - num_sets_to_subtract * 36 * KB;
+}
+
 bool NullPointerHandler::Action([[maybe_unused]] int sig, siginfo_t* info, void* context) {
   uintptr_t fault_address = reinterpret_cast<uintptr_t>(info->si_addr);
   if (!IsValidFaultAddress(fault_address)) {
@@ -80,8 +97,7 @@ bool NullPointerHandler::Action([[maybe_unused]] int sig, siginfo_t* info, void*
   // need the return PC to recognize that this was a null check in Nterp, so
   // that the handler can get the needed data from the Nterp frame.
 
-  // Note: Currently, Nterp is compiled to the A32 instruction set and managed
-  // code is compiled to the T32 instruction set.
+  // Note: Currently, both Nterp and managed code is compiled to the T32 instruction set.
   // To find the stack map for compiled code, we need to set the bottom bit in
   // the return PC indicating T32 just like we would if we were going to return
   // to that PC (though we're going to jump to the exception handler instead).
@@ -91,6 +107,14 @@ bool NullPointerHandler::Action([[maybe_unused]] int sig, siginfo_t* info, void*
   bool in_thumb_mode = mc->arm_cpsr & (1 << 5);
   uint32_t instr_size = in_thumb_mode ? GetInstructionSize(ptr) : 4;
   uintptr_t return_pc = (mc->arm_pc + instr_size) | (in_thumb_mode ? 1 : 0);
+
+  if (return_pc - nterp_op_aget_start() < kNterpAgetAputHandlersSize) {
+    // Export the dex PC here, so that the nterp `aget*`/`aput*` opcode handlers do not need
+    // to export it before doing implicit null checks. The `EXPORT_PC` in nterp expands to
+    //     str     r11, [r6, #-0x8]
+    uintptr_t* dex_pc_slot = reinterpret_cast<uintptr_t*>(mc->arm_r6 - kNterpExportedDexPcOffset);
+    *dex_pc_slot = mc->arm_fp;  // Note: r11 is fp.
+  }
 
   // Push the return PC to the stack and pass the fault address in LR.
   mc->arm_sp -= sizeof(uintptr_t);

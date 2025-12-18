@@ -10,8 +10,7 @@
     FETCH_B r3, 1, 1                    @ r3<- CC
     GET_VREG r0, r2                     @ r0<- vBB (array object)
     GET_VREG r1, r3                     @ r1<- vCC (requested index)
-    cmp     r0, #0                      @ null array object?
-    beq     common_errNullObject        @ yes, bail
+    // Note: if r0 is null, this will be handled by our SIGSEGV handler.
     ldr     r3, [r0, #MIRROR_ARRAY_LENGTH_OFFSET]    @ r3<- arrayObj->length
     add     r0, r0, r1, lsl #$shift     @ r0<- arrayObj + index*width
     cmp     r1, r3                      @ compare unsigned index, length
@@ -71,8 +70,7 @@
     FETCH_B r3, 1, 1                    @ r3<- CC
     GET_VREG r0, r2                     @ r0<- vBB (array object)
     GET_VREG r1, r3                     @ r1<- vCC (requested index)
-    cmp     r0, #0                      @ null array object?
-    beq     common_errNullObject        @ yes, bail
+    // Note: if r0 is null, this will be handled by our SIGSEGV handler.
     ldr     r3, [r0, #MIRROR_ARRAY_LENGTH_OFFSET]     @ r3<- arrayObj->length
     cmp     r1, r3                      @ compare unsigned index, length
     bcs     common_errArrayIndex        @ index >= length, bail
