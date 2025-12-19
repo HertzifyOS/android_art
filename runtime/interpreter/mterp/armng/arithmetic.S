@@ -774,64 +774,76 @@
 %def op_shl_int_lit8():
 %  binopLit8(extract="ubfx    r1, r3, #8, #5", instr="mov     r0, r0, lsl r1")
 
-%def op_shift_long(core):
+%def op_shift_long(large_shift):
     /*
      * Long integer shift.  This is different from the generic 32/64-bit
      * binary operations because vAA/vBB are 64-bit but vCC (the shift
      * distance) is 32-bit.  Also, Dalvik requires us to mask off the low
      * 6 bits of the shift distance.
      */
-    /* shl-long vAA, vBB, vCC */
+    /* {shl,shr,ushr}-long vAA, vBB, vCC */
     FETCH r0, 1                         @ r0<- CCBB
-    mov     r4, rINST, lsr #8           @ r4<- AA
+    lsrs    r4, rINST, #8               @ r4<- AA; set flags to use 16-bit encoding (same below)
     and     r3, r0, #255                @ r3<- BB
-    mov     r0, r0, lsr #8              @ r0<- CC
-    VREG_INDEX_TO_ADDR r3, r3           @ r3<- &fp[BB]
+    lsrs    r0, r0, #8                  @ r0<- CC
+    VREG_INDEX_TO_ADDR r1, r3           @ r1<- &fp[BB]
+    PRESCALE_VREG r4, r4, s="s"         @ r4<- A << 2
     GET_VREG r2, r0                     @ r2<- vCC
-    GET_VREG_WIDE_BY_ADDR r0, r1, r3    @ r0/r1<- vBB/vBB+1
-    CLEAR_SHADOW_PAIR r4, lr, ip        @ Zero out the shadow regs
-    and     r2, r2, #63                 @ r2<- r2 & 0x3f
-    VREG_INDEX_TO_ADDR r4, r4           @ r4<- &fp[AA]
-%   core(fetch_advance="FETCH_ADVANCE_INST 2")
+    CLEAR_SHADOW_PAIR_PRESCALED r4, r0, r3, s="s"  @ Zero out the shadow regs
+    GET_VREG_WIDE_BY_ADDR r0, r1, r1    @ r0/r1<- vBB/vBB+1
+    VREG_INDEX_TO_ADDR_PRESCALED r4, r4 @ r4<- &fp[AA]
+    FETCH_ADVANCE_INST 2
+    lsls    r3, r2, #27                 @ set C from bit 6 with a 16-bit instruction
+    and     r2, r2, #0x1f               @ r2<- (r2 & 0x1f)
+    bcc     .L${opcode}_2addr_small_shift
+.L${opcode}_large_shift:
+%   large_shift()
     PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
     GOTO_OPCODE                         @ jump to next instruction
 
-%def op_shift_long_2addr(core):
+%def op_shift_long_2addr(small_shift):
     /*
      * Long integer shift, 2addr version.  vA is 64-bit value/result, vB is
      * 32-bit shift distance.
      */
     /* shl-long/2addr vA, vB */
-    mov     r3, rINST, lsr #12          @ r3<- B
+    lsrs    r3, rINST, #12              @ r3<- B; set flags to use 16-bit encoding (same below)
     ubfx    r4, rINST, #8, #4           @ r4<- A
     GET_VREG r2, r3                     @ r2<- vB
-    CLEAR_SHADOW_PAIR r4, lr, ip        @ Zero out the shadow regs
-    VREG_INDEX_TO_ADDR r4, r4           @ r4<- &fp[A]
-    and     r2, r2, #63                 @ r2<- r2 & 0x3f
+    PRESCALE_VREG r4, r4, s="s"         @ r4<- A << 2
+    CLEAR_SHADOW_PAIR_PRESCALED r4, r0, r1, s="s"  @ Zero out the shadow regs
+    VREG_INDEX_TO_ADDR_PRESCALED r4, r4 @ r4<- &fp[A]
     GET_VREG_WIDE_BY_ADDR r0, r1, r4    @ r0/r1<- vAA/vAA+1
-%   core(fetch_advance="FETCH_ADVANCE_INST 1")
+    lsls    r3, r2, #27                 @ set C from bit 6 with a 16-bit instruction
+    FETCH_ADVANCE_INST 1
+    and     r2, r2, #0x1f               @ r2<- (r2 & 0x1f)
+%   other_opcode = re.sub(r"_2addr", r"", opcode)
+    bcs     .L${other_opcode}_large_shift
+.L${opcode}_small_shift:
+%   small_shift()
     PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
     GOTO_OPCODE                         @ jump to next instruction
 
-%def op_shl_long_core(fetch_advance):
-    @ Calculate {r0-r1} << r2 with r2 < 64 (already masked).
-    mov     r1, r1, asl r2              @ r1<- r1 << r2
+%def shl_long_large_shift():
+    @ Calculate {r0-r1} << (r2 + 32) with r2 < 32.
+    lsl     r1, r0, r2                  @ r1<- r0 << r2
+    movs    r0, #0                      @ r0<- 0; set flags to use 16-bit encoding
+
+%def shl_long_small_shift():
+    @ Calculate {r0-r1} << r2 with r2 < 32.
     rsb     r3, r2, #32                 @ r3<- 32 - r2
-    lsr     r3, r0, r3                  @ r3<- r0 << (32-r2)
-    orr     r1, r1,  r3                 @ r1<- r1 | (r0 << (32-r2))
-    subs    ip, r2, #32                 @ ip<- r2 - 32
-    ${fetch_advance}
-    it      pl
-    movpl   r1, r0, asl ip              @ if r2 >= 32, r1<- r0 << (r2-32)
-    mov     r0, r0, asl r2              @ r0<- r0 << r2
+    lsls    r1, r1, r2                  @ r1<- r1 << r2; set flags to use 16-bit encoding
+    lsr     r3, r0, r3                  @ r3<- r0 >>> (32-r2)
+    lsls    r0, r0, r2                  @ r0<- r0 << r2; set flags to use 16-bit encoding
+    add     r1, r1, r3                  @ r1<- r1 | (r0 >>> (32-r2)); use `add` for 16-bit encoding
 
 %def op_shl_long():
-%   op_shift_long(op_shl_long_core)
+%   op_shift_long(shl_long_large_shift)
 
 %def op_shl_long_2addr():
-%   op_shift_long_2addr(op_shl_long_core)
+%   op_shift_long_2addr(shl_long_small_shift)
 
 %def op_shr_int():
 %  binop(preinstr="and     r1, r1, #31", instr="mov     r0, r0, asr r1")
@@ -842,23 +854,24 @@
 %def op_shr_int_lit8():
 %  binopLit8(extract="ubfx    r1, r3, #8, #5", instr="mov     r0, r0, asr r1")
 
-%def op_shr_long_core(fetch_advance):
-    @ Calculate {r0-r1} >> r2 with r2 < 64 (already masked).
-    mov     r0, r0, lsr r2              @ r0<- r2 >> r2
+%def shr_long_large_shift():
+    @ Calculate {r0-r1} >> (r2 + 32) with r2 < 32.
+    asrs    r0, r1, r2                  @ r0<- r1 >> r2
+    asrs    r1, r1, #31                 @ r1<- r1 >> 31; set flags to use 16-bit encoding
+
+%def shr_long_small_shift():
+    @ Calculate {r0-r1} >> r2 with r2 < 32.
     rsb     r3, r2, #32                 @ r3<- 32 - r2
+    lsrs    r0, r0, r2                  @ r0<- r0 >>> r2; set flags to use 16-bit encoding
     lsl     r3, r1, r3                  @ r3<- r1 << (32-r2)
-    orr     r0, r0, r3                  @ r0<- r0 | (r1 << (32-r2))
-    subs    ip, r2, #32                 @ ip<- r2 - 32
-    ${fetch_advance}
-    it      pl
-    movpl   r0, r1, asr ip              @ if r2 >= 32, r0<-r1 >> (r2-32)
-    mov     r1, r1, asr r2              @ r1<- r1 >> r2
+    asrs    r1, r1, r2                  @ r1<- r1 >> r2; set flags to use 16-bit encoding
+    add     r0, r0, r3                  @ r0<- r0 | (r1 << (32-r2)); use `add` for 16-bit encoding
 
 %def op_shr_long():
-%   op_shift_long(op_shr_long_core)
+%   op_shift_long(shr_long_large_shift)
 
 %def op_shr_long_2addr():
-%   op_shift_long_2addr(op_shr_long_core)
+%   op_shift_long_2addr(shr_long_small_shift)
 
 %def op_sub_int():
 %  binop(instr="sub     r0, r0, r1")
@@ -881,23 +894,24 @@
 %def op_ushr_int_lit8():
 %  binopLit8(extract="ubfx    r1, r3, #8, #5", instr="mov     r0, r0, lsr r1")
 
-%def op_ushr_long_core(fetch_advance):
-    @ Calculate {r0-r1} >>> r2 with r2 < 64 (already masked).
-    mov     r0, r0, lsr r2              @ r0<- r2 >> r2
+%def ushr_long_large_shift():
+    @ Calculate {r0-r1} >>> (r2 + 32) with r2 < 32.
+    lsr     r0, r1, r2                  @ r1<- r0 >>> r2;
+    movs    r1, #0                      @ r1<- 0; set flags to use 16-bit encoding
+
+%def ushr_long_small_shift():
+    @ Calculate {r0-r1} >>> r2 with r2 < 32.
     rsb     r3, r2, #32                 @ r3<- 32 - r2
+    lsrs    r0, r0, r2                  @ r0<- r0 >>> r2; set flags to use 16-bit encoding
     lsl     r3, r1, r3                  @ r3<- r1 << (32-r2)
-    orr     r0, r0, r3                  @ r0<- r0 | (r1 << (32-r2))
-    subs    ip, r2, #32                 @ ip<- r2 - 32
-    ${fetch_advance}
-    it      pl
-    movpl   r0, r1, lsr ip              @ if r2 >= 32, r0<-r1 >>> (r2-32)
-    mov     r1, r1, lsr r2              @ r1<- r1 >>> r2
+    lsrs    r1, r1, r2                  @ r1<- r1 >>> r2; set flags to use 16-bit encoding
+    add     r0, r0, r3                  @ r0<- r0 | (r1 << (32-r2)); use `add` for 16-bit encoding
 
 %def op_ushr_long():
-%   op_shift_long(op_ushr_long_core)
+%   op_shift_long(ushr_long_large_shift)
 
 %def op_ushr_long_2addr():
-%   op_shift_long_2addr(op_ushr_long_core)
+%   op_shift_long_2addr(ushr_long_small_shift)
 
 %def op_xor_int():
 %  binop(instr="eor     r0, r0, r1")
