@@ -774,7 +774,7 @@
 %def op_shl_int_lit8():
 %  binopLit8(extract="ubfx    r1, r3, #8, #5", instr="mov     r0, r0, lsl r1")
 
-%def op_shl_long():
+%def op_shift_long(core):
     /*
      * Long integer shift.  This is different from the generic 32/64-bit
      * binary operations because vAA/vBB are 64-bit but vCC (the shift
@@ -792,20 +792,12 @@
     CLEAR_SHADOW_PAIR r4, lr, ip        @ Zero out the shadow regs
     and     r2, r2, #63                 @ r2<- r2 & 0x3f
     VREG_INDEX_TO_ADDR r4, r4           @ r4<- &fp[AA]
-    mov     r1, r1, asl r2              @ r1<- r1 << r2
-    rsb     r3, r2, #32                 @ r3<- 32 - r2
-    lsr     r3, r0, r3                  @ r3<- r0 << (32-r2)
-    orr     r1, r1,  r3                 @ r1<- r1 | (r0 << (32-r2))
-    subs    ip, r2, #32                 @ ip<- r2 - 32
-    it      pl
-    movpl   r1, r0, asl ip              @ if r2 >= 32, r1<- r0 << (r2-32)
-    FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
-    mov     r0, r0, asl r2              @ r0<- r0 << r2
+%   core(fetch_advance="FETCH_ADVANCE_INST 2")
     PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
     GOTO_OPCODE                         @ jump to next instruction
 
-%def op_shl_long_2addr():
+%def op_shift_long_2addr(core):
     /*
      * Long integer shift, 2addr version.  vA is 64-bit value/result, vB is
      * 32-bit shift distance.
@@ -818,18 +810,28 @@
     VREG_INDEX_TO_ADDR r4, r4           @ r4<- &fp[A]
     and     r2, r2, #63                 @ r2<- r2 & 0x3f
     GET_VREG_WIDE_BY_ADDR r0, r1, r4    @ r0/r1<- vAA/vAA+1
-    mov     r1, r1, asl r2              @ r1<- r1 << r2
-    rsb     r3, r2, #32                 @ r3<- 32 - r2
-    lsr     r3, r0, r3                  @ r3<- r0 << (32-r2)
-    orr     r1, r1, r3                  @ r1<- r1 | (r0 << (32-r2))
-    subs    ip, r2, #32                 @ ip<- r2 - 32
-    FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
-    it      pl
-    movpl   r1, r0, asl ip              @ if r2 >= 32, r1<- r0 << (r2-32)
-    mov     r0, r0, asl r2              @ r0<- r0 << r2
+%   core(fetch_advance="FETCH_ADVANCE_INST 1")
     PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
     SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
     GOTO_OPCODE                         @ jump to next instruction
+
+%def op_shl_long_core(fetch_advance):
+    @ Calculate {r0-r1} << r2 with r2 < 64 (already masked).
+    mov     r1, r1, asl r2              @ r1<- r1 << r2
+    rsb     r3, r2, #32                 @ r3<- 32 - r2
+    lsr     r3, r0, r3                  @ r3<- r0 << (32-r2)
+    orr     r1, r1,  r3                 @ r1<- r1 | (r0 << (32-r2))
+    subs    ip, r2, #32                 @ ip<- r2 - 32
+    ${fetch_advance}
+    it      pl
+    movpl   r1, r0, asl ip              @ if r2 >= 32, r1<- r0 << (r2-32)
+    mov     r0, r0, asl r2              @ r0<- r0 << r2
+
+%def op_shl_long():
+%   op_shift_long(op_shl_long_core)
+
+%def op_shl_long_2addr():
+%   op_shift_long_2addr(op_shl_long_core)
 
 %def op_shr_int():
 %  binop(preinstr="and     r1, r1, #31", instr="mov     r0, r0, asr r1")
@@ -840,62 +842,23 @@
 %def op_shr_int_lit8():
 %  binopLit8(extract="ubfx    r1, r3, #8, #5", instr="mov     r0, r0, asr r1")
 
-%def op_shr_long():
-    /*
-     * Long integer shift.  This is different from the generic 32/64-bit
-     * binary operations because vAA/vBB are 64-bit but vCC (the shift
-     * distance) is 32-bit.  Also, Dalvik requires us to mask off the low
-     * 6 bits of the shift distance.
-     */
-    /* shr-long vAA, vBB, vCC */
-    FETCH r0, 1                         @ r0<- CCBB
-    mov     r4, rINST, lsr #8           @ r4<- AA
-    and     r3, r0, #255                @ r3<- BB
-    mov     r0, r0, lsr #8              @ r0<- CC
-    VREG_INDEX_TO_ADDR r3, r3           @ r3<- &fp[BB]
-    GET_VREG r2, r0                     @ r2<- vCC
-    GET_VREG_WIDE_BY_ADDR r0, r1, r3    @ r0/r1<- vBB/vBB+1
-    CLEAR_SHADOW_PAIR r4, lr, ip        @ Zero out the shadow regs
-    and     r2, r2, #63                 @ r0<- r0 & 0x3f
-    VREG_INDEX_TO_ADDR r4, r4           @ r4<- &fp[AA]
+%def op_shr_long_core(fetch_advance):
+    @ Calculate {r0-r1} >> r2 with r2 < 64 (already masked).
     mov     r0, r0, lsr r2              @ r0<- r2 >> r2
     rsb     r3, r2, #32                 @ r3<- 32 - r2
     lsl     r3, r1, r3                  @ r3<- r1 << (32-r2)
     orr     r0, r0, r3                  @ r0<- r0 | (r1 << (32-r2))
     subs    ip, r2, #32                 @ ip<- r2 - 32
+    ${fetch_advance}
     it      pl
     movpl   r0, r1, asr ip              @ if r2 >= 32, r0<-r1 >> (r2-32)
-    FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     mov     r1, r1, asr r2              @ r1<- r1 >> r2
-    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
-    SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
-    GOTO_OPCODE                         @ jump to next instruction
+
+%def op_shr_long():
+%   op_shift_long(op_shr_long_core)
 
 %def op_shr_long_2addr():
-    /*
-     * Long integer shift, 2addr version.  vA is 64-bit value/result, vB is
-     * 32-bit shift distance.
-     */
-    /* shr-long/2addr vA, vB */
-    mov     r3, rINST, lsr #12          @ r3<- B
-    ubfx    r4, rINST, #8, #4           @ r4<- A
-    GET_VREG r2, r3                     @ r2<- vB
-    CLEAR_SHADOW_PAIR r4, lr, ip        @ Zero out the shadow regs
-    VREG_INDEX_TO_ADDR r4, r4           @ r4<- &fp[A]
-    and     r2, r2, #63                 @ r2<- r2 & 0x3f
-    GET_VREG_WIDE_BY_ADDR r0, r1, r4    @ r0/r1<- vAA/vAA+1
-    mov     r0, r0, lsr r2              @ r0<- r2 >> r2
-    rsb     r3, r2, #32                 @ r3<- 32 - r2
-    lsl     r3, r1, r3                  @ r3<- r1 << (32-r2)
-    orr     r0, r0, r3                  @ r0<- r0 | (r1 << (32-r2))
-    subs    ip, r2, #32                 @ ip<- r2 - 32
-    FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
-    it      pl
-    movpl   r0, r1, asr ip              @ if r2 >= 32, r0<-r1 >> (r2-32)
-    mov     r1, r1, asr r2              @ r1<- r1 >> r2
-    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
-    SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
-    GOTO_OPCODE                         @ jump to next instruction
+%   op_shift_long_2addr(op_shr_long_core)
 
 %def op_sub_int():
 %  binop(instr="sub     r0, r0, r1")
@@ -918,62 +881,23 @@
 %def op_ushr_int_lit8():
 %  binopLit8(extract="ubfx    r1, r3, #8, #5", instr="mov     r0, r0, lsr r1")
 
-%def op_ushr_long():
-    /*
-     * Long integer shift.  This is different from the generic 32/64-bit
-     * binary operations because vAA/vBB are 64-bit but vCC (the shift
-     * distance) is 32-bit.  Also, Dalvik requires us to mask off the low
-     * 6 bits of the shift distance.
-     */
-    /* ushr-long vAA, vBB, vCC */
-    FETCH r0, 1                         @ r0<- CCBB
-    mov     r4, rINST, lsr #8           @ r4<- AA
-    and     r3, r0, #255                @ r3<- BB
-    mov     r0, r0, lsr #8              @ r0<- CC
-    VREG_INDEX_TO_ADDR r3, r3           @ r3<- &fp[BB]
-    GET_VREG r2, r0                     @ r2<- vCC
-    GET_VREG_WIDE_BY_ADDR r0, r1, r3    @ r0/r1<- vBB/vBB+1
-    CLEAR_SHADOW_PAIR r4, lr, ip        @ Zero out the shadow regs
-    and     r2, r2, #63                 @ r0<- r0 & 0x3f
-    VREG_INDEX_TO_ADDR r4, r4           @ r4<- &fp[AA]
+%def op_ushr_long_core(fetch_advance):
+    @ Calculate {r0-r1} >>> r2 with r2 < 64 (already masked).
     mov     r0, r0, lsr r2              @ r0<- r2 >> r2
     rsb     r3, r2, #32                 @ r3<- 32 - r2
     lsl     r3, r1, r3                  @ r3<- r1 << (32-r2)
     orr     r0, r0, r3                  @ r0<- r0 | (r1 << (32-r2))
     subs    ip, r2, #32                 @ ip<- r2 - 32
+    ${fetch_advance}
     it      pl
     movpl   r0, r1, lsr ip              @ if r2 >= 32, r0<-r1 >>> (r2-32)
-    FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     mov     r1, r1, lsr r2              @ r1<- r1 >>> r2
-    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
-    SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
-    GOTO_OPCODE                         @ jump to next instruction
+
+%def op_ushr_long():
+%   op_shift_long(op_ushr_long_core)
 
 %def op_ushr_long_2addr():
-    /*
-     * Long integer shift, 2addr version.  vA is 64-bit value/result, vB is
-     * 32-bit shift distance.
-     */
-    /* ushr-long/2addr vA, vB */
-    mov     r3, rINST, lsr #12          @ r3<- B
-    ubfx    r4, rINST, #8, #4           @ r4<- A
-    GET_VREG r2, r3                     @ r2<- vB
-    CLEAR_SHADOW_PAIR r4, lr, ip        @ Zero out the shadow regs
-    VREG_INDEX_TO_ADDR r4, r4           @ r4<- &fp[A]
-    and     r2, r2, #63                 @ r2<- r2 & 0x3f
-    GET_VREG_WIDE_BY_ADDR r0, r1, r4    @ r0/r1<- vAA/vAA+1
-    mov     r0, r0, lsr r2              @ r0<- r2 >> r2
-    rsb     r3, r2, #32                 @ r3<- 32 - r2
-    lsl     r3, r1, r3                  @ r3<- r1 << (32-r2)
-    orr     r0, r0, r3                  @ r0<- r0 | (r1 << (32-r2))
-    subs    ip, r2, #32                 @ ip<- r2 - 32
-    FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
-    it      pl
-    movpl   r0, r1, lsr ip              @ if r2 >= 32, r0<-r1 >>> (r2-32)
-    mov     r1, r1, lsr r2              @ r1<- r1 >>> r2
-    PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
-    SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
-    GOTO_OPCODE                         @ jump to next instruction
+%   op_shift_long_2addr(op_ushr_long_core)
 
 %def op_xor_int():
 %  binop(instr="eor     r0, r0, r1")
