@@ -139,22 +139,24 @@
      * If "chkzero" is set to 1, we perform a divide-by-zero check on
      * vCC (r1).  Useful for integer division and modulus.
      *
-     * for: add-long, sub-long, div-long, rem-long, and-long, or-long,
-     *      xor-long, add-double, sub-double, mul-double, div-double,
-     *      rem-double
+     * for: add-long, sub-long, div-long, rem-long, and-long, or-long, xor-long
      *
      * IMPORTANT: you may specify "chkzero" or "preinstr" but not both.
      */
     /* binop vAA, vBB, vCC */
     FETCH r0, 1                         @ r0<- CCBB
-    mov     rINST, rINST, lsr #8        @ rINST<- AA
-    and     r2, r0, #255                @ r2<- BB
-    mov     r3, r0, lsr #8              @ r3<- CC
+%   if chkzero:
+      lsrs    rINST, rINST, #8          @ rINST<- AA; set flags to use 16-bit encoding
+      lsrs    r3, r0, #8                @ r3<- CC; set flags to use 16-bit encoding
+%   else:
+      lsr     rINST, rINST, #8          @ rINST<- AA
+      lsr     r3, r0, #8                @ r3<- CC
+    and     r1, r0, #255                @ r1<- BB
     VREG_INDEX_TO_ADDR r4, rINST        @ r4<- &fp[AA]
-    VREG_INDEX_TO_ADDR r2, r2           @ r2<- &fp[BB]
     VREG_INDEX_TO_ADDR r3, r3           @ r3<- &fp[CC]
-    GET_VREG_WIDE_BY_ADDR r0, r1, r2    @ r0/r1<- vBB/vBB+1
+    VREG_INDEX_TO_ADDR r1, r1           @ r1<- &fp[BB]
     GET_VREG_WIDE_BY_ADDR r2, r3, r3    @ r2/r3<- vCC/vCC+1
+    GET_VREG_WIDE_BY_ADDR r0, r1, r1    @ r0/r1<- vBB/vBB+1
 %   if chkzero:
       orrs    ip, r2, r3                @ second arg (r2-r3) is zero?
       beq     common_errDivideByZero
@@ -163,7 +165,9 @@
     $preinstr                           @ optional op; may set condition codes
     $instr                              @ result<- op, r0-r3 changed
     PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
-    SET_VREG_WIDE_BY_ADDR $result0,$result1,r4  @ vAA/vAA+1<,  $result0/$result1
+    @ Use write-back for 16-bit encoding if `chkzero`.
+%   wb = '!' if chkzero else ''
+    SET_VREG_WIDE_BY_ADDR $result0,$result1,r4, ${wb}  @ vAA/vAA+1<,  $result0/$result1
     GOTO_OPCODE                         @ jump to next instruction
     /* 14-17 instructions */
 
@@ -323,7 +327,8 @@
 %  binopLit8(extract="", instr="and     r0, r0, r3, asr #8")
 
 %def op_and_long():
-%  binopWide(preinstr="and     r0, r0, r2", instr="and     r1, r1, r3")
+   // Set flags to use 16-bit encoding for one of the instructions.
+%  binopWide(preinstr="ands    r0, r0, r2", instr="and     r1, r1, r3")
 
 %def op_and_long_2addr():
 %  binopWide2addr(preinstr="and     r0, r0, r2", instr="and     r1, r1, r3")
@@ -537,22 +542,23 @@
      */
     /* mul-long vAA, vBB, vCC */
     FETCH r0, 1                         @ r0<- CCBB
-    and     r2, r0, #255                @ r2<- BB
-    mov     r3, r0, lsr #8              @ r3<- CC
-    VREG_INDEX_TO_ADDR r2, r2           @ r2<- &fp[BB]
+    and     r1, r0, #255                @ r1<- BB
+    lsrs    r3, r0, #8                  @ r3<- CC; set flags to use 16-bit encoding (same below)
+    VREG_INDEX_TO_ADDR r1, r1           @ r1<- &fp[BB]
     VREG_INDEX_TO_ADDR r3, r3           @ r3<- &fp[CC]
-    GET_VREG_WIDE_BY_ADDR r0, r1, r2    @ r0/r1<- vBB/vBB+1
+    GET_VREG_WIDE_BY_ADDR r0, r1, r1    @ r0/r1<- vBB/vBB+1
     GET_VREG_WIDE_BY_ADDR r2, r3, r3    @ r2/r3<- vCC/vCC+1
-    mul     ip, r0, r3                  @ ip<- YxX
-    umull   r0, lr, r2, r0              @ r0/lr <- ZxX RdLo == Rn - this is OK.
-    mla     r3, r1, r2, ip              @ r3<- YxX + (ZxW)
-    mov     r4, rINST, lsr #8           @ r4<- AA
-    add     r1, r3, lr                  @ r1<- lr + low(ZxW + (YxX))
-    CLEAR_SHADOW_PAIR r4, lr, ip        @ Zero out the shadow regs
-    VREG_INDEX_TO_ADDR r4, r4           @ r2<- &fp[AA]
+    muls    r3, r0, r3                  @ r3<- low(YxX)
+    umull   r0, lr, r2, r0              @ r0/lr <- ZxX
+    mla     r1, r2, r1, r3              @ r1<- low(YxX + ZxW)
+    lsrs    r4, rINST, #8               @ r4<- AA
+    add     r1, r1, lr                  @ r1<- high(ZxX) + low(ZxW + (YxX))
+    PRESCALE_VREG r4, r4                @ r4<- AA << 2
+    CLEAR_SHADOW_PAIR_PRESCALED r4, r2, r3, s="s"  @ Zero out the shadow regs
+    VREG_INDEX_TO_ADDR_PRESCALED r4, r4  @ r4<- &fp[AA]
     FETCH_ADVANCE_INST 2                @ advance rPC, load rINST
     PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
-    SET_VREG_WIDE_BY_ADDR r0, r1 , r4   @ vAA/vAA+1<- r1/r2
+    SET_VREG_WIDE_BY_ADDR r0, r1, r4    @ vAA/vAA+1<- r0/r1
     GOTO_OPCODE                         @ jump to next instruction
 
 %def op_mul_long_2addr():
@@ -606,7 +612,8 @@
 %  binopLit8(extract="", instr="orr     r0, r0, r3, asr #8")
 
 %def op_or_long():
-%  binopWide(preinstr="orr     r0, r0, r2", instr="orr     r1, r1, r3")
+   // Set flags to use 16-bit encoding for one of the instructions.
+%  binopWide(preinstr="orrs    r0, r0, r2", instr="orr     r1, r1, r3")
 
 %def op_or_long_2addr():
 %  binopWide2addr(preinstr="orr     r0, r0, r2", instr="orr     r1, r1, r3")
@@ -981,7 +988,8 @@
 %  binopLit8(extract="", instr="eor     r0, r0, r3, asr #8")
 
 %def op_xor_long():
-%  binopWide(preinstr="eor     r0, r0, r2", instr="eor     r1, r1, r3")
+   // Set flags to use 16-bit encoding for one of the instructions.
+%  binopWide(preinstr="eors    r0, r0, r2", instr="eor     r1, r1, r3")
 
 %def op_xor_long_2addr():
 %  binopWide2addr(preinstr="eor     r0, r0, r2", instr="eor     r1, r1, r3")

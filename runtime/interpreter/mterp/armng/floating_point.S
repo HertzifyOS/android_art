@@ -53,8 +53,8 @@
      */
     /* doubleop vAA, vBB, vCC */
     FETCH r0, 1                         @ r0<- CCBB
-    mov     r4, rINST, lsr #8           @ r4<- AA
-    mov     r3, r0, lsr #8              @ r3<- CC
+    lsrs    r4, rINST, #8               @ r4<- AA; set flags to use 16-bit encoding
+    lsr     r3, r0, #8                  @ r3<- CC
     and     r2, r0, #255                @ r2<- BB
     VREG_INDEX_TO_ADDR r3, r3           @ r3<- &vCC
     VREG_INDEX_TO_ADDR r2, r2           @ r2<- &vBB
@@ -253,17 +253,18 @@
      *
      * For: long-to-double
      */
-    mov     r3, rINST, lsr #12          @ r3<- B
+    lsrs    r3, rINST, #12              @ r3<- B; set flags to use 16-bit encoding (same below)
     ubfx    r4, rINST, #8, #4           @ r4<- A
-    CLEAR_SHADOW_PAIR r4, ip, lr        @ Zero shadow regs
     VREG_INDEX_TO_ADDR r3, r3           @ r3<- &fp[B]
-    VREG_INDEX_TO_ADDR r4, r4           @ r4<- &fp[A]
+    PRESCALE_VREG r4, r4, s="s"         @ r4<- A << 2
     GET_VREG_FP_BY_ADDR d0, r3          @ d0<- vBB
+    CLEAR_SHADOW_PAIR_PRESCALED r4, r0, r1, s="s"  @ Zero shadow regs
+    VREG_INDEX_TO_ADDR_PRESCALED r4, r4 @ r4<- &fp[A]
     FETCH_ADVANCE_INST 1                @ advance rPC, load rINST
 
     vcvt.f64.s32    d1, s1              @ d1<- (double)(vAAh)
     vcvt.f64.u32    d2, s0              @ d2<- (double)(vAAl)
-    vldr            d3, constval$opcode
+    vldr            d3, .L${opcode}_constval
     vmla.f64        d2, d1, d3          @ d2<- vAAh*2^32 + vAAl
 
     PREPARE_OPCODE_DISPATCH             @ insert opcode to rIBASE
@@ -272,7 +273,7 @@
 
     /* literal pool helper */
     .balign 8
-constval${opcode}:
+.L${opcode}_constval:
     .8byte          0x41f0000000000000
 
 %def op_long_to_float():

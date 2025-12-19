@@ -6,7 +6,10 @@
  *
  */
     FETCH_B r2, 1, 0                    @ r2<- BB
-    mov     r4, rINST, lsr #8           @ r4<- AA
+%   if wide:
+      lsrs    r4, rINST, #8             @ r4<- AA; set flags to use 16-bit encoding
+%   else:
+      lsr     r4, rINST, #8             @ r4<- AA
     FETCH_B r3, 1, 1                    @ r3<- CC
     GET_VREG r0, r2                     @ r0<- vBB (array object)
     GET_VREG r1, r3                     @ r1<- vCC (requested index)
