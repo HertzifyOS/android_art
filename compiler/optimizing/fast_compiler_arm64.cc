@@ -4145,12 +4145,6 @@ bool FastCompilerARM64::ProcessDexInstructionForMasks(const Instruction& instruc
     OP_CASE(XOR)
     OP_CASE(DIV)
     OP_CASE(REM)
-#undef OP_CASE
-#define OP_CASE(opcode) \
-    case Instruction::opcode ##_INT_2ADDR: \
-    case Instruction::opcode ##_INT: \
-    case Instruction::opcode ##_LONG_2ADDR: \
-    case Instruction::opcode ##_LONG:
     OP_CASE(SHL)
     OP_CASE(SHR)
     OP_CASE(USHR)
@@ -4238,6 +4232,9 @@ bool FastCompilerARM64::ProcessDexInstructionForMasks(const Instruction& instruc
     OP_CASE(XOR)
     OP_CASE(DIV)
     OP_CASE(REM)
+    OP_CASE(SHL)
+    OP_CASE(SHR)
+    OP_CASE(USHR)
 #undef OP_CASE
     case Instruction::NEG_DOUBLE:
     case Instruction::NEG_LONG:
