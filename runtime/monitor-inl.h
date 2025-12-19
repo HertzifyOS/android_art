@@ -17,10 +17,10 @@
 #ifndef ART_RUNTIME_MONITOR_INL_H_
 #define ART_RUNTIME_MONITOR_INL_H_
 
-#include "monitor.h"
-
 #include "gc_root-inl.h"
+#include "monitor.h"
 #include "obj_ptr-inl.h"
+#include "thread_list.h"
 
 namespace art HIDDEN {
 
@@ -56,7 +56,7 @@ inline void Monitor::SetLockOwnerInfo(ArtMethod* method, uint32_t dex_pc, Thread
 
 inline void Monitor::GetLockOwnerInfo(/*out*/ ArtMethod** method,
                                       /*out*/ uint32_t* dex_pc,
-                                      Thread* t) {
+                                      MonitorOwner t) {
   ArtMethod* owners_method;
   uint32_t owners_dex_pc;
   Thread* owner;
@@ -78,6 +78,25 @@ inline void Monitor::GetLockOwnerInfo(/*out*/ ArtMethod** method,
     *method = nullptr;
     *dex_pc = 0;
   }
+}
+
+inline bool MonitorOwner::IsOwner(const Thread* t) const {
+  if (t == nullptr) {
+    return false;
+  }
+  return storage_ == reinterpret_cast<uintptr_t>(t);
+}
+
+inline bool MonitorOwner::operator==(const Thread* t) const {
+  return storage_ == reinterpret_cast<uintptr_t>(t);
+}
+
+inline uint32_t MonitorOwner::GetThreadId() const {
+  if (IsNull()) {
+    return ThreadList::kInvalidThreadId;
+  }
+
+  return reinterpret_cast<Thread*>(storage_)->GetThreadId();
 }
 
 }  // namespace art

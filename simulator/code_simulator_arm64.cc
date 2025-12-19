@@ -74,6 +74,13 @@ void BasicCodeSimulatorArm64::InitInstructionSimulator(size_t stack_size) {
   // The debugger or trace macro-instructions may enable tracing dynamically, so always enable
   // coloured tracing.
   instruction_simulator_->SetColouredTrace(true);
+
+  // VIXL simulator will print a warning by default if it gets an instruction with any special
+  // behavior in terms of memory model - not only those with exclusive access.
+  //
+  // TODO: Update this once the behavior is resolved in VIXL.
+  instruction_simulator_->SilenceExclusiveAccessWarning();
+
   if (VLOG_IS_ON(simulator)) {
     // Only trace the main thread. Multiple threads tracing simulation at the same time can ruin
     // the output trace, making it difficult to read.
@@ -125,27 +132,33 @@ class ARTSimulator final : public Simulator {
     RegisterBranchInterception(artResolveTypeFromCode);
     RegisterBranchInterception(artThrowClassCastExceptionForObject);
     RegisterBranchInterception(artInstanceOfFromCode);
+    RegisterBranchInterception(artThrowArrayBoundsFromCode);
+    RegisterBranchInterception(artThrowNullPointerExceptionFromCode);
+    RegisterBranchInterception(artThrowStringBoundsFromCode);
+    RegisterBranchInterception(artDeoptimizeFromCompiledCode);
 
-    RegisterBranchInterception(artArm64SimulatorGenericJNIPlaceholder,
-                               [this]([[maybe_unused]] uint64_t addr)
-                               REQUIRES_SHARED(Locks::mutator_lock_) {
-      uint64_t native_code_ptr = static_cast<uint64_t>(ReadXRegister(0));
-      ArtMethod** simulated_reserved_area = reinterpret_cast<ArtMethod**>(ReadXRegister(1));
-      Thread* self = reinterpret_cast<Thread*>(ReadXRegister(2));
+    RegisterTwoWordReturnInterception(artInvokeSuperTrampolineWithAccessCheck);
 
-      uint64_t fp_result = 0.0;
-      int64_t gpr_result = artQuickGenericJniTrampolineSimulator(
-          native_code_ptr,
-          reinterpret_cast<void*>(simulated_reserved_area),
-          reinterpret_cast<void*>(&fp_result));
+    RegisterBranchInterception(
+        artArm64SimulatorGenericJNIPlaceholder,
+        [this]([[maybe_unused]] uint64_t addr) REQUIRES_SHARED(Locks::mutator_lock_) {
+          uint64_t native_code_ptr = static_cast<uint64_t>(ReadXRegister(0));
+          ArtMethod** simulated_reserved_area = reinterpret_cast<ArtMethod**>(ReadXRegister(1));
+          Thread* self = reinterpret_cast<Thread*>(ReadXRegister(2));
 
-      jvalue jval;
-      jval.j = gpr_result;
-      uint64_t result_end = artQuickGenericJniEndTrampoline(self, jval, fp_result);
+          uint64_t fp_result = 0.0;
+          int64_t gpr_result = artQuickGenericJniTrampolineSimulator(
+              native_code_ptr,
+              reinterpret_cast<void*>(simulated_reserved_area),
+              reinterpret_cast<void*>(&fp_result));
 
-      WriteXRegister(0, result_end);
-      WriteDRegister(0, bit_cast<double>(result_end));
-    });
+          jvalue jval;
+          jval.j = gpr_result;
+          uint64_t result_end = artQuickGenericJniEndTrampoline(self, jval, fp_result);
+
+          WriteXRegister(0, result_end);
+          WriteDRegister(0, bit_cast<double>(result_end));
+        });
   }
 
   virtual ~ARTSimulator() {}

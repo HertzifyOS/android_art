@@ -704,6 +704,9 @@ class EXPORT Thread {
     return tls32_.thin_lock_thread_id;
   }
 
+  // Returns the thread id used for java monitor lock purpose.
+  ALWAYS_INLINE uint32_t GetMonitorThreadId() const { return GetThreadId(); }
+
   pid_t GetTid() const {
     return tls32_.tid;
   }
