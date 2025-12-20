@@ -1246,6 +1246,7 @@ ndk::ScopedAStatus Artd::dexopt(
   std::unique_ptr<File> dex_file = OR_RETURN_NON_FATAL(OpenFileForReading(in_dexFile));
   args.Add("--zip-fd=%d", dex_file->Fd()).Add("--zip-location=%s", in_dexFile);
   fd_logger.Add(*dex_file);
+  // Check if the dex file is other-readable compared to the given fs_permission.
   struct stat dex_st = OR_RETURN_NON_FATAL(injector_->Fstat(*dex_file));
   if ((dex_st.st_mode & S_IROTH) == 0) {
     if (fs_permission.isOtherReadable) {
@@ -1275,8 +1276,14 @@ ndk::ScopedAStatus Artd::dexopt(
   args.Add("--oat-fd=%d", oat_file->Fd()).Add("--oat-location=%s", artifacts_path.oat_path);
   fd_logger.Add(*oat_file);
 
+  // For vdex, it can always follow the same permission as the dex file, so if the dex file is
+  // public, then the vdex file can be public too. This is safe because the vdex file doesn't
+  // contain anything from the profile. In this way, when the app is loaded by other apps, it can
+  // run at least in the "verify" mode even if the other artifacts are not public.
+  FsPermission vdex_fs_permission = fs_permission;
+  vdex_fs_permission.isOtherReadable = dex_st.st_mode & S_IROTH;
   std::unique_ptr<NewFile> vdex_file =
-      OR_RETURN_NON_FATAL(NewFile::Create(artifacts_path.vdex_path, fs_permission));
+      OR_RETURN_NON_FATAL(NewFile::Create(artifacts_path.vdex_path, vdex_fs_permission));
   args.Add("--output-vdex-fd=%d", vdex_file->Fd());
   fd_logger.Add(*vdex_file);
 
@@ -2353,6 +2360,20 @@ Result<void> Artd::PreRebootInitDeriveClasspath(const std::string& path) {
 
 Result<bool> Artd::PreRebootInitBootImages(ArtdCancellationSignal* cancellation_signal) {
   CmdlineBuilder args = OR_RETURN(GetArtExecCmdlineBuilder());
+
+  // A clean view of the new system partition prepared by dexopt_chroot_setup, disregarding the
+  // /system/etc overrides, to make sure odrefresh gets the new boot image profile and other files
+  // in /system/etc.
+  unique_fd new_system_dir;
+  if (OS::DirectoryExists("/mnt/new_system")) {
+    // odrefresh doesn't have the SELinux permission to find files under `/mnt` in chroot, so we
+    // open the directory and pass it as a dirfd to odrefresh.
+    new_system_dir = OR_RETURN_WITH_CONTEXT(OpenDirectory("/mnt/new_system"),
+                                            "Failed to open the clean system view");
+    args.Add("--env=ANDROID_ROOT=/proc/self/fd/%d", new_system_dir.get())
+        .Add("--keep-fds=%d", new_system_dir.get());
+  }
+
   args.Add("--")
       .Add(OR_RETURN(BuildArtBinPath("odrefresh")))
       .Add("--only-boot-images")

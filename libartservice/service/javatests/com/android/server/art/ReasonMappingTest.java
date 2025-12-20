@@ -58,18 +58,6 @@ public class ReasonMappingTest {
     }
 
     @Test
-    public void testGetCompilerFilterForShared() {
-        when(SystemProperties.get("pm.dexopt.shared")).thenReturn("speed");
-        assertThat(ReasonMapping.getCompilerFilterForShared()).isEqualTo("speed");
-    }
-
-    @Test(expected = IllegalStateException.class)
-    public void testGetCompilerFilterForSharedProfileGuidedFilter() throws Exception {
-        when(SystemProperties.get("pm.dexopt.shared")).thenReturn("speed-profile");
-        ReasonMapping.getCompilerFilterForShared();
-    }
-
-    @Test
     public void testGetPriorityClassForReason() throws Exception {
         assertThat(ReasonMapping.getPriorityClassForReason("install"))
                 .isEqualTo(ArtFlags.PRIORITY_INTERACTIVE);

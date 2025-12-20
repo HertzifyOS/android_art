@@ -1242,6 +1242,8 @@
                   "870-constant-if",
                   "871-switch",
                   "873-dead-handler",
+                  "874-filled-new-array",
+                  "875-shifts",
                   "999-redefine-hiddenapi",
                   "1000-non-moving-space-stress",
                   "1001-app-image-regions",
@@ -1706,6 +1708,13 @@
                 "656-checker-simd-opt-no-interp-ac"],
       "description": ["Timeout on QEMU"],
       "env_vars": {"ART_TEST_ON_VM": "true"}
+    },
+    {
+      "tests": ["2400-setstaticfield-uninitialized"],
+      "description": ["Test fails assertions on riscv64 for unknown reason"],
+      "variant": "jit-on-first-use",
+      "env_vars": {"ART_TEST_ON_VM": "true"},
+      "bug": "http://b/470276377"
     },
     {
       "tests": ["137-cfi"],

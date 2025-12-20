@@ -4128,6 +4128,8 @@ bool FastCompilerARM64::ProcessDexInstructionForMasks(const Instruction& instruc
     case Instruction::MONITOR_EXIT:
     case Instruction::SPARSE_SWITCH:
     case Instruction::PACKED_SWITCH:
+    case Instruction::FILLED_NEW_ARRAY:
+    case Instruction::FILLED_NEW_ARRAY_RANGE:
     case Instruction::FILL_ARRAY_DATA: {
       return true;
     }
@@ -4143,12 +4145,6 @@ bool FastCompilerARM64::ProcessDexInstructionForMasks(const Instruction& instruc
     OP_CASE(XOR)
     OP_CASE(DIV)
     OP_CASE(REM)
-#undef OP_CASE
-#define OP_CASE(opcode) \
-    case Instruction::opcode ##_INT_2ADDR: \
-    case Instruction::opcode ##_INT: \
-    case Instruction::opcode ##_LONG_2ADDR: \
-    case Instruction::opcode ##_LONG:
     OP_CASE(SHL)
     OP_CASE(SHR)
     OP_CASE(USHR)
@@ -4236,6 +4232,9 @@ bool FastCompilerARM64::ProcessDexInstructionForMasks(const Instruction& instruc
     OP_CASE(XOR)
     OP_CASE(DIV)
     OP_CASE(REM)
+    OP_CASE(SHL)
+    OP_CASE(SHR)
+    OP_CASE(USHR)
 #undef OP_CASE
     case Instruction::NEG_DOUBLE:
     case Instruction::NEG_LONG:
@@ -4274,8 +4273,6 @@ bool FastCompilerARM64::ProcessDexInstructionForMasks(const Instruction& instruc
 
     case Instruction::NEW_ARRAY:
     case Instruction::NEW_INSTANCE:
-    case Instruction::FILLED_NEW_ARRAY:
-    case Instruction::FILLED_NEW_ARRAY_RANGE:
     case Instruction::MOVE_RESULT_OBJECT:
     case Instruction::IGET_OBJECT:
     case Instruction::SGET_OBJECT:

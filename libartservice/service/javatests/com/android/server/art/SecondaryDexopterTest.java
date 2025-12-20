@@ -86,11 +86,15 @@ public class SecondaryDexopterTest {
     private final ProfilePath mDex1CurProfile = AidlUtils.buildProfilePathForSecondaryCur(DEX_1);
     private final ProfilePath mDex2RefProfile =
             AidlUtils.buildProfilePathForSecondaryRefAsInput(DEX_2);
+    private final ProfilePath mDex2CurProfile = AidlUtils.buildProfilePathForSecondaryCur(DEX_2);
     private final ProfilePath mDex3RefProfile =
             AidlUtils.buildProfilePathForSecondaryRefAsInput(DEX_3);
     private final OutputProfile mDex1PrivateOutputProfile =
             AidlUtils.buildOutputProfileForSecondary(
                     DEX_1, UID, UID, false /* isOtherReadable */, false /* isPreReboot */);
+    private final OutputProfile mDex2PrivateOutputProfile =
+            AidlUtils.buildOutputProfileForSecondary(
+                    DEX_2, UID, UID, false /* isOtherReadable */, false /* isPreReboot */);
 
     private final int mDefaultDexoptTrigger = DexoptTrigger.COMPILER_FILTER_IS_BETTER
             | DexoptTrigger.PRIMARY_BOOT_IMAGE_BECOMES_USABLE | DexoptTrigger.NEED_EXTRACTION;
@@ -129,7 +133,6 @@ public class SecondaryDexopterTest {
                 .when(SystemProperties.getBoolean(eq("dalvik.vm.always_debuggable"), anyBoolean()))
                 .thenReturn(false);
         lenient().when(SystemProperties.get("dalvik.vm.appimageformat")).thenReturn("lz4");
-        lenient().when(SystemProperties.get("pm.dexopt.shared")).thenReturn("speed");
 
         // No ISA translation.
         lenient()
@@ -182,14 +185,13 @@ public class SecondaryDexopterTest {
                         DexContainerFileDexoptResult.create(DEX_1, true /* isPrimaryAbi */,
                                 "arm64-v8a", "speed-profile", DexoptResult.DEXOPT_PERFORMED),
                         DexContainerFileDexoptResult.create(DEX_2, true /* isPrimaryAbi */,
-                                "arm64-v8a", "speed", DexoptResult.DEXOPT_PERFORMED),
+                                "arm64-v8a", "speed-profile", DexoptResult.DEXOPT_PERFORMED),
                         DexContainerFileDexoptResult.create(DEX_2, false /* isPrimaryAbi */,
-                                "armeabi-v7a", "speed", DexoptResult.DEXOPT_PERFORMED),
+                                "armeabi-v7a", "speed-profile", DexoptResult.DEXOPT_PERFORMED),
                         DexContainerFileDexoptResult.create(DEX_3, true /* isPrimaryAbi */,
                                 "arm64-v8a", "verify", DexoptResult.DEXOPT_PERFORMED));
 
         // It should use profile for dex 1.
-
         verify(mArtd).mergeProfiles(deepEq(List.of(mDex1CurProfile)), deepEq(mDex1RefProfile),
                 deepEq(mDex1PrivateOutputProfile), deepEq(List.of(DEX_1)),
                 deepEq(mMergeProfileOptions));
@@ -203,23 +205,27 @@ public class SecondaryDexopterTest {
 
         verify(mArtd).deleteProfile(deepEq(mDex1CurProfile));
 
-        // It should use "speed" for dex 2 for both ISAs and make the artifacts public.
-
-        verify(mArtd, never()).isProfileUsable(deepEq(mDex2RefProfile), any());
-        verify(mArtd, never()).mergeProfiles(any(), deepEq(mDex2RefProfile), any(), any(), any());
-
-        verify(mArtd).getDexoptNeeded(
-                eq(DEX_2), eq("arm64"), any(), eq("speed"), eq(mDefaultDexoptTrigger), any());
-        checkDexoptWithNoProfile(
-                verify(mArtd), DEX_2, "arm64", "speed", "CLC_FOR_DEX_2", true /* isPublic */);
+        // It should use "speed-profile" for dex 2 for both ISAs and make the artifacts private.
+        verify(mArtd).isProfileUsable(deepEq(mDex2RefProfile), any());
+        verify(mArtd).mergeProfiles(deepEq(List.of(mDex2CurProfile)), deepEq(mDex2RefProfile),
+                deepEq(mDex2PrivateOutputProfile), deepEq(List.of(DEX_2)),
+                deepEq(mMergeProfileOptions));
 
         verify(mArtd).getDexoptNeeded(
-                eq(DEX_2), eq("arm"), any(), eq("speed"), eq(mDefaultDexoptTrigger), any());
-        checkDexoptWithNoProfile(
-                verify(mArtd), DEX_2, "arm", "speed", "CLC_FOR_DEX_2", true /* isPublic */);
+                eq(DEX_2), eq("arm64"), any(), eq("speed-profile"), eq(mBetterOrSameDexoptTrigger), any());
+        checkDexoptWithPrivateProfile(verify(mArtd), DEX_2, "arm64",
+                ProfilePath.tmpProfilePath(mDex2PrivateOutputProfile.profilePath), "CLC_FOR_DEX_2");
+
+        verify(mArtd).getDexoptNeeded(
+                eq(DEX_2), eq("arm"), any(), eq("speed-profile"), eq(mBetterOrSameDexoptTrigger), any());
+        checkDexoptWithPrivateProfile(verify(mArtd), DEX_2, "arm",
+                ProfilePath.tmpProfilePath(mDex2PrivateOutputProfile.profilePath), "CLC_FOR_DEX_2");
+
+        verify(mArtd).commitTmpProfile(deepEq(mDex2PrivateOutputProfile.profilePath));
+
+        verify(mArtd).deleteProfile(deepEq(mDex2CurProfile));
 
         // It should use "verify" for dex 3 and make the artifacts private.
-
         verify(mArtd, never()).isProfileUsable(deepEq(mDex3RefProfile), any());
         verify(mArtd, never()).mergeProfiles(any(), deepEq(mDex3RefProfile), any(), any(), any());
 
@@ -248,7 +254,8 @@ public class SecondaryDexopterTest {
         lenient().when(dex1Info.isUsedByOtherApps()).thenReturn(false);
         lenient().when(dex1Info.fileVisibility()).thenReturn(FileVisibility.OTHER_READABLE);
 
-        // This should be compiled without profile because it's used by other apps.
+        // This should be compiled with profile, but the artifacts are private, because it's used by
+        // other apps.
         var dex2Info = mock(CheckedSecondaryDexInfo.class);
         lenient().when(dex2Info.dexPath()).thenReturn(DEX_2);
         lenient().when(dex2Info.userHandle()).thenReturn(USER_HANDLE);
@@ -276,11 +283,13 @@ public class SecondaryDexopterTest {
                 .when(mArtd.getProfileVisibility(deepEq(mDex1RefProfile)))
                 .thenReturn(FileVisibility.NOT_OTHER_READABLE);
 
-        // Profiles for dex file 2 and 3 are also usable, but shouldn't be used.
+        // Profiles for dex file 2 is also usable.
         lenient().when(mArtd.isProfileUsable(deepEq(mDex2RefProfile), any())).thenReturn(true);
         lenient()
                 .when(mArtd.getProfileVisibility(deepEq(mDex2RefProfile)))
                 .thenReturn(FileVisibility.NOT_OTHER_READABLE);
+
+        // Profiles for dex file 3 is also usable, but shouldn't be used.
         lenient().when(mArtd.isProfileUsable(deepEq(mDex3RefProfile), any())).thenReturn(true);
         lenient()
                 .when(mArtd.getProfileVisibility(deepEq(mDex3RefProfile)))

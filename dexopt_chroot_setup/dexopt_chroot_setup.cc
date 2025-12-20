@@ -547,6 +547,14 @@ Result<void> PrepareExternalLibDirs() {
                       /*check_source_is_not_in_chroot=*/false));
   OR_RETURN(Unmount(classpaths_tmp_dir));
 
+  // Prepare a clean view of the new system partition for odrefresh, disregarding the /system/etc
+  // overrides set up above, to make sure it gets the new boot image profile and other files in
+  // /system/etc.
+  OR_RETURN(CreateDir(PathInChroot("/mnt/new_system")));
+  OR_RETURN(BindMount(PathInChroot("/system"),
+                      PathInChroot("/mnt/new_system"),
+                      /*check_source_is_not_in_chroot=*/false));
+
   return {};
 }
 
@@ -770,7 +778,8 @@ Result<void> DexoptChrootSetup::TearDownChroot() const {
                          "/product/etc",
                          "/vendor/etc",
                          "/system/etc/classpaths",
-                         "/mnt/classpaths"},
+                         "/mnt/classpaths",
+                         "/mnt/new_system"},
                         mount_point_in_chroot)) {
       OR_RETURN(Unmount(entry.mount_point));
     }

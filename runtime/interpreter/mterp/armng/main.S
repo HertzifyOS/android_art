@@ -209,6 +209,10 @@
     str     \reg, [rFP, \vreg, lsl #2]
     str     \reg, [rREFS, \vreg, lsl #2]
 .endm
+.macro SET_VREG_OBJECT_PRESCALED reg, scaled_vreg
+    str     \reg, [rFP, \scaled_vreg]
+    str     \reg, [rREFS, \scaled_vreg]
+.endm
 .macro SET_VREG_FLOAT reg, vreg, tmpreg
     add     \tmpreg, rFP, \vreg, lsl #2
     vstr    \reg, [\tmpreg]
@@ -235,6 +239,11 @@
     mov     \tmp1, #0
     strd    \tmp1, \tmp1, [\tmp2]
 .endm
+.macro CLEAR_SHADOW_PAIR_PRESCALED scaled_vreg, tmp1, tmp2, s=""
+    add\s   \tmp2, rREFS, \scaled_vreg
+    mov\s   \tmp1, #0
+    strd    \tmp1, \tmp1, [\tmp2]
+.endm
 .macro CLEAR_SHADOW_PAIR_PRESCALED_RZERO scaled_vreg, rzero, tmp, s=""
     add\s   \tmp, rREFS, \scaled_vreg
     strd    \rzero, \rzero, [\tmp]
@@ -242,8 +251,8 @@
 .macro VREG_INDEX_TO_ADDR reg, vreg
     add     \reg, rFP, \vreg, lsl #2
 .endm
-.macro VREG_INDEX_TO_ADDR_PRESCALED reg, scaled_vreg
-    add     \reg, rFP, \scaled_vreg
+.macro VREG_INDEX_TO_ADDR_PRESCALED reg, scaled_vreg, s=""
+    add\s   \reg, rFP, \scaled_vreg
 .endm
 
 // An assembly entry for nterp.
