@@ -1317,7 +1317,15 @@ bool FastCompilerARM64::GenerateFrame() {
   }
   core_spill_mask_ |= (1 << lr.GetCode());
 
-  code_generation_data_->GetStackMapStream()->BeginMethod(GetFrameSize(),
+  size_t frame_size = GetFrameSize();
+  if (frame_size > GetStackOverflowReservedBytes(InstructionSet::kArm64)) {
+    // This isn't an unimplemented reason, just a hard limit we have in the
+    // runtime about compile code frames.
+    unimplemented_reason_ = "FrameTooLarge";
+    return false;
+  }
+
+  code_generation_data_->GetStackMapStream()->BeginMethod(frame_size,
                                                           core_spill_mask_,
                                                           fpu_spill_mask_,
                                                           GetCodeItemAccessor().RegistersSize(),
@@ -1339,7 +1347,7 @@ bool FastCompilerARM64::GenerateFrame() {
   }
 
   CodeGeneratorARM64::GenerateFrame(GetAssembler(),
-                                    GetFrameSize(),
+                                    frame_size,
                                     GetFramePreservedCoreRegisters(),
                                     GetFramePreservedFPRegisters(),
                                     /* requires_current_method= */ true);
