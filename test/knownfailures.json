@@ -1244,6 +1244,7 @@
                   "873-dead-handler",
                   "874-filled-new-array",
                   "875-shifts",
+                  "876-ifconst",
                   "999-redefine-hiddenapi",
                   "1000-non-moving-space-stress",
                   "1001-app-image-regions",
