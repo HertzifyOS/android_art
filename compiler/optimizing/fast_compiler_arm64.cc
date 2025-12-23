@@ -1593,6 +1593,7 @@ bool FastCompilerARM64::HandleInvoke(const Instruction& instruction,
       EmissionCheckScope guard(GetVIXLAssembler(), kMaxMacroInstructionSizeInBytes);
       __ Ldr(kArtMethodRegister.W(), HeapOperand(receiver.W(), class_offset));
       if (can_be_null) {
+        UpdateNonNullMask(obj_reg, /* can_be_null= */ false);
         RecordPcInfo(dex_pc);
       }
     }
@@ -2412,6 +2413,7 @@ bool FastCompilerARM64::BuildArrayAccess(const Instruction& instruction,
     EmissionCheckScope guard(GetVIXLAssembler(), kMaxMacroInstructionSizeInBytes);
     __ Ldr(temp, mem);
     if (CanBeNull(array_reg)) {
+      UpdateNonNullMask(array_reg, /* can_be_null= */ false);
       RecordPcInfo(dex_pc);
     }
   }
@@ -2489,6 +2491,7 @@ bool FastCompilerARM64::BuildArrayLength(
     EmissionCheckScope guard(GetVIXLAssembler(), kMaxMacroInstructionSizeInBytes);
     __ Ldr(dest_reg, mem);
     if (CanBeNull(array)) {
+      UpdateNonNullMask(array, /* can_be_null= */ false);
       RecordPcInfo(dex_pc);
     }
   }
@@ -2547,6 +2550,7 @@ bool FastCompilerARM64::BuildInstanceFieldGet(const Instruction& instruction,
              next)) {
     return false;
   }
+  UpdateNonNullMask(obj_reg, /* can_be_null= */ false);
   return true;
 }
 
@@ -2590,15 +2594,17 @@ bool FastCompilerARM64::BuildInstanceFieldSet(const Instruction& instruction,
   }
   MemOperand mem = HeapOperand(holder, field->GetOffset());
 
-  return DoPut(mem,
-               holder,
-               field,
-               instruction.Opcode(),
-               source_reg,
-               can_receiver_be_null,
-               is_object,
-               field->IsVolatile(),
-               dex_pc);
+  bool result = DoPut(mem,
+                      holder,
+                      field,
+                      instruction.Opcode(),
+                      source_reg,
+                      can_receiver_be_null,
+                      is_object,
+                      field->IsVolatile(),
+                      dex_pc);
+  UpdateNonNullMask(obj_reg, /* can_be_null= */ false);
+  return result;
 }
 
 bool FastCompilerARM64::DoPut(const MemOperand& base,
@@ -3077,6 +3083,7 @@ bool FastCompilerARM64::BuildFillArrayData(const Instruction& instruction, uint3
     EmissionCheckScope guard(GetVIXLAssembler(), kMaxMacroInstructionSizeInBytes);
     __ Ldr(length, mem);
     if (CanBeNull(array_reg)) {
+      UpdateNonNullMask(array_reg, /* can_be_null= */ false);
       RecordPcInfo(dex_pc);
     }
   }
