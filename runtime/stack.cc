@@ -743,13 +743,7 @@ void StackVisitor::ValidateFrame() const {
     // Frame consistency checks.
     size_t frame_size = GetCurrentQuickFrameInfo().FrameSizeInBytes();
     CHECK_NE(frame_size, 0u);
-    // For compiled code, we could try to have a rough guess at an upper size we expect
-    // to see for a frame:
-    // 256 registers
-    // 2 words HandleScope overhead
-    // 3+3 register spills
-    // const size_t kMaxExpectedFrameSize = (256 + 2 + 3 + 3) * sizeof(word);
-    const size_t kMaxExpectedFrameSize = interpreter::kNterpMaxFrame;
+    constexpr size_t kMaxExpectedFrameSize = GetStackOverflowReservedBytes(kRuntimeISA);
     CHECK_LE(frame_size, kMaxExpectedFrameSize) << method->PrettyMethod();
     size_t return_pc_offset = GetCurrentQuickFrameInfo().GetReturnPcOffset();
     CHECK_LT(return_pc_offset, frame_size);
