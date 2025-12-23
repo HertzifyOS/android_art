@@ -758,6 +758,10 @@ void UnstartedRuntime::UnstartedJNIExecutableGetParameterTypesInternal(
   }
 
   ArtMethod* method = executable->GetArtMethod();
+  if (method == nullptr) {
+    result->SetL(nullptr);
+    return;
+  }
   const dex::TypeList* params = method->GetParameterTypeList();
   if (params == nullptr) {
     result->SetL(nullptr);

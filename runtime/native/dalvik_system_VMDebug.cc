@@ -345,6 +345,12 @@ static jobject VMDebug_getExecutableMethodFileOffsetsNative(JNIEnv* env,
   }
 
   ArtMethod* art_method = m->GetArtMethod();
+  if (art_method == nullptr) {
+    soa.Self()->ThrowNewExceptionF("Ljava/lang/RuntimeException;",
+                                   "Could not find ArtMethod*. Possibly javaExecutable was a"
+                                   "serialized constructor");
+    return nullptr;
+  }
   auto oat_method_quick_code =
       reinterpret_cast<const uint8_t*>(art_method->GetOatMethodQuickCode(kRuntimePointerSize));
 

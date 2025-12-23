@@ -1308,7 +1308,8 @@
                   "2279-aconfig-flags",
                   "2286-method-tracing-aot-code",
                   "2396-unmodifiable-final-fields",
-                  "2398-method-trace-opt-code"],
+                  "2398-method-trace-opt-code",
+	          "2401-serialize-constructor"],
         "variant": "jvm",
         "description": ["Doesn't run on RI."]
     },
