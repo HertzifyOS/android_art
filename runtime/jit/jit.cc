@@ -1792,15 +1792,9 @@ void Jit::MaybeEnqueueCompilation(ArtMethod* method, Thread* self) {
         it->second.previously_warm = true;
       }
     }
-  } else {
-    if (!UseFastCompiler()) {
-      // Mark the method as warm for the profile saver.
-      method->SetPreviouslyWarm();
-    } else if (!Runtime::Current()->GetStartupCompleted()) {
-      // If startup hasn't completed yet, avoid JIT compiling to not be in the
-      // way of startup.
-      return;
-    }
+  } else if (!UseFastCompiler()) {
+    // Mark the method as warm for the profile saver.
+    method->SetPreviouslyWarm();
   }
 
   if (!method->IsNative() && GetCodeCache()->CanAllocateProfilingInfo()) {
