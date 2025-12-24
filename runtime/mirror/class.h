@@ -1113,9 +1113,6 @@ class EXPORT MANAGED Class final : public Object {
   }
 
   void SetNumReferenceStaticFields(uint32_t new_num) REQUIRES_SHARED(Locks::mutator_lock_) {
-    if (new_num > 0) {
-      AddRemoveClassFlags(kClassFlagHasStaticRefs);
-    }
     // Not called within a transaction.
     SetField32<false>(NumReferenceStaticFieldsOffset(), new_num);
   }

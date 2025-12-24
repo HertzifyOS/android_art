@@ -6678,7 +6678,12 @@ bool ClassLinker::LinkClass(Thread* self,
     if (LIKELY(descriptor != nullptr) && cha_ != nullptr) {
       cha_->UpdateAfterLoadingOf(klass);
     }
-
+    // Ensure that the static-ref class-flag is set in resolving class and not
+    // in the temp class so that CMC GC doesn't try updating non-existent static
+    // refs in the temp class.
+    if (klass->NumReferenceStaticFieldsUnchecked() > 0) {
+      klass->AddRemoveClassFlags(mirror::kClassFlagHasStaticRefs);
+    }
     // This will notify waiters on klass that saw the not yet resolved
     // class in the class_table_ during EnsureResolved.
     mirror::Class::SetStatus(klass, ClassStatus::kResolved, self);
@@ -6726,6 +6731,12 @@ bool ClassLinker::LinkClass(Thread* self,
     mirror::Class::SetStatus(klass, ClassStatus::kRetired, self);
 
     CHECK_EQ(h_new_class->GetStatus(), ClassStatus::kResolving);
+    // Ensure that the static-ref class-flag is set in resolving class and not
+    // in the temp class so that CMC GC doesn't try updating non-existent static
+    // refs in the temp class.
+    if (h_new_class->NumReferenceStaticFieldsUnchecked() > 0) {
+      h_new_class->AddRemoveClassFlags(mirror::kClassFlagHasStaticRefs);
+    }
     // This will notify waiters on new_class that saw the not yet resolved
     // class in the class_table_ during EnsureResolved.
     mirror::Class::SetStatus(h_new_class, ClassStatus::kResolved, self);
