@@ -1317,7 +1317,15 @@ bool FastCompilerARM64::GenerateFrame() {
   }
   core_spill_mask_ |= (1 << lr.GetCode());
 
-  code_generation_data_->GetStackMapStream()->BeginMethod(GetFrameSize(),
+  size_t frame_size = GetFrameSize();
+  if (frame_size > GetStackOverflowReservedBytes(InstructionSet::kArm64)) {
+    // This isn't an unimplemented reason, just a hard limit we have in the
+    // runtime about compile code frames.
+    unimplemented_reason_ = "FrameTooLarge";
+    return false;
+  }
+
+  code_generation_data_->GetStackMapStream()->BeginMethod(frame_size,
                                                           core_spill_mask_,
                                                           fpu_spill_mask_,
                                                           GetCodeItemAccessor().RegistersSize(),
@@ -1339,7 +1347,7 @@ bool FastCompilerARM64::GenerateFrame() {
   }
 
   CodeGeneratorARM64::GenerateFrame(GetAssembler(),
-                                    GetFrameSize(),
+                                    frame_size,
                                     GetFramePreservedCoreRegisters(),
                                     GetFramePreservedFPRegisters(),
                                     /* requires_current_method= */ true);
@@ -2045,6 +2053,7 @@ void FastCompilerARM64::DoWriteBarrierOn(Register holder,
 #define DO_CASE(arm_op, op, other) \
     case arm_op: { \
       if (constant op other) { \
+        PrepareToBranch(dex_pc + target_offset); \
         __ B(label); \
       } \
       break; \
@@ -2072,9 +2081,6 @@ bool FastCompilerARM64::If_21_22t(const Instruction& instruction, uint32_t dex_p
   Location location = vreg_locations_[register_index];
 
   if (kCompareWithZero) {
-    // We are going to branch, move all constants to registers to make the merge
-    // point use the same locations.
-    PrepareToBranch(dex_pc + target_offset);
     if (location.IsConstant()) {
       DCHECK(location.GetConstant()->IsIntConstant());
       int32_t constant = location.GetConstant()->AsIntConstant()->GetValue();
@@ -2087,6 +2093,9 @@ bool FastCompilerARM64::If_21_22t(const Instruction& instruction, uint32_t dex_p
         DO_CASE(vixl::aarch64::ge, >=, 0);
       }
     } else {
+      // We are going to branch, move all constants to registers to make the merge
+      // point use the same locations.
+      PrepareToBranch(dex_pc + target_offset);
       location = GetExistingRegisterLocation(register_index, DataType::Type::kInt32);
       if (HitUnimplemented()) {
         return false;
@@ -2111,9 +2120,6 @@ bool FastCompilerARM64::If_21_22t(const Instruction& instruction, uint32_t dex_p
   } else {
     // !kCompareWithZero
     Location other_location = vreg_locations_[instruction.VRegB_22t()];
-    // We are going to branch, move all constants to registers to make the merge
-    // point use the same locations.
-    PrepareToBranch(dex_pc + target_offset);
     if (location.IsConstant() && other_location.IsConstant()) {
       int32_t constant = location.GetConstant()->AsIntConstant()->GetValue();
       int32_t other_constant = other_location.GetConstant()->AsIntConstant()->GetValue();
@@ -2126,6 +2132,9 @@ bool FastCompilerARM64::If_21_22t(const Instruction& instruction, uint32_t dex_p
         DO_CASE(vixl::aarch64::ge, >=, other_constant);
       }
     } else {
+      // We are going to branch, move all constants to registers to make the merge
+      // point use the same locations.
+      PrepareToBranch(dex_pc + target_offset);
       // Reload the locations, which can now be registers.
       location = GetExistingRegisterLocation(register_index, DataType::Type::kInt32);
       other_location = GetExistingRegisterLocation(instruction.VRegB_22t(), DataType::Type::kInt32);
