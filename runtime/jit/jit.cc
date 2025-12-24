@@ -1267,7 +1267,7 @@ static bool SupportsFastCompiler() {
 uint16_t Jit::GetInitialHotnessThreshold() {
   Runtime* runtime = Runtime::Current();
   Jit* jit = runtime->GetJit();
-  if (jit == nullptr || !jit->UseFastCompiler()) {
+  if (jit == nullptr || !jit->UseFastCompiler() || Runtime::Current()->IsJavaDebuggable()) {
     return runtime->GetJITOptions()->GetWarmupThreshold();
   }
   static constexpr uint16_t kFastThreshold = 4;
