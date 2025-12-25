@@ -349,6 +349,8 @@ class CodeInfo {
       : dex_register_catalog_.GetRow(index).GetLocation();
   }
 
+  bool IsDebuggable() const { return flags_ & kIsDebuggable; }
+
   bool HasInlineInfo() const {
     return inline_infos_.NumRows() > 0;
   }

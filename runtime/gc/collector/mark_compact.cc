@@ -2135,7 +2135,7 @@ void MarkCompact::UpdateStaticFieldsReferences(mirror::Class* klass, Visitor& vi
         } else {
           // We read correct vtable length. Proceed with that.
         }
-      } else if (IsValidFd(uffd_)) {
+      } else if (IsValidFd(uffd_) && use_move_ioctl_) {
         // This is the rare case in which the page preceding the one being updated started after
         // num_reference_static_fields_ and ended before the class-end and contains embedded
         // vtable-length. It may also contain the static references on it. But it will not cause
@@ -2303,7 +2303,7 @@ void MarkCompact::UpdateInstanceFieldsReferences(mirror::Object* obj,
           DCHECK_LT(state, static_cast<uint8_t>(PageState::kProcessedAndMapping));
           DCHECK_NE(state, static_cast<uint8_t>(PageState::kProcessed));
           DCHECK_NE(state, static_cast<uint8_t>(PageState::kUnprocessed));
-        } else if (IsValidFd(uffd_)) {
+        } else if (IsValidFd(uffd_) && use_move_ioctl_) {
           // This case is probably never going to happen, where there is at
           // least one non-overlapping page between reference_instance_offsets_
           // and last word of overflow-bitmap. Such page(s) can have static

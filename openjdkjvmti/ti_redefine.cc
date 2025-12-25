@@ -2891,13 +2891,19 @@ void Redefiner::ClassRedefinition::UpdateClassStructurally(const RedefinitionDat
         return f;
       },
       [&](art::ArtMethod* m, const auto& info) REQUIRES(art::Locks::mutator_lock_) {
-        DCHECK(m != nullptr) << info;
-        auto it = method_map.find(m);
+        // For Constructor objects constructed via serializationCopy ArtMethod can be a nullptr.
+        if (m == nullptr) {
+          return static_cast<art::ArtMethod*>(nullptr);
+        }
+
         if (UNLIKELY(could_change_resolution_of(m, info))) {
           // Dex-cache Resolution might change. Just clear the resolved value.
           VLOG(plugin) << "Clearing resolution " << info << " for (method) " << m->PrettyMethod();
           return static_cast<art::ArtMethod*>(nullptr);
-        } else if (it != method_map.end()) {
+        }
+
+        auto it = method_map.find(m);
+        if (it != method_map.end()) {
           VLOG(plugin) << "Updating " << info << " object for (method) "
                       << it->second->PrettyMethod();
           return it->second;

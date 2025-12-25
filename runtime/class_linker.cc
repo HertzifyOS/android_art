@@ -5621,6 +5621,7 @@ ObjPtr<mirror::Class> ClassLinker::CreateProxyClass(ScopedObjectAccessAlreadyRun
   // Filter out to only the non-private virtual methods.
   for (auto [mirror, idx] : ZipCount(h_methods.Iterate<mirror::Method>())) {
     ArtMethod* m = mirror->GetArtMethod();
+    DCHECK_NE(m, nullptr);
     if (!m->IsPrivate() && !m->IsStatic()) {
       proxied_methods.push_back(m);
       proxied_throws_idx.push_back(idx);

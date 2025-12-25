@@ -891,7 +891,12 @@ void ImageSpace::Relocator::RelocateImage(ArrayRef<const std::unique_ptr<ImageSp
               ObjPtr<mirror::Executable> as_executable =
                   ObjPtr<mirror::Executable>::DownCast(object);
               ArtMethod* unpatched_method = as_executable->GetArtMethod<kVerifyNone>();
-              ArtMethod* patched_method = forward_image(unpatched_method);
+              // Only constructors created using serializationCopy might have a null ArtMethod.
+              // Serialized constructors maintain the corresponding method differently and
+              // ArtMethod will be set to nullptr.
+              DCHECK_IMPLIES(klass == method_class, unpatched_method != nullptr);
+              ArtMethod* patched_method =
+                  (unpatched_method == nullptr) ? nullptr : forward_image(unpatched_method);
               as_executable->SetArtMethod</*kTransactionActive=*/ false,
                                           /*kCheckTransaction=*/ true,
                                           kVerifyNone>(patched_method);

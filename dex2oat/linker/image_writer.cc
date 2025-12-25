@@ -3454,7 +3454,9 @@ void ImageWriter::FixupObject(Object* orig, Object* copy) {
       auto* dest = down_cast<mirror::Executable*>(copy);
       auto* src = down_cast<mirror::Executable*>(orig);
       ArtMethod* src_method = src->GetArtMethod();
-      CopyAndFixupPointer(dest, mirror::Executable::ArtMethodOffset(), src_method);
+      if (src_method != nullptr) {
+        CopyAndFixupPointer(dest, mirror::Executable::ArtMethodOffset(), src_method);
+      }
     } else if (klass == GetClassRoot<mirror::FieldVarHandle, kWithoutReadBarrier>(class_roots) ||
          klass == GetClassRoot<mirror::StaticFieldVarHandle, kWithoutReadBarrier>(class_roots)) {
       // Need to update the ArtField.

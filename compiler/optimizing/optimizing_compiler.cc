@@ -856,12 +856,6 @@ CodeGenerator* OptimizingCompiler::TryCompile(ArenaAllocator* allocator,
     return nullptr;
   }
 
-  if (Compiler::IsPathologicalCase(*code_item, method_idx, dex_file)) {
-    SCOPED_TRACE << "Not compiling because of pathological case";
-    MaybeRecordStat(compilation_stats_.get(), MethodCompilationStat::kNotCompiledPathological);
-    return nullptr;
-  }
-
   // Implementation of the space filter: do not compile a code item whose size in
   // code units is bigger than 128.
   static constexpr size_t kSpaceFilterOptimizingThreshold = 128;
@@ -1173,6 +1167,13 @@ CompiledMethod* OptimizingCompiler::Compile(const dex::CodeItem* code_item,
   ArenaStack arena_stack(runtime->GetArenaPool());
   std::unique_ptr<CodeGenerator> codegen;
   bool compiled_intrinsic = false;
+
+  if (Compiler::IsPathologicalCase(*code_item, method_idx, dex_file)) {
+    SCOPED_TRACE << "Not compiling because of pathological case";
+    MaybeRecordStat(compilation_stats_.get(), MethodCompilationStat::kNotCompiledPathological);
+    return nullptr;
+  }
+
   {
     ScopedObjectAccess soa(Thread::Current());
     ArtMethod* method =
@@ -1484,6 +1485,12 @@ bool OptimizingCompiler::JitCompile(Thread* self,
       jit_logger->WriteLog(code, jni_compiled_method.GetCode().size(), method);
     }
     return true;
+  }
+
+  if (Compiler::IsPathologicalCase(*code_item, method_idx, *dex_file)) {
+    SCOPED_TRACE << "Not compiling because of pathological case";
+    MaybeRecordStat(compilation_stats_.get(), MethodCompilationStat::kNotCompiledPathological);
+    return false;
   }
 
   ArenaStack arena_stack(runtime->GetJitArenaPool());
