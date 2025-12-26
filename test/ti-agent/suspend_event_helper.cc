@@ -51,6 +51,7 @@ struct TestData {
   jmethodID frame_pop_setup_method;
   jmethodID method_exit_callback;
   std::vector<std::string> interesting_classes;
+  bool suspend_on_method_entry_exit;
   bool hit_location;
 
   TestData(jvmtiEnv* jvmti,
@@ -73,6 +74,7 @@ struct TestData {
         method_exit_callback(method_callback != nullptr ? env->FromReflectedMethod(method_callback)
                                                         : nullptr),
         interesting_classes(interesting),
+        suspend_on_method_entry_exit(true),
         hit_location(false) {
     JvmtiErrorToException(
         env, jvmti, jvmti->CreateRawMonitor("SuspendStopMonitor", &notify_monitor));
@@ -190,13 +192,15 @@ void suspendOnceCallback(jvmtiEnv* jvmti, JNIEnv* env, jthread thr, jmethodID me
           env, jvmti, jvmti->GetThreadLocalStorage(thr, reinterpret_cast<void**>(&data)))) {
     return;
   }
-  CHECK(data != nullptr);
+  if (data == nullptr) {
+    return;
+  }
   if (method != data->target_method) {
     return;
   }
   env->CallStaticVoidMethod(
       data->target_klass, data->method_exit_callback, GetJavaMethod(jvmti, env, method));
-  if (!data->hit_location) {
+  if (!data->hit_location && data->suspend_on_method_entry_exit) {
     data->PerformSuspend(jvmti, env);
   }
 }
@@ -379,6 +383,7 @@ Java_art_SuspendEvents_setupMethodExitTest(JNIEnv* env, [[maybe_unused]] jclass 
   memset(&cb, 0, sizeof(cb));
   cb.MethodEntry = cbMethodEntrySuspendOnce;
   cb.MethodExit = cbMethodExitSuspendOnce;
+  cb.Exception = cbException;
   JvmtiErrorToException(env, jvmti_env, jvmti_env->SetEventCallbacks(&cb, sizeof(cb)));
 }
 
@@ -672,6 +677,30 @@ extern "C" JNIEXPORT void JNICALL Java_art_SuspendEvents_setupSuspendExceptionEv
           JVMTI_ENABLE, is_catch ? JVMTI_EVENT_EXCEPTION_CATCH : JVMTI_EVENT_EXCEPTION, thr));
 }
 
+extern "C" JNIEXPORT void JNICALL Java_art_SuspendEvents_enableMethodExitEvents(
+    JNIEnv* env, [[maybe_unused]] jclass klass , jclass target_class, jobject method, jthread thr) {
+  TestData* data;
+  if (JvmtiErrorToException(
+      env, jvmti_env, jvmti_env->GetThreadLocalStorage(thr, reinterpret_cast<void**>(&data)))) {
+    return;
+  }
+  if (data != nullptr) {
+    data->suspend_on_method_entry_exit = false;
+
+    if (data->target_klass == nullptr) {
+      data->target_klass = reinterpret_cast<jclass>(env->NewGlobalRef(target_class));
+    } else if (!env->IsSameObject(data->target_klass, target_class)) {
+      LOG(ERROR) << "No support for setting events for different target classes";
+    }
+
+    data->method_exit_callback = env->FromReflectedMethod(method);
+  }
+  JvmtiErrorToException(
+      env,
+      jvmti_env,
+      jvmti_env->SetEventNotificationMode(JVMTI_ENABLE, JVMTI_EVENT_METHOD_EXIT, thr));
+}
+
 extern "C" JNIEXPORT void JNICALL Java_art_SuspendEvents_clearSuspendExceptionEvent(
     JNIEnv* env, [[maybe_unused]] jclass klass , jthread thr) {
   TestData* data;
@@ -693,6 +722,22 @@ extern "C" JNIEXPORT void JNICALL Java_art_SuspendEvents_clearSuspendExceptionEv
     return;
   }
   DeleteTestData(env, thr, data);
+}
+
+extern "C" JNIEXPORT void JNICALL Java_art_SuspendEvents_disableExceptionEvents(
+    JNIEnv* env, [[maybe_unused]] jclass klass , jthread thr) {
+  if (JvmtiErrorToException(
+          env,
+          jvmti_env,
+          jvmti_env->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_EXCEPTION_CATCH, thr))) {
+    return;
+  }
+  if (JvmtiErrorToException(
+          env,
+          jvmti_env,
+          jvmti_env->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_EXCEPTION, thr))) {
+    return;
+  }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_art_SuspendEvents_setupSuspendMethodEvent(
@@ -903,5 +948,18 @@ Java_art_SuspendEvents_waitForSuspendHit(JNIEnv* env, [[maybe_unused]] jclass kl
          (state & JVMTI_THREAD_STATE_SUSPENDED) == 0) {
   }
 }
+
+extern "C" JNIEXPORT void JNICALL Java_art_SuspendEvents_clearTestData(
+    JNIEnv* env, [[maybe_unused]] jclass klass , jthread thr) {
+  TestData* data;
+  if (JvmtiErrorToException(
+          env, jvmti_env, jvmti_env->GetThreadLocalStorage(thr, reinterpret_cast<void**>(&data)))) {
+    return;
+  }
+  if (data != nullptr) {
+    DeleteTestData(env, thr, data);
+  }
+}
+
 }  // namespace common_suspend_event
 }  // namespace art

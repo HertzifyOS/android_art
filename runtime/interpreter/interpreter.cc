@@ -482,16 +482,21 @@ void EnterInterpreterFromDeoptimize(Thread* self,
     uint32_t new_dex_pc = dex_pc;
     if (UNLIKELY(self->IsExceptionPending())) {
       DCHECK(self->GetException() != Thread::GetDeoptimizationException());
-      // If we deoptimize from the QuickExceptionHandler, we already reported the exception throw
-      // event to the instrumentation. Skip throw listeners for the first frame. The deopt check
-      // should happen after the throw listener is called as throw listener can trigger a
-      // deoptimization.
-      new_dex_pc = MoveToExceptionHandler(self,
-                                          *shadow_frame,
-                                          /* skip_listeners= */ false,
-                                          /* skip_throw_listener= */ frame_cnt == 0) ?
-                       shadow_frame->GetDexPC() :
-                       dex::kDexNoIndex;
+      if (shadow_frame->GetForcePopFrame()) {
+        // Just continue with next instruction which will pop the frame.
+        new_dex_pc = shadow_frame->GetDexPC();
+      } else {
+        // If we deoptimize from the QuickExceptionHandler, we already reported the exception throw
+        // event to the instrumentation. Skip throw listeners for the first frame. The deopt check
+        // should happen after the throw listener is called as throw listener can trigger a
+        // deoptimization.
+        new_dex_pc = MoveToExceptionHandler(self,
+                                            *shadow_frame,
+                                            /* skip_listeners= */ false,
+                                            /* skip_throw_listener= */ frame_cnt == 0) ?
+            shadow_frame->GetDexPC() :
+            dex::kDexNoIndex;
+      }
     } else if (!from_code) {
       // Deoptimization is not called from code directly.
       const Instruction* instr = &accessor.InstructionAt(dex_pc);
