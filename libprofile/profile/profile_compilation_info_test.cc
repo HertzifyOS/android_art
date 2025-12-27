@@ -436,6 +436,32 @@ TEST_F(ProfileCompilationInfoTest, BadVersion) {
   ASSERT_FALSE(loaded_info.Load(GetFd(profile)));
 }
 
+TEST_F(ProfileCompilationInfoTest, LoadBootProfileAsRegular) {
+  ScratchFile profile;
+
+  ProfileCompilationInfo saved_info(true /*for_boot_image*/);
+  ASSERT_TRUE(AddMethod(&saved_info, dex1, /*method_idx=*/ 0));
+  ASSERT_TRUE(saved_info.Save(GetFd(profile)));
+  ASSERT_EQ(0, profile.GetFile()->Flush());
+
+  // Loading a boot profile with a regular ProfileCompilationInfo should fail.
+  ProfileCompilationInfo loaded_info(false /*for_boot_image*/);
+  ASSERT_FALSE(loaded_info.Load(GetFd(profile)));
+}
+
+TEST_F(ProfileCompilationInfoTest, LoadRegularProfileAsBoot) {
+  ScratchFile profile;
+
+  ProfileCompilationInfo saved_info(false /*for_boot_image*/);
+  ASSERT_TRUE(AddMethod(&saved_info, dex1, /*method_idx=*/ 0));
+  ASSERT_TRUE(saved_info.Save(GetFd(profile)));
+  ASSERT_EQ(0, profile.GetFile()->Flush());
+
+  // Loading a regular profile with a boot ProfileCompilationInfo should fail.
+  ProfileCompilationInfo loaded_info(true /*for_boot_image*/);
+  ASSERT_FALSE(loaded_info.Load(GetFd(profile)));
+}
+
 TEST_F(ProfileCompilationInfoTest, Incomplete) {
   ScratchFile profile;
   ASSERT_TRUE(profile.GetFile()->WriteFully(
@@ -445,6 +471,90 @@ TEST_F(ProfileCompilationInfoTest, Incomplete) {
   // Write that we have one section info.
   const uint32_t file_section_count = 1u;
   ASSERT_TRUE(profile.GetFile()->WriteFully(&file_section_count, sizeof(file_section_count)));
+  ASSERT_EQ(0, profile.GetFile()->Flush());
+
+  ProfileCompilationInfo loaded_info;
+  ASSERT_FALSE(loaded_info.Load(GetFd(profile)));
+}
+
+TEST_F(ProfileCompilationInfoTest, CorruptProfileKey) {
+  ScratchFile profile;
+
+  // Header
+  ASSERT_TRUE(profile.GetFile()->WriteFully(ProfileCompilationInfo::kProfileMagic, kProfileMagicSize));
+  ASSERT_TRUE(profile.GetFile()->WriteFully(ProfileCompilationInfo::kProfileVersion, kProfileVersionSize));
+  uint32_t section_count = 1;
+  ASSERT_TRUE(profile.GetFile()->WriteFully(&section_count, sizeof(section_count)));
+
+  // Section info for dex files
+  uint32_t dex_files_section_offset =
+      kProfileMagicSize + kProfileVersionSize + sizeof(section_count) + sizeof(uint32_t) * 4;
+  // 5 is shorter than length (10)
+  uint32_t dex_files_section_size =
+      sizeof(ProfileIndexType) + 3 * sizeof(uint32_t) + sizeof(uint16_t) + 5;
+  uint32_t section_info[] = {
+    0, // type = kDexFiles
+    dex_files_section_offset,
+    dex_files_section_size,
+    0 // inflated_size = 0 (not compressed)
+  };
+  ASSERT_TRUE(profile.GetFile()->WriteFully(section_info, sizeof(section_info)));
+
+  // Dex files section
+  ProfileIndexType num_dex_files = 1;
+  ASSERT_TRUE(profile.GetFile()->WriteFully(&num_dex_files, sizeof(num_dex_files)));
+  uint32_t dex_info[] = {123, 10, 20}; // checksum, num_type_ids, num_method_ids
+  ASSERT_TRUE(profile.GetFile()->WriteFully(dex_info, sizeof(dex_info)));
+  uint16_t key_length = 10; // longer than available data
+  ASSERT_TRUE(profile.GetFile()->WriteFully(&key_length, sizeof(key_length)));
+  ASSERT_TRUE(profile.GetFile()->WriteFully("abcde", 5)); // 5 bytes of key_data
+
+  ASSERT_EQ(0, profile.GetFile()->Flush());
+
+  ProfileCompilationInfo loaded_info;
+  ASSERT_FALSE(loaded_info.Load(GetFd(profile)));
+}
+
+TEST_F(ProfileCompilationInfoTest, CorruptExtraDescriptor) {
+  ScratchFile profile;
+
+  // Header
+  ASSERT_TRUE(profile.GetFile()->WriteFully(ProfileCompilationInfo::kProfileMagic, kProfileMagicSize));
+  ASSERT_TRUE(profile.GetFile()->WriteFully(ProfileCompilationInfo::kProfileVersion, kProfileVersionSize));
+  uint32_t section_count = 2; // Dex files and extra descriptors
+  ASSERT_TRUE(profile.GetFile()->WriteFully(&section_count, sizeof(section_count)));
+
+  // Section infos
+  uint32_t dex_files_section_offset =
+      kProfileMagicSize + kProfileVersionSize + sizeof(section_count) + sizeof(uint32_t) * 4 * 2;
+  uint32_t dex_files_section_size = sizeof(ProfileIndexType); // no dex files
+  uint32_t extra_desc_offset = dex_files_section_offset + dex_files_section_size;
+  // 5 is shorter than length (10)
+  uint32_t extra_desc_size = sizeof(uint16_t) + sizeof(uint16_t) + 5;
+  uint32_t section_infos[] = {
+    0, // type = kDexFiles
+    dex_files_section_offset,
+    dex_files_section_size,
+    0, // inflated_size = 0 (not compressed)
+
+    1, // type = kExtraDescriptors
+    extra_desc_offset,
+    extra_desc_size,
+    0 // inflated_size = 0 (not compressed)
+  };
+  ASSERT_TRUE(profile.GetFile()->WriteFully(section_infos, sizeof(section_infos)));
+
+  // Dex files section (empty)
+  ProfileIndexType num_dex_files = 0;
+  ASSERT_TRUE(profile.GetFile()->WriteFully(&num_dex_files, sizeof(num_dex_files)));
+
+  // Extra descriptors section
+  uint16_t num_extra_descriptors = 1;
+  ASSERT_TRUE(profile.GetFile()->WriteFully(&num_extra_descriptors, sizeof(num_extra_descriptors)));
+  uint16_t desc_length = 10; // longer than available data
+  ASSERT_TRUE(profile.GetFile()->WriteFully(&desc_length, sizeof(desc_length)));
+  ASSERT_TRUE(profile.GetFile()->WriteFully("abcde", 5)); // 5 bytes of desc_data
+
   ASSERT_EQ(0, profile.GetFile()->Flush());
 
   ProfileCompilationInfo loaded_info;
