@@ -782,7 +782,7 @@ void HConstantFoldingVisitor::VisitStaticFieldGet(HStaticFieldGet* instruction) 
   }
 
   HConstant* constant = nullptr;
-  {
+  if (!GetGraph()->IsDebuggable()) {  // JNI can modify static final fields in debuggable runtime.
     ScopedObjectAccess soa(Thread::Current());
 
     if (!IsUnmodifiableAndInitialized(field, compiler_options_)) {
