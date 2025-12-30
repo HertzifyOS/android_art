@@ -107,7 +107,7 @@ class IntrinsicVisitor : public ValueObject {
   }
 
   static void ComputeValueOfLocations(HInvoke* invoke,
-                                      CodeGenerator* codegen,
+                                      const CodeGenerator* codegen,
                                       int32_t low,
                                       int32_t length,
                                       Location return_location,
@@ -152,8 +152,8 @@ class IntrinsicVisitor : public ValueObject {
 
   static MemberOffset GetReferenceDisableIntrinsicOffset();
   static MemberOffset GetReferenceSlowPathEnabledOffset();
-  static void CreateReferenceGetReferentLocations(HInvoke* invoke, CodeGenerator* codegen);
-  static void CreateReferenceRefersToLocations(HInvoke* invoke, CodeGenerator* codegen);
+  static void CreateReferenceGetReferentLocations(HInvoke* invoke, const CodeGenerator* codegen);
+  static void CreateReferenceRefersToLocations(HInvoke* invoke, const CodeGenerator* codegen);
 
  protected:
   IntrinsicVisitor() {}

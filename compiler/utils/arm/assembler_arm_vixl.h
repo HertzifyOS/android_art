@@ -275,7 +275,7 @@ class ArmVIXLAssembler final : public Assembler {
   void LoadRegisterList(RegList regs, size_t stack_offset);
   void StoreRegisterList(RegList regs, size_t stack_offset);
 
-  bool ShifterOperandCanAlwaysHold(uint32_t immediate);
+  bool ShifterOperandCanAlwaysHold(uint32_t immediate) const;
   bool ShifterOperandCanHold(Opcode opcode,
                              uint32_t immediate,
                              vixl::aarch32::FlagsUpdate update_flags = vixl::aarch32::DontCare);

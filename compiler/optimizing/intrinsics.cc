@@ -81,7 +81,7 @@ static bool CanReferenceBootImageObjects(HInvoke* invoke, const CompilerOptions&
 }
 
 void IntrinsicVisitor::ComputeValueOfLocations(HInvoke* invoke,
-                                               CodeGenerator* codegen,
+                                               const CodeGenerator* codegen,
                                                int32_t low,
                                                int32_t length,
                                                Location return_location,
@@ -180,7 +180,7 @@ MemberOffset IntrinsicVisitor::GetReferenceSlowPathEnabledOffset() {
 }
 
 void IntrinsicVisitor::CreateReferenceGetReferentLocations(HInvoke* invoke,
-                                                           CodeGenerator* codegen) {
+                                                           const CodeGenerator* codegen) {
   if (!CanReferenceBootImageObjects(invoke, codegen->GetCompilerOptions())) {
     return;
   }
@@ -192,7 +192,8 @@ void IntrinsicVisitor::CreateReferenceGetReferentLocations(HInvoke* invoke,
   locations->SetOut(Location::RequiresCoreRegister());
 }
 
-void IntrinsicVisitor::CreateReferenceRefersToLocations(HInvoke* invoke, CodeGenerator* codegen) {
+void IntrinsicVisitor::CreateReferenceRefersToLocations(HInvoke* invoke,
+                                                        const CodeGenerator* codegen) {
   if (codegen->EmitNonBakerReadBarrier()) {
     // Unimplemented for non-Baker read barrier.
     return;

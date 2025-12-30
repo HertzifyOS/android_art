@@ -148,10 +148,11 @@ class ReadBarrierSystemArrayCopySlowPathARMVIXL : public SlowPathCodeARMVIXL {
   DISALLOW_COPY_AND_ASSIGN(ReadBarrierSystemArrayCopySlowPathARMVIXL);
 };
 
-IntrinsicLocationsBuilderARMVIXL::IntrinsicLocationsBuilderARMVIXL(CodeGeneratorARMVIXL* codegen)
+IntrinsicLocationsBuilderARMVIXL::IntrinsicLocationsBuilderARMVIXL(
+    const CodeGeneratorARMVIXL* codegen)
     : allocator_(codegen->GetGraph()->GetAllocator()),
       codegen_(codegen),
-      assembler_(codegen->GetAssembler()),
+      assembler_(&codegen->GetAssembler()),
       features_(codegen->GetInstructionSetFeatures()) {}
 
 bool IntrinsicLocationsBuilderARMVIXL::TryDispatch(HInvoke* invoke) {
@@ -1185,7 +1186,8 @@ void IntrinsicCodeGeneratorARMVIXL::VisitStringNewStringFromString(HInvoke* invo
   __ Bind(slow_path->GetExitLabel());
 }
 
-static Location LocationForSystemArrayCopyInput(ArmVIXLAssembler* assembler, HInstruction* input) {
+static Location LocationForSystemArrayCopyInput(const ArmVIXLAssembler* assembler,
+                                                HInstruction* input) {
   HIntConstant* const_input = input->AsIntConstantOrNull();
   if (const_input != nullptr && assembler->ShifterOperandCanAlwaysHold(const_input->GetValue())) {
     return Location::ConstantLocation(const_input);
@@ -1199,7 +1201,7 @@ static Location LocationForSystemArrayCopyInput(ArmVIXLAssembler* assembler, HIn
 // in the native implementation.
 static constexpr int32_t kSystemArrayCopyPrimThreshold = 384;
 
-static void CreateSystemArrayCopyLocations(ArmVIXLAssembler* assembler,
+static void CreateSystemArrayCopyLocations(const ArmVIXLAssembler* assembler,
                                            HInvoke* invoke,
                                            DataType::Type type) {
   int32_t copy_threshold = kSystemArrayCopyPrimThreshold / DataType::Size(type);
@@ -2820,7 +2822,7 @@ void IntrinsicCodeGeneratorARMVIXL::VisitIntegerDivideUnsigned(HInvoke* invoke) 
   __ Bind(slow_path->GetExitLabel());
 }
 
-static inline bool Use64BitExclusiveLoadStore(bool atomic, CodeGeneratorARMVIXL* codegen) {
+static inline bool Use64BitExclusiveLoadStore(bool atomic, const CodeGeneratorARMVIXL* codegen) {
   return atomic && !codegen->GetInstructionSetFeatures().HasAtomicLdrdAndStrd();
 }
 
@@ -2945,7 +2947,7 @@ static void GenerateIntrinsicGet(HInvoke* invoke,
 }
 
 static void CreateUnsafeGetLocations(HInvoke* invoke,
-                                     CodeGeneratorARMVIXL* codegen,
+                                     const CodeGeneratorARMVIXL* codegen,
                                      DataType::Type type,
                                      bool atomic) {
   bool can_call = codegen->EmitReadBarrier() && IsUnsafeGetReference(invoke);
@@ -3336,7 +3338,7 @@ static void GenerateIntrinsicSet(CodeGeneratorARMVIXL* codegen,
                             maybe_temp3);
 }
 
-static void CreateUnsafePutTempLocations(CodeGeneratorARMVIXL* codegen,
+static void CreateUnsafePutTempLocations(const CodeGeneratorARMVIXL* codegen,
                                          DataType::Type type,
                                          bool atomic,
                                          LocationSummary* locations) {
@@ -3353,7 +3355,7 @@ static void CreateUnsafePutTempLocations(CodeGeneratorARMVIXL* codegen,
 }
 
 static void CreateUnsafePutLocations(HInvoke* invoke,
-                                     CodeGeneratorARMVIXL* codegen,
+                                     const CodeGeneratorARMVIXL* codegen,
                                      DataType::Type type,
                                      bool atomic) {
   ArenaAllocator* allocator = codegen->GetGraph()->GetAllocator();
@@ -3366,7 +3368,7 @@ static void CreateUnsafePutLocations(HInvoke* invoke,
 }
 
 static void CreateUnsafePutAbsoluteLocations(HInvoke* invoke,
-                                             CodeGeneratorARMVIXL* codegen,
+                                             const CodeGeneratorARMVIXL* codegen,
                                              DataType::Type type,
                                              bool atomic) {
   ArenaAllocator* allocator = codegen->GetGraph()->GetAllocator();
@@ -3981,7 +3983,7 @@ class ReadBarrierCasSlowPathARMVIXL : public SlowPathCodeARMVIXL {
   SlowPathCodeARMVIXL* update_old_value_slow_path_;
 };
 
-static void CreateUnsafeCASLocations(HInvoke* invoke, CodeGeneratorARMVIXL* codegen) {
+static void CreateUnsafeCASLocations(HInvoke* invoke, const CodeGeneratorARMVIXL* codegen) {
   const bool can_call = codegen->EmitReadBarrier() && IsUnsafeCASReference(invoke);
   ArenaAllocator* allocator = codegen->GetGraph()->GetAllocator();
   LocationSummary* locations = LocationSummary::Create(
@@ -4254,7 +4256,7 @@ static void GenerateGetAndUpdate(CodeGeneratorARMVIXL* codegen,
 }
 
 static void CreateUnsafeGetAndUpdateLocations(HInvoke* invoke,
-                                              CodeGeneratorARMVIXL* codegen,
+                                              const CodeGeneratorARMVIXL* codegen,
                                               DataType::Type type,
                                               GetAndUpdateOp get_and_update_op) {
   const bool can_call = codegen->EmitReadBarrier() && IsUnsafeGetAndSetReference(invoke);
@@ -4860,7 +4862,7 @@ static void GenerateVarHandleTarget(HInvoke* invoke,
 }
 
 static LocationSummary* CreateVarHandleCommonLocations(HInvoke* invoke,
-                                                       CodeGeneratorARMVIXL* codegen) {
+                                                       const CodeGeneratorARMVIXL* codegen) {
   size_t expected_coordinates_count = GetExpectedVarHandleCoordinatesCount(invoke);
   DataType::Type return_type = invoke->GetType();
 
@@ -4910,7 +4912,7 @@ static LocationSummary* CreateVarHandleCommonLocations(HInvoke* invoke,
 }
 
 static void CreateVarHandleGetLocations(HInvoke* invoke,
-                                        CodeGeneratorARMVIXL* codegen,
+                                        const CodeGeneratorARMVIXL* codegen,
                                         bool atomic) {
   VarHandleOptimizations optimizations(invoke);
   if (optimizations.GetDoNotIntrinsify()) {
@@ -5062,7 +5064,7 @@ void IntrinsicCodeGeneratorARMVIXL::VisitVarHandleGetVolatile(HInvoke* invoke) {
 }
 
 static void CreateVarHandleSetLocations(HInvoke* invoke,
-                                        CodeGeneratorARMVIXL* codegen,
+                                        const CodeGeneratorARMVIXL* codegen,
                                         bool atomic) {
   VarHandleOptimizations optimizations(invoke);
   if (optimizations.GetDoNotIntrinsify()) {
@@ -5232,7 +5234,7 @@ void IntrinsicCodeGeneratorARMVIXL::VisitVarHandleSetVolatile(HInvoke* invoke) {
 }
 
 static void CreateVarHandleCompareAndSetOrExchangeLocations(HInvoke* invoke,
-                                                            CodeGeneratorARMVIXL* codegen,
+                                                            const CodeGeneratorARMVIXL* codegen,
                                                             bool return_success) {
   VarHandleOptimizations optimizations(invoke);
   if (optimizations.GetDoNotIntrinsify()) {
@@ -5572,7 +5574,7 @@ void IntrinsicCodeGeneratorARMVIXL::VisitVarHandleWeakCompareAndSetRelease(HInvo
 }
 
 static void CreateVarHandleGetAndUpdateLocations(HInvoke* invoke,
-                                                 CodeGeneratorARMVIXL* codegen,
+                                                 const CodeGeneratorARMVIXL* codegen,
                                                  GetAndUpdateOp get_and_update_op) {
   VarHandleOptimizations optimizations(invoke);
   if (optimizations.GetDoNotIntrinsify()) {

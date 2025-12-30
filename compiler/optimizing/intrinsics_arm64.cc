@@ -829,7 +829,7 @@ static void GenUnsafeGetAbsolute(HInvoke* invoke,
 
 static void CreateUnsafeGetLocations(ArenaAllocator* allocator,
                                      HInvoke* invoke,
-                                     CodeGeneratorARM64* codegen,
+                                     const CodeGeneratorARM64* codegen,
                                      bool is_volatile = false) {
   bool can_call = codegen->EmitReadBarrier() && IsUnsafeGetReference(invoke);
   LocationSummary* locations = LocationSummary::Create(
@@ -1275,7 +1275,7 @@ void IntrinsicCodeGeneratorARM64::VisitJdkUnsafePutByte(HInvoke* invoke) {
 
 static void CreateUnsafeCASLocations(ArenaAllocator* allocator,
                                      HInvoke* invoke,
-                                     CodeGeneratorARM64* codegen) {
+                                     const CodeGeneratorARM64* codegen) {
   const bool can_call = codegen->EmitReadBarrier() && IsUnsafeCASReference(invoke);
   LocationSummary* locations = LocationSummary::Create(
       allocator,
@@ -1951,7 +1951,7 @@ static void GenerateGetAndUpdate(CodeGeneratorARM64* codegen,
 
 static void CreateUnsafeGetAndUpdateLocations(ArenaAllocator* allocator,
                                               HInvoke* invoke,
-                                              CodeGeneratorARM64* codegen) {
+                                              const CodeGeneratorARM64* codegen) {
   const bool can_call = codegen->EmitReadBarrier() && IsUnsafeGetAndSetReference(invoke);
   LocationSummary* locations = LocationSummary::Create(
       allocator,
@@ -4297,7 +4297,7 @@ void IntrinsicCodeGeneratorARM64::VisitFP16Rint(HInvoke* invoke) {
 
 void FP16ComparisonLocations(HInvoke* invoke,
                              ArenaAllocator* allocator_,
-                             CodeGeneratorARM64* codegen_,
+                             const CodeGeneratorARM64* codegen_,
                              int requiredTemps) {
   if (!codegen_->GetInstructionSetFeatures().HasFP16()) {
     return;
@@ -4994,7 +4994,7 @@ static void GenerateVarHandleTarget(HInvoke* invoke,
 }
 
 static LocationSummary* CreateVarHandleCommonLocations(HInvoke* invoke,
-                                                       CodeGeneratorARM64* codegen) {
+                                                       const CodeGeneratorARM64* codegen) {
   size_t expected_coordinates_count = GetExpectedVarHandleCoordinatesCount(invoke);
   DataType::Type return_type = invoke->GetType();
 
@@ -5045,7 +5045,7 @@ static LocationSummary* CreateVarHandleCommonLocations(HInvoke* invoke,
   return locations;
 }
 
-static void CreateVarHandleGetLocations(HInvoke* invoke, CodeGeneratorARM64* codegen) {
+static void CreateVarHandleGetLocations(HInvoke* invoke, const CodeGeneratorARM64* codegen) {
   VarHandleOptimizations optimizations(invoke);
   if (optimizations.GetDoNotIntrinsify()) {
     return;
@@ -5175,7 +5175,7 @@ void IntrinsicCodeGeneratorARM64::VisitVarHandleGetVolatile(HInvoke* invoke) {
   GenerateVarHandleGet(invoke, codegen_, std::memory_order_seq_cst);
 }
 
-static void CreateVarHandleSetLocations(HInvoke* invoke, CodeGeneratorARM64* codegen) {
+static void CreateVarHandleSetLocations(HInvoke* invoke, const CodeGeneratorARM64* codegen) {
   VarHandleOptimizations optimizations(invoke);
   if (optimizations.GetDoNotIntrinsify()) {
     return;
@@ -5285,7 +5285,7 @@ void IntrinsicCodeGeneratorARM64::VisitVarHandleSetVolatile(HInvoke* invoke) {
 }
 
 static void CreateVarHandleCompareAndSetOrExchangeLocations(HInvoke* invoke,
-                                                            CodeGeneratorARM64* codegen,
+                                                            const CodeGeneratorARM64* codegen,
                                                             bool return_success) {
   VarHandleOptimizations optimizations(invoke);
   if (optimizations.GetDoNotIntrinsify()) {
@@ -5644,7 +5644,7 @@ void IntrinsicCodeGeneratorARM64::VisitVarHandleWeakCompareAndSetRelease(HInvoke
 }
 
 static void CreateVarHandleGetAndUpdateLocations(HInvoke* invoke,
-                                                 CodeGeneratorARM64* codegen,
+                                                 const CodeGeneratorARM64* codegen,
                                                  GetAndUpdateOp get_and_update_op) {
   VarHandleOptimizations optimizations(invoke);
   if (optimizations.GetDoNotIntrinsify()) {

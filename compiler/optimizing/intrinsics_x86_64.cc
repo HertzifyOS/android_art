@@ -49,7 +49,7 @@ namespace art HIDDEN {
 
 namespace x86_64 {
 
-IntrinsicLocationsBuilderX86_64::IntrinsicLocationsBuilderX86_64(CodeGeneratorX86_64* codegen)
+IntrinsicLocationsBuilderX86_64::IntrinsicLocationsBuilderX86_64(const CodeGeneratorX86_64* codegen)
   : allocator_(codegen->GetGraph()->GetAllocator()), codegen_(codegen) {
 }
 
@@ -361,7 +361,7 @@ void IntrinsicCodeGeneratorX86_64::VisitMathSqrt(HInvoke* invoke) {
 
 static void CreateSSE41FPToFPLocations(ArenaAllocator* allocator,
                                        HInvoke* invoke,
-                                       CodeGeneratorX86_64* codegen) {
+                                       const CodeGeneratorX86_64* codegen) {
   // Do we have instruction support?
   if (!codegen->GetInstructionSetFeatures().HasSSE4_1()) {
     return;
@@ -404,7 +404,7 @@ void IntrinsicCodeGeneratorX86_64::VisitMathRint(HInvoke* invoke) {
 
 static void CreateSSE41FPToIntLocations(ArenaAllocator* allocator,
                                         HInvoke* invoke,
-                                        CodeGeneratorX86_64* codegen) {
+                                        const CodeGeneratorX86_64* codegen) {
   // Do we have instruction support?
   if (!codegen->GetInstructionSetFeatures().HasSSE4_1()) {
     return;
@@ -1914,7 +1914,7 @@ static void CreateIntIntToIntLocations(ArenaAllocator* allocator, HInvoke* invok
 
 static void CreateIntIntIntToIntLocations(ArenaAllocator* allocator,
                                           HInvoke* invoke,
-                                          CodeGeneratorX86_64* codegen) {
+                                          const CodeGeneratorX86_64* codegen) {
   bool can_call = codegen->EmitReadBarrier() && IsUnsafeGetReference(invoke);
   LocationSummary* locations = LocationSummary::Create(
       allocator,
@@ -2278,7 +2278,7 @@ void IntrinsicCodeGeneratorX86_64::VisitJdkUnsafePutByte(HInvoke* invoke) {
 
 static void CreateUnsafeCASLocations(ArenaAllocator* allocator,
                                      HInvoke* invoke,
-                                     CodeGeneratorX86_64* codegen,
+                                     const CodeGeneratorX86_64* codegen,
                                      DataType::Type type) {
   const bool can_call = codegen->EmitBakerReadBarrier() && IsUnsafeCASReference(invoke);
   LocationSummary* locations = LocationSummary::Create(
@@ -2648,7 +2648,7 @@ void IntrinsicCodeGeneratorX86_64::VisitJdkUnsafeCompareAndSetReference(HInvoke*
 
 static void CreateUnsafeGetAndUpdateLocations(ArenaAllocator* allocator,
                                               HInvoke* invoke,
-                                              CodeGeneratorX86_64* codegen) {
+                                              const CodeGeneratorX86_64* codegen) {
   const bool can_call = codegen->EmitReadBarrier() && IsUnsafeGetAndSetReference(invoke);
   LocationSummary* locations = LocationSummary::Create(
       allocator,
@@ -2930,7 +2930,7 @@ void IntrinsicCodeGeneratorX86_64::VisitLongReverse(HInvoke* invoke) {
 }
 
 static void CreateBitCountLocations(
-    ArenaAllocator* allocator, CodeGeneratorX86_64* codegen, HInvoke* invoke) {
+    ArenaAllocator* allocator, const CodeGeneratorX86_64* codegen, HInvoke* invoke) {
   if (!codegen->GetInstructionSetFeatures().HasPopCnt()) {
     // Do nothing if there is no popcnt support. This results in generating
     // a call for the intrinsic rather than direct code.
@@ -4028,7 +4028,8 @@ static void GenerateVarHandleTarget(HInvoke* invoke,
   }
 }
 
-static bool HasVarHandleIntrinsicImplementation(HInvoke* invoke, CodeGeneratorX86_64* codegen) {
+static bool HasVarHandleIntrinsicImplementation(HInvoke* invoke,
+                                                const CodeGeneratorX86_64* codegen) {
   // The only supported read barrier implementation is the Baker-style read barriers.
   if (codegen->EmitNonBakerReadBarrier()) {
     return false;
@@ -4079,7 +4080,7 @@ static LocationSummary* CreateVarHandleCommonLocations(HInvoke* invoke) {
   return locations;
 }
 
-static void CreateVarHandleGetLocations(HInvoke* invoke, CodeGeneratorX86_64* codegen) {
+static void CreateVarHandleGetLocations(HInvoke* invoke, const CodeGeneratorX86_64* codegen) {
   if (!HasVarHandleIntrinsicImplementation(invoke, codegen)) {
     return;
   }
@@ -4354,7 +4355,7 @@ void IntrinsicCodeGeneratorX86_64::VisitVarHandleGetVolatile(HInvoke* invoke) {
   GenerateVarHandleGet(invoke, codegen_);
 }
 
-static void CreateVarHandleSetLocations(HInvoke* invoke, CodeGeneratorX86_64* codegen) {
+static void CreateVarHandleSetLocations(HInvoke* invoke, const CodeGeneratorX86_64* codegen) {
   if (!HasVarHandleIntrinsicImplementation(invoke, codegen)) {
     return;
   }
@@ -4461,7 +4462,7 @@ void IntrinsicCodeGeneratorX86_64::VisitVarHandleSetVolatile(HInvoke* invoke) {
 }
 
 static void CreateVarHandleCompareAndSetOrExchangeLocations(HInvoke* invoke,
-                                                            CodeGeneratorX86_64* codegen) {
+                                                            const CodeGeneratorX86_64* codegen) {
   if (!HasVarHandleIntrinsicImplementation(invoke, codegen)) {
     return;
   }
@@ -4617,7 +4618,7 @@ void IntrinsicCodeGeneratorX86_64::VisitVarHandleCompareAndExchangeRelease(HInvo
   GenerateVarHandleCompareAndSetOrExchange(invoke, codegen_, /*is_cmpxchg=*/ true);
 }
 
-static void CreateVarHandleGetAndSetLocations(HInvoke* invoke, CodeGeneratorX86_64* codegen) {
+static void CreateVarHandleGetAndSetLocations(HInvoke* invoke, const CodeGeneratorX86_64* codegen) {
   if (!HasVarHandleIntrinsicImplementation(invoke, codegen)) {
     return;
   }
@@ -4793,7 +4794,8 @@ static void GenerateVarHandleGetAndSet(HInvoke* invoke,
   }
 }
 
-static void CreateVarHandleGetAndBitwiseOpLocations(HInvoke* invoke, CodeGeneratorX86_64* codegen) {
+static void CreateVarHandleGetAndBitwiseOpLocations(HInvoke* invoke,
+                                                    const CodeGeneratorX86_64* codegen) {
   if (!HasVarHandleIntrinsicImplementation(invoke, codegen)) {
     return;
   }
@@ -4948,7 +4950,7 @@ static void GenerateVarHandleGetAndOp(HInvoke* invoke,
   }
 }
 
-static void CreateVarHandleGetAndAddLocations(HInvoke* invoke, CodeGeneratorX86_64* codegen) {
+static void CreateVarHandleGetAndAddLocations(HInvoke* invoke, const CodeGeneratorX86_64* codegen) {
   if (!HasVarHandleIntrinsicImplementation(invoke, codegen)) {
     return;
   }

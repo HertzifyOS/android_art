@@ -45,7 +45,7 @@ namespace art HIDDEN {
 
 namespace x86 {
 
-IntrinsicLocationsBuilderX86::IntrinsicLocationsBuilderX86(CodeGeneratorX86* codegen)
+IntrinsicLocationsBuilderX86::IntrinsicLocationsBuilderX86(const CodeGeneratorX86* codegen)
   : allocator_(codegen->GetGraph()->GetAllocator()),
     codegen_(codegen) {
 }
@@ -321,7 +321,7 @@ void IntrinsicCodeGeneratorX86::VisitMathSqrt(HInvoke* invoke) {
 
 static void CreateSSE41FPToFPLocations(ArenaAllocator* allocator,
                                        HInvoke* invoke,
-                                       CodeGeneratorX86* codegen) {
+                                       const CodeGeneratorX86* codegen) {
   // Do we have instruction support?
   if (!codegen->GetInstructionSetFeatures().HasSSE4_1()) {
     return;
@@ -486,9 +486,9 @@ static void CreateLowestOneBitLocations(ArenaAllocator* allocator, bool is_long,
 }
 
 static void GenLowestOneBit(X86Assembler* assembler,
-                      CodeGeneratorX86* codegen,
-                      bool is_long,
-                      HInvoke* invoke) {
+                            CodeGeneratorX86* codegen,
+                            bool is_long,
+                            HInvoke* invoke) {
   LocationSummary* locations = invoke->GetLocations();
   Location src = locations->InAt(0);
   Location out_loc = locations->Out();
@@ -1819,7 +1819,7 @@ static void CreateIntIntToIntLocations(ArenaAllocator* allocator,
 
 static void CreateIntIntIntToIntLocations(ArenaAllocator* allocator,
                                           HInvoke* invoke,
-                                          CodeGeneratorX86* codegen,
+                                          const CodeGeneratorX86* codegen,
                                           DataType::Type type,
                                           bool is_volatile) {
   bool can_call = codegen->EmitReadBarrier() && IsUnsafeGetReference(invoke);
@@ -2274,7 +2274,7 @@ void IntrinsicCodeGeneratorX86::VisitJdkUnsafePutByte(HInvoke* invoke) {
 }
 
 static void CreateIntIntIntIntIntToInt(ArenaAllocator* allocator,
-                                       CodeGeneratorX86* codegen,
+                                       const CodeGeneratorX86* codegen,
                                        DataType::Type type,
                                        HInvoke* invoke) {
   const bool can_call = codegen->EmitBakerReadBarrier() && IsUnsafeCASReference(invoke);
@@ -2598,7 +2598,7 @@ enum class GetAndUpdateOp {
 
 void CreateUnsafeGetAndUpdateLocations(ArenaAllocator* allocator,
                                        HInvoke* invoke,
-                                       CodeGeneratorX86* codegen,
+                                       const CodeGeneratorX86* codegen,
                                        DataType::Type type,
                                        GetAndUpdateOp get_and_unsafe_op) {
   const bool can_call = codegen->EmitReadBarrier() && IsUnsafeGetAndSetReference(invoke);
@@ -2923,7 +2923,7 @@ void IntrinsicCodeGeneratorX86::VisitLongReverse(HInvoke* invoke) {
 }
 
 static void CreateBitCountLocations(
-    ArenaAllocator* allocator, CodeGeneratorX86* codegen, HInvoke* invoke, bool is_long) {
+    ArenaAllocator* allocator, const CodeGeneratorX86* codegen, HInvoke* invoke, bool is_long) {
   if (!codegen->GetInstructionSetFeatures().HasPopCnt()) {
     // Do nothing if there is no popcnt support. This results in generating
     // a call for the intrinsic rather than direct code.
@@ -4020,7 +4020,7 @@ static Register GenerateVarHandleFieldReference(HInvoke* invoke,
   return locations->InAt(1).AsRegister<Register>();
 }
 
-static void CreateVarHandleGetLocations(HInvoke* invoke, CodeGeneratorX86* codegen) {
+static void CreateVarHandleGetLocations(HInvoke* invoke, const CodeGeneratorX86* codegen) {
   // The only read barrier implementation supporting the
   // VarHandleGet intrinsic is the Baker-style read barriers.
   if (codegen->EmitNonBakerReadBarrier()) {
@@ -4144,7 +4144,7 @@ void IntrinsicCodeGeneratorX86::VisitVarHandleGetOpaque(HInvoke* invoke) {
   GenerateVarHandleGet(invoke, codegen_);
 }
 
-static void CreateVarHandleSetLocations(HInvoke* invoke, CodeGeneratorX86* codegen) {
+static void CreateVarHandleSetLocations(HInvoke* invoke, const CodeGeneratorX86* codegen) {
   // The only read barrier implementation supporting the
   // VarHandleGet intrinsic is the Baker-style read barriers.
   if (codegen->EmitNonBakerReadBarrier()) {
@@ -4318,7 +4318,7 @@ void IntrinsicCodeGeneratorX86::VisitVarHandleSetOpaque(HInvoke* invoke) {
   GenerateVarHandleSet(invoke, codegen_);
 }
 
-static void CreateVarHandleGetAndSetLocations(HInvoke* invoke, CodeGeneratorX86* codegen) {
+static void CreateVarHandleGetAndSetLocations(HInvoke* invoke, const CodeGeneratorX86* codegen) {
   // The only read barrier implementation supporting the
   // VarHandleGet intrinsic is the Baker-style read barriers.
   if (codegen->EmitNonBakerReadBarrier()) {
@@ -4520,7 +4520,7 @@ void IntrinsicCodeGeneratorX86::VisitVarHandleGetAndSetRelease(HInvoke* invoke) 
 }
 
 static void CreateVarHandleCompareAndSetOrExchangeLocations(HInvoke* invoke,
-                                                            CodeGeneratorX86* codegen) {
+                                                            const CodeGeneratorX86* codegen) {
   // The only read barrier implementation supporting the
   // VarHandleGet intrinsic is the Baker-style read barriers.
   if (codegen->EmitNonBakerReadBarrier()) {
@@ -4702,7 +4702,7 @@ void IntrinsicCodeGeneratorX86::VisitVarHandleCompareAndExchangeRelease(HInvoke*
   GenerateVarHandleCompareAndSetOrExchange(invoke, codegen_);
 }
 
-static void CreateVarHandleGetAndAddLocations(HInvoke* invoke, CodeGeneratorX86* codegen) {
+static void CreateVarHandleGetAndAddLocations(HInvoke* invoke, const CodeGeneratorX86* codegen) {
   // The only read barrier implementation supporting the
   // VarHandleGet intrinsic is the Baker-style read barriers.
   if (codegen->EmitNonBakerReadBarrier()) {
@@ -4877,7 +4877,8 @@ void IntrinsicCodeGeneratorX86::VisitVarHandleGetAndAddRelease(HInvoke* invoke) 
   GenerateVarHandleGetAndAdd(invoke, codegen_);
 }
 
-static void CreateVarHandleGetAndBitwiseOpLocations(HInvoke* invoke, CodeGeneratorX86* codegen) {
+static void CreateVarHandleGetAndBitwiseOpLocations(HInvoke* invoke,
+                                                    const CodeGeneratorX86* codegen) {
   // The only read barrier implementation supporting the
   // VarHandleGet intrinsic is the Baker-style read barriers.
   if (codegen->EmitNonBakerReadBarrier()) {
