@@ -1713,7 +1713,8 @@ static void ReplaceStrongRoots(art::Thread* self, const ObjectMap& map)
     void VisitRoots(art::mirror::Object*** roots, size_t count, const art::RootInfo& info) override
         REQUIRES_SHARED(art::Locks::mutator_lock_) {
       art::mirror::Object*** end = roots + count;
-      for (art::mirror::Object** obj = *roots; roots != end; obj = *(++roots)) {
+      for (; roots != end; ++roots) {
+        art::mirror::Object** obj = *roots;
         auto it = map_.find(*obj);
         if (it != map_.end()) {
           // Java frames might have the JIT doing optimizations (for example loop-unrolling or
@@ -1739,8 +1740,8 @@ static void ReplaceStrongRoots(art::Thread* self, const ObjectMap& map)
                     size_t count,
                     const art::RootInfo& info) override REQUIRES_SHARED(art::Locks::mutator_lock_) {
       art::mirror::CompressedReference<art::mirror::Object>** end = roots + count;
-      for (art::mirror::CompressedReference<art::mirror::Object>* obj = *roots; roots != end;
-           obj = *(++roots)) {
+      for (; roots != end; ++roots) {
+        art::mirror::CompressedReference<art::mirror::Object>* obj = *roots;
         auto it = map_.find(obj->AsMirrorPtr());
         if (it != map_.end()) {
           // Java frames might have the JIT doing optimizations (for example loop-unrolling or
