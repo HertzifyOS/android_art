@@ -1712,13 +1712,6 @@
       "env_vars": {"ART_TEST_ON_VM": "true"}
     },
     {
-      "tests": ["2400-setstaticfield-uninitialized"],
-      "description": ["Test fails assertions on riscv64 for unknown reason"],
-      "variant": "jit-on-first-use",
-      "env_vars": {"ART_TEST_ON_VM": "true"},
-      "bug": "http://b/470276377"
-    },
-    {
       "tests": ["137-cfi"],
       "description": ["Fails on SBC"],
       "env_vars": {"ART_TEST_ON_SBC": "true"}
