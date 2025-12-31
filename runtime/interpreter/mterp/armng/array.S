@@ -169,26 +169,27 @@
 %def op_new_array():
    /* new-array vA, vB, class@CCCC */
    EXPORT_PC
+%  slow_path = add_slow_path(op_new_array_slow_path)
    // Fast-path which gets the class from thread-local cache.
-%  fetch_from_thread_cache("r0", miss_label="2f")
-   TEST_IF_MARKING 3f
-1:
+%  fetch_from_thread_cache("r0", miss_label=slow_path)
+   TEST_IF_MARKING 1f
+.L${opcode}_resume:
    lsr     r1, rINST, #12              // r1<- B
    GET_VREG r1, r1                     // r1<- vB (array length)
    ldr lr, [rSELF, #THREAD_ALLOC_ARRAY_ENTRYPOINT_OFFSET]
    blx lr
    dmb ishst                           // need fence for making array's class visible
-   ubfx    r1, rINST, #8, #4           // r1<- A
-   SET_VREG_OBJECT r0, r1
-   FETCH_ADVANCE_INST 2
-   PREPARE_OPCODE_DISPATCH
-   GOTO_OPCODE
-2:
+   ubfx    r1, rINST, #(8-2), #(4+2)   // r1<- A << 2; opcode 23 has highest two bits clear
+   // Shorten the handler by using the dispatch from the `op_new_instance` handler.
+%  new_instance_opcode = re.sub(r"new_array", r"new_instance", opcode);
+   b .L${new_instance_opcode}_store_r0_to_prescaled_r1_fetch_advance_2_dispatch
+1:
+   bl art_quick_read_barrier_mark_reg00
+   b .L${opcode}_resume
+
+%def op_new_array_slow_path():
    mov r0, rSELF
    ldr r1, [sp]
    mov r2, rPC
    bl nterp_get_class
-   b 1b
-3:
-   bl art_quick_read_barrier_mark_reg00
-   b 1b
+   b .L${opcode}_resume

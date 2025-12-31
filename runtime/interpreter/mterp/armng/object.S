@@ -603,6 +603,8 @@
 .L${opcode}_resume:
    lsrs    r1, rINST, #(8-2)            // r1 <- A << 2; opcode 22 has highest two bits clear;
                                         // set flags to use 16-bit encoding
+   // `new-array` handler jumps here to shorten the code.
+.L${opcode}_store_r0_to_prescaled_r1_fetch_advance_2_dispatch:
    SET_VREG_OBJECT_PRESCALED r0, r1     // fp[A] <- value
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
