@@ -447,7 +447,8 @@ Heap::Heap(size_t initial_size,
     LOG(INFO) << "Heap() entering";
   }
 
-  LOG(INFO) << "Using " << foreground_collector_type_ << " GC.";
+  std::string generational = use_generational_gc_ ? "generational " : "non-generational ";
+  LOG(INFO) << "Using " << generational << foreground_collector_type_ << " GC.";
   if (gUseUserfaultfd) {
     CHECK_EQ(foreground_collector_type_, kCollectorTypeCMC);
     CHECK_EQ(background_collector_type_, kCollectorTypeCMCBackground);
@@ -5026,7 +5027,8 @@ void Heap::PostForkChildAction(Thread* self) {
   uint64_t last_adj_time = NanoTime();
   next_gc_type_ = NonStickyGcType();  // Always start with a full gc.
 
-  LOG(INFO) << "Using " << foreground_collector_type_ << " GC.";
+  std::string generational = use_generational_gc_ ? "generational " : "non-generational ";
+  LOG(INFO) << "Using " << generational << foreground_collector_type_ << " GC.";
   if (gUseUserfaultfd) {
     DCHECK_NE(mark_compact_, nullptr);
     mark_compact_->CreateUserfaultfd(/*post_fork*/true);
