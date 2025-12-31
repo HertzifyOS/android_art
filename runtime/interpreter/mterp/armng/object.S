@@ -3,11 +3,15 @@
    // Fast-path which gets the class from thread-local cache.
 %  fetch_from_thread_cache("r0", miss_label="3f")
 1:
+#ifdef USE_HEAP_POISONING
+   lsrs    r2, rINST, #8               // r2<- A; set flags to use 16-bit encoding
+#else  // USE_HEAP_POISONING
    lsr     r2, rINST, #8               // r2<- A
+#endif  // USE_HEAP_POISONING
    GET_VREG r3, r2                     // r3<- vA (object)
    cbz     r3, 2f
    ldr     r2, [r3, #MIRROR_OBJECT_CLASS_OFFSET]
-   UNPOISON_HEAP_REF r2
+   UNPOISON_HEAP_REF r2, s="s"
    // Fast path: do a comparison without read barrier.
    cmp     r0, r2
    bne     ${slow_path}
@@ -79,11 +83,15 @@
    // Fast-path which gets the class from thread-local cache.
 %  fetch_from_thread_cache("r1", miss_label=slow_path)
 .L${opcode}_resume:
+#ifdef USE_HEAP_POISONING
+   lsrs    r2, rINST, #12              // r2<- B; set flags to use 16-bit encoding
+#else  // USE_HEAP_POISONING
    lsr     r2, rINST, #12              // r2<- B
+#endif  // USE_HEAP_POISONING
    GET_VREG r0, r2                     // r0<- vB (object)
    cbz     r0, 1f
    ldr     r2, [r0, #MIRROR_OBJECT_CLASS_OFFSET]
-   UNPOISON_HEAP_REF r2
+   UNPOISON_HEAP_REF r2, s="s"
    // Fast path: do a comparison without read barrier.
    cmp     r1, r2
    bne     ${check_hierarchy}
@@ -191,9 +199,13 @@
      SET_VREG_WIDE_BY_ADDR r0, r1, r2, wb="!"  // fp[A] <- value; write-back to use 16-bit encoding
 %  elif is_object:
      $load   r0, [r3, r1]
-     UNPOISON_HEAP_REF r0
+#ifdef USE_HEAP_POISONING
+     UNPOISON_HEAP_REF r0, s="s"
+     TEST_IF_MARKING .L${opcode}_read_barrier
+#else  // USE_HEAP_POISONING
      mov     r3, rMR                   // MOV+CBZ is 4B (`cmp rMR, #0` + BNE is 6B).
      TEST_IF_MARKING_CBZ r3, .L${opcode}_read_barrier
+#endif  // USE_HEAP_POISONING
 .L${opcode}_resume_after_read_barrier:
      PRESCALE_VREG r2, r2, s="s"       // set flags to use 16-bit encoding
      SET_VREG_OBJECT_PRESCALED r0, r2  // fp[A] <- value
@@ -204,9 +216,12 @@
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
 %  if is_object:
+#ifndef USE_HEAP_POISONING
 .L${opcode}_read_barrier:
      bl      art_quick_read_barrier_mark_reg00
      b       .L${opcode}_resume_after_read_barrier
+#endif  // !USE_HEAP_POISONING
+%    pass
 
 %def op_iget_slow_path(load, wide, is_object):
    ldr     r0, [sp]
@@ -254,6 +269,13 @@
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
+%  if is_object:
+#ifdef USE_HEAP_POISONING
+.L${opcode}_read_barrier:
+     bl      art_quick_read_barrier_mark_reg00
+     b       .L${opcode}_resume_after_read_barrier
+#endif  // USE_HEAP_POISONING
+%    pass
 
 %def op_iget_wide():
 %  op_iget(load="ldr", wide=True)
@@ -278,27 +300,32 @@
 %  if not wide:
      ubfx    r4, rINST, #8, #4         // r4<- A
      GET_VREG r4, r4                   // r4 <- v[A]
+%  pass
    // Fast-path which gets the field from thread-local cache.
-%  fetch_from_thread_cache("r0", miss_label=slow_path)
+#ifdef USE_HEAP_POISONING
+%  fetch_from_thread_cache("r1", miss_label=slow_path, wb=is_object, tmp="r0", tmp2="r2")
+#else  // USE_HEAP_POISONING
+%  fetch_from_thread_cache("r1", miss_label=slow_path)
+#endif  // USE_HEAP_POISONING
 .L${opcode}_resume:
 %  if is_object:
-     lsrs    r1, rINST, #12            // r1<- B; set flags to use 16-bit encoding
+     lsrs    r0, rINST, #12            // r0<- B; set flags to use 16-bit encoding
 %  else:
-     lsr     r1, rINST, #12            // r1<- B
-   GET_VREG r1, r1                     // vB (object we're operating on)
-   cmp     r1, #0
+     lsr     r0, rINST, #12            // r0<- B
+   GET_VREG r0, r0                     // r0<- vB (object we're operating on)
+   cmp     r0, #0
    beq     common_errNullObject
 %  if wide:
      ubfx    r4, rINST, #8, #4         // r4<- A
      VREG_INDEX_TO_ADDR r4, r4
      GET_VREG_WIDE_BY_ADDR r2, r3, r4  // fp[A] <- value
-     add     r1, r1, r0
-     strd    r2, r3, [r1]
+     add     r0, r0, r1
+     strd    r2, r3, [r0]
 %  else:
-     POISON_HEAP_REF_IF_OBJECT $is_object, r4
-     $store  r4, [r1, r0]
+     POISON_HEAP_REF_IF_OBJECT $is_object, r4, s="s"
+     $store  r4, [r0, r1]
      // Use low register temps and set flags to use 16-bit encodings.
-     WRITE_BARRIER_IF_OBJECT $is_object, r4, r1, .L${opcode}_skip_write_barrier, r0, r2, s="s"
+     WRITE_BARRIER_IF_OBJECT $is_object, r4, r0, .L${opcode}_skip_write_barrier, r1, r2, s="s"
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
@@ -316,8 +343,8 @@
      bl      NterpGetLocalInstanceFieldForIPutObject
 %  else:
      bl      NterpGetLocalInstanceField
-   cmp     r0, #0
-   bge     .L${opcode}_resume
+   movs    r1, r0
+   bpl     .L${opcode}_resume
 .L${opcode}_slow_path_continue:
    mov     r0, rSELF
    ldr     r1, [sp]
@@ -329,8 +356,8 @@
      // Reload the value as it may have moved.
      ubfx    r4, rINST, #8, #4         // r4<- A
      GET_VREG r4, r4                   // r4 <- v[A]
-   cmp     r0, #0
-   bge     .L${opcode}_resume
+   movs    r1, r0
+   bpl     .L${opcode}_resume
    CLEAR_INSTANCE_VOLATILE_MARKER r0
 %  if wide:
      lsr     r4, rINST, #12              // r4<- B
@@ -504,9 +531,14 @@
 %  fetch_from_thread_cache("r1", miss_label=slow_path, wb=is_object, tmp="r0", tmp2="r2")
 .L${opcode}_resume:
    ldr     r0, [r1, #ART_FIELD_DECLARING_CLASS_OFFSET]
+#ifdef USE_HEAP_POISONING
+   ldr     r1, [r1, #ART_FIELD_OFFSET_OFFSET]
+   TEST_IF_MARKING .L${opcode}_read_barrier
+#else  // USE_HEAP_POISONING
    mov     r3, rMR                     // MOV+CBZ is 4B (`cmp rMR, #0` + BNE is 6B).
    ldr     r1, [r1, #ART_FIELD_OFFSET_OFFSET]
    TEST_IF_MARKING_CBZ r3, .L${opcode}_read_barrier
+#endif  // USE_HEAP_POISONING
 .L${opcode}_resume_after_read_barrier:
 %  if wide:
      lsr     r2, rINST, #8             // r2 <- A
@@ -515,16 +547,24 @@
      add     r0, r0, r1
      strd    r2, r3, [r0]
 %  else:
-     POISON_HEAP_REF_IF_OBJECT $is_object, r4
+     POISON_HEAP_REF_IF_OBJECT $is_object, r4, s="s"
      $store  r4, [r0, r1]
      // Use low register temps and set flags to use 16-bit encodings.
      WRITE_BARRIER_IF_OBJECT $is_object, r4, r0, .L${opcode}_skip_write_barrier, r1, r2, s="s"
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
+%  if is_object:
+#ifndef USE_HEAP_POISONING
 .L${opcode}_read_barrier:
-   bl      art_quick_read_barrier_mark_reg00
-   b       .L${opcode}_resume_after_read_barrier
+     bl      art_quick_read_barrier_mark_reg00
+     b       .L${opcode}_resume_after_read_barrier
+#endif  // !USE_HEAP_POISONING
+%    pass
+%  else:
+.L${opcode}_read_barrier:
+     bl      art_quick_read_barrier_mark_reg00
+     b       .L${opcode}_resume_after_read_barrier
 
 %def op_sput_slow_path(store, wide, is_object):
    ldr     r0, [sp]
@@ -583,6 +623,13 @@
 .L${opcode}_slow_path_read_barrier:
    bl      art_quick_read_barrier_mark_reg00
    b       .L${opcode}_slow_path_resume_after_read_barrier
+%  if is_object:
+#ifdef USE_HEAP_POISONING
+.L${opcode}_read_barrier:
+     bl      art_quick_read_barrier_mark_reg00
+     b       .L${opcode}_resume_after_read_barrier
+#endif  // USE_HEAP_POISONING
+%    pass
 
 %def op_sput_wide():
 %  op_sput(store="str", wide=True)

@@ -167,8 +167,12 @@
    GET_VREG r1, r1
    // Note: if r1 is null, this will be handled by our SIGSEGV handler.
    ldr r2, [r1, #MIRROR_OBJECT_CLASS_OFFSET]
-   UNPOISON_HEAP_REF r2
+#ifdef USE_HEAP_POISONING
+   UNPOISON_HEAP_REF r2, s="s"
+   adds r2, r2, #MIRROR_CLASS_VTABLE_OFFSET_32
+#else  // USE_HEAP_POISONING
    add r2, r2, #MIRROR_CLASS_VTABLE_OFFSET_32
+#endif  // USE_HEAP_POISONING
    ldr r0, [r2, r0, lsl #2]
    b $helper
 2:

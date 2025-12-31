@@ -117,13 +117,12 @@ void CheckNterpAsmConstants() {
   ptrdiff_t interp_size = reinterpret_cast<uintptr_t>(artNterpAsmInstructionEnd) -
                           reinterpret_cast<uintptr_t>(artNterpAsmInstructionStart);
   static_assert(kNumPackedOpcodes * width != 0);
-  // For arm64, we have four sets of opcode handlers, 20KiB apart, to get a handler set with
+  // For arm/arm64, we have four sets of opcode handlers, 20KiB apart, to get a handler set with
   // 16KiB alignment for quick opcode dispatch. Each handler set is 16KiB and the 4KiB gaps
   // hold slow paths for the handler sets. Slow paths for the last handler set are located
   // after the `artNterpAsmInstructionEnd`.
-  // For arm, we have eight sets of opcode handlers, 36KiB apart, as we need 32KiB alignment.
   static constexpr size_t kNumHandlerSets =
-      (kRuntimeISA == InstructionSet::kArm64) ? 4 : (kRuntimeISA == InstructionSet::kArm) ? 8 : 1;
+      (kRuntimeISA == InstructionSet::kArm64 || kRuntimeISA == InstructionSet::kArm) ? 4 : 1;
   static constexpr size_t kExpectedSize =
       kNumHandlerSets * kNumPackedOpcodes * width + (kNumHandlerSets - 1) * 4 * KB;
   if (interp_size != kExpectedSize) {

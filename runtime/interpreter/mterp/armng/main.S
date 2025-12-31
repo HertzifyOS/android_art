@@ -173,7 +173,7 @@
  * Insert the instruction's opcode field into the rIBASE register.
  */
 .macro PREPARE_OPCODE_DISPATCH
-    bfi     rIBASE, rINST, #7, #8
+    bfi     rIBASE, rINST, #NTERP_HANDLER_SIZE_LOG2, #8
 .endm
 
 /*
@@ -1426,9 +1426,9 @@
    GOTO_OPCODE
 .endm
 
-.macro POISON_HEAP_REF_IF_OBJECT is_object, rRef
+.macro POISON_HEAP_REF_IF_OBJECT is_object, rRef, s=""
    .if \is_object
-     POISON_HEAP_REF \rRef
+     POISON_HEAP_REF \rRef, \s
    .endif
 .endm
 
@@ -1711,29 +1711,29 @@ OAT_ENTRY ExecuteNterpImpl
 .Lexecute_instructions:
     // Prepare rIBASE.
     //
-    // A full set of opcode handlers has 32KiB. We can quickly construct the handler address by
-    // inserting the opcode from the low 8 bits of the 16-bit instruction into bits 14:7 of a
-    // register holding a 32KiB-aligned start of the handlers. However, with 4KiB pages,
-    // `libart.so` is loaded only on a 4KiB-aligned address. Therefore we emit eight sets of nterp
-    // handlers, 36KiB apart, and one of them starts at a 32KiB-aligned address. We fill the 4KiB
-    // gaps with slow-path code. The bits 14:12 of the last hander set address tell us how many
-    // times we need to subtract the 36KiB distance to get the address of the aligned handler set,
-    //     nterp7_op_nop - ((nterp7_op_nop >> 12) & 7) * 36KiB .
-    // To shorten the initialization sequence, we subtract only 32KiB per handler set as the
-    // remaining 4KiB only clears bits 14:12 which shall be replaced by the opcode anyway.
-#if NTERP_HANDLER_SIZE_LOG2 != 7
+    // A full set of opcode handlers has 20KiB. We can quickly construct the handler address by
+    // inserting the opcode from the low 8 bits of the 16-bit instruction into bits 13:6 of a
+    // register holding a 16KiB-aligned start of the handlers. However, with 4KiB pages,
+    // `libart.so` is loaded only on a 4KiB-aligned address. Therefore we emit four sets of nterp
+    // handlers, 20KiB apart, and one of them starts at a 20KiB-aligned address. We fill the 4KiB
+    // gaps with slow-path code. The bits 13:12 of the last handler set address tell us how many
+    // times we need to subtract the 20KiB distance to get the address of the aligned handler set,
+    //     nterp3_op_nop - ((nterp3_op_nop >> 12) & 3) * 20KiB .
+    // To shorten the initialization sequence, we subtract only 16KiB per handler set as the
+    // remaining 4KiB only clears bits 13:12 which shall be replaced by the opcode anyway.
+#if NTERP_HANDLER_SIZE_LOG2 != 6
 #error "Unexpected handler size."
 #endif
     ldr rIBASE, #.LrIBASE_init_diff
 .LrIBASE_init_add_pc:
     add rIBASE, pc
-    and ip, rIBASE, #0x7000
-    sub rIBASE, rIBASE, ip, lsl #3
+    and ip, rIBASE, #0x3000
+    sub rIBASE, rIBASE, ip, lsl #2
     /* start executing the instruction at rPC */
     START_EXECUTING_INSTRUCTIONS
     /* NOTE: no fallthrough */
 .LrIBASE_init_diff:
-    .word (nterp7_op_nop + /* thumb mode */ 1) - (.LrIBASE_init_add_pc + 4)
+    .word (nterp3_op_nop + /* thumb mode */ 1) - (.LrIBASE_init_add_pc + 4)
     // cfi info continues, and covers the whole nterp implementation.
     SIZE ExecuteNterpImpl
 
@@ -2027,7 +2027,7 @@ f2l_maybeNaN:
 // within [ExecuteNterpImpl, EndExecuteNterpImpl).
 %def instruction_end():
 %   prefix_number = int(re.sub(r"nterp([0-7])_", r"\1", opcode_name_prefix))
-%   if prefix_number == 7:
+%   if prefix_number == 3:
       .type artNterpAsmInstructionEnd, #function
       .hidden artNterpAsmInstructionEnd
       .global artNterpAsmInstructionEnd
@@ -2048,16 +2048,16 @@ artNterpAsmInstructionEnd:
       .balign 4096
 %   else:
 %     prev_op_nop = "nterp{}_op_nop".format(int(prefix_number) - 1)
-      .org ${prev_op_nop} + 36864
+      .org ${prev_op_nop} + 20480
 
 %def add_slow_path_for_last_prefix(write_fn, *write_args, suffix="_slow_path"):
-%   if opcode_name_prefix != "nterp7_":
-%     return re.sub(r"nterp._", r"nterp7_", opcode) + suffix
+%   if opcode_name_prefix != "nterp3_":
+%     return re.sub(r"nterp._", r"nterp3_", opcode) + suffix
 %   else:
 %     return add_slow_path(write_fn=write_fn, *write_args, suffix=suffix)
 
 %def opcode_name_prefixes():
-%   return ["nterp0_", "nterp1_", "nterp2_", "nterp3_", "nterp4_", "nterp5_", "nterp6_", "nterp7_"]
+%   return ["nterp0_", "nterp1_", "nterp2_", "nterp3_"]
 %def opcode_start():
   NAME_START ${opcode}
     # Explicitly restore CFA, just in case the previous opcode clobbered it (by .cfi_def_*).

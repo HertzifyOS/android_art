@@ -28,11 +28,16 @@
       GOTO_OPCODE                       @ jump to next instruction
 %   elif is_object:
       $load   r2, [r0, #$data_offset]   @ w2<- vBB[vCC]
-      UNPOISON_HEAP_REF r2
+      UNPOISON_HEAP_REF r2, s="s"
       TEST_IF_MARKING 2f
 1:
       PREPARE_OPCODE_DISPATCH           @ insert opcode to rIBASE
+#ifdef USE_HEAP_POISONING
+      PRESCALE_VREG r4, r4, s="s"       @ set flags to use 16-bit encoding
+      SET_VREG_OBJECT_PRESCALED r2, r4  @ vAA<- w2
+#else  // USE_HEAP_POISONING
       SET_VREG_OBJECT r2, r4            @ vAA<- w2
+#endif  // USE_HEAP_POISONING
       GOTO_OPCODE                       @ jump to next instruction
 2:
       bl art_quick_read_barrier_mark_reg02
