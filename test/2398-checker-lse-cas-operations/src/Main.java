@@ -22,6 +22,7 @@ public class Main {
     Main m = new Main();
     m.compareAndSet(0, 1);
     m.getAndAdd(1);
+    m.getAndSet(1);
   }
 
   private volatile int a;
@@ -55,5 +56,16 @@ public class Main {
   // CHECK-FI:
   public int getAndAdd(int value) {
     return (int) VH_A.getAndAdd(this, value);
+  }
+
+  // CHECK-START-ARM64: int Main.getAndSet(int) disassembly (after)
+  // CHECK-IF:     hasIsaFeature("lse")
+  // CHECK:            swp
+  // CHECK-ELSE:
+  // CHECK:            ldxr
+  // CHECK:            stxr
+  // CHECK-FI:
+  public int getAndSet(int newValue) {
+    return (int) VH_A.getAndSet(this, newValue);
   }
 }

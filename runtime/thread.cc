@@ -1889,11 +1889,11 @@ bool Thread::RequestSynchronousCheckpoint(Closure* function, ThreadState wait_st
       // This waits while holding the mutator lock. Effectively `self` becomes
       // impossible to suspend until `this` responds to the suspend request.
       // Arguably that's not making anything qualitatively worse.
-      bool success = !Runtime::Current()
-                          ->GetThreadList()
-                          ->WaitForSuspendBarrier(self, &wrapped_barrier.barrier_)
-                          .has_value();
-      CHECK(success);
+      auto opt_fail_string = Runtime::Current()->GetThreadList()->WaitForSuspendBarrier(
+          self, &wrapped_barrier.barrier_);
+      if (opt_fail_string.has_value()) {
+        AbortInThis("Synchronous checkpoint failed to suspend: " + opt_fail_string.value());
+      }
     }
 
     // Ensure that the flip function for this thread, if pending, is finished *before*
