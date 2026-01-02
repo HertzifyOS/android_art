@@ -2135,12 +2135,15 @@ void MarkCompact::UpdateStaticFieldsReferences(mirror::Class* klass, Visitor& vi
         } else {
           // We read correct vtable length. Proceed with that.
         }
-      } else if (IsValidFd(uffd_) && use_move_ioctl_) {
+      } else if (use_move_ioctl_ && IsValidFd(uffd_) &&
+                 HasAddress(
+                     GetToSpaceAddr(vtable_len_page), moving_space_begin_, black_dense_end_)) {
         // This is the rare case in which the page preceding the one being updated started after
         // num_reference_static_fields_ and ended before the class-end and contains embedded
         // vtable-length. It may also contain the static references on it. But it will not cause
         // recursive page-moves as it contains vtable-lengh on it. Hence will not end up here again.
-        DCHECK(HasAddress(GetToSpaceAddr(vtable_len_page), moving_space_begin_, black_dense_end_));
+        // NOTE: In extremely rare case if such a page is in non-black-dense portion, then also we
+        // must have read the right value of vtable-length.
         MoveBlackDensePageForUpdate(vtable_len_page);
         // Now we can read from the to-space.
         vtable_len = to_klass->GetEmbeddedVTableLength<kVerifyFlags>();
@@ -2314,22 +2317,30 @@ void MarkCompact::UpdateInstanceFieldsReferences(mirror::Object* obj,
           auto* bitmap_last_word_page =
               AlignDown(reinterpret_cast<uint8_t*>(bitmap_last_word), gPageSize);
           auto* to_cur_bitmap_word = GetToSpaceAddr(overflow_bitmap + i);
-          for (auto* page = AlignDown(reinterpret_cast<uint8_t*>(overflow_bitmap + i), gPageSize);
-               page < bitmap_last_word_page;) {
-            MoveBlackDensePageForUpdate(page);
-            page += gPageSize;
-            auto* to_page_end = reinterpret_cast<uint32_t*>(GetToSpaceAddr(page));
-            for (; to_cur_bitmap_word < to_page_end; to_cur_bitmap_word++, i++) {
-              ref_bitmap = *to_cur_bitmap_word;
-              if (ref_bitmap != 0) {
-                visit_one_map_word(mirror::kObjectHeaderSize +
-                                       i * sizeof(mirror::HeapReference<mirror::Object>) * 32,
-                                   ref_bitmap);
+          if (HasAddress(to_cur_bitmap_word, black_dense_end_, moving_space_end_)) {
+            // We read a genuine 0 bitmap at index i. So, continue the loop in from-space.
+            // This would be the case for classes which are overlapping with the black-dense
+            // boundary. Once we have crossed the boundary and are in non-black-dense
+            // portion, we can unconditionally use from-space klass going forward.
+            to_klass = klass;
+          } else {
+            for (auto* page = AlignDown(reinterpret_cast<uint8_t*>(overflow_bitmap + i), gPageSize);
+                 page < bitmap_last_word_page;) {
+              MoveBlackDensePageForUpdate(page);
+              page += gPageSize;
+              auto* to_page_end = reinterpret_cast<uint32_t*>(GetToSpaceAddr(page));
+              for (; to_cur_bitmap_word < to_page_end; to_cur_bitmap_word++, i++) {
+                ref_bitmap = *to_cur_bitmap_word;
+                if (ref_bitmap != 0) {
+                  visit_one_map_word(mirror::kObjectHeaderSize +
+                                         i * sizeof(mirror::HeapReference<mirror::Object>) * 32,
+                                     ref_bitmap);
+                }
               }
             }
+            i--;  // reverse the extra increment from the above loop.
+            DCHECK_LT(i, bitmap_num_words);
           }
-          i--;  // reverse the extra increment from the above loop.
-          DCHECK_LT(i, bitmap_num_words);
         }
       }
     }
