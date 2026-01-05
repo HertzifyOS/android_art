@@ -140,6 +140,7 @@ genrule {
 
 python_binary_host {
     name: "appcompat",
+    visibility: ["//visibility:private"],
     srcs: ["appcompat.py"],
     data: [
         ":veridex",
@@ -148,11 +149,21 @@ python_binary_host {
     ],
     device_common_data: [
         ":platform-bootclasspath{hiddenapi-flags.csv}",
+        ":platform-bootclasspath{hiddenapi-flagged-apis.csv}",
     ],
 }
 
+// This is used in `GtsUnofficialApisUsageTestCases`
+genrule {
+    name: "appcompat_bin",
+    tools: [":appcompat"],
+    out: ["appcompat"],
+    cmd: "cp $(location :appcompat) $(out)",
+    visibility: ["//visibility:public"],
+}
+
 // TODO: Remove `veridex_zip` and `appcompat.sh` after migrating
-//       `GtsUnofficialApisUsageTestCases` and `GtsNetUnofficialApisUsageTestCases` to use appcompat.
+//       `GtsNetUnofficialApisUsageTestCases` to use appcompat.
 java_genrule {
     name: "veridex_zip",
     srcs: [
