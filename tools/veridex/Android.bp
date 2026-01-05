@@ -26,8 +26,6 @@ cc_binary {
     defaults: ["art_defaults"],
     host_supported: true,
     srcs: [
-        "aconfig_guard_finder.cc",
-        "dependency_graph.cc",
         "flow_analysis.cc",
         "hidden_api.cc",
         "hidden_api_finder.cc",
@@ -51,7 +49,6 @@ cc_binary {
     stl: "libc++_static",
     header_libs: [
         "art_libartbase_headers",
-        "libdexfile_all_headers",
     ],
     target: {
         darwin: {

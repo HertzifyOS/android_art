@@ -17,15 +17,14 @@
 #ifndef ART_TOOLS_VERIDEX_PRECISE_HIDDEN_API_FINDER_H_
 #define ART_TOOLS_VERIDEX_PRECISE_HIDDEN_API_FINDER_H_
 
+#include "class_filter.h"
+#include "dex/method_reference.h"
+#include "flow_analysis.h"
+
 #include <iostream>
 #include <map>
 #include <set>
 #include <string>
-
-#include "aconfig_guard_finder.h"
-#include "class_filter.h"
-#include "dex/method_reference.h"
-#include "flow_analysis.h"
 
 namespace art {
 
@@ -38,12 +37,7 @@ class VeridexResolver;
  */
 class PreciseHiddenApiFinder {
  public:
-  explicit PreciseHiddenApiFinder(const HiddenApi& hidden_api,
-                                  bool ignore_aconfig_guards,
-                                  DependencyGraph* dependency_graph)
-      : hidden_api_(hidden_api),
-        ignore_aconfig_guards_(ignore_aconfig_guards),
-        dependency_graph_(dependency_graph) {}
+  explicit PreciseHiddenApiFinder(const HiddenApi& hidden_api) : hidden_api_(hidden_api) {}
 
   // Iterate over the dex files associated with the passed resolvers to report
   // hidden API uses.
@@ -57,19 +51,15 @@ class PreciseHiddenApiFinder {
   void RunInternal(
       const std::vector<std::unique_ptr<VeridexResolver>>& resolvers,
       const ClassFilter& class_filter,
-      const std::function<
-          void(VeridexResolver*, const ClassAccessor::Method&, AconfigGuardFinder*)>& action);
+      const std::function<void(VeridexResolver*, const ClassAccessor::Method&)>& action);
 
   // Add uses found in method `ref`.
   void AddUsesAt(const std::vector<ReflectAccessInfo>& accesses, MethodReference ref);
 
   const HiddenApi& hidden_api_;
-  const bool ignore_aconfig_guards_;
 
   std::map<MethodReference, std::vector<ReflectAccessInfo>> concrete_uses_;
   std::map<MethodReference, std::vector<ReflectAccessInfo>> abstract_uses_;
-
-  DependencyGraph* dependency_graph_;
 };
 
 }  // namespace art
