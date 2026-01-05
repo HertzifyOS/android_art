@@ -24,7 +24,7 @@
    srliw s8, xINST, 8   // s8 := B|A
    srliw s7, xINST, 12  // s7 := B
    andi s8, s8, 0xF     // s8 := A
-   FETCH_FROM_THREAD_CACHE /*resolved klass*/a0, .L${opcode}_miss, t0, t1
+%  fetch_from_thread_cache(/*resolved klass*/"a0", f".L{opcode}_miss", "t0", "t1")
    TEST_IF_MARKING t0, .L${opcode}_mark
 .L${opcode}_resume:
 

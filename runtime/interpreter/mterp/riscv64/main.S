@@ -221,30 +221,6 @@
     jr \reg
 .endm
 
-.macro FETCH_FROM_THREAD_CACHE reg, miss_label, z0, z1
-    // See art::InterpreterCache::IndexOf() for computing index of key within cache array.
-    // Entry address:
-    //   xSELF + OFFSET + ((xPC>>2 & xFF) << 4)
-    // = xSELF + OFFSET + ((xPC & xFF<<2) << 2)
-    // = xSELF + ((OFFSET>>2 + (xPC & xFF<<2)) << 2)
-    // => ANDI, ADD, SH2ADD
-#if (THREAD_INTERPRETER_CACHE_SIZE_LOG2 != 8)
-#error Expected interpreter cache array size = 256 elements
-#endif
-#if (THREAD_INTERPRETER_CACHE_KEY_TO_ENTRY_SHIFT != 2)
-#error Expected interpreter cache key to entry shift 2
-#endif
-#if ((THREAD_INTERPRETER_CACHE_OFFSET & 0x3) != 0)
-#error Expected interpreter cache offset to be 4-byte aligned
-#endif
-    andi \z0, xPC, THREAD_INTERPRETER_CACHE_KEY_MASK
-    addi \z0, \z0, THREAD_INTERPRETER_CACHE_OFFSET >> 2
-    sh2add \z0, \z0, xSELF  // z0 := entry's address
-    ld \z1, (\z0)           // z1 := dex PC
-    bne xPC, \z1, \miss_label
-    ld \reg, 8(\z0)         // value: depends on context; see call site
-.endm
-
 // Inputs:
 //   - a0
 //   - xSELF
@@ -717,6 +693,29 @@ artNterpAsmInstructionEnd:
     FETCH_INST
     GET_INST_OPCODE t0
     GOTO_OPCODE t0
+
+%def fetch_from_thread_cache(reg, miss_label, z0, z1):
+    // See art::InterpreterCache::IndexOf() for computing index of key within cache array.
+    // Entry address:
+    //   xSELF + OFFSET + ((xPC>>2 & xFF) << 4)
+    // = xSELF + OFFSET + ((xPC & xFF<<2) << 2)
+    // = xSELF + ((OFFSET>>2 + (xPC & xFF<<2)) << 2)
+    // => ANDI, ADD, SH2ADD
+#if (THREAD_INTERPRETER_CACHE_SIZE_LOG2 != 8)
+#error Expected interpreter cache array size = 256 elements
+#endif
+#if (THREAD_INTERPRETER_CACHE_KEY_TO_ENTRY_SHIFT != 2)
+#error Expected interpreter cache key to entry shift 2
+#endif
+#if ((THREAD_INTERPRETER_CACHE_OFFSET & 0x3) != 0)
+#error Expected interpreter cache offset to be 4-byte aligned
+#endif
+    andi ${z0}, xPC, THREAD_INTERPRETER_CACHE_KEY_MASK
+    addi ${z0}, ${z0}, THREAD_INTERPRETER_CACHE_OFFSET >> 2
+    sh2add ${z0}, ${z0}, xSELF  // z0 := entry's address
+    ld ${z1}, (${z0})           // z1 := dex PC
+    bne xPC, ${z1}, ${miss_label}
+    ld ${reg}, 8(${z0})         // value: depends on context; see call site
 
 %def opcode_pre():
 %   pass
