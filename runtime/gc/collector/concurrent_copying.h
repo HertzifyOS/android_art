@@ -18,10 +18,10 @@
 #define ART_RUNTIME_GC_COLLECTOR_CONCURRENT_COPYING_H_
 
 #include "base/macros.h"
+#include "base/offsets.h"
 #include "garbage_collector.h"
 #include "gc/accounting/space_bitmap.h"
 #include "immune_spaces.h"
-#include "offsets.h"
 
 #include <map>
 #include <memory>

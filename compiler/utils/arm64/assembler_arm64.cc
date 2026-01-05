@@ -16,9 +16,9 @@
 
 #include "arch/arm64/instruction_set_features_arm64.h"
 #include "assembler_arm64.h"
+#include "base/offsets.h"
 #include "entrypoints/quick/quick_entrypoints.h"
 #include "heap_poisoning.h"
-#include "offsets.h"
 #include "thread.h"
 
 using namespace vixl::aarch64;  // NOLINT(build/namespaces)

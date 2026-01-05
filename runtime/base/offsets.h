@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-#ifndef ART_RUNTIME_OFFSETS_H_
-#define ART_RUNTIME_OFFSETS_H_
+#ifndef ART_RUNTIME_BASE_OFFSETS_H_
+#define ART_RUNTIME_BASE_OFFSETS_H_
 
 #include <iosfwd>
 
 #include "base/macros.h"
 #include "base/pointer_size.h"
-#include "runtime_globals.h"
 
 namespace art HIDDEN {
 
@@ -92,4 +91,4 @@ class MemberOffset : public Offset {
 
 }  // namespace art
 
-#endif  // ART_RUNTIME_OFFSETS_H_
+#endif  // ART_RUNTIME_BASE_OFFSETS_H_

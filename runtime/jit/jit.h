@@ -27,6 +27,7 @@
 #include "base/histogram-inl.h"
 #include "base/macros.h"
 #include "base/mutex.h"
+#include "base/offsets.h"
 #include "base/timing_logger.h"
 #include "compilation_kind.h"
 #include "handle.h"
@@ -34,7 +35,6 @@
 #include "jit/debugger_interface.h"
 #include "jit_options.h"
 #include "obj_ptr.h"
-#include "offsets.h"
 #include "thread_pool.h"
 
 namespace art HIDDEN {

@@ -31,6 +31,7 @@
 #include "base/iteration_range.h"
 #include "base/macros.h"
 #include "base/mutex.h"
+#include "base/offsets.h"
 #include "base/quasi_atomic.h"
 #include "base/stl_util.h"
 #include "base/transform_array_ref.h"
@@ -53,7 +54,6 @@
 #include "loop_information.h"
 #include "mirror/class.h"
 #include "mirror/method_type.h"
-#include "offsets.h"
 #include "reference_type_info.h"
 
 namespace art HIDDEN {
