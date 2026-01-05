@@ -76,11 +76,29 @@ public class Main {
     }
   }
 
+  // Test 5: This test checks that the SuspendCheck is removed from the
+  // header because it contains an intrinsic.
+
+  // Only one SuspendCheck
+  /// CHECK-START: void Main.$noinline$testRemoveSuspendCheckWithIntrinsic(int[]) disassembly (after)
+  /// CHECK:        SuspendCheck
+  /// CHECK-NOT:    SuspendCheck
+
+  // The Suspend check is marked as no op
+  /// CHECK-START: void Main.$noinline$testRemoveSuspendCheckWithIntrinsic(int[]) disassembly (after)
+  /// CHECK:        SuspendCheck is_no_op:true
+  public static void $noinline$testRemoveSuspendCheckWithIntrinsic(int[] a) {
+    for (int i = 0; i < ITERATIONS; i++) {
+      a[i] = Integer.numberOfLeadingZeros(i);
+    }
+  }
+
   public static void main(String[] args) {
     int[] a = new int[100];
     $noinline$testRemoveSuspendCheck(a);
     testRemoveSuspendCheckWithCall(a);
     testRemoveSuspendCheckAboveHeuristic(a);
     testRemoveSuspendCheckUnknownCount(a, 4);
+    $noinline$testRemoveSuspendCheckWithIntrinsic(a);
   }
 }

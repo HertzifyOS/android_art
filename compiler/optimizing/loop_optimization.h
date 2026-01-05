@@ -580,6 +580,8 @@ class HLoopOptimization : public HOptimization {
   // Helper for target-specific behaviour for loop optimizations.
   ArchNoOptsLoopHelper* arch_loop_helper_;
 
+  const CodeGenerator& codegen_;
+
   friend class LoopOptimizationTest;
   friend class PredicatedSimdLoopOptimizationTest;
 

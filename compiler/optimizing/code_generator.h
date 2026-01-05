@@ -772,6 +772,14 @@ class CodeGenerator : public DeletableArenaObject<kArenaAllocCodeGenerator> {
   virtual HGraphVisitor* GetLocationBuilder() = 0;
   virtual HGraphVisitor* GetInstructionVisitor() = 0;
 
+  // Returns true if `invoke` is an intrinsic with code generation that it is truly there and
+  // call-free (not unimplemented, no bail on instruction features, or call on slow path).
+  //
+  // TODO: Avoid wasting Arena memory. This is done by calling the locations builder on the
+  // instruction and clearing out the locations once result is known. We assume this call only has
+  // creating locations as side effects!
+  virtual bool IsIntrinsicCallFree(HInvoke* invoke) const = 0;
+
  protected:
   // Patch info used for recording locations of required linker patches and their targets,
   // i.e. target method, string, type or code identified by their dex file and index,

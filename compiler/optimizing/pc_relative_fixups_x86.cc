@@ -200,7 +200,7 @@ class PCRelativeHandlerVisitor final : public HGraphVisitor {
     bool base_added = false;
     if (invoke_static_or_direct != nullptr &&
         invoke_static_or_direct->HasPcRelativeMethodLoadKind() &&
-        !IsCallFreeIntrinsic<IntrinsicLocationsBuilderX86>(invoke, codegen_)) {
+        !(invoke_static_or_direct->IsIntrinsic() && codegen_->IsIntrinsicCallFree(invoke))) {
       HX86ComputeBaseMethodAddress* method_address = GetPCRelativeBasePointer(invoke);
       // Add the extra parameter.
       invoke_static_or_direct->AddSpecialInput(method_address);

@@ -7696,5 +7696,16 @@ void CodeGeneratorARM64::CompileBakerReadBarrierThunk(Arm64Assembler& assembler,
 
 #undef __
 
+// TODO: Update this to call IsIntrinsicCallFree<> once the IntrinsicLocationsBuilder
+// constructors are consistent across archs.
+bool CodeGeneratorARM64::IsIntrinsicCallFree(HInvoke* invoke) const {
+  DCHECK(invoke->IsIntrinsic());
+  IntrinsicLocationsBuilderARM64 builder(GetGraph()->GetAllocator(),
+                                         const_cast<CodeGeneratorARM64*>(this));
+  bool success = builder.TryDispatch(invoke) && !invoke->GetLocations()->CanCall();
+  invoke->SetLocations(nullptr);
+  return success;
+}
+
 }  // namespace arm64
 }  // namespace art

@@ -749,6 +749,8 @@ class CodeGeneratorX86_64 : public CodeGenerator {
   // We will fix this up in the linker later to have the right value.
   static constexpr int32_t kPlaceholder32BitOffset = 256;
 
+  bool IsIntrinsicCallFree(HInvoke* invoke) const override;
+
  private:
   static RegisterSet ComputeCalleeSaves();
   static RegisterSet ComputeBlockedRegisters();

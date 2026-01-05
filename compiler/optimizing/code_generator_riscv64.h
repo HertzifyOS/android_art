@@ -641,6 +641,7 @@ class CodeGeneratorRISCV64 : public CodeGenerator {
 
   bool CanUseImplicitSuspendCheck() const;
 
+  bool IsIntrinsicCallFree(HInvoke* invoke) const override;
 
   // Create slow path for a Baker read barrier for a GC root load within `instruction`.
   SlowPathCodeRISCV64* AddGcRootBakerBarrierBarrierSlowPath(

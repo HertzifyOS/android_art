@@ -26,7 +26,8 @@ namespace art HIDDEN {
 
 void LoopAnalysis::CalculateLoopBasicProperties(HLoopInformation* loop_info,
                                                 LoopAnalysisInfo* analysis_results,
-                                                int64_t trip_count) {
+                                                int64_t trip_count,
+                                                const CodeGenerator& codegen) {
   analysis_results->trip_count_ = trip_count;
 
   for (HBasicBlock* block : loop_info->GetBlocks()) {
@@ -52,7 +53,7 @@ void LoopAnalysis::CalculateLoopBasicProperties(HLoopInformation* loop_info,
       if (it.Current()->GetType() == DataType::Type::kInt64) {
         analysis_results->has_long_type_instructions_ = true;
       }
-      if (MakesScalarPeelingUnrollingNonBeneficial(instruction)) {
+      if (MakesScalarPeelingUnrollingNonBeneficial(instruction, codegen)) {
         analysis_results->has_instructions_preventing_scalar_peeling_ = true;
         analysis_results->has_instructions_preventing_scalar_unrolling_ = true;
       }
@@ -69,6 +70,18 @@ int64_t LoopAnalysis::GetLoopTripCount(HLoopInformation* loop_info,
     trip_count = LoopAnalysisInfo::kUnknownTripCount;
   }
   return trip_count;
+}
+
+bool LoopAnalysis::MakesScalarPeelingUnrollingNonBeneficial(HInstruction* instruction,
+                                                            const CodeGenerator& codegen) {
+  return instruction->IsNewArray() || instruction->IsNewInstance() ||
+         instruction->IsUnresolvedInstanceFieldGet() ||
+         instruction->IsUnresolvedInstanceFieldSet() || instruction->IsUnresolvedStaticFieldGet() ||
+         instruction->IsUnresolvedStaticFieldSet() ||
+         // Support loops with intrinsified invokes. Treat non-intrinsics and unimplemented
+         // intrinsics as non-beneficial.
+         (instruction->IsInvoke() && !(instruction->AsInvoke()->IsIntrinsic() &&
+                                       codegen.IsIntrinsicCallFree(instruction->AsInvoke())));
 }
 
 // Default implementation of loop helper; used for all targets unless a custom implementation
