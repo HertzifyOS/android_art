@@ -110,6 +110,12 @@ bool LICM::Run() {
     }
 
     HLoopInformation* loop_info = block->GetLoopInformation();
+    if (loop_info->ContainsIrreducibleLoop()) {
+      // We cannot licm in an irreducible loop, or in a natural loop containing an
+      // irreducible loop.
+      continue;
+    }
+
     SideEffects loop_effects = side_effects.GetLoopEffects(block);
     HBasicBlock* pre_header = loop_info->GetPreHeader();
 
@@ -123,13 +129,6 @@ bool LICM::Run() {
       if (kIsDebugBuild) {
         visited->SetBit(inner->GetBlockId());
       }
-
-      if (loop_info->ContainsIrreducibleLoop()) {
-        // We cannot licm in an irreducible loop, or in a natural loop containing an
-        // irreducible loop.
-        continue;
-      }
-      DCHECK(!loop_info->IsIrreducible());
 
       // We can move an instruction that can throw only as long as it is the first visible
       // instruction (throw or write) in the loop. Note that the first potentially visible
