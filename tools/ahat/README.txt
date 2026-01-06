@@ -49,6 +49,10 @@ Known Issues:
  * Line number decoding for allocations in proguarded classes.
 
 Release History:
+ 1.10 January, 2026
+   Move Bitmaps functionality to main menu (top bar).
+   Add Strings page to main menu to help find duplicate strings.
+
  1.9 December, 2025
    Show sample path and incoming references to unreachable instances.
    Add option to sort allocations table by various columns.
