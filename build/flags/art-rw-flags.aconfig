@@ -50,10 +50,13 @@ flag {
 }
 
 flag {
-  name: "native_alloc_time_based_gc_triggering"
+  name: "native_alloc_time_based_gc_triggering_bugfix"
   namespace: "system_performance"
   description: "Time based gc triggering support for native alloc gc."
   bug: "469141032"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
   is_fixed_read_only: false
   is_exported: false
 }

@@ -4469,7 +4469,7 @@ inline float Heap::NativeMemoryOverTarget(size_t current_native_bytes, bool is_g
   size_t weighted_num_bytes_allocated = GetBytesAllocated() + weighted_native_bytes;
 
   if (com::android::art::rw::flags::enable_time_based_gc_triggering() &&
-      com::android::art::rw::flags::native_alloc_time_based_gc_triggering() &&
+      com::android::art::rw::flags::native_alloc_time_based_gc_triggering_bugfix() &&
       enable_time_based_gc_trigger_) {
     if (weighted_num_bytes_allocated >= java_gc_start_bytes) {
       // Time based gc triggering sets java_gc_start_bytes for use as a
