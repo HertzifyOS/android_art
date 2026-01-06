@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 public final class Main {
@@ -43,6 +45,9 @@ public final class Main {
 
     private static final Integer BOXED_INT = Values.INT;
     private static final Integer BOXED_INT_NULL = Values.NULL_INTEGER;
+
+    private static final List<String> ARRAY_LIST = new ArrayList<>();
+    private static final List<String> EMPTY_LIST = List.of();
 
     public static final class Values {
         static volatile boolean BOOLEAN;
@@ -116,6 +121,17 @@ public final class Main {
 
         ensureJitCompiled(Main.class, "$noinline$testInteger");
         $noinline$testInteger();
+
+        ensureJitCompiled(Main.class, "$noinline$testInvocation");
+        $noinline$testInvocation();
+    }
+
+    private static void $noinline$testInvocation() {
+        int total = ARRAY_LIST.size() + EMPTY_LIST.size();
+
+        if (total != 0) {
+            throw new AssertionError("Expected 0 elements, got " + total);
+        }
     }
 
     private static void $noinline$testBoolean() {

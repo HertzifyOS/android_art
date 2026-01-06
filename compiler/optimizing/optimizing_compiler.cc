@@ -644,6 +644,9 @@ void OptimizingCompiler::RunOptimizations(HGraph* graph,
   static constexpr OptimizationDef optimizations[] = {
       // Initial optimizations.
       OptDef(OptimizationPass::kConstantFolding),
+      OptDef(OptimizationPass::kReferenceTypePropagation,
+             "reference_type_propagation$initial",
+             OptimizationPass::kConstantFolding),
       OptDef(OptimizationPass::kInstructionSimplifier),
       OptDef(OptimizationPass::kDeadCodeElimination,
              "dead_code_elimination$initial"),
