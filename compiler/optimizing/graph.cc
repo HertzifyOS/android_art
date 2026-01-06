@@ -188,18 +188,17 @@ GraphAnalysisResult HGraph::BuildDominatorTree() {
   // (5) Compute the dominance information and the reverse post order.
   ComputeDominanceInformation();
 
-  // (6) Precompute per-block try membership before AnalyzeLoops as it needs this information for
-  //     the implicit edges between try blocks and its corresponding catch blocks.
-  //     The SSA builder also needs the information to build catch block phis from values of
-  //     locals at throwing instructions inside try blocks.
-  ComputeTryBlockInformation();
-
-  // (7) Analyze loops discovered through back edge analysis, and
+  // (6) Analyze loops discovered through back edge analysis, and
   //     set the loop information on each block.
   GraphAnalysisResult result = AnalyzeLoops();
   if (result != kAnalysisSuccess) {
     return result;
   }
+
+  // (7) Precompute per-block try membership before entering the SSA builder,
+  //     which needs the information to build catch block phis from values of
+  //     locals at throwing instructions inside try blocks.
+  ComputeTryBlockInformation();
 
   return kAnalysisSuccess;
 }
@@ -597,22 +596,17 @@ void HGraph::SimplifyCFG() {
 }
 
 GraphAnalysisResult HGraph::AnalyzeLoops() const {
-  // TODO: Dealing with exceptional back edges could be tricky because
-  //       they only approximate the real control flow. This breaks preconditions of HGraphs like
-  //       exception handler blocks being catch blocks. Bail out for now.
-  for (HBasicBlock* block : GetPostOrder()) {
-    if (block->IsLoopHeader() && block->IsCatchBlock()) {
-      VLOG(compiler) << "Not compiled: Exceptional back edges";
-      return kAnalysisFailThrowCatchLoop;
-    }
-  }
-
   // We iterate post order to ensure we visit inner loops before outer loops.
   // `PopulateRecursive` needs this guarantee to know whether a natural loop
   // contains an irreducible loop.
   for (HBasicBlock* block : GetPostOrder()) {
     if (block->IsLoopHeader()) {
-      DCHECK(!block->IsCatchBlock());
+      if (block->IsCatchBlock()) {
+        // TODO: Dealing with exceptional back edges could be tricky because
+        //       they only approximate the real control flow. Bail out for now.
+        VLOG(compiler) << "Not compiled: Exceptional back edges";
+        return kAnalysisFailThrowCatchLoop;
+      }
       block->GetLoopInformation()->Populate();
     }
   }

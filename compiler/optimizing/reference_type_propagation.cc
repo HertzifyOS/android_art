@@ -28,6 +28,7 @@
 #include "handle_scope-inl.h"
 #include "mirror/class-inl.h"
 #include "mirror/dex_cache.h"
+#include "obj_ptr.h"
 #include "scoped_thread_state_change-inl.h"
 
 namespace art HIDDEN {
@@ -588,7 +589,13 @@ void ReferenceTypePropagation::RTPVisitor::VisitInstanceFieldGet(HInstanceFieldG
 }
 
 void ReferenceTypePropagation::RTPVisitor::VisitStaticFieldGet(HStaticFieldGet* instr) {
-  UpdateFieldAccessTypeInfo(instr, instr->GetFieldInfo());
+  if (instr->HasConstantValue()) {
+    ScopedObjectAccess soa(Thread::Current());
+    ObjPtr<mirror::Class> klass = instr->GetConstantValue()->GetClass();
+    SetClassAsTypeInfo(instr, klass, /*is_exact=*/ true);
+  } else {
+    UpdateFieldAccessTypeInfo(instr, instr->GetFieldInfo());
+  }
 }
 
 void ReferenceTypePropagation::RTPVisitor::VisitUnresolvedInstanceFieldGet(

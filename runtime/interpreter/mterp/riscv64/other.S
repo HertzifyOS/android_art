@@ -219,7 +219,7 @@
 // Format 21c: AA|1a BBBB
 %def op_const_string(jumbo=False):
    // Fast path: string from thread-local cache.
-   FETCH_FROM_THREAD_CACHE /*object*/a0, .L${opcode}_slow, t0, t1
+%  fetch_from_thread_cache(/*object*/"a0", f".L{opcode}_slow", "t0", "t1")
    TEST_IF_MARKING t2, .L${opcode}_mark
 
 .L${opcode}_resume:
@@ -251,7 +251,7 @@
 // Format 21c: AA|1c BBBB
 %def op_const_class():
    // Fast path: klass reference from thread-local cache.
-   FETCH_FROM_THREAD_CACHE /*object*/a0, .L${opcode}_slow, t0, t1
+%  fetch_from_thread_cache(/*object*/"a0", f".L{opcode}_slow", "t0", "t1")
    TEST_IF_MARKING t2, .L${opcode}_mark
 
 .L${opcode}_resume:

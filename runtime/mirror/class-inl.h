@@ -505,7 +505,8 @@ inline ArtMethod* Class::FindVirtualMethodForInterface(ArtMethod* method,
 
 inline ArtMethod* Class::FindVirtualMethodForVirtual(ArtMethod* method, PointerSize pointer_size) {
   // Only miranda or default methods may come from interfaces and be used as a virtual.
-  DCHECK(!method->GetDeclaringClass()->IsInterface() || method->IsDefault() || method->IsMiranda());
+  DCHECK_IMPLIES(method->GetDeclaringClass()->IsInterface(),
+                 method->IsDefault() || method->IsMiranda());
   DCHECK(method->GetDeclaringClass()->IsAssignableFrom(this))
       << "Method " << method->PrettyMethod()
       << " is not declared in " << PrettyDescriptor() << " or its super classes";

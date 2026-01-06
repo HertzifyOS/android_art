@@ -838,6 +838,8 @@ void HConstantFoldingVisitor::VisitStaticFieldGet(HStaticFieldGet* instruction) 
       }
       case DataType::Type::kReference: {
         if (instruction->HasConstantValue()) {
+          // Constant folding is run multiple times. Setting value only once, but making sure that
+          // its value is still the same.
           DCHECK_EQ(field->GetObject(field->GetDeclaringClass().Ptr()),
                     instruction->GetConstantValue().Get());
         } else {

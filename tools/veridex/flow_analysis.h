@@ -27,8 +27,6 @@
 
 namespace art {
 
-class AconfigGuardFinder;
-
 /**
  * The source where a dex register comes from.
  */
@@ -39,8 +37,6 @@ enum class RegisterSource {
   kClass,
   kString,
   kConstant,
-  kAconfigFlag,
-  kAconfigPackage,
   kNone
 };
 
@@ -117,11 +113,8 @@ class VeriFlowAnalysis {
 
   void Run();
 
-  virtual RegisterValue AnalyzeInvoke(uint32_t dex_pc,
-                                      const Instruction& instruction,
-                                      bool is_range) = 0;
+  virtual RegisterValue AnalyzeInvoke(const Instruction& instruction, bool is_range) = 0;
   virtual void AnalyzeFieldSet(const Instruction& instruction) = 0;
-  virtual void ProcessBranch(uint32_t dex_pc, const Instruction& instruction) = 0;
   virtual ~VeriFlowAnalysis() {}
 
  private:
@@ -134,6 +127,9 @@ class VeriFlowAnalysis {
   // Set the instruction at the given pc as a branch target.
   void SetAsBranchTarget(uint32_t dex_pc);
 
+  // Whether the instruction at the given pc is a branch target.
+  bool IsBranchTarget(uint32_t dex_pc);
+
   // Merge the register values at the given pc with `current_registers`.
   // Return whether the register values have changed, and the instruction needs
   // to be visited again.
@@ -144,23 +140,17 @@ class VeriFlowAnalysis {
   void UpdateRegister(uint32_t dex_register, const RegisterValue& value);
   void UpdateRegister(uint32_t dex_register, const VeriClass* cls);
   void UpdateRegister(uint32_t dex_register, int32_t value, const VeriClass* cls);
-  void ProcessDexInstruction(uint32_t dex_pc, const Instruction& inst);
+  void ProcessDexInstruction(const Instruction& inst);
   void SetVisited(uint32_t dex_pc);
   RegisterValue GetFieldType(uint32_t field_index);
 
   int GetBranchFlags(const Instruction& instruction) const;
 
  protected:
-  // Whether the instruction at the given pc is a branch target.
-  bool IsBranchTarget(uint32_t dex_pc);
-
   const RegisterValue& GetRegister(uint32_t dex_register) const;
   RegisterValue GetReturnType(uint32_t method_index);
-  const CodeItemDataAccessor& GetCodeItemAccessor() const { return code_item_accessor_; }
 
   VeridexResolver* resolver_;
-  AconfigGuardFinder* aconfig_guard_finder_;
-  std::set<uint32_t> aconfig_package_registers_;
 
  private:
   const uint32_t method_id_;
@@ -196,22 +186,15 @@ struct ReflectAccessInfo {
 // Collects all reflection uses.
 class FlowAnalysisCollector : public VeriFlowAnalysis {
  public:
-  FlowAnalysisCollector(VeridexResolver* resolver,
-                        const ClassAccessor::Method& method,
-                        AconfigGuardFinder* aconfig_guard_finder)
-      : VeriFlowAnalysis(resolver, method) {
-    aconfig_guard_finder_ = aconfig_guard_finder;
-  }
+  FlowAnalysisCollector(VeridexResolver* resolver, const ClassAccessor::Method& method)
+      : VeriFlowAnalysis(resolver, method) {}
 
   const std::vector<ReflectAccessInfo>& GetUses() const {
     return uses_;
   }
 
-  RegisterValue AnalyzeInvoke(uint32_t dex_pc,
-                              const Instruction& instruction,
-                              bool is_range) override;
+  RegisterValue AnalyzeInvoke(const Instruction& instruction, bool is_range) override;
   void AnalyzeFieldSet(const Instruction& instruction) override;
-  void ProcessBranch(uint32_t dex_pc, const Instruction& instruction) override;
 
  private:
   // List of reflection uses found, concrete and abstract.
@@ -223,21 +206,15 @@ class FlowAnalysisSubstitutor : public VeriFlowAnalysis {
  public:
   FlowAnalysisSubstitutor(VeridexResolver* resolver,
                           const ClassAccessor::Method& method,
-                          const std::map<MethodReference, std::vector<ReflectAccessInfo>>& accesses,
-                          AconfigGuardFinder* aconfig_guard_finder)
-      : VeriFlowAnalysis(resolver, method), accesses_(accesses) {
-    aconfig_guard_finder_ = aconfig_guard_finder;
-  }
+                          const std::map<MethodReference, std::vector<ReflectAccessInfo>>& accesses)
+      : VeriFlowAnalysis(resolver, method), accesses_(accesses) {}
 
   const std::vector<ReflectAccessInfo>& GetUses() const {
     return uses_;
   }
 
-  RegisterValue AnalyzeInvoke(uint32_t dex_pc,
-                              const Instruction& instruction,
-                              bool is_range) override;
+  RegisterValue AnalyzeInvoke(const Instruction& instruction, bool is_range) override;
   void AnalyzeFieldSet(const Instruction& instruction) override;
-  void ProcessBranch(uint32_t dex_pc, const Instruction& instruction) override;
 
  private:
   // List of reflection uses found, concrete and abstract.

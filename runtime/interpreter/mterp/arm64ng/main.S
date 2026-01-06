@@ -1710,11 +1710,11 @@ OAT_ENTRY ExecuteNterpImpl
     // register holding a 16KiB-aligned start of the handlers. However, with 4KiB pages,
     // `libart.so` is loaded only on a 4KiB-aligned address. Therefore we emit four sets of nterp
     // handlers, 20KiB apart, and one of them starts at a 16KiB-aligned address. We fill the 4KiB
-    // gaps with slow-path code. The bits 12-13 of the last hander set address tell us how many
+    // gaps with slow-path code. The bits 12-13 of the last handler set address tell us how many
     // times we need to subtract the 20KiB distance to get the address of the aligned handler set,
     //     nterp3_op_nop - ((nterp3_op_nop >> 12) & 3) * 20KiB .
     // To shorten the initialization sequence, we subtract only 16KiB per handler set as the
-    // remaining 4KiB only clears bits 13:14 which shall be replaced by the opcode anyway. Since
+    // remaining 4KiB only clears bits 13:12 which shall be replaced by the opcode anyway. Since
     // the low 12 bits are clear, we use UBFIZ to merge extraction and multiplication by 16KiB.
 #if NTERP_HANDLER_SIZE_LOG2 != 6
 #error "Unexpected handler size."

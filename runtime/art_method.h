@@ -286,8 +286,7 @@ class EXPORT ArtMethod final {
     static_assert((kAccCopied & kAccIntrinsicBits) != 0,
                   "kAccCopied deliberately overlaps intrinsic bits");
     const bool copied = (access_flags & (kAccIntrinsic | kAccCopied)) == kAccCopied;
-    // (IsMiranda() || IsDefaultConflicting()) implies copied
-    DCHECK(!(IsMiranda(access_flags) || IsDefaultConflicting(access_flags)) || copied)
+    DCHECK_IMPLIES(IsMiranda(access_flags) || IsDefaultConflicting(access_flags), copied)
         << "Miranda or default-conflict methods must always be copied.";
     return copied;
   }

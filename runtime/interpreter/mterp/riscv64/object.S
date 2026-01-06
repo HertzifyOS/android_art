@@ -3,7 +3,7 @@
 // Throw a ClassCastException if the reference in the given register cannot be cast to the indicated
 // type.
 %def op_check_cast():
-   FETCH_FROM_THREAD_CACHE /*expected klass*/a1, .L${opcode}_miss, t0, t1
+%  fetch_from_thread_cache(/*expected klass*/"a1", f".L{opcode}_miss", "t0", "t1")
 .L${opcode}_miss_resume:
 
    srliw t0, xINST, 8         // t0 := AA
@@ -101,7 +101,7 @@
    srliw s7, xINST, 8    // s7 := B|A
    srliw s8, xINST, 12   // s8 := B
    andi s7, s7, 0xF      // s7 := A, used in slow path
-   FETCH_FROM_THREAD_CACHE /*expected klass*/ a1, .L${opcode}_miss, t0, t1
+%  fetch_from_thread_cache(/*expected klass*/ "a1", f".L{opcode}_miss", "t0", "t1")
 .L${opcode}_miss_resume:
 
 %  get_vreg("a0", "s8", is_unsigned=True)  # a0 := fp[B], zext
@@ -200,7 +200,7 @@
 %def op_new_instance():
    EXPORT_PC
    srliw s7, xINST, 8  // s7 := AA
-   FETCH_FROM_THREAD_CACHE /*resolved klass*/a0, .L${opcode}_miss, t0, t1
+%  fetch_from_thread_cache(/*resolved klass*/"a0", f".L{opcode}_miss", "t0", "t1")
    TEST_IF_MARKING t0, .L${opcode}_mark
 .L${opcode}_mark_resume:
 
@@ -270,7 +270,7 @@
    andi s8, s8, 0xF        // s8 := A
 
    // Fast path: NterpGetInstanceFieldOffset's byte offset from thread-local cache.
-   FETCH_FROM_THREAD_CACHE /*field_offset*/a0, .L${opcode}_slow, t1, t2
+%  fetch_from_thread_cache(/*field_offset*/"a0", f".L{opcode}_slow", "t1", "t2")
 .L${opcode}_slow_resume:
 
 %  get_vreg("t0", "s7", is_unsigned=True)  # t0 := holder
@@ -332,7 +332,7 @@
    andi s8, s8, 0xF        // s8 := A
 
    // Fast path: NterpGetInstanceFieldOffset's byte offset from thread-local cache.
-   FETCH_FROM_THREAD_CACHE /*field_offset*/a0, .L${opcode}_slow, t1, t2
+%  fetch_from_thread_cache(/*field_offset*/"a0", f".L{opcode}_slow", "t1", "t2")
 .L${opcode}_slow_resume:
 
 %  get_vreg("t0", "s7", is_unsigned=True)  # t0 := holder
@@ -434,7 +434,7 @@
                            // s8 := value, held across slow path call
 
    // Fast path: NterpGetInstanceFieldOffset's byte offset from thread-local cache.
-   FETCH_FROM_THREAD_CACHE /*resolved_field*/a0, .L${opcode}_slow, t0, t1
+%  fetch_from_thread_cache(/*resolved_field*/"a0", f".L{opcode}_slow", "t0", "t1")
 .L${opcode}_slow_resume:
 
 %  get_vreg("t0", "s7", is_unsigned=True)  # t0 := holder
@@ -505,7 +505,7 @@
 %  get_vreg("s9", "s8", is_unsigned=True)  # s9 := reference
 
    // Fast path: NterpGetInstanceFieldOffset's byte offset from thread-local cache.
-   FETCH_FROM_THREAD_CACHE /*resolved_field*/a0, .L${opcode}_slow, t0, t1
+%  fetch_from_thread_cache(/*resolved_field*/"a0", f".L{opcode}_slow", "t0", "t1")
 .L${opcode}_slow_resume:   // s9 := reference (slow path only)
 
 %  get_vreg("t0", "s7", is_unsigned=True)  # t0 := holder
@@ -596,7 +596,7 @@
    srliw s7, xINST, 8  // s7 := AA (live through volatile path)
    // Fast path: NterpGetStaticField's resolved_field from thread-local cache.
    // Stores cache value in a0 to match slow path's return from NterpGetStaticField.
-   FETCH_FROM_THREAD_CACHE /*resolved_field*/a0, .L${opcode}_slow, t0, t1
+%  fetch_from_thread_cache(/*resolved_field*/"a0", f".L{opcode}_slow", "t0", "t1")
 .L${opcode}_slow_resume:
 
    lwu t0, ART_FIELD_OFFSET_OFFSET(a0)           // t0 := field offset
@@ -669,7 +669,7 @@
    srliw s7, xINST, 8  // s7 := AA (live through volatile path)
    // Fast path: NterpGetStaticField's resolved_field from thread-local cache.
    // Stores cache value in a0 to match slow path's return from NterpGetStaticField.
-   FETCH_FROM_THREAD_CACHE /*resolved_field*/a0, .L${opcode}_slow, t0, t1
+%  fetch_from_thread_cache(/*resolved_field*/"a0", f".L{opcode}_slow", "t0", "t1")
 .L${opcode}_slow_resume:
 
    lwu t0, ART_FIELD_OFFSET_OFFSET(a0)           // t0 := field offset
@@ -781,7 +781,7 @@
 
    // Fast path: NterpGetStaticField's resolved_field from thread-local cache.
    // Stores cache value in a0 to match slow path's return from NterpGetStaticField.
-   FETCH_FROM_THREAD_CACHE /*resolved_field*/a0, .L${opcode}_slow, t0, t1
+%  fetch_from_thread_cache(/*resolved_field*/"a0", f".L{opcode}_slow", "t0", "t1")
 .L${opcode}_slow_resume:
 
    lwu t0, ART_FIELD_OFFSET_OFFSET(a0)
@@ -863,7 +863,7 @@
 
    // Fast path: NterpGetStaticField's resolved_field from thread-local cache.
    // Stores cache value in a0 to match slow path's return from NterpGetStaticField.
-   FETCH_FROM_THREAD_CACHE /*resolved_field*/a0, .L${opcode}_slow, t0, t1
+%  fetch_from_thread_cache(/*resolved_field*/"a0", f".L{opcode}_slow", "t0", "t1")
 .L${opcode}_slow_resume:   // s8 := reference (slow path only)
 
    lwu t0, ART_FIELD_OFFSET_OFFSET(a0)
@@ -885,7 +885,7 @@
 
 .L${opcode}_slow:
 %  slow_path = add_slow_path(op_sput_object_slow_path, "s7", "s8", "t0", "t1")
-   tail $slow_path  // slow path offset exceeds regular branch imm in FETCH_FROM_THREAD_CACHE
+   tail $slow_path  // slow path offset exceeds regular branch imm in fetch_from_thread_cache
 
 
 // Static store, object variant. Contains both slow path and volatile path

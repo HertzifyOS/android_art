@@ -57,7 +57,7 @@
 %def op_invoke_virtual(range=""):
    EXPORT_PC
    FETCH s7, count=2                // s7 := F|E|D|C or CCCC (range)
-   FETCH_FROM_THREAD_CACHE a0, /*slow path*/2f, t0, t1
+%  fetch_from_thread_cache("a0", /*slow path*/"2f", "t0", "t1")
                                     // a0 := method idx of resolved virtual method
 1:
 %  fetch_receiver(reg="a1", vreg="s7", range=range)
@@ -89,7 +89,7 @@
 %def op_invoke_super(range=""):
    EXPORT_PC
    FETCH s7, count=2              // s7 := F|E|D|C or CCCC (range)
-   FETCH_FROM_THREAD_CACHE a0, /*slow path*/2f, t0, t1
+%  fetch_from_thread_cache("a0", /*slow path*/"2f", "t0", "t1")
                                   // a0 := ArtMethod*
 1:
 %  fetch_receiver(reg="a1", vreg="s7", range=range)
@@ -115,7 +115,7 @@
 %def op_invoke_direct(range=""):
    EXPORT_PC
    FETCH s7, count=2               // s7 := F|E|D|C or CCCC (range)
-   FETCH_FROM_THREAD_CACHE a0, /*slow path*/2f, t0, t1
+%  fetch_from_thread_cache("a0", /*slow path*/"2f", "t0", "t1")
                                    // a0 := ArtMethod*, never String.<init>
 1:
 %  fetch_receiver(reg="a1", vreg="s7", range=range)
@@ -141,7 +141,7 @@
    EXPORT_PC
    // TODO: Unnecessary if A=0, and unnecessary if nterp-to-nterp.
    FETCH s7, count=2               // s7 := F|E|D|C or CCCC (range)
-   FETCH_FROM_THREAD_CACHE a0, /*slow path*/1f, t0, t1
+%  fetch_from_thread_cache("a0", /*slow path*/"1f", "t0", "t1")
                                    // a0 := ArtMethod*
    tail NterpInvokeStatic${range}  // arg a0, s7
 1:
@@ -163,7 +163,7 @@
    // (1) ArtMethod*
    // (2) ArtMethod* with LSB #1 set (default method)
    // (3) method index << 16 with LSB #0 set (j.l.Object method)
-   FETCH_FROM_THREAD_CACHE a0, /*slow path*/5f, t0, t1
+%  fetch_from_thread_cache("a0", /*slow path*/"5f", "t0", "t1")
 1:
 %  fetch_receiver(reg="a1", vreg="s7", range=range)
                           // a1 := fp[C] (this)
