@@ -358,7 +358,6 @@
     .else
       ldr wDEXFILE, [x0, #ART_METHOD_DECLARING_CLASS_OFFSET]
     .endif
-    UNPOISON_HEAP_REF wDEXFILE
     add \refs, \refs, wip2, uxth #2           // Add `4 * outs_size`.
     sub ip, sp, \regs_ins, uxth #3            // Subtract `(2 * 4 * registers_size)` from SP.
     and \refs, \refs, #(-__SIZEOF_POINTER__)  // \refs offset = 24 + (4 * outs_size) + padding1.
