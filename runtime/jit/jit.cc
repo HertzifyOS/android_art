@@ -1817,7 +1817,7 @@ bool Jit::CompileMethod(ArtMethod* method,
         MutexLock mu(self, lock_);
         shared_method_info_map_[method].previously_warm = true;
       }
-    } else if (!UseFastCompiler()) {
+    } else {
       // We set the method as warm when being baseline compiled.
       method->SetPreviouslyWarm();
     }

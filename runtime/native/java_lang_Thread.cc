@@ -75,8 +75,8 @@ static void Thread_setCurrentThreadNative(JNIEnv* env, jclass, jobject java_thre
   soa.Self()->SetCurrentPeer(new_current_thread.Ptr());
 }
 
-static jboolean Thread_interrupted(JNIEnv* env, jclass) {
-  return static_cast<JNIEnvExt*>(env)->GetSelf()->Interrupted() ? JNI_TRUE : JNI_FALSE;
+static jboolean Thread_interrupted() {
+  return Thread::Current()->Interrupted() ? JNI_TRUE : JNI_FALSE;
 }
 
 static jboolean Thread_isInterrupted(JNIEnv* env, jobject java_thread) {
@@ -269,7 +269,7 @@ static JNINativeMethod gMethods[] = {
     FAST_NATIVE_METHOD(Thread, currentCarrierThread, "()Ljava/lang/Thread;"),
     FAST_NATIVE_METHOD(Thread, currentThread, "()Ljava/lang/Thread;"),
     FAST_NATIVE_METHOD(Thread, setCurrentThreadNative, "(Ljava/lang/Thread;)V"),
-    FAST_NATIVE_METHOD(Thread, interrupted, "()Z"),
+    CRITICAL_NATIVE_METHOD(Thread, interrupted, "()Z"),
     FAST_NATIVE_METHOD(Thread, isInterrupted, "()Z"),
     NATIVE_METHOD(Thread, nativeCreate, "(Ljava/lang/Thread;JZ)V"),
     NATIVE_METHOD(Thread, nativeGetStatus, "(Z)I"),

@@ -4459,20 +4459,39 @@ inline float Heap::NativeMemoryOverTarget(size_t current_native_bytes, bool is_g
     // It's OK to lose an update if two stores race.
     old_native_bytes_allocated_.store(current_native_bytes, std::memory_order_relaxed);
     return 0.0;
-  } else {
-    size_t new_native_bytes = UnsignedDifference(current_native_bytes, old_native_bytes);
-    size_t weighted_native_bytes = new_native_bytes / kNewNativeDiscountFactor
-        + old_native_bytes / kOldNativeDiscountFactor;
-    size_t add_bytes_allowed = static_cast<size_t>(
-        NativeAllocationGcWatermark() * HeapGrowthMultiplier());
-    size_t java_gc_start_bytes = is_gc_concurrent
-        ? concurrent_start_bytes_
-        : target_footprint_.load(std::memory_order_relaxed);
-    size_t adj_start_bytes = UnsignedSum(java_gc_start_bytes,
-                                         add_bytes_allowed / kNewNativeDiscountFactor);
-    return static_cast<float>(GetBytesAllocated() + weighted_native_bytes)
-         / static_cast<float>(adj_start_bytes);
   }
+
+  size_t new_native_bytes = UnsignedDifference(current_native_bytes, old_native_bytes);
+  size_t weighted_native_bytes =
+      new_native_bytes / kNewNativeDiscountFactor + old_native_bytes / kOldNativeDiscountFactor;
+  size_t java_gc_start_bytes = is_gc_concurrent ? concurrent_start_bytes_
+                                                : target_footprint_.load(std::memory_order_relaxed);
+  size_t weighted_num_bytes_allocated = GetBytesAllocated() + weighted_native_bytes;
+
+  if (com::android::art::rw::flags::enable_time_based_gc_triggering() &&
+      com::android::art::rw::flags::native_alloc_time_based_gc_triggering() &&
+      enable_time_based_gc_trigger_) {
+    if (weighted_num_bytes_allocated >= java_gc_start_bytes) {
+      // Time based gc triggering sets java_gc_start_bytes for use as a
+      // last resort to ensure we start GC before running out of heap
+      // entirely.
+      return static_cast<float>(weighted_num_bytes_allocated) /
+             static_cast<float>(java_gc_start_bytes);
+    }
+
+    size_t new_num_bytes_allocated = GetBytesAllocated() + new_native_bytes;
+    size_t bytes_allocated_since_last_gc_kb =
+        (new_num_bytes_allocated - num_bytes_alive_after_gc_) / KB;
+    uint64_t time_since_last_gc_ms = NsToMs(NanoTime() - last_gc_start_time_);
+    return static_cast<float>(bytes_allocated_since_last_gc_kb * time_since_last_gc_ms) /
+           static_cast<float>(time_based_gc_threshold_);
+  }
+
+  size_t add_bytes_allowed =
+      static_cast<size_t>(NativeAllocationGcWatermark() * HeapGrowthMultiplier());
+  size_t adj_start_bytes =
+      UnsignedSum(java_gc_start_bytes, add_bytes_allowed / kNewNativeDiscountFactor);
+  return static_cast<float>(weighted_num_bytes_allocated) / static_cast<float>(adj_start_bytes);
 }
 
 inline void Heap::CheckGCForNative(Thread* self) {

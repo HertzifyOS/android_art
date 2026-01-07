@@ -65,12 +65,16 @@ public class CompOsTestUtils {
     public void runCompilationJobEarlyAndWait() throws Exception {
         waitForJobToBeScheduled();
 
+        // Get the device's timestamp before we start the job.
+        long timeSinceEpochMillis = mDevice.getDeviceDate();
+        CLog.i("Compilation job starting time (epoch in milliseconds): " + timeSinceEpochMillis);
+
         assertCommandSucceeds("cmd jobscheduler run -f android " + JOB_ID);
         // It takes time. Just don't spam.
         TimeUnit.SECONDS.sleep(SECONDS_BEFORE_PROGRESS_CHECK);
         // The job runs asynchronously. To wait until it completes.
         waitForJobExit(VM_ODREFRESH_MAX_SECONDS - SECONDS_BEFORE_PROGRESS_CHECK);
-        checkCompOsCompilationResult();
+        checkCompOsCompilationResult(timeSinceEpochMillis);
     }
 
     public String checksumDirectoryContentPartial(String path) throws Exception {
@@ -153,8 +157,9 @@ public class CompOsTestUtils {
         return result.getStdout().trim();
     }
 
-    private void checkCompOsCompilationResult() throws Exception {
-        String command = "logcat -d -s IsolatedCompilationMetrics"
+    private void checkCompOsCompilationResult(long timeSinceEpochMillis) throws Exception {
+        String startTimestamp = String.format("%.3f", timeSinceEpochMillis / 1000.0);
+        String command = "logcat -d -T " + startTimestamp + " -s IsolatedCompilationMetrics"
                 + " | grep ISOLATED_COMPILATION_ENDED | tail -n 1";
         String lastMatchingLine = mDevice.executeShellCommand(command).trim();
 
