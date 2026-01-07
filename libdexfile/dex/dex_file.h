@@ -902,6 +902,22 @@ class DexFile {
   static size_t Utf8Length(const char* utf8_data, size_t utf16_length);
   static std::string_view StringViewFromUtf16Length(const char* utf8_data, size_t utf16_length);
 
+  static constexpr size_t DataBeginOffset() {
+    return OFFSETOF_MEMBER(DexFile, data_) + decltype(data_)::ArrayOffset();
+  }
+
+  static constexpr size_t StringIdsOffset() {
+    return OFFSETOF_MEMBER(DexFile, string_ids_);
+  }
+
+  static constexpr size_t MethodIdsOffset() {
+    return OFFSETOF_MEMBER(DexFile, method_ids_);
+  }
+
+  static constexpr size_t ProtoIdsOffset() {
+    return OFFSETOF_MEMBER(DexFile, proto_ids_);
+  }
+
  protected:
   // First Dex format version supporting default methods.
   static constexpr uint32_t kDefaultMethodsVersion = 37;
