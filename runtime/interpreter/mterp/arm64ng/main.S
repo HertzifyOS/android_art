@@ -458,13 +458,12 @@
 // - xNEW_FP: the new pointer to dex registers
 // - xNEW_REFS: the new pointer to references
 // - xPC: the new PC pointer to execute
-// - x2: value in instruction to decode the number of arguments.
-// - x3: first dex register
-// - x4: top of dex register array
 //
 // The method expects:
 // - x0 to contain the ArtMethod
-// - x8 to contain the code item
+// - x1 may contain the receiver and must not be clobbered
+// - x2 to contain the code item
+// - x3-x7 can be used as temporaries.
 .macro SETUP_STACK_FOR_INVOKE
    // We do the same stack overflow check as the compiler. See CanMethodUseNterp
    // in how we limit the maximum nterp frame size.
@@ -475,20 +474,20 @@
    // are called by compiled code or nterp.
    SPILL_ALL_CALLEE_SAVES
 
-   // Setup the frame. Use x2 for `old_sp` as the old SP is not needed after the setup.
-   SETUP_STACK_FRAME x8, xNEW_REFS, xNEW_FP, CFI_NEW_REFS, x2
-   // Make x4 point to the top of the dex register array.
-   add x4, xNEW_FP, ip, uxtx #2
-
-   // Fetch instruction information before replacing xPC.
-   // TODO: move this down to the method that uses it, fetching it directly from wINST.
-   FETCH_B w2, 0, 1
-   // TODO: we could avoid this as instance invokes already fetch it.
-   FETCH w3, 2
+   // Setup the frame. Use x3 for `old_sp` as the old SP is not needed after the setup.
+   SETUP_STACK_FRAME x2, xNEW_REFS, xNEW_FP, CFI_NEW_REFS, x3
 
    // Set the dex pc pointer to point to instructions.
-   add xPC, x8, #CODE_ITEM_INSNS_OFFSET
+   add xPC, x2, #CODE_ITEM_INSNS_OFFSET
    CFI_DEFINE_DEX_PC_WITH_OFFSET(CFI_TMP, CFI_DEX, 0)
+.endm
+
+// Copy one argument dex register. Emits exactly 4 instructions (16 bytes).
+.macro N2N_COPY_NON_RANGE_ARG arg, refs, fp, offset, t0, t1
+   GET_VREG_OBJECT \t1, \arg
+   GET_VREG    \t0, \arg
+   str         \t1, [\refs, #\offset]
+   str         \t0, [\fp, #\offset]
 .endm
 
 // Setup arguments based on a non-range nterp to nterp call, and start executing
@@ -496,74 +495,53 @@
 // - xNEW_FP: the new pointer to dex registers
 // - xNEW_REFS: the new pointer to references
 // - xPC: the new PC pointer to execute
-// - x2: number of arguments (bits 4-7), 5th argument if any (bits 0-3)
-// - x3: first dex register
-// - x4: top of dex register array
+// - wINST: the invoke instruction with number of arguments in bits 15:12 and G arg in bits 11:8
+// - ip: the dex registers size
+// - x8: arguments C-F
 // - x1: receiver if non-static.
 .macro SETUP_NON_RANGE_ARGUMENTS_AND_EXECUTE is_static=0, is_string_init=0
    // /* op vA, vB, {vC...vG} */
-   asr ip2, x2, #4
-   cbz ip2, 6f
-   mov ip, #-4
-   cmp ip2, #2
-   b.lt 1f
-   b.eq 2f
-   cmp ip2, #4
-   b.lt 3f
-   b.eq 4f
+   // Calculate address of the code performing the argument copy in x9 (computed goto).
+   // Each dex register copy is done by 4 instructions (16 bytes).
+   lsr wip2, wINST, #12
+   .if \is_static
+     adr x9, 1f
+   .else
+     adr x9, 1f + 16  // One less copy than the number of arguments.
+   .endif
+   sub wip, wip, wip2
+   ubfx w7, wINST, #8, #4             // Extract G
+   sub x9, x9, wip2, uxtw #4
+   ubfx w6, w8, #12, #4               // Extract F
+   // Calculate input dex register addresses in xNEW_REFS and xNEW_FP.
+   add x10, xNEW_REFS, wip, uxtw #2
+   ubfx w5, w8, #8, #4                // Extract E
+   add x11, xNEW_FP, wip, uxtw #2
+   ubfx w4, w8, #4, #4                // Extract D
+   .if \is_static
+     ubfx w3, w8, #0, #4              // Extract C
+   .endif
+   // Jump to the code that performs the argument copying.
+   br  x9
 
-  // We use a decrementing ip to store references relative
-  // to xNEW_FP and dex registers relative to x4
-  //
-  // TODO: We could set up ip as the number of registers (this can be an additional output from
-  // SETUP_STACK_FOR_INVOKE) and then just decrement it by one before copying each arg.
-  // Maybe even introduce macros NEW_VREG_ADDRESS/NEW_VREG_REF_ADDRESS.
-5:
-   and         x2, x2, #15
-   GET_VREG_OBJECT w5, w2
-   str         w5, [xNEW_FP, ip]
-   GET_VREG    w5, w2
-   str         w5, [x4, ip]
-   sub         ip, ip, #4
-4:
-   asr         x2, x3, #12
-   GET_VREG_OBJECT w5, w2
-   str         w5, [xNEW_FP, ip]
-   GET_VREG    w5, w2
-   str         w5, [x4, ip]
-   sub         ip, ip, #4
-3:
-   ubfx        x2, x3, #8, #4
-   GET_VREG_OBJECT w5, w2
-   str         w5, [xNEW_FP, ip]
-   GET_VREG    w5, w2
-   str         w5, [x4, ip]
-   sub         ip, ip, #4
-2:
-   ubfx        x2, x3, #4, #4
-   GET_VREG_OBJECT w5, w2
-   str         w5, [xNEW_FP, ip]
-   GET_VREG    w5, w2
-   str         w5, [x4, ip]
-   .if !\is_string_init
-     sub         ip, ip, #4
+   .balign 16
+   // Each `N2N_COPY_NON_RANGE_ARG` emits 16 bytes of code.
+   N2N_COPY_NON_RANGE_ARG w7, x10, x11, 16, wip, wip2
+   N2N_COPY_NON_RANGE_ARG w6, x10, x11, 12, wip, wip2
+   N2N_COPY_NON_RANGE_ARG w5, x10, x11, 8, wip, wip2
+   N2N_COPY_NON_RANGE_ARG w4, x10, x11, 4, wip, wip2
+   .if \is_static
+     N2N_COPY_NON_RANGE_ARG w3, x10, x11, 0, wip, wip2
    .endif
 1:
    .if \is_string_init
      // Ignore the first argument
 %    pass
-   .elseif \is_static
-     and         x2, x3, #0xf
-     GET_VREG_OBJECT w5, w2
-     str         w5, [xNEW_FP, ip]
-     GET_VREG    w5, w2
-     str         w5, [x4, ip]
-   .else
-     str         w1, [xNEW_FP, ip]
-     str         w1, [x4, ip]
+   .elseif !\is_static
+     str         w1, [x10]
+     str         w1, [x11]
    .endif
 
-6:
    // Start executing the method.
    mov xFP, xNEW_FP
    mov xREFS, xNEW_REFS
@@ -576,43 +554,41 @@
 // - xNEW_FP: the new pointer to dex registers
 // - xNEW_REFS: the new pointer to references
 // - xPC: the new PC pointer to execute
-// - x2: number of arguments
-// - x3: first dex register
-// - x4: top of dex register array
+// - wINST: the invoke instruction with number of arguments in bits 15:8
+// - x8: first dex register
 // - x1: receiver if non-static.
 //
 // Uses ip, ip2, x5, x6 as temporaries.
 .macro SETUP_RANGE_ARGUMENTS_AND_EXECUTE is_static=0, is_string_init=0
-   mov ip, #-4
+   lsr w3, wINST, #8
+   sub x2, xNEW_FP, xNEW_REFS
+   add x8, x8, x3             // index past the last argument
    .if \is_string_init
      // Ignore the first argument
-     sub x2, x2, #1
-     add x3, x3, #1
+     sub x3, x3, #1
    .elseif !\is_static
-     sub x2, x2, #1
-     add x3, x3, #1
+     sub x3, x3, #1
    .endif
+   sub x2, x2, #4
 
-   cbz x2, 2f
-   add ip2, xREFS, x3, lsl #2  // pointer to first argument in reference array
-   add ip2, ip2, x2, lsl #2    // pointer to last argument in reference array
-   add x5, xFP, x3, lsl #2     // pointer to first argument in register array
-   add x6, x5, x2, lsl #2      // pointer to last argument in register array
+   cbz x3, 2f
+   add x5, xREFS, x8, lsl #2  // pointer past the last argument in reference array
+   add x6, xFP, x8, lsl #2    // pointer past the last argument in register array
 1:
-   ldr  w7, [ip2, #-4]!
-   str  w7, [xNEW_FP, ip]
-   sub  x2, x2, 1
-   ldr  w7, [x6, #-4]!
-   str  w7, [x4, ip]
-   sub ip, ip, 4
-   cbnz x2, 1b
+   ldr  wip, [x5, #-4]!
+   ldr  wip2, [x6, #-4]!
+   sub  x3, x3, 1
+   str  wip, [xNEW_REFS, x2]
+   str  wip2, [xNEW_FP, x2]
+   sub x2, x2, 4
+   cbnz x3, 1b
 2:
    .if \is_string_init
      // Ignore first argument
 %    pass
    .elseif !\is_static
-     str w1, [xNEW_FP, ip]
-     str w1, [x4, ip]
+     str w1, [xNEW_REFS, x2]
+     str w1, [xNEW_FP, x2]
    .endif
    mov xFP, xNEW_FP
    mov xREFS, xNEW_REFS
@@ -659,17 +635,20 @@
    ldp x0, x1, [sp], #32
 .endm
 
-// Input:  x0 contains the ArtMethod
-// Output: x8 contains the code item
-.macro GET_CODE_ITEM
-   ldr x8, [x0, #ART_METHOD_DATA_OFFSET_64]
+.macro GET_CODE_ITEM dest, method
+   ldr \dest, [\method, #ART_METHOD_DATA_OFFSET_64]
 .endm
 
-.macro DO_ENTRY_POINT_CHECK call_compiled_code
+// Check if method entrypoint is the nterp entrypoint for quick nterp-to-nterp transition.
+// Loads the code item and entrypoint to specified registers for potential reuse.
+.macro N2N_ENTRY_POINT_CHECK code_item, entrypoint, call_compiled_code
    // On entry, the method is x0, the instance is x1
-   adr x2, ExecuteNterpImpl
-   ldr x3, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
-   cmp x2, x3
+#if ART_METHOD_QUICK_CODE_OFFSET_64 != ART_METHOD_DATA_OFFSET_64 + 8
+#error Unexpected offsets, cannot use LDP.
+#endif
+   ldp \code_item, \entrypoint, [x0, #ART_METHOD_DATA_OFFSET_64]
+   adr ip, ExecuteNterpImpl
+   cmp \entrypoint, ip
    b.ne  \call_compiled_code
 .endm
 
@@ -824,8 +803,7 @@
      // We always go to compiled code for custom calls.
 %    pass
    .else
-     DO_ENTRY_POINT_CHECK .Lcall_compiled_code_\suffix
-     GET_CODE_ITEM
+     N2N_ENTRY_POINT_CHECK x2, x3, .Lcall_compiled_code_\suffix
      .if \is_string_init
        bl nterp_to_nterp_string_init_non_range
      .elseif \is_static
@@ -1167,8 +1145,7 @@
      // We always go to compiled code for custom calls.
 %    pass
    .else
-     DO_ENTRY_POINT_CHECK .Lcall_compiled_code_range_\suffix
-     GET_CODE_ITEM
+     N2N_ENTRY_POINT_CHECK x2, x3, .Lcall_compiled_code_range_\suffix
      .if \is_string_init
        bl nterp_to_nterp_string_init_range
      .elseif \is_static
@@ -1899,12 +1876,16 @@ NterpHotnessCheck:
 
 nterp_to_nterp_static_non_range:
     .cfi_startproc
+    // Load the C-F arguments to w8.
+    FETCH w8, 2
     SETUP_STACK_FOR_INVOKE
     SETUP_NON_RANGE_ARGUMENTS_AND_EXECUTE is_static=1, is_string_init=0
     .cfi_endproc
 
 nterp_to_nterp_string_init_non_range:
     .cfi_startproc
+    // Load the C-F arguments to w8.
+    FETCH w8, 2
     SETUP_STACK_FOR_INVOKE
     SETUP_NON_RANGE_ARGUMENTS_AND_EXECUTE is_static=0, is_string_init=1
     .cfi_endproc
@@ -1917,6 +1898,8 @@ nterp_to_nterp_instance_non_range:
 
 nterp_to_nterp_static_range:
     .cfi_startproc
+    // Load the C-F arguments to w8.
+    FETCH w8, 2
     SETUP_STACK_FOR_INVOKE
     SETUP_RANGE_ARGUMENTS_AND_EXECUTE is_static=1
     .cfi_endproc
@@ -1929,6 +1912,8 @@ nterp_to_nterp_instance_range:
 
 nterp_to_nterp_string_init_range:
     .cfi_startproc
+    // Load the C-F arguments to w8.
+    FETCH w8, 2
     SETUP_STACK_FOR_INVOKE
     SETUP_RANGE_ARGUMENTS_AND_EXECUTE is_static=0, is_string_init=1
     .cfi_endproc
