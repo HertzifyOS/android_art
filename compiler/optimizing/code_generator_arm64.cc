@@ -5004,7 +5004,7 @@ void InstructionCodeGeneratorARM64::VisitInvokeInterface(HInvokeInterface* invok
 }
 
 void LocationsBuilderARM64::VisitInvokeVirtual(HInvokeVirtual* invoke) {
-  IntrinsicLocationsBuilderARM64 intrinsic(allocator_, codegen_);
+  IntrinsicLocationsBuilderARM64 intrinsic(codegen_);
   if (intrinsic.TryDispatch(invoke)) {
     return;
   }
@@ -5017,7 +5017,7 @@ void LocationsBuilderARM64::VisitInvokeStaticOrDirect(HInvokeStaticOrDirect* inv
   // art::PrepareForRegisterAllocation.
   DCHECK(!invoke->IsStaticWithExplicitClinitCheck());
 
-  IntrinsicLocationsBuilderARM64 intrinsic(allocator_, codegen_);
+  IntrinsicLocationsBuilderARM64 intrinsic(codegen_);
   if (intrinsic.TryDispatch(invoke)) {
     return;
   }
@@ -5298,7 +5298,7 @@ void CodeGeneratorARM64::MoveFromReturnRegister(Location trg, DataType::Type typ
 }
 
 void LocationsBuilderARM64::VisitInvokePolymorphic(HInvokePolymorphic* invoke) {
-  IntrinsicLocationsBuilderARM64 intrinsic(allocator_, codegen_);
+  IntrinsicLocationsBuilderARM64 intrinsic(codegen_);
   if (intrinsic.TryDispatch(invoke)) {
     return;
   }
@@ -7702,15 +7702,8 @@ void CodeGeneratorARM64::CompileBakerReadBarrierThunk(Arm64Assembler& assembler,
 
 #undef __
 
-// TODO: Update this to call IsIntrinsicCallFree<> once the IntrinsicLocationsBuilder
-// constructors are consistent across archs.
 bool CodeGeneratorARM64::IsIntrinsicCallFree(HInvoke* invoke) const {
-  DCHECK(invoke->IsIntrinsic());
-  IntrinsicLocationsBuilderARM64 builder(GetGraph()->GetAllocator(),
-                                         const_cast<CodeGeneratorARM64*>(this));
-  bool success = builder.TryDispatch(invoke) && !invoke->GetLocations()->CanCall();
-  invoke->SetLocations(nullptr);
-  return success;
+  return IsIntrinsicCallFree<IntrinsicLocationsBuilderARM64>(invoke, this);
 }
 
 }  // namespace arm64
