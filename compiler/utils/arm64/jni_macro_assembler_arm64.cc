@@ -16,13 +16,13 @@
 
 #include "jni_macro_assembler_arm64.h"
 
+#include "base/offsets.h"
 #include "entrypoints/quick/quick_entrypoints.h"
 #include "jni/indirect_reference_table.h"
 #include "jni/jni_env_ext.h"
 #include "jni/local_reference_table.h"
 #include "lock_word.h"
 #include "managed_register_arm64.h"
-#include "offsets.h"
 #include "thread.h"
 
 using namespace vixl::aarch64;  // NOLINT(build/namespaces)

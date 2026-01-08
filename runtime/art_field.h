@@ -18,11 +18,11 @@
 #define ART_RUNTIME_ART_FIELD_H_
 
 #include "base/macros.h"
+#include "base/offsets.h"
 #include "dex/modifiers.h"
 #include "dex/primitive.h"
 #include "gc_root.h"
 #include "obj_ptr.h"
-#include "offsets.h"
 #include "read_barrier_option.h"
 #include "verify_object.h"
 

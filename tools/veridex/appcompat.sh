@@ -25,9 +25,14 @@ if [[ -e ${SCRIPT_DIR}/veridex && \
       -e ${SCRIPT_DIR}/hiddenapi-flags.csv && \
       -e ${SCRIPT_DIR}/org.apache.http.legacy-stubs.zip && \
       -e ${SCRIPT_DIR}/system-stubs.zip ]]; then
+  extra_flags=""
+  if [[ -e ${SCRIPT_DIR}/hiddenapi-flagged-apis.csv ]]; then
+    extra_flags="--flagged-apis=${SCRIPT_DIR}/hiddenapi-flagged-apis.csv"
+  fi
   exec ${SCRIPT_DIR}/veridex \
     --core-stubs=${SCRIPT_DIR}/system-stubs.zip:${SCRIPT_DIR}/org.apache.http.legacy-stubs.zip \
     --api-flags=${SCRIPT_DIR}/hiddenapi-flags.csv \
+    $extra_flags \
     --exclude-api-lists=sdk,invalid \
     $@
 fi
@@ -68,6 +73,10 @@ if [[ "$@" != "*--api-flags=*" ]]; then
     exit 1
   fi
   extra_flags="--api-flags=$file"
+fi
+
+if [[ -f "${OUT}/soong/hiddenapi/hiddenapi-flagged-apis.csv" ]]; then
+  extra_flags="${extra_flags} --flagged-apis=${OUT}/soong/hiddenapi/hiddenapi-flagged-apis.csv"
 fi
 
 # If --exclude-api-lists is not passed directly, exclude SDK APIs.

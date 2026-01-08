@@ -29,11 +29,11 @@
 #include "arch/instruction_set.h"
 #include "base/locks.h"
 #include "base/macros.h"
+#include "base/offsets.h"
 #include "base/pointer_size.h"
 #include "base/safe_map.h"
 #include "gc_root.h"
 #include "jvalue.h"
-#include "offsets.h"
 
 namespace art HIDDEN {
 namespace mirror {

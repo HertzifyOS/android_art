@@ -23,7 +23,7 @@
 
 #include "arch/instruction_set.h"
 #include "base/macros.h"
-#include "offsets.h"
+#include "base/offsets.h"
 
 namespace art HIDDEN {
 

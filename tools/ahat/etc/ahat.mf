@@ -1,4 +1,4 @@
 Name: ahat/
 Implementation-Title: ahat
-Implementation-Version: 1.9
+Implementation-Version: 1.10
 Main-Class: com.android.ahat.Main

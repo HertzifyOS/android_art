@@ -26,9 +26,9 @@
 #include "base/arena_object.h"
 #include "base/array_ref.h"
 #include "base/macros.h"
+#include "base/offsets.h"
 #include "base/pointer_size.h"
 #include "managed_register.h"
-#include "offsets.h"
 
 namespace art HIDDEN {
 

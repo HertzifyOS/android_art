@@ -42,7 +42,12 @@ class HConstantFoldingVisitor final : public CRTPGraphVisitor<HConstantFoldingVi
                                    OptimizingCompilerStats* stats)
       : CRTPGraphVisitor(graph),
         compiler_options_(compiler_options),
-        stats_(stats) {}
+        stats_(stats),
+        optimizations_occurred_(false) {}
+
+  bool OptimizationsOccurred() const {
+    return optimizations_occurred_;
+  }
 
  private:
   // Forward visit functions using the base class forwarding except for those we forward below.
@@ -93,6 +98,8 @@ class HConstantFoldingVisitor final : public CRTPGraphVisitor<HConstantFoldingVi
   const CompilerOptions& compiler_options_;
 
   OptimizingCompilerStats* stats_;
+
+  bool optimizations_occurred_;
 
   template <typename T> friend class CRTPGraphVisitor;
 
@@ -179,7 +186,7 @@ bool HConstantFolding::Run() {
   // another instruction, may possibly be used to turn that second
   // instruction into a constant as well.
   visitor.VisitReversePostOrder();
-  return true;
+  return visitor.OptimizationsOccurred();
 }
 
 void HConstantFoldingVisitor::VisitUnaryOperation(HUnaryOperation* inst) {
@@ -189,6 +196,7 @@ void HConstantFoldingVisitor::VisitUnaryOperation(HUnaryOperation* inst) {
   if (constant != nullptr) {
     inst->ReplaceWith(constant);
     inst->GetBlock()->RemoveInstruction(inst);
+    optimizations_occurred_ = true;
   } else if (inst->InputAt(0)->IsSelect() && inst->InputAt(0)->HasOnlyOneNonEnvironmentUse()) {
     // Try to replace the select's inputs in Select+UnaryOperation cases. We can do this if both
     // inputs to the select are constants, and this is the only use of the select.
@@ -208,6 +216,7 @@ void HConstantFoldingVisitor::VisitUnaryOperation(HUnaryOperation* inst) {
     select->UpdateType();
     inst->ReplaceWith(select);
     inst->GetBlock()->RemoveInstruction(inst);
+    optimizations_occurred_ = true;
   }
 }
 
@@ -315,8 +324,10 @@ ALWAYS_INLINE inline void HConstantFoldingVisitor::HandleBinaryOperation(Instruc
   if (replace) {
     inst->ReplaceWith(replacement);
     inst->GetBlock()->RemoveInstruction(inst);
+    optimizations_occurred_ = true;
   } else if (TryRemoveBinaryOperationViaSelect(inst)) {
     // Already replaced inside TryRemoveBinaryOperationViaSelect.
+    optimizations_occurred_ = true;
   }
 }
 
@@ -326,6 +337,7 @@ void HConstantFoldingVisitor::VisitDivZeroCheck(HDivZeroCheck* inst) {
   if (check_input->IsConstant() && !check_input->AsConstant()->IsArithmeticZero()) {
     inst->ReplaceWith(check_input);
     inst->GetBlock()->RemoveInstruction(inst);
+    optimizations_occurred_ = true;
   }
 }
 
@@ -351,6 +363,13 @@ void HConstantFoldingVisitor::PropagateValue(HBasicBlock* starting_block,
     DCHECK_GE(uses_after, 1u) << "we must at least have the use in the if clause.";
     DCHECK_GE(uses_before, uses_after);
     MaybeRecordStat(stats_, MethodCompilationStat::kPropagatedIfValue, uses_before - uses_after);
+    if (uses_before != uses_after) {
+      optimizations_occurred_ = true;
+    }
+  } else {
+    // Optimization might not actually happen, but calculating it is slow. Pessimistically assume
+    // that optimization happened.
+    optimizations_occurred_ = true;
   }
 }
 
@@ -520,6 +539,7 @@ void HConstantFoldingVisitor::FoldReverseIntrinsic(HInvoke* inst) {
         GetGraph()->GetLongConstant(ReverseBits64(input->AsLongConstant()->GetValue())));
   }
   inst->GetBlock()->RemoveInstruction(inst);
+  optimizations_occurred_ = true;
 }
 
 void HConstantFoldingVisitor::FoldReverseBytesIntrinsic(HInvoke* inst) {
@@ -545,6 +565,7 @@ void HConstantFoldingVisitor::FoldReverseBytesIntrinsic(HInvoke* inst) {
         GetGraph()->GetIntConstant(BSWAP<int16_t>(input->AsIntConstant()->GetValue())));
   }
   inst->GetBlock()->RemoveInstruction(inst);
+  optimizations_occurred_ = true;
 }
 
 void HConstantFoldingVisitor::FoldBitCountIntrinsic(HInvoke* inst) {
@@ -565,6 +586,7 @@ void HConstantFoldingVisitor::FoldBitCountIntrinsic(HInvoke* inst) {
                    POPCOUNT(input->AsLongConstant()->GetValue());
   inst->ReplaceWith(GetGraph()->GetIntConstant(result));
   inst->GetBlock()->RemoveInstruction(inst);
+  optimizations_occurred_ = true;
 }
 
 void HConstantFoldingVisitor::FoldDivideUnsignedIntrinsic(HInvoke* inst) {
@@ -611,6 +633,7 @@ void HConstantFoldingVisitor::FoldDivideUnsignedIntrinsic(HInvoke* inst) {
   }
 
   inst->GetBlock()->RemoveInstruction(inst);
+  optimizations_occurred_ = true;
 }
 
 void HConstantFoldingVisitor::FoldHighestOneBitIntrinsic(HInvoke* inst) {
@@ -633,6 +656,7 @@ void HConstantFoldingVisitor::FoldHighestOneBitIntrinsic(HInvoke* inst) {
         GetGraph()->GetLongConstant(HighestOneBitValue(input->AsLongConstant()->GetValue())));
   }
   inst->GetBlock()->RemoveInstruction(inst);
+  optimizations_occurred_ = true;
 }
 
 void HConstantFoldingVisitor::FoldLowestOneBitIntrinsic(HInvoke* inst) {
@@ -655,6 +679,7 @@ void HConstantFoldingVisitor::FoldLowestOneBitIntrinsic(HInvoke* inst) {
         GetGraph()->GetLongConstant(LowestOneBitValue(input->AsLongConstant()->GetValue())));
   }
   inst->GetBlock()->RemoveInstruction(inst);
+  optimizations_occurred_ = true;
 }
 
 void HConstantFoldingVisitor::FoldNumberOfLeadingZerosIntrinsic(HInvoke* inst) {
@@ -676,6 +701,7 @@ void HConstantFoldingVisitor::FoldNumberOfLeadingZerosIntrinsic(HInvoke* inst) {
                                         JAVASTYLE_CLZ(input->AsLongConstant()->GetValue());
   inst->ReplaceWith(GetGraph()->GetIntConstant(result));
   inst->GetBlock()->RemoveInstruction(inst);
+  optimizations_occurred_ = true;
 }
 
 void HConstantFoldingVisitor::FoldNumberOfTrailingZerosIntrinsic(HInvoke* inst) {
@@ -697,6 +723,7 @@ void HConstantFoldingVisitor::FoldNumberOfTrailingZerosIntrinsic(HInvoke* inst) 
                                         JAVASTYLE_CTZ(input->AsLongConstant()->GetValue());
   inst->ReplaceWith(GetGraph()->GetIntConstant(result));
   inst->GetBlock()->RemoveInstruction(inst);
+  optimizations_occurred_ = true;
 }
 
 void HConstantFoldingVisitor::VisitArrayLength(HArrayLength* inst) {
@@ -708,6 +735,7 @@ void HConstantFoldingVisitor::VisitArrayLength(HArrayLength* inst) {
     const dex::StringId& string_id = dex_file.GetStringId(load_string->GetStringIndex());
     inst->ReplaceWith(GetGraph()->GetIntConstant(
         dchecked_integral_cast<int32_t>(dex_file.GetStringUtf16Length(string_id))));
+    optimizations_occurred_ = true;
   }
 }
 
@@ -718,6 +746,7 @@ void HConstantFoldingVisitor::VisitTypeConversion(HTypeConversion* inst) {
   if (constant != nullptr) {
     inst->ReplaceWith(constant);
     inst->GetBlock()->RemoveInstruction(inst);
+    optimizations_occurred_ = true;
   } else if (inst->InputAt(0)->IsSelect() && inst->InputAt(0)->HasOnlyOneNonEnvironmentUse()) {
     // Try to replace the select's inputs in Select+TypeConversion. We can do this if both
     // inputs to the select are constants, and this is the only use of the select.
@@ -737,6 +766,7 @@ void HConstantFoldingVisitor::VisitTypeConversion(HTypeConversion* inst) {
     select->UpdateType();
     inst->ReplaceWith(select);
     inst->GetBlock()->RemoveInstruction(inst);
+    optimizations_occurred_ = true;
   }
 }
 
@@ -777,6 +807,7 @@ void HConstantFoldingVisitor::VisitStaticFieldGet(HStaticFieldGet* instruction) 
     if (compiler_options_.GetAssumeValueOptions().MaybeGetAssumedValue(field, &assumed_value)) {
       instruction->ReplaceWith(GetGraph()->GetIntConstant(assumed_value));
       instruction->GetBlock()->RemoveInstruction(instruction);
+      optimizations_occurred_ = true;
       return;
     }
   }
@@ -849,6 +880,7 @@ void HConstantFoldingVisitor::VisitStaticFieldGet(HStaticFieldGet* instruction) 
           } else {
             instruction->SetConstantValue(
                 GetGraph()->GetHandleCache()->GetHandles()->NewHandle(obj));
+            optimizations_occurred_ = true;
           }
         }
         break;
@@ -861,6 +893,7 @@ void HConstantFoldingVisitor::VisitStaticFieldGet(HStaticFieldGet* instruction) 
   if (constant != nullptr) {
     instruction->ReplaceWith(constant);
     instruction->GetBlock()->RemoveInstruction(instruction);
+    optimizations_occurred_ = true;
   }
 }
 

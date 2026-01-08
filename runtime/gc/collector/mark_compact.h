@@ -29,13 +29,13 @@
 #include "base/gc_visited_arena_pool.h"
 #include "base/macros.h"
 #include "base/mutex.h"
+#include "base/offsets.h"
 #include "garbage_collector.h"
 #include "gc/accounting/atomic_stack.h"
 #include "gc/accounting/bitmap-inl.h"
 #include "gc/accounting/heap_bitmap.h"
 #include "gc_root.h"
 #include "immune_spaces.h"
-#include "offsets.h"
 #include "scoped_thread_priority_change.h"
 
 namespace art HIDDEN {

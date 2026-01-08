@@ -20,9 +20,9 @@
 #include <android-base/logging.h>
 
 #include "base/macros.h"
+#include "base/offsets.h"
 #include "constants_arm.h"
 #include "dwarf/register.h"
-#include "offsets.h"
 #include "utils/arm/managed_register_arm.h"
 #include "utils/assembler.h"
 
