@@ -1748,7 +1748,8 @@
                   "661-oat-writer-layout",
                   "692-vdex-secondary-loader",
                   "850-checker-branches",
-                  "2042-reference-processing"],
+                  "2042-reference-processing",
+                  "2398-method-trace-opt-code"],
         "env_vars": {"ART_USE_RESTRICTED_MODE": "true"},
         "description": ["Test failures when using the restricted mode for simulator."]
     },
