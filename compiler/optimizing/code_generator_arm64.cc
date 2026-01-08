@@ -4886,10 +4886,9 @@ void LocationsBuilderARM64::HandleInvoke(HInvoke* invoke) {
 
 void LocationsBuilderARM64::VisitInvokeInterface(HInvokeInterface* invoke) {
   HandleInvoke(invoke);
-  // Add the hidden argument.
   if (invoke->GetHiddenArgumentLoadKind() == MethodLoadKind::kRecursive) {
-    invoke->GetLocations()->SetInAt(invoke->GetNumberOfArguments() - 1,
-                                    Location::CoreRegister(x15.GetCode()));
+    // We cannot request ip1 as it's blocked by the register allocator.
+    invoke->GetLocations()->SetInAt(invoke->GetNumberOfArguments() - 1, Location::Any());
   }
 }
 
@@ -4956,22 +4955,29 @@ void InstructionCodeGeneratorARM64::VisitInvokeInterface(HInvokeInterface* invok
   // If we're compiling baseline, update the inline cache.
   codegen_->MaybeGenerateInlineCacheCheck(invoke, temp);
 
-  // The register x15 is used as the hidden argument for `art_quick_imt_conflict_trampoline`,
-  // so make sure VIXL is not using it as a scratch register.
-  DCHECK(!UseScratchRegisterScope(GetVIXLAssembler()).IsAvailable(x15));
+  // The register ip1 is required to be used for the hidden argument in
+  // art_quick_imt_conflict_trampoline, so prevent VIXL from using it.
+  MacroAssembler* masm = GetVIXLAssembler();
+  UseScratchRegisterScope scratch_scope(masm);
+  scratch_scope.Exclude(ip1);
   if (invoke->GetHiddenArgumentLoadKind() == MethodLoadKind::kRecursive) {
-    DCHECK(locations->InAt(invoke->GetNumberOfArguments() - 1).Equals(
-        Location::CoreRegister(x15.GetCode())));
-  } else if (invoke->GetHiddenArgumentLoadKind() == MethodLoadKind::kRuntimeCall) {
-    // If the load kind is through a runtime call, we will pass the method we fetch
-    // from the IMT, which will either be a no-op if we don't hit the conflict stub,
-    // or will make us always go through the trampoline when there is a conflict.
-  } else {
+    Location interface_method = locations->InAt(invoke->GetNumberOfArguments() - 1);
+    if (interface_method.IsStackSlot()) {
+      __ Ldr(ip1, StackOperandFrom(interface_method));
+    } else {
+      __ Mov(ip1, XRegisterFrom(interface_method));
+    }
+  // If the load kind is through a runtime call, we will pass the method we
+  // fetch the IMT, which will either be a no-op if we don't hit the conflict
+  // stub, or will make us always go through the trampoline when there is a
+  // conflict.
+  } else if (invoke->GetHiddenArgumentLoadKind() != MethodLoadKind::kRuntimeCall) {
     codegen_->LoadMethod(
-        invoke->GetHiddenArgumentLoadKind(), Location::CoreRegister(x15.GetCode()), invoke);
+        invoke->GetHiddenArgumentLoadKind(), Location::CoreRegister(ip1.GetCode()), invoke);
   }
 
-  __ Ldr(temp, MemOperand(temp, mirror::Class::ImtPtrOffset(kArm64PointerSize).Uint32Value()));
+  __ Ldr(temp,
+      MemOperand(temp, mirror::Class::ImtPtrOffset(kArm64PointerSize).Uint32Value()));
   uint32_t method_offset = static_cast<uint32_t>(ImTable::OffsetOfElement(
       invoke->GetImtIndex(), kArm64PointerSize));
   // temp = temp->GetImtEntryAt(method_offset);
@@ -4979,7 +4985,7 @@ void InstructionCodeGeneratorARM64::VisitInvokeInterface(HInvokeInterface* invok
   if (invoke->GetHiddenArgumentLoadKind() == MethodLoadKind::kRuntimeCall) {
     // We pass the method from the IMT in case of a conflict. This will ensure
     // we go into the runtime to resolve the actual method.
-    __ Mov(x15, temp);
+    __ Mov(ip1, temp);
   }
   // lr = temp->GetEntryPoint();
   __ Ldr(lr, MemOperand(temp, entry_point.Int32Value()));
