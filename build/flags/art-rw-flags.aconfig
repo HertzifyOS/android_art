@@ -142,3 +142,12 @@ flag {
   is_fixed_read_only: false
   is_exported: false
 }
+
+flag {
+  name: "lse_quick_lock"
+  namespace: "system_performance"
+  description: "Use runtime LSE instructions when available to optimize quick lock entry points"
+  bug: "474165956"
+  is_fixed_read_only: false
+  is_exported: false
+}
