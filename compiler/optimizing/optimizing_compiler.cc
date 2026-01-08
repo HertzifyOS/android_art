@@ -792,8 +792,12 @@ class CompilationFilterForRestrictedMode
   // supported by concrete visitors below.
   void VisitInstruction(HInstruction* instruction) {
     LocationSummary* locations = instruction->GetLocations();
-    if (locations != nullptr && locations->CanCall()) {
-      RejectGraph();
+    if (locations != nullptr) {
+      // Reject: kCallOnMainOnly and kCallOnMainAndSlowPath.
+      // Allow:  kNoCall and kCallOnSlowPath.
+      if (locations->WillCall()) {
+        RejectGraph();
+      }
     }
   }
 
