@@ -70,7 +70,7 @@ void HLoopInformation::PopulateRecursive(HBasicBlock* block) {
     // We're visiting loops in post-order, so inner loops must have been
     // populated already.
     DCHECK(block->GetLoopInformation()->IsPopulated());
-    if (block->GetLoopInformation()->IsIrreducible()) {
+    if (block->GetLoopInformation()->ContainsIrreducibleLoop()) {
       contains_irreducible_loop_ = true;
     }
   }
@@ -188,6 +188,9 @@ void HLoopInformation::Populate() {
 void HLoopInformation::PopulateInnerLoopUpwards(HLoopInformation* inner_loop) {
   DCHECK(inner_loop->GetPreHeader()->GetLoopInformation() == this);
   block_mask_.Union(&inner_loop->block_mask_);
+  if (inner_loop->ContainsIrreducibleLoop()) {
+    contains_irreducible_loop_ = true;
+  }
   HLoopInformation* outer_loop = GetPreHeader()->GetLoopInformation();
   if (outer_loop != nullptr) {
     outer_loop->PopulateInnerLoopUpwards(this);
