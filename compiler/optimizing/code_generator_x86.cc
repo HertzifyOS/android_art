@@ -9357,5 +9357,9 @@ void InstructionCodeGeneratorX86::VisitBitwiseNegatedRight(
 
 #undef __
 
+bool CodeGeneratorX86::IsIntrinsicCallFree(HInvoke* invoke) const {
+  return IsIntrinsicCallFree<IntrinsicLocationsBuilderX86>(invoke, this);
+}
+
 }  // namespace x86
 }  // namespace art

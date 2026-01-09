@@ -8798,5 +8798,9 @@ void SlowPathCodeX86_64::RestoreLiveRegisters(CodeGenerator* codegen, LocationSu
 
 #undef __
 
+bool CodeGeneratorX86_64::IsIntrinsicCallFree(HInvoke* invoke) const {
+  return IsIntrinsicCallFree<IntrinsicLocationsBuilderX86_64>(invoke, this);
+}
+
 }  // namespace x86_64
 }  // namespace art

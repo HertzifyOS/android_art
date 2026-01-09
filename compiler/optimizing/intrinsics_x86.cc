@@ -3477,7 +3477,7 @@ static void RequestBaseMethodAddressInRegister(HInvoke* invoke) {
   if (locations != nullptr) {
     HInvokeStaticOrDirect* invoke_static_or_direct = invoke->AsInvokeStaticOrDirect();
     // Note: The base method address is not present yet when this is called from the
-    // PCRelativeHandlerVisitor via IsCallFreeIntrinsic() to determine whether to insert it.
+    // PCRelativeHandlerVisitor via IsIntrinsicCallFree() to determine whether to insert it.
     if (invoke_static_or_direct->HasSpecialInput()) {
       DCHECK(invoke_static_or_direct->InputAt(invoke_static_or_direct->GetSpecialInputIndex())
                  ->IsX86ComputeBaseMethodAddress());

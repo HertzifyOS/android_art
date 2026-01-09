@@ -915,6 +915,8 @@ class CodeGeneratorARMVIXL : public CodeGenerator {
   void MaybeGenerateInlineCacheCheck(HInstruction* instruction, vixl32::Register klass);
   void MaybeIncrementHotness(HSuspendCheck* suspend_check, bool is_frame_entry);
 
+  bool IsIntrinsicCallFree(HInvoke* invoke) const override;
+
  private:
   static RegisterSet ComputeCalleeSaves();
   static RegisterSet ComputeBlockedRegisters(HGraph* graph);

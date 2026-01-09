@@ -1124,6 +1124,8 @@ class CodeGeneratorARM64 : public CodeGenerator {
 
   bool CanUseImplicitSuspendCheck() const;
 
+  bool IsIntrinsicCallFree(HInvoke* invoke) const override;
+
  private:
   static RegisterSet ComputeCalleeSaves();
   static RegisterSet ComputeBlockedRegisters(HGraph* graph);

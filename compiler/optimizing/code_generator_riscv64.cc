@@ -7312,5 +7312,16 @@ void CodeGeneratorRISCV64::SwapLocations(Location loc1, Location loc2, DataType:
   }
 }
 
+// TODO: Update this to call IsIntrinsicCallFree<> once the IntrinsicLocationsBuilder
+// constructors are consistent across archs.
+bool CodeGeneratorRISCV64::IsIntrinsicCallFree(HInvoke* invoke) const {
+  DCHECK(invoke->IsIntrinsic());
+  IntrinsicLocationsBuilderRISCV64 builder(GetGraph()->GetAllocator(),
+                                           const_cast<CodeGeneratorRISCV64*>(this));
+  bool success = builder.TryDispatch(invoke) && !invoke->GetLocations()->CanCall();
+  invoke->SetLocations(nullptr);
+  return success;
+}
+
 }  // namespace riscv64
 }  // namespace art

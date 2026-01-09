@@ -10504,5 +10504,9 @@ void CodeGeneratorARMVIXL::CompileBakerReadBarrierThunk(ArmVIXLAssembler& assemb
 
 #undef __
 
+bool CodeGeneratorARMVIXL::IsIntrinsicCallFree(HInvoke* invoke) const {
+  return IsIntrinsicCallFree<IntrinsicLocationsBuilderARMVIXL>(invoke, this);
+}
+
 }  // namespace arm
 }  // namespace art

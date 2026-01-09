@@ -538,7 +538,8 @@ HLoopOptimization::HLoopOptimization(HGraph* graph,
       vector_header_(nullptr),
       vector_body_(nullptr),
       vector_index_(nullptr),
-      arch_loop_helper_(ArchNoOptsLoopHelper::Create(codegen, global_allocator_)) {}
+      arch_loop_helper_(ArchNoOptsLoopHelper::Create(codegen, global_allocator_)),
+      codegen_(codegen) {}
 
 bool HLoopOptimization::Run() {
   // Skip if there is no loop or the graph has irreducible loops.
@@ -1097,7 +1098,7 @@ bool HLoopOptimization::TryLoopScalarOpts(LoopNode* node) {
   }
 
   LoopAnalysisInfo analysis_info(loop_info);
-  LoopAnalysis::CalculateLoopBasicProperties(loop_info, &analysis_info, trip_count);
+  LoopAnalysis::CalculateLoopBasicProperties(loop_info, &analysis_info, trip_count, codegen_);
   if (analysis_info.HasInstructionsPreventingScalarOpts() ||
       arch_loop_helper_->IsLoopNonBeneficialForScalarOpts(&analysis_info)) {
     return false;
