@@ -726,9 +726,9 @@
     {
         "tests": ["203-multi-checkpoint"],
         "variant": "continuous-gc",
-	"bug": "b/463857863",
+        "bug": "b/463857863",
         "description": [ "the thread_list lock acquired in the test needs to be looked into as ",
-			 "it sometimes causes suspend-all on the gc-thread to deadlock" ]
+                         "it sometimes causes suspend-all on the gc-thread to deadlock" ]
     },
     {
         "tests": ["2031-zygote-compiled-frame-deopt"],
@@ -736,15 +736,15 @@
         "bug": "b/463464286",
         "env_vars": {"ART_USE_READ_BARRIER": "false"},
         "description": [ "Deadlock between marking-pause and reclaim-phase of CMC as we have a ",
-			 "window not holding the mutator-lock, wherein another thread can acquire ",
-			 "mutator-lock exclusively and then wait for weak-ref access." ]
+             "window not holding the mutator-lock, wherein another thread can acquire ",
+             "mutator-lock exclusively and then wait for weak-ref access." ]
     },
     {
         "tests": ["656-checker-simd-opt-no-interp-ac"],
         "variant": "continuous-gc & target",
-	"bug": "b/462496090",
+        "bug": "b/462496090",
         "description": [ "Timing out on target as test takes long time. Being a checker test, ",
-			 "it doesn't add much value to have it in this mode" ]
+                "it doesn't add much value to have it in this mode" ]
     },
     {
         "tests": ["2040-huge-native-alloc"],
@@ -1245,6 +1245,7 @@
                   "874-filled-new-array",
                   "875-shifts",
                   "876-ifconst",
+                  "877-long",
                   "999-redefine-hiddenapi",
                   "1000-non-moving-space-stress",
                   "1001-app-image-regions",
@@ -1309,7 +1310,7 @@
                   "2286-method-tracing-aot-code",
                   "2396-unmodifiable-final-fields",
                   "2398-method-trace-opt-code",
-	          "2401-serialize-constructor"],
+                  "2401-serialize-constructor"],
         "variant": "jvm",
         "description": ["Doesn't run on RI."]
     },
