@@ -325,48 +325,48 @@
 // - x0 to contain the ArtMethod
 //
 // Outputs
-// - ip contains the dex registers size
+// - \regs_ins contains the dex registers size in bits 15:0 and inputs size in bits 31:15
 // - \old_sp contains the old stack pointer.
 // - if \ins is not "none", \ins contains the ins size
 //
-// Uses ip, ip2 and x14 as temporaries.
-.macro SETUP_STACK_FRAME code_item, refs, fp, cfi_refs, old_sp, ins=none
-    // Fetch dex register size.
-    ldrh wip, [\code_item, #CODE_ITEM_REGISTERS_SIZE_OFFSET]
-    // Fetch outs size.
-    ldrh wip2, [\code_item, #CODE_ITEM_OUTS_SIZE_OFFSET]
-    // Fetch ins size if requested.
-    .ifnc \ins, none
-      ldrh \ins, [\code_item, #CODE_ITEM_INS_SIZE_OFFSET]
-    .endif
+// Uses ip and ip2 as temporaries.
+.macro SETUP_STACK_FRAME code_item, refs, fp, cfi_refs, old_sp, regs_ins=wip
+    // Fetch dex register size, ins size, outs size and (unnecessary) tries size with a single LDP.
+#if CODE_ITEM_INS_SIZE_OFFSET != CODE_ITEM_REGISTERS_SIZE_OFFSET + 2 || \
+    CODE_ITEM_OUTS_SIZE_OFFSET != CODE_ITEM_REGISTERS_SIZE_OFFSET + 4
+#error Unexpected offsets.
+#endif
+    ldp \regs_ins, wip2, [\code_item, #CODE_ITEM_REGISTERS_SIZE_OFFSET]
 
-    // Compute required frame size: ((2 * ip) + ip2) * 4 + 24
+    // Calculate the new SP and \refs offset from the new SP.
+    // Frame size: 24 + (4 * outs_size) + padding1 + (2 * 4 * registers_size) + padding2.
     // 24 is for saving the previous frame, pc, and method being executed.
-    add x14, ip, ip
-    add x14, x14, ip2
-    lsl x14, x14, #2
-    add x14, x14, #24
+    mov \refs, #(24 + 4)                      // +4 for rounding up \refs offset.
+    add \refs, \refs, wip2, uxth #2           // Add `4 * outs_size`.
+    sub ip, sp, \regs_ins, uxth #3            // Subtract `(2 * 4 * registers_size)` from SP.
+    and \refs, \refs, #(-__SIZEOF_POINTER__)  // \refs offset = 24 + (4 * outs_size) + padding1.
+    sub ip, ip, \refs                         // Subtract \refs offset.
+    and ip, ip, #-16                          // Align new SP (add padding2).
 
-    // Compute new stack pointer in x14
-    sub x14, sp, x14
-    // Alignment
-    and x14, x14, #-16
-
-    // Set reference and dex registers, align to pointer size for previous frame and dex pc.
-    add \refs, x14, ip2, lsl #2
-    add \refs, \refs, 28
-    and \refs, \refs, #(-__SIZEOF_POINTER__)
-    add \fp, \refs, ip, lsl #2
-
-    // Now setup the stack pointer.
+    // Remember the old SP.
     mov \old_sp, sp
     .cfi_def_cfa_register \old_sp
-    mov sp, x14
+
+    // Calculate \refs pointer from the \refs offset and new SP.
+    add \refs, \refs, ip
+
+    // Update the SP.
+    mov sp, ip
+
+    // Store the old SP and change CFA to use it.
     str \old_sp, [\refs, #-8]
     CFI_DEF_CFA_BREG_PLUS_UCONST \cfi_refs, -8, CALLEE_SAVES_SIZE
 
+    // Calculate \fp pointer from \refs pointer and registers_size.
+    add \fp, \refs, \regs_ins, uxth #2
+
     // Put nulls in reference frame.
-    cbz ip, 2f
+    cbz \regs_ins, 2f  // Note: Zero regs in bits 15:0 implies zero inputs in bits 31:16.
     mov ip2, \refs
 1:
     str xzr, [ip2], #8  // May clear vreg[0].
@@ -458,12 +458,13 @@
 // - xNEW_FP: the new pointer to dex registers
 // - xNEW_REFS: the new pointer to references
 // - xPC: the new PC pointer to execute
+// - x3: the dex registers size in bits 15:0 and inputs size in bits 31:15
 //
 // The method expects:
 // - x0 to contain the ArtMethod
 // - x1 may contain the receiver and must not be clobbered
 // - x2 to contain the code item
-// - x3-x7 can be used as temporaries.
+// - x4-x7 can be used as temporaries.
 .macro SETUP_STACK_FOR_INVOKE
    // We do the same stack overflow check as the compiler. See CanMethodUseNterp
    // in how we limit the maximum nterp frame size.
@@ -474,8 +475,8 @@
    // are called by compiled code or nterp.
    SPILL_ALL_CALLEE_SAVES
 
-   // Setup the frame. Use x3 for `old_sp` as the old SP is not needed after the setup.
-   SETUP_STACK_FRAME x2, xNEW_REFS, xNEW_FP, CFI_NEW_REFS, x3
+   // Setup the frame. Use x4 for `old_sp` as the old SP is not needed after the setup.
+   SETUP_STACK_FRAME x2, xNEW_REFS, xNEW_FP, CFI_NEW_REFS, x4, w3
 
    // Set the dex pc pointer to point to instructions.
    add xPC, x2, #CODE_ITEM_INSNS_OFFSET
@@ -496,27 +497,30 @@
 // - xNEW_REFS: the new pointer to references
 // - xPC: the new PC pointer to execute
 // - wINST: the invoke instruction with number of arguments in bits 15:12 and G arg in bits 11:8
-// - ip: the dex registers size
+// - x3: the dex registers size in bits 15:0 and inputs size in bits 31:15
 // - x8: arguments C-F
 // - x1: receiver if non-static.
 .macro SETUP_NON_RANGE_ARGUMENTS_AND_EXECUTE is_static=0, is_string_init=0
    // /* op vA, vB, {vC...vG} */
-   // Calculate address of the code performing the argument copy in x9 (computed goto).
-   // Each dex register copy is done by 4 instructions (16 bytes).
-   lsr wip2, wINST, #12
-   .if \is_static
+   // The inputs size from the invoke in wINST bits 15:12 is one higher than the inputs size
+   // in x3 bits 31:16 for string init. To avoid adjusting the `N2N_COPY_NON_RANGE_ARG` offsets
+   // below, use the former for the inputs start calculation while using the latter for the
+   // computed goto.
+   .if \is_static || \is_string_init
      adr x9, 1f
    .else
      adr x9, 1f + 16  // One less copy than the number of arguments.
    .endif
-   sub wip, wip, wip2
+   sub wip, w3, wINST, lsr #12        // inputs start index in low 16 bits
    ubfx w7, wINST, #8, #4             // Extract G
-   sub x9, x9, wip2, uxtw #4
+   // Note: The top 4 bits of dex registers size must be clear, otherwise the frame would
+   // be too large and we would not use nterp (>=16KiB dex registers even without REFS).
+   sub x9, x9, x3, lsr #(16 - 4)      // Target code to copy arguments
    ubfx w6, w8, #12, #4               // Extract F
    // Calculate input dex register addresses in xNEW_REFS and xNEW_FP.
-   add x10, xNEW_REFS, wip, uxtw #2
+   add x10, xNEW_REFS, wip, uxth #2
    ubfx w5, w8, #8, #4                // Extract E
-   add x11, xNEW_FP, wip, uxtw #2
+   add x11, xNEW_FP, wip, uxth #2
    ubfx w4, w8, #4, #4                // Extract D
    .if \is_static
      ubfx w3, w8, #0, #4              // Extract C
@@ -1600,16 +1604,17 @@ OAT_ENTRY ExecuteNterpImpl
 
     ldr xPC, [x0, #ART_METHOD_DATA_OFFSET_64]
     // Setup the stack for executing the method. Use xINST as a callee-save temporary.
-    SETUP_STACK_FRAME xPC, xREFS, xFP, CFI_REFS, xINST, w15
+    SETUP_STACK_FRAME xPC, xREFS, xFP, CFI_REFS, xINST, w14
+    lsr w15, w14, #16  // Extract inputs size
     // Update xPC to point to instructions.
     add xPC, xPC, #CODE_ITEM_INSNS_OFFSET
 
     // Setup the parameters
     cbz w15, .Lxmm_setup_finished
 
-    sub ip2, ip, x15
+    sub wip2, w14, w15  // inputs start index in low 16 bits (high bits have inputs size)
     ldr wCSTMP, [x0, #ART_METHOD_ACCESS_FLAGS_OFFSET]
-    lsl x27, ip2, #2 // x27 is now the offset for inputs into the registers array.
+    ubfiz w27, wip2, #2, #16  // x27 is now the offset for inputs into the registers array.
 
     tbz wCSTMP, #ART_METHOD_NTERP_ENTRY_POINT_FAST_PATH_FLAG_BIT, .Lsetup_slow_path
     // Setup pointer to inputs in FP and pointer to inputs in REFS
