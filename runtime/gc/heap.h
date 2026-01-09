@@ -1657,6 +1657,34 @@ class Heap {
   // The NanoTime when we started the most recent GC.
   uint64_t last_gc_start_time_ = 0;
 
+  // Helper class for tracking the area under the curve of memory use over
+  // time, used in time based GC triggering.
+  class TimeIntegral {
+   public:
+    TimeIntegral() { Reset(); }
+
+    // Reset the integral value to zero as of now.
+    void Reset();
+
+    // Update the integral for now assuming 'value' is the current value.
+    // Returns the updated integral.
+    ALWAYS_INLINE uint64_t AddSample(uint64_t value);
+
+   private:
+    // The total area integrated so far.
+    Atomic<uint64_t> integral_;
+
+    // The NanoTime when we last updated the integral value.
+    Atomic<uint64_t> time_;
+
+    DISALLOW_COPY_AND_ASSIGN(TimeIntegral);
+  };
+
+  // The total time*alloc used so far since last GC for Java heap and native
+  // heap respectively, in units of ms * KB.
+  TimeIntegral time_based_gc_threshold_progress_;
+  TimeIntegral time_based_gc_threshold_native_progress_;
+
   // The NanoTime of the next scheduled time-based gc threshold check.
   uint64_t next_time_based_gc_threshold_check_ = 0;
 

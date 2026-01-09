@@ -479,8 +479,15 @@ inline Heap::NeedGc Heap::ShouldConcurrentGCForJava(size_t new_num_bytes_allocat
 
       size_t bytes_allocated_since_last_gc_kb =
           (new_num_bytes_allocated - num_bytes_alive_after_gc_) / KB;
-      uint64_t time_since_last_gc_ms = NsToMs(NanoTime() - last_gc_start_time_);
-      if (bytes_allocated_since_last_gc_kb * time_since_last_gc_ms >= time_based_gc_threshold_) {
+      uint64_t threshold_progress;
+      if (com::android::art::rw::flags::time_based_gc_triggering_via_integral()) {
+        threshold_progress =
+            time_based_gc_threshold_progress_.AddSample(bytes_allocated_since_last_gc_kb);
+      } else {
+        uint64_t time_since_last_gc_ms = NsToMs(NanoTime() - last_gc_start_time_);
+        threshold_progress = bytes_allocated_since_last_gc_kb * time_since_last_gc_ms;
+      }
+      if (threshold_progress >= time_based_gc_threshold_) {
         return kNeedGc;
       }
 
@@ -490,8 +497,15 @@ inline Heap::NeedGc Heap::ShouldConcurrentGCForJava(size_t new_num_bytes_allocat
         // in that case. We need to explicitly request a time-based GC
         // threshold check if there isn't already one scheduled to run before
         // then.
-        uint64_t time_delta_ms = time_based_gc_threshold_ / bytes_allocated_since_last_gc_kb;
-        uint64_t gc_trigger_time = last_gc_start_time_ + MsToNs(time_delta_ms);
+        uint64_t gc_trigger_time;
+        if (com::android::art::rw::flags::time_based_gc_triggering_via_integral()) {
+          uint64_t time_delta_ms =
+              (time_based_gc_threshold_ - threshold_progress) / bytes_allocated_since_last_gc_kb;
+          gc_trigger_time = NanoTime() + MsToNs(time_delta_ms);
+        } else {
+          uint64_t time_delta_ms = time_based_gc_threshold_ / bytes_allocated_since_last_gc_kb;
+          gc_trigger_time = last_gc_start_time_ + MsToNs(time_delta_ms);
+        }
         if (gc_trigger_time < next_time_based_gc_threshold_check_) {
           return kNeedGcThresholdCheck;
         }
@@ -510,6 +524,17 @@ inline void Heap::ReportAllocationForJavaHeapProf(mirror::Object* obj, size_t al
   if (heap_sampler_.IsEnabled()) {
     heap_sampler_.ReportAllocation(obj, alloc_size);
   }
+}
+
+inline uint64_t Heap::TimeIntegral::AddSample(uint64_t value) {
+  uint64_t before = time_.load(std::memory_order_relaxed);
+  uint64_t now = NanoTime();
+  uint64_t time_delta_ms = NsToMs(now - before);
+  if (time_delta_ms > 0 && time_.compare_exchange_weak(before, now, std::memory_order_relaxed)) {
+    uint64_t integral_delta = time_delta_ms * value;
+    return integral_.fetch_add(integral_delta, std::memory_order_relaxed) + integral_delta;
+  }
+  return integral_.load(std::memory_order_relaxed);
 }
 
 }  // namespace gc
