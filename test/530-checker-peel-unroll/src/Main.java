@@ -1399,7 +1399,7 @@ public class Main {
     initMatrix(mB);
     initMatrix(mC);
 
-    int expected = 174291881;
+    int expected = 174291878;
     int found = 0;
 
     double[] doubleArray = new double[LENGTH_B];
@@ -1409,6 +1409,7 @@ public class Main {
     unrollingDivZeroCheck(a, 15);
     unrollingTypeConversion(a, doubleArray);
     unrollingCheckCast(a, new SubMain());
+    unrollingFull(a);
     $noinline$testUnrollingIntrinsic(a);
 
     // Call unrollingWhile(a);

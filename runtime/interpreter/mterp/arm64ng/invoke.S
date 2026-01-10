@@ -8,6 +8,13 @@
    FETCH w0, 1 // call_site index, first argument of runtime call.
    b NterpCommonInvokeCustomRange
 
+%def get_receiver(dest, args, range):
+%  if range:
+     GET_VREG ${dest}, ${args}
+%  else:
+     and ${dest}, ${args}, #0xf
+     GET_VREG ${dest}, ${dest}
+
 %def invoke_direct_or_super(helper="", range=False, is_super=False):
    // The slow path fits in the handler for `invoke-super/range`.
 %  slow_path = '1f' if is_super and range else add_slow_path( \
@@ -16,11 +23,9 @@
    // Fast-path which gets the method from thread-local cache.
 %  fetch_from_thread_cache("x0", miss_label=slow_path)
 .L${opcode}_resume:
-   // Load the first argument (the 'this' pointer).
-   FETCH w1, 2
-%  if not range:
-     and w1, w1, #0xf
-   GET_VREG w1, w1
+   // Load the C-F arguments to w8 and get the receiver to x1 (the 'this' pointer).
+   FETCH w8, 2
+%  get_receiver("w1", "w8", range)
    cbz w1, common_errNullObject    // bail if null
    b $helper
 %  if is_super and range:
@@ -55,24 +60,17 @@
 %def op_invoke_super_range():
 %  invoke_direct_or_super(helper="NterpCommonInvokeInstanceRange", range=True, is_super=True)
 
-%def op_invoke_polymorphic():
+%def op_invoke_polymorphic(range=False, helper="NterpCommonInvokePolymorphic"):
    EXPORT_PC
    // No need to fetch the target method.
-   // Load the first argument (the 'this' pointer).
-   FETCH w1, 2
-   and w1, w1, #0xf
-   GET_VREG w1, w1
+   // Load the C-F arguments to w8 and get the receiver to x1 (the 'this' pointer).
+   FETCH w8, 2
+%  get_receiver("w1", "w8", range)
    cbz w1, common_errNullObject    // bail if null
-   b NterpCommonInvokePolymorphic
+   b ${helper}
 
 %def op_invoke_polymorphic_range():
-   EXPORT_PC
-   // No need to fetch the target method.
-   // Load the first argument (the 'this' pointer).
-   FETCH w1, 2
-   GET_VREG w1, w1
-   cbz w1, common_errNullObject    // bail if null
-   b NterpCommonInvokePolymorphicRange
+%  op_invoke_polymorphic(range=True, helper="NterpCommonInvokePolymorphicRange")
 
 %def invoke_interface(range=False):
 %  slow_path = add_slow_path(invoke_interface_slow_path, range)
@@ -80,11 +78,9 @@
    // Fast-path which gets the method from thread-local cache.
 %  fetch_from_thread_cache("xCSTMP", miss_label=slow_path)
 .L${opcode}_resume:
-   // First argument is the 'this' pointer.
-   FETCH w1, 2
-%  if not range:
-     and w1, w1, #0xf
-   GET_VREG w1, w1
+   // Load the C-F arguments to w8 and get the receiver to x1 (the 'this' pointer).
+   FETCH w8, 2
+%  get_receiver("w1", "w8", range)
    // Note: if w1 is null, this will be handled by our SIGSEGV handler.
    ldr w2, [x1, #MIRROR_OBJECT_CLASS_OFFSET]
    UNPOISON_HEAP_REF w2
@@ -162,10 +158,9 @@
    // Fast-path which gets the method from thread-local cache.
 %  fetch_from_thread_cache("x2", miss_label=slow_path)
 .L${opcode}_resume:
-   FETCH w1, 2
-%  if not range:
-     and w1, w1, #0xf
-   GET_VREG w1, w1
+   // Load the C-F arguments to w8 and get the receiver to x1 (the 'this' pointer).
+   FETCH w8, 2
+%  get_receiver("w1", "w8", range)
    // Note: if w1 is null, this will be handled by our SIGSEGV handler.
    ldr w0, [x1, #MIRROR_OBJECT_CLASS_OFFSET]
    UNPOISON_HEAP_REF w0

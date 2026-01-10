@@ -202,6 +202,9 @@ class InvokePolymorphicSlowPathARM64 : public SlowPathCodeARM64 {
 
 #undef __
 
+IntrinsicLocationsBuilderARM64::IntrinsicLocationsBuilderARM64(const CodeGeneratorARM64* codegen)
+    : allocator_(codegen->GetGraph()->GetAllocator()), codegen_(codegen) {}
+
 bool IntrinsicLocationsBuilderARM64::TryDispatch(HInvoke* invoke) {
 #ifdef ART_USE_RESTRICTED_MODE
   // TODO(Simulator): support intrinsics.

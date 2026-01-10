@@ -34,9 +34,7 @@ class Riscv64Assembler;
 
 class IntrinsicLocationsBuilderRISCV64 final : public IntrinsicVisitor {
  public:
-  explicit IntrinsicLocationsBuilderRISCV64(ArenaAllocator* allocator,
-                                            const CodeGeneratorRISCV64* codegen)
-      : allocator_(allocator), codegen_(codegen) {}
+  explicit IntrinsicLocationsBuilderRISCV64(const CodeGeneratorRISCV64* codegen);
 
   // Define visitor methods.
 

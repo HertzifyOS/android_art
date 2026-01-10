@@ -1664,15 +1664,15 @@ END art_quick_proxy_invoke_handler
     /*
      * Called to resolve an imt conflict.
      * x0 is the conflict ArtMethod.
-     * x15 is a hidden argument that holds the target interface method.
+     * xIP1 is a hidden argument that holds the target interface method.
      *
-     * Note that this stub writes to xIP0, and x0.
+     * Note that this stub writes to xIP0, xIP1, and x0.
      */
 ENTRY art_quick_imt_conflict_trampoline
     ldr xIP0, [x0, #ART_METHOD_JNI_OFFSET_64]  // Load ImtConflictTable
     ldr x0, [xIP0]  // Load first entry in ImtConflictTable.
 .Limt_table_iterate:
-    cmp x0, x15
+    cmp x0, xIP1
     // Branch if found. Benchmarks have shown doing a branch here is better.
     beq .Limt_table_found
     // If the entry is null, the interface method is not in the ImtConflictTable.
@@ -1689,7 +1689,7 @@ ENTRY art_quick_imt_conflict_trampoline
 .Lconflict_trampoline:
     // Call the runtime stub to populate the ImtConflictTable and jump to the
     // resolved method.
-    mov x0, x15  // Load interface method
+    mov x0, xIP1  // Load interface method
     INVOKE_TRAMPOLINE_BODY artInvokeInterfaceTrampoline
 END art_quick_imt_conflict_trampoline
 

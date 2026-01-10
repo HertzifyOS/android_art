@@ -123,6 +123,10 @@ class InvokePolymorphicSlowPathRISCV64 : public SlowPathCodeRISCV64 {
   DISALLOW_COPY_AND_ASSIGN(InvokePolymorphicSlowPathRISCV64);
 };
 
+IntrinsicLocationsBuilderRISCV64::IntrinsicLocationsBuilderRISCV64(
+    const CodeGeneratorRISCV64* codegen)
+    : allocator_(codegen->GetGraph()->GetAllocator()), codegen_(codegen) {}
+
 bool IntrinsicLocationsBuilderRISCV64::TryDispatch(HInvoke* invoke) {
   Dispatch(invoke);
   LocationSummary* res = invoke->GetLocations();
