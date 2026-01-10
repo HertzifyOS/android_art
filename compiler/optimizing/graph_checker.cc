@@ -1031,6 +1031,70 @@ void GraphChecker::HandleLoop(HBasicBlock* loop_header) {
                             id));
     }
   }
+
+  // We treat loops in OSR-compiled methods as irreducible because they can be entered from the
+  // interpreter at the SuspendCheck. This doesn't apply to inlined loops, as OSR entry only happens
+  // in the outer method.
+  bool is_osr_irreducible = false;
+  if (GetGraph()->IsCompilingOsr()) {
+    HSuspendCheck* suspend_check = loop_information->GetSuspendCheck();
+    DCHECK_IMPLIES(suspend_check != nullptr, suspend_check->HasEnvironment());
+    if (suspend_check == nullptr || !suspend_check->GetEnvironment()->IsFromInlinedInvoke()) {
+      is_osr_irreducible = true;
+    }
+  }
+
+  // A loop is irreducible iff it's structurally irreducible (has a back-edge not dominated by the
+  // header) or if it's an OSR entry loop.
+  const bool expected_irreducible =
+      loop_information->HasBackEdgeNotDominatedByHeader() ||
+      is_osr_irreducible;
+
+  if (loop_information->IsIrreducible() != expected_irreducible) {
+    AddError(StringPrintf(
+        "Loop defined by header %d has inconsistent IsIrreducible(): %s. "
+        "Expected: %s (HasBackEdgeNotDominatedByHeader(): %s, is_osr_irreducible: %s).",
+        id,
+        StrBool(loop_information->IsIrreducible()),
+        StrBool(expected_irreducible),
+        StrBool(loop_information->HasBackEdgeNotDominatedByHeader()),
+        StrBool(is_osr_irreducible)));
+  }
+
+  // IsIrreducible implies ContainsIrreducibleLoop.
+  if (loop_information->IsIrreducible() && !loop_information->ContainsIrreducibleLoop()) {
+    AddError(StringPrintf("Loop defined by header %d is irreducible but "
+                          "ContainsIrreducibleLoop() is false.",
+                          id));
+  }
+
+  // The ContainsIrreducibleLoop flag should be true if and only if the loop
+  // itself is irreducible or it contains an inner irreducible loop.
+  bool has_inner_irreducible_loop = false;
+  for (uint32_t i : loop_blocks.Indexes()) {
+    HBasicBlock* block = GetGraph()->GetBlocks()[i];
+    if (block != nullptr && block->IsLoopHeader()) {
+      HLoopInformation* inner_loop = block->GetLoopInformation();
+      if (inner_loop != loop_information && inner_loop->ContainsIrreducibleLoop()) {
+        has_inner_irreducible_loop = true;
+        break;
+      }
+    }
+  }
+
+  const bool expected_contains_irreducible_loop =
+      expected_irreducible ||
+      has_inner_irreducible_loop;
+  if (loop_information->ContainsIrreducibleLoop() != expected_contains_irreducible_loop) {
+    AddError(StringPrintf(
+        "Loop defined by header %d has inconsistent ContainsIrreducibleLoop(): %s. "
+        "Expected: %s (expected_irreducible: %s, has_inner_irreducible_loop: %s).",
+        id,
+        StrBool(loop_information->ContainsIrreducibleLoop()),
+        StrBool(expected_contains_irreducible_loop),
+        StrBool(expected_irreducible),
+        StrBool(has_inner_irreducible_loop)));
+  }
 }
 
 void GraphChecker::VisitPhi(HPhi* phi) {

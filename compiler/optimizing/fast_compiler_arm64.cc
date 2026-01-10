@@ -759,6 +759,11 @@ void FastCompilerARM64::MoveConstantsAndFpusToRegisters() {
     Location location  = vreg_locations_[i];
     if (location.IsConstant()) {
       DCHECK(location.GetConstant()->IsIntConstant() || location.GetConstant()->IsLongConstant());
+      // If the second register of the wide constant is used, we need to discard
+      // that constant.
+      if (location.GetConstant()->IsLongConstant() && !vreg_locations_[i + 1].IsInvalid()) {
+        continue;
+      }
       DataType::Type type = location.GetConstant()->IsIntConstant()
           ? DataType::Type::kInt32
           : DataType::Type::kInt64;
