@@ -142,12 +142,12 @@ public abstract class DexoptResult {
      * element is the result of the requested package.
      *
      * If the request is to dexopt a single package with {@link
-     * ArtFlags.FLAG_SHOULD_INCLUDE_DEPENDENCIES} set, the first element is the result of the
+     * ArtFlags#FLAG_SHOULD_INCLUDE_DEPENDENCIES} set, the first element is the result of the
      * requested package, and the rest are the results of the dependency packages.
      *
      * If the request is to dexopt multiple packages, the list contains the results of all the
      * requested packages. The results of their dependency packages are also included if {@link
-     * ArtFlags.FLAG_SHOULD_INCLUDE_DEPENDENCIES} is set.
+     * ArtFlags#FLAG_SHOULD_INCLUDE_DEPENDENCIES} is set.
      *
      * If the request is a batch dexopt operation that got cancelled, the list still has an entry
      * for every package that was requested to be optimized.
