@@ -23,9 +23,9 @@
    // Fast-path which gets the method from thread-local cache.
 %  fetch_from_thread_cache("x0", miss_label=slow_path)
 .L${opcode}_resume:
-   // Load the C-F arguments to w8 and get the receiver to x1 (the 'this' pointer).
-   FETCH w8, 2
-%  get_receiver("w1", "w8", range)
+   // Load the C-F arguments to wARGS (w8) and get the receiver to x1 (the 'this' pointer).
+   FETCH wARGS, 2
+%  get_receiver("w1", "wARGS", range)
    cbz w1, common_errNullObject    // bail if null
    b $helper
 %  if is_super and range:
@@ -63,9 +63,9 @@
 %def op_invoke_polymorphic(range=False, helper="NterpCommonInvokePolymorphic"):
    EXPORT_PC
    // No need to fetch the target method.
-   // Load the C-F arguments to w8 and get the receiver to x1 (the 'this' pointer).
-   FETCH w8, 2
-%  get_receiver("w1", "w8", range)
+   // Load the C-F arguments to wARGS (w8) and get the receiver to x1 (the 'this' pointer).
+   FETCH wARGS, 2
+%  get_receiver("w1", "wARGS", range)
    cbz w1, common_errNullObject    // bail if null
    b ${helper}
 
@@ -78,9 +78,9 @@
    // Fast-path which gets the method from thread-local cache.
 %  fetch_from_thread_cache("xCSTMP", miss_label=slow_path)
 .L${opcode}_resume:
-   // Load the C-F arguments to w8 and get the receiver to x1 (the 'this' pointer).
-   FETCH w8, 2
-%  get_receiver("w1", "w8", range)
+   // Load the C-F arguments to wARGS (w8) and get the receiver to x1 (the 'this' pointer).
+   FETCH wARGS, 2
+%  get_receiver("w1", "wARGS", range)
    // Note: if w1 is null, this will be handled by our SIGSEGV handler.
    ldr w2, [x1, #MIRROR_OBJECT_CLASS_OFFSET]
    UNPOISON_HEAP_REF w2
@@ -158,9 +158,9 @@
    // Fast-path which gets the method from thread-local cache.
 %  fetch_from_thread_cache("x2", miss_label=slow_path)
 .L${opcode}_resume:
-   // Load the C-F arguments to w8 and get the receiver to x1 (the 'this' pointer).
-   FETCH w8, 2
-%  get_receiver("w1", "w8", range)
+   // Load the C-F arguments to wARGS (w8) and get the receiver to x1 (the 'this' pointer).
+   FETCH wARGS, 2
+%  get_receiver("w1", "wARGS", range)
    // Note: if w1 is null, this will be handled by our SIGSEGV handler.
    ldr w0, [x1, #MIRROR_OBJECT_CLASS_OFFSET]
    UNPOISON_HEAP_REF w0

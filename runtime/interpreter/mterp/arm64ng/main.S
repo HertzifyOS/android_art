@@ -102,6 +102,7 @@
 #endif
 
 // Temporary registers while setting up a frame for nterp-to-nterp calls.
+#define wARGS     w8    // args C-F for non-range calls, first arg for range calls.
 #define xNEW_FP   x12
 #define xNEW_REFS x13
 #define CFI_NEW_REFS 13
@@ -496,34 +497,35 @@
 // - xNEW_FP: the new pointer to dex registers
 // - xNEW_REFS: the new pointer to references
 // - xPC: the new PC pointer to execute
-// - wINST: the invoke instruction with number of arguments in bits 15:12 and G arg in bits 11:8
+// - wINST: the invoke instruction with G arg in bits 11:8
 // - x3: the dex registers size in bits 15:0 and inputs size in bits 31:15
 // - x8: arguments C-F
 // - x1: receiver if non-static.
-.macro SETUP_NON_RANGE_ARGUMENTS_AND_EXECUTE is_static=0, is_string_init=0
+// Note: the number of arguments in bits 15:12 of wINST is off by one for string init
+.macro SETUP_NON_RANGE_ARGUMENTS_AND_EXECUTE is_static=0
    // /* op vA, vB, {vC...vG} */
    // The inputs size from the invoke in wINST bits 15:12 is one higher than the inputs size
    // in x3 bits 31:16 for string init. To avoid adjusting the `N2N_COPY_NON_RANGE_ARG` offsets
    // below, use the former for the inputs start calculation while using the latter for the
    // computed goto.
-   .if \is_static || \is_string_init
+   .if \is_static
      adr x9, 1f
    .else
      adr x9, 1f + 16  // One less copy than the number of arguments.
    .endif
-   sub wip, w3, wINST, lsr #12        // inputs start index in low 16 bits
+   sub wip, w3, w3, lsr #16           // inputs start index in low 16 bits
    ubfx w7, wINST, #8, #4             // Extract G
    // Note: The top 4 bits of dex registers size must be clear, otherwise the frame would
    // be too large and we would not use nterp (>=16KiB dex registers even without REFS).
    sub x9, x9, x3, lsr #(16 - 4)      // Target code to copy arguments
-   ubfx w6, w8, #12, #4               // Extract F
+   ubfx w6, wARGS, #12, #4            // Extract F
    // Calculate input dex register addresses in xNEW_REFS and xNEW_FP.
    add x10, xNEW_REFS, wip, uxth #2
-   ubfx w5, w8, #8, #4                // Extract E
+   ubfx w5, wARGS, #8, #4             // Extract E
    add x11, xNEW_FP, wip, uxth #2
-   ubfx w4, w8, #4, #4                // Extract D
+   ubfx w4, wARGS, #4, #4             // Extract D
    .if \is_static
-     ubfx w3, w8, #0, #4              // Extract C
+     ubfx w3, wARGS, #0, #4           // Extract C
    .endif
    // Jump to the code that performs the argument copying.
    br  x9
@@ -538,10 +540,7 @@
      N2N_COPY_NON_RANGE_ARG w3, x10, x11, 0, wip, wip2
    .endif
 1:
-   .if \is_string_init
-     // Ignore the first argument
-%    pass
-   .elseif !\is_static
+   .if !\is_static
      str         w1, [x10]
      str         w1, [x11]
    .endif
@@ -558,19 +557,17 @@
 // - xNEW_FP: the new pointer to dex registers
 // - xNEW_REFS: the new pointer to references
 // - xPC: the new PC pointer to execute
-// - wINST: the invoke instruction with number of arguments in bits 15:8
+// - x3: the dex registers size in bits 15:0 and inputs size in bits 31:15
 // - x8: first dex register
 // - x1: receiver if non-static.
+// Note: the number of arguments in bits 15:12 of wINST is off by one for string init
 //
 // Uses ip, ip2, x5, x6 as temporaries.
-.macro SETUP_RANGE_ARGUMENTS_AND_EXECUTE is_static=0, is_string_init=0
-   lsr w3, wINST, #8
+.macro SETUP_RANGE_ARGUMENTS_AND_EXECUTE is_static=0
+   lsr w3, w3, #16
    sub x2, xNEW_FP, xNEW_REFS
    add x8, x8, x3             // index past the last argument
-   .if \is_string_init
-     // Ignore the first argument
-     sub x3, x3, #1
-   .elseif !\is_static
+   .if !\is_static
      sub x3, x3, #1
    .endif
    sub x2, x2, #4
@@ -587,10 +584,7 @@
    sub x2, x2, 4
    cbnz x3, 1b
 2:
-   .if \is_string_init
-     // Ignore first argument
-%    pass
-   .elseif !\is_static
+   .if !\is_static
      str w1, [xNEW_REFS, x2]
      str w1, [xNEW_FP, x2]
    .endif
@@ -809,8 +803,13 @@
    .else
      N2N_ENTRY_POINT_CHECK x2, x3, .Lcall_compiled_code_\suffix
      .if \is_string_init
-       bl nterp_to_nterp_string_init_non_range
+       FETCH w8, 2                // Load the C-F arguments to w8.
+       ubfx wip, wINST, #8, #4    // Extract G
+       lsr wARGS, wARGS, #4       // Shift args D-F to C-E for string init.
+       bfi wARGS, wip, #12, #4    // Insert arg G as F for string init.
+       bl nterp_to_nterp_static_non_range
      .elseif \is_static
+       FETCH w8, 2                // Load the C-F arguments to w8.
        bl nterp_to_nterp_static_non_range
      .else
        bl nterp_to_nterp_instance_non_range
@@ -1151,8 +1150,11 @@
    .else
      N2N_ENTRY_POINT_CHECK x2, x3, .Lcall_compiled_code_range_\suffix
      .if \is_string_init
-       bl nterp_to_nterp_string_init_range
+       FETCH w8, 2                // Load the first argument number to w8.
+       add w8, w8, #1             // Adjust the first argument number for string init.
+       bl nterp_to_nterp_static_range
      .elseif \is_static
+       FETCH w8, 2                // Load the first argument number to w8.
        bl nterp_to_nterp_static_range
      .else
        bl nterp_to_nterp_instance_range
@@ -1881,30 +1883,18 @@ NterpHotnessCheck:
 
 nterp_to_nterp_static_non_range:
     .cfi_startproc
-    // Load the C-F arguments to w8.
-    FETCH w8, 2
     SETUP_STACK_FOR_INVOKE
-    SETUP_NON_RANGE_ARGUMENTS_AND_EXECUTE is_static=1, is_string_init=0
-    .cfi_endproc
-
-nterp_to_nterp_string_init_non_range:
-    .cfi_startproc
-    // Load the C-F arguments to w8.
-    FETCH w8, 2
-    SETUP_STACK_FOR_INVOKE
-    SETUP_NON_RANGE_ARGUMENTS_AND_EXECUTE is_static=0, is_string_init=1
+    SETUP_NON_RANGE_ARGUMENTS_AND_EXECUTE is_static=1
     .cfi_endproc
 
 nterp_to_nterp_instance_non_range:
     .cfi_startproc
     SETUP_STACK_FOR_INVOKE
-    SETUP_NON_RANGE_ARGUMENTS_AND_EXECUTE is_static=0, is_string_init=0
+    SETUP_NON_RANGE_ARGUMENTS_AND_EXECUTE is_static=0
     .cfi_endproc
 
 nterp_to_nterp_static_range:
     .cfi_startproc
-    // Load the C-F arguments to w8.
-    FETCH w8, 2
     SETUP_STACK_FOR_INVOKE
     SETUP_RANGE_ARGUMENTS_AND_EXECUTE is_static=1
     .cfi_endproc
@@ -1913,14 +1903,6 @@ nterp_to_nterp_instance_range:
     .cfi_startproc
     SETUP_STACK_FOR_INVOKE
     SETUP_RANGE_ARGUMENTS_AND_EXECUTE is_static=0
-    .cfi_endproc
-
-nterp_to_nterp_string_init_range:
-    .cfi_startproc
-    // Load the C-F arguments to w8.
-    FETCH w8, 2
-    SETUP_STACK_FOR_INVOKE
-    SETUP_RANGE_ARGUMENTS_AND_EXECUTE is_static=0, is_string_init=1
     .cfi_endproc
 
   NAME_END nterp_helper
