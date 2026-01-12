@@ -1749,8 +1749,7 @@
                   "661-oat-writer-layout",
                   "692-vdex-secondary-loader",
                   "850-checker-branches",
-                  "2042-reference-processing",
-                  "2398-method-trace-opt-code"],
+                  "2042-reference-processing"],
         "env_vars": {"ART_USE_RESTRICTED_MODE": "true"},
         "description": ["Test failures when using the restricted mode for simulator."]
     },
@@ -1804,5 +1803,10 @@
         "description": ["jvm doesn't seem to pop the frame when requested from exception thrown",
                         "listener when method exit callbacks are enabled. It works without method",
                         "exit callbacks. It seems like a bug in jvm."]
+    },
+    {
+        "tests": ["137-cfi"],
+        "env_vars": {"ART_USE_SIMULATOR": "true"},
+        "description": ["Simulator does not currently support cfi relocations."]
     }
 ]
