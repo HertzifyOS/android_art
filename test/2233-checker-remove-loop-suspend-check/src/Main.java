@@ -17,6 +17,7 @@
 public class Main {
 
   static final int ITERATIONS = 16;
+  static final int SMALL_ITERATIONS = 8;
 
   // Test 1: This test checks whether the SuspendCheck is removed from the
   // header.
@@ -100,7 +101,10 @@ public class Main {
   /// CHECK-START: void Main.$noinline$testRemoveSuspendCheckWithIntrinsic(int[]) disassembly (after)
   /// CHECK:        SuspendCheck is_no_op:true loop:<<Loop:B\d+>>
   public static void $noinline$testRemoveSuspendCheckWithIntrinsic(int[] a) {
-    for (int i = 0; i < ITERATIONS; i++) {
+    // For no-image we have an extra LoadClass + ClinitCheck that pushes this loop past the
+    // threshold of trip_count * number_of_instructions_per_trip. Use SMALL_ITERATIONS to not go
+    // over that limit.
+    for (int i = 0; i < SMALL_ITERATIONS; i++) {
       a[i] = Integer.numberOfLeadingZeros(i);
     }
   }
