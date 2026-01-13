@@ -540,24 +540,16 @@ reloc_addr\@:
 .endm
 
 // Locking is needed for both managed code and JNI stubs.
-.macro LOCK_OBJECT_FAST_PATH obj, slow_lock, can_be_null, use_lse
-    .if \use_lse
-        .arch_extension lse
-    .endif
-    // Use scratch registers x8-x11 (x12 for LSE) as temporaries.
+.macro LOCK_OBJECT_FAST_PATH obj, slow_lock, can_be_null
+    // Use scratch registers x8-x11 as temporaries.
     ldr    w9, [xSELF, #THREAD_ID_OFFSET]
     .if \can_be_null
         BRANCH_SYMBOL_CBZ \obj, \slow_lock
     .endif
                                       // Exclusive load/store has no immediate anymore.
     add    x8, \obj, #MIRROR_OBJECT_LOCK_WORD_OFFSET
-    .if \use_lse
-        ldr    w10, [x8]              // With LSE we only need a simple one-time load.
-    .endif
 1:
-    .if !\use_lse
-        ldaxr  w10, [x8]              // Without LSE, acquire needed only in most common case.
-    .endif
+    ldaxr  w10, [x8]                  // Acquire needed only in most common case.
     eor    w11, w10, w9               // Prepare the value to store if unlocked
                                       //   (thread id, count of 0 and preserved read barrier bits),
                                       // or prepare to compare thread id for recursive lock check
@@ -565,15 +557,8 @@ reloc_addr\@:
     tst    w10, #LOCK_WORD_GC_STATE_MASK_SHIFTED_TOGGLED  // Test the non-gc bits.
     b.ne   2f                         // Check if unlocked.
     // Unlocked case - store w11: original lock word plus thread id, preserved read barrier bits.
-    .if \use_lse
-        mov    w12, w10               // Remember old value for comparison.
-        casa   w10, w11, [x8]         // CAS Acquire: w10 (expected) -> w11 (new)
-        cmp    w10, w12
-        b.ne   1b                     // Retry
-    .else
-        stxr   w10, w11, [x8]
-        cbnz   w10, 1b                // If the store failed, retry.
-    .endif
+    stxr   w10, w11, [x8]
+    cbnz   w10, 1b                    // If the store failed, retry.
     ret
 2:  // w10: original lock word, w9: thread id, w11: w10 ^ w9
                                       // Check lock word state and thread id together,
@@ -583,26 +568,13 @@ reloc_addr\@:
     tst    w11, #LOCK_WORD_THIN_LOCK_COUNT_MASK_SHIFTED  // Test the new thin lock count.
     BRANCH_SYMBOL_EQ \slow_lock                 // Zero as the new count indicates overflow, go
                                                 // slow path.
-    .if \use_lse
-        mov    w12, w10               // Remember old value for comparison.
-        cas    w10, w11, [x8]         // CAS: w10 (expected) -> w11 (new). Relaxed ordering.
-        cmp    w10, w12
-        b.ne   1b                     // Retry
-    .else
-        stxr   w10, w11, [x8]
-        cbnz   w10, 1b                // If the store failed, retry.
-    .endif
+    stxr   w10, w11, [x8]
+    cbnz   w10, 1b                    // If the store failed, retry.
     ret
-    .if \use_lse
-        .arch_extension nolse
-    .endif
 .endm
 
 // Unlocking is needed for both managed code and JNI stubs.
-.macro UNLOCK_OBJECT_FAST_PATH obj, slow_unlock, can_be_null, use_lse
-    .if \use_lse
-        .arch_extension lse
-    .endif
+.macro UNLOCK_OBJECT_FAST_PATH obj, slow_unlock, can_be_null
     // Use scratch registers x8-x11 as temporaries.
     ldr    w9, [xSELF, #THREAD_ID_OFFSET]
     .if \can_be_null
@@ -610,58 +582,38 @@ reloc_addr\@:
     .endif
                                       // Exclusive load/store has no immediate anymore.
     add    x8, \obj, #MIRROR_OBJECT_LOCK_WORD_OFFSET
+1:
 #ifndef USE_READ_BARRIER
     ldr    w10, [x8]
 #else
-    .if \use_lse
-        ldr    w10, [x8]              // With LSE, we still need a simple load to check ownership.
-    .else
-1:                                    // This path is only retaken for non-LSE paths.
-        ldxr   w10, [x8]              // Without LSE, we need an exclusive load.
-    .endif
+    ldxr   w10, [x8]                  // Need to use atomic instructions for read barrier.
 #endif
-
     eor    w11, w10, w9               // Prepare the value to store if simply locked
                                       //   (mostly 0s, and preserved read barrier bits),
                                       // or prepare to compare thread id for recursive lock check
                                       //   (lock_word.ThreadId() ^ self->ThreadId()).
     tst    w11, #LOCK_WORD_GC_STATE_MASK_SHIFTED_TOGGLED  // Test the non-gc bits.
     b.ne   2f                         // Locked recursively or by other thread?
-
     // Transition to unlocked.
 #ifndef USE_READ_BARRIER
     stlr   w11, [x8]
 #else
-    .if \use_lse
-        // Memory: [ID | RB]  ^  w9: [ID | 0]  -> Result: [0 | RB]
-        steorl w9, [x8]               // Atomically clear thread id but preserve read barrier.
-    .else
-        stlxr  w10, w11, [x8]         // Need to use atomic instructions for read barrier.
-        cbnz   w10, 1b                // If the store failed, retry.
-    .endif
+    stlxr  w10, w11, [x8]             // Need to use atomic instructions for read barrier.
+    cbnz   w10, 1b                    // If the store failed, retry.
 #endif
     ret
 2:
                                       // Check lock word state and thread id together.
     tst    w11, #(LOCK_WORD_STATE_MASK_SHIFTED | LOCK_WORD_THIN_LOCK_OWNER_MASK_SHIFTED)
     BRANCH_SYMBOL_NE \slow_unlock
-#ifndef USE_READ_BARRIER
     sub    w11, w10, #LOCK_WORD_THIN_LOCK_COUNT_ONE  // decrement count
+#ifndef USE_READ_BARRIER
     str    w11, [x8]
 #else
-    .if \use_lse
-        mov    w11, #-LOCK_WORD_THIN_LOCK_COUNT_ONE
-        stadd  w11, [x8]              // Atomically decrement count field but preserve read barrier.
-    .else
-        sub    w11, w10, #LOCK_WORD_THIN_LOCK_COUNT_ONE  // decrement count
-        stxr   w10, w11, [x8]         // Need to use atomic instructions for read barrier.
-        cbnz   w10, 1b                // If the store failed, retry.
-    .endif
+    stxr   w10, w11, [x8]             // Need to use atomic instructions for read barrier.
+    cbnz   w10, 1b                    // If the store failed, retry.
 #endif
     ret
-    .if \use_lse
-        .arch_extension nolse
-    .endif
 .endm
 
 #endif  // ART_RUNTIME_ARCH_ARM64_ASM_SUPPORT_ARM64_S_
