@@ -1382,6 +1382,12 @@ void CodeGeneratorX86_64::RecordBootImageStringPatch(HLoadString* load_string) {
   __ Bind(&boot_image_string_patches_.back().label);
 }
 
+void CodeGeneratorX86_64::RecordAppImageStringPatch(HLoadString* load_string) {
+  app_image_string_patches_.emplace_back(
+      &load_string->GetDexFile(), load_string->GetStringIndex().index_);
+  __ Bind(&app_image_string_patches_.back().label);
+}
+
 Label* CodeGeneratorX86_64::NewStringBssEntryPatch(HLoadString* load_string) {
   string_bss_entry_patches_.emplace_back(
       &load_string->GetDexFile(), load_string->GetStringIndex().index_);
@@ -1482,6 +1488,7 @@ void CodeGeneratorX86_64::EmitLinkerPatches(ArenaVector<linker::LinkerPatch>* li
       public_type_bss_entry_patches_.size() +
       package_type_bss_entry_patches_.size() +
       boot_image_string_patches_.size() +
+      app_image_string_patches_.size() +
       string_bss_entry_patches_.size() +
       method_type_bss_entry_patches_.size() +
       boot_image_jni_entrypoint_patches_.size() +
@@ -1501,6 +1508,7 @@ void CodeGeneratorX86_64::EmitLinkerPatches(ArenaVector<linker::LinkerPatch>* li
   }
   DCHECK_IMPLIES(!GetCompilerOptions().IsAppImage(), app_image_method_patches_.empty());
   DCHECK_IMPLIES(!GetCompilerOptions().IsAppImage(), app_image_type_patches_.empty());
+  DCHECK_IMPLIES(!GetCompilerOptions().IsAppImage(), app_image_string_patches_.empty());
   if (GetCompilerOptions().IsBootImage()) {
     EmitPcRelativeLinkerPatches<NoDexFileAdapter<linker::LinkerPatch::IntrinsicReferencePatch>>(
         boot_image_other_patches_, linker_patches);
@@ -1511,6 +1519,8 @@ void CodeGeneratorX86_64::EmitLinkerPatches(ArenaVector<linker::LinkerPatch>* li
         app_image_method_patches_, linker_patches);
     EmitPcRelativeLinkerPatches<linker::LinkerPatch::TypeAppImageRelRoPatch>(
         app_image_type_patches_, linker_patches);
+    EmitPcRelativeLinkerPatches<linker::LinkerPatch::StringAppImageRelRoPatch>(
+        app_image_string_patches_, linker_patches);
   }
   EmitPcRelativeLinkerPatches<linker::LinkerPatch::MethodBssEntryPatch>(
       method_bss_entry_patches_, linker_patches);
@@ -1663,6 +1673,7 @@ CodeGeneratorX86_64::CodeGeneratorX86_64(HGraph* graph,
       public_type_bss_entry_patches_(graph->GetAllocator()->Adapter(kArenaAllocCodeGenerator)),
       package_type_bss_entry_patches_(graph->GetAllocator()->Adapter(kArenaAllocCodeGenerator)),
       boot_image_string_patches_(graph->GetAllocator()->Adapter(kArenaAllocCodeGenerator)),
+      app_image_string_patches_(graph->GetAllocator()->Adapter(kArenaAllocCodeGenerator)),
       string_bss_entry_patches_(graph->GetAllocator()->Adapter(kArenaAllocCodeGenerator)),
       method_type_bss_entry_patches_(graph->GetAllocator()->Adapter(kArenaAllocCodeGenerator)),
       boot_image_jni_entrypoint_patches_(graph->GetAllocator()->Adapter(kArenaAllocCodeGenerator)),
@@ -7041,6 +7052,7 @@ HLoadString::LoadKind CodeGeneratorX86_64::GetSupportedLoadStringKind(
   switch (desired_string_load_kind) {
     case HLoadString::LoadKind::kBootImageLinkTimePcRelative:
     case HLoadString::LoadKind::kBootImageRelRo:
+    case HLoadString::LoadKind::kAppImageRelRo:
     case HLoadString::LoadKind::kBssEntry:
       DCHECK(!GetCompilerOptions().IsJitCompiler());
       break;
@@ -7103,6 +7115,13 @@ void InstructionCodeGeneratorX86_64::VisitLoadString(HLoadString* load) NO_THREA
       __ movl(out,
               Address::Absolute(CodeGeneratorX86_64::kPlaceholder32BitOffset, /* no_rip= */ false));
       codegen_->RecordBootImageRelRoPatch(CodeGenerator::GetBootImageOffset(load));
+      return;
+    }
+    case HLoadString::LoadKind::kAppImageRelRo: {
+      DCHECK(codegen_->GetCompilerOptions().IsAppImage());
+      __ movl(out,
+              Address::Absolute(CodeGeneratorX86_64::kPlaceholder32BitOffset, /* no_rip= */ false));
+      codegen_->RecordAppImageStringPatch(load);
       return;
     }
     case HLoadString::LoadKind::kBssEntry: {

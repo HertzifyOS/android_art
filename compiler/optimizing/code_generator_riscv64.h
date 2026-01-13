@@ -595,6 +595,9 @@ class CodeGeneratorRISCV64 : public CodeGenerator {
   PcRelativePatchInfo* NewBootImageStringPatch(const DexFile& dex_file,
                                                dex::StringIndex string_index,
                                                const PcRelativePatchInfo* info_high = nullptr);
+  PcRelativePatchInfo* NewAppImageStringPatch(const DexFile& dex_file,
+                                              dex::StringIndex string_index,
+                                              const PcRelativePatchInfo* info_high = nullptr);
   PcRelativePatchInfo* NewStringBssEntryPatch(const DexFile& dex_file,
                                               dex::StringIndex string_index,
                                               const PcRelativePatchInfo* info_high = nullptr);
@@ -837,6 +840,8 @@ class CodeGeneratorRISCV64 : public CodeGenerator {
   ArenaDeque<PcRelativePatchInfo> package_type_bss_entry_patches_;
   // PC-relative String patch info for kBootImageLinkTimePcRelative.
   ArenaDeque<PcRelativePatchInfo> boot_image_string_patches_;
+  // PC-relative String patch info for kAppImageRelRo.
+  ArenaDeque<PcRelativePatchInfo> app_image_string_patches_;
   // PC-relative String patch info for kBssEntry.
   ArenaDeque<PcRelativePatchInfo> string_bss_entry_patches_;
   // PC-relative method patch info for kBootImageLinkTimePcRelative+kCallCriticalNative.

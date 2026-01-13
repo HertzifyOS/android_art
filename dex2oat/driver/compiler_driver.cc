@@ -615,7 +615,8 @@ void CompilerDriver::CollectStringsForLinkerPatches(
       [&]([[maybe_unused]] const DexFileReference& ref, CompiledMethod* method) {
         if (method != nullptr) {
           for (const linker::LinkerPatch& patch : method->GetPatches()) {
-            if (patch.GetType() == linker::LinkerPatch::Type::kStringRelative) {
+            if (patch.GetType() == linker::LinkerPatch::Type::kStringRelative ||
+                patch.GetType() == linker::LinkerPatch::Type::kStringAppImageRelRo) {
               StringReference target_string = patch.TargetString();
               if (last_dex_file != target_string.dex_file) {
                 last_dex_file = target_string.dex_file;

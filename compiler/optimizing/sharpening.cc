@@ -22,6 +22,7 @@
 #include "base/pointer_size.h"
 #include "class_linker.h"
 #include "code_generator.h"
+#include "com_android_art_flags.h"
 #include "driver/compiler_options.h"
 #include "driver/dex_compilation_unit.h"
 #include "driver/image_class_map-inl.h"
@@ -492,6 +493,9 @@ void HSharpening::ProcessLoadString(
       string = class_linker->LookupString(string_index, dex_cache.Get());
       if (string != nullptr && runtime->GetHeap()->ObjectIsInBootImageSpace(string)) {
         desired_load_kind = HLoadString::LoadKind::kBootImageRelRo;
+      } else if (com::android::art::flags::load_string_img_rel_ro() &&
+                 (com::android::art::flags::weak_const_string() || string != nullptr)) {
+        desired_load_kind = HLoadString::LoadKind::kAppImageRelRo;
       } else {
         desired_load_kind = HLoadString::LoadKind::kBssEntry;
       }

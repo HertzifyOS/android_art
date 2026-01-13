@@ -47,8 +47,8 @@ std::ostream& operator<<(std::ostream& stream, StubType stub_type);
 class EXPORT PACKED(4) OatHeader {
  public:
   static constexpr std::array<uint8_t, 4> kOatMagic { { 'o', 'a', 't', '\n' } };
-  // Last oat version changed reason: arm64: Change invoke-interface hidden arg register to x15.
-  static constexpr std::array<uint8_t, 4> kOatVersion{{'2', '6', '9', '\0'}};
+  // Last oat version changed reason: Implement `HLoadString::LoadKind::kAppImageRelRo`.
+  static constexpr std::array<uint8_t, 4> kOatVersion{{'2', '7', '0', '\0'}};
 
   static constexpr const char* kDex2OatCmdLineKey = "dex2oat-cmdline";
   static constexpr const char* kDebuggableKey = "debuggable";
