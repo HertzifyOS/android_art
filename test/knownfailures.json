@@ -1131,6 +1131,7 @@
           "2292-checker-smali-peek-poke-truncation",
           "2294-smali-select-do-not-simplify",
           "2295-smali-duplicate-phis",
+          "2299-checker-reducible-and-irreducible-loop-opt",
           "2397-array-verification-edge-cases",
           "2398-checkexacttype-methodhandles",
           "2400-setstaticfield-uninitialized"
