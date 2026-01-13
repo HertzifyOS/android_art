@@ -68,6 +68,16 @@ flag {
   is_exported: false
 }
 
+# Flag for loading managed string references from .data.img.rel.ro.
+flag {
+  name: "load_string_img_rel_ro"
+  namespace: "art_performance"
+  description: "Flag to control whether loading string references from .data.img.rel.ro is enabled"
+  bug: "475414908"
+  is_fixed_read_only: true
+  is_exported: false
+}
+
 flag {
   name: "test"
   namespace: "art_mainline"
