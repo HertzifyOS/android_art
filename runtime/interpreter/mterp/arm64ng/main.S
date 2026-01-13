@@ -870,7 +870,7 @@
 .Linvoke_fast_path_\suffix:
      .if \is_interface
        // Setup hidden argument.
-       mov ip2, xCSTMP
+       mov x15, xCSTMP
      .endif
      ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
@@ -912,7 +912,7 @@
      b.eq .Lget_shorty_and_invoke_\suffix
      .if \is_interface
        // Setup hidden argument.
-       mov ip2, xCSTMP
+       mov x15, xCSTMP
      .endif
      ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
@@ -975,7 +975,7 @@
    .else
       .if \is_interface
         // Setup hidden argument.
-        mov ip2, xCSTMP
+        mov x15, xCSTMP
       .endif
       ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
       blr lr
@@ -1230,7 +1230,7 @@
 .Linvoke_fast_path_range_\suffix:
      .if \is_interface
        // Setup hidden argument.
-       mov ip2, xCSTMP
+       mov x15, xCSTMP
      .endif
      ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
@@ -1267,7 +1267,7 @@
      b.eq .Lget_shorty_and_invoke_range_\suffix
      .if \is_interface
        // Setup hidden argument.
-       mov ip2, xCSTMP
+       mov x15, xCSTMP
      .endif
      ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
@@ -1340,7 +1340,7 @@
    .else
       .if \is_interface
         // Setup hidden argument.
-        mov ip2, xCSTMP
+        mov x15, xCSTMP
       .endif
       ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
       blr lr

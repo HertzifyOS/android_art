@@ -1623,7 +1623,7 @@ bool FastCompilerARM64::HandleInvoke(const Instruction& instruction,
     uint32_t method_offset =
         static_cast<uint32_t>(ImTable::OffsetOfElement(offset, kArm64PointerSize));
     __ Ldr(kArtMethodRegister, MemOperand(kArtMethodRegister, method_offset));
-    if (!LoadMethod(ip1, resolved_method)) {
+    if (!LoadMethod(x15, resolved_method)) {
       return false;
     }
   } else {
