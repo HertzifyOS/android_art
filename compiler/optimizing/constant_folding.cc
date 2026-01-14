@@ -21,6 +21,7 @@
 #include "art_field-inl.h"
 #include "base/bit_utils.h"
 #include "base/casts.h"
+#include "base/locks.h"
 #include "base/logging.h"
 #include "base/sdk_version.h"
 #include "dex/dex_file-inl.h"
@@ -79,7 +80,11 @@ class HConstantFoldingVisitor final : public CRTPGraphVisitor<HConstantFoldingVi
   void VisitIf(HIf* inst);
   void VisitInvoke(HInvoke* inst);
   void VisitTypeConversion(HTypeConversion* inst);
-  void VisitStaticFieldGet(HStaticFieldGet* instruction);
+  void VisitStaticFieldGet(HStaticFieldGet* inst);
+  void VisitInstanceFieldGet(HInstanceFieldGet* inst);
+
+  void FoldFieldValue(HFieldAccess* inst, ObjPtr<mirror::Object> receiver)
+      REQUIRES_SHARED (Locks::mutator_lock_);
 
   void PropagateValue(HBasicBlock* starting_block,
                       HInstruction* variable,
@@ -772,8 +777,8 @@ void HConstantFoldingVisitor::VisitTypeConversion(HTypeConversion* inst) {
 
 static bool IsUnmodifiableAndInitialized(ArtField* field, const CompilerOptions& compiler_options)
     REQUIRES_SHARED(Locks::mutator_lock_) {
-  DCHECK(field->IsStatic());
-  DCHECK(field->IsFinal());
+  DCHECK(field->IsStatic()) << field->PrettyField();
+  DCHECK(field->IsFinal()) << field->PrettyField();
 
   if (field->IsWriteProtected()) {
     return false;
@@ -812,83 +817,111 @@ void HConstantFoldingVisitor::VisitStaticFieldGet(HStaticFieldGet* instruction) 
     }
   }
 
-  HConstant* constant = nullptr;
-  if (!GetGraph()->IsDebuggable()) {  // JNI can modify static final fields in debuggable runtime.
-    ScopedObjectAccess soa(Thread::Current());
-
-    if (!IsUnmodifiableAndInitialized(field, compiler_options_)) {
-      return;
-    }
-
-    switch (instruction->GetFieldType()) {
-      case DataType::Type::kBool: {
-        uint8_t value = field->GetBoolean(field->GetDeclaringClass());
-        constant = GetGraph()->GetConstant(DataType::Type::kBool, value);
-        break;
-      }
-      case DataType::Type::kInt8: {
-        int8_t value = field->GetByte(field->GetDeclaringClass());
-        constant = GetGraph()->GetConstant(DataType::Type::kInt8, value);
-        break;
-      }
-      case DataType::Type::kUint16: {
-        uint16_t value = field->GetChar(field->GetDeclaringClass());
-        constant = GetGraph()->GetConstant(DataType::Type::kUint16, value);
-        break;
-      }
-      case DataType::Type::kInt16: {
-        int16_t value = field->GetShort(field->GetDeclaringClass());
-        constant = GetGraph()->GetConstant(DataType::Type::kInt16, value);
-        break;
-      }
-      case DataType::Type::kInt32: {
-        uint32_t value = field->Get32(field->GetDeclaringClass());
-        constant = GetGraph()->GetIntConstant(value);
-        break;
-      }
-      case DataType::Type::kFloat32: {
-        // On x86-32 ArtField::GetFloat might canonicalize NaNs when floats are put and read
-        // back from FP register stack.
-        uint32_t raw_bits = field->Get32(field->GetDeclaringClass());
-        float value = bit_cast<float, uint32_t>(raw_bits);
-        constant = GetGraph()->GetFloatConstant(value);
-        break;
-      }
-      case DataType::Type::kInt64: {
-        uint64_t value = field->Get64(field->GetDeclaringClass());
-        constant = GetGraph()->GetLongConstant(static_cast<int64_t>(value));
-        break;
-      }
-      case DataType::Type::kFloat64: {
-        // On x86-32 ArtField::GetDouble might canonicalize NaNs when doubles are put and read
-        // back from FP register stack.
-        uint64_t raw_bits = field->Get64(field->GetDeclaringClass());
-        double value = bit_cast<double, uint64_t>(raw_bits);
-        constant = GetGraph()->GetDoubleConstant(value);
-        break;
-      }
-      case DataType::Type::kReference: {
-        if (instruction->HasConstantValue()) {
-          // Constant folding is run multiple times. Setting value only once, but making sure that
-          // its value is still the same.
-          DCHECK_EQ(field->GetObject(field->GetDeclaringClass().Ptr()),
-                    instruction->GetConstantValue().Get());
-        } else {
-          ObjPtr<mirror::Object> obj = field->GetObject(field->GetDeclaringClass());
-          if (obj.IsNull()) {
-            constant = GetGraph()->GetNullConstant();
-          } else {
-            instruction->SetConstantValue(
-                GetGraph()->GetHandleCache()->GetHandles()->NewHandle(obj));
-            optimizations_occurred_ = true;
-          }
-        }
-        break;
-      }
-      default:
-        break;
-    }
+  // JNI can modify static final fields in debuggable runtime.
+  if (GetGraph()->IsDebuggable()) {
+    return;
   }
+
+  ScopedObjectAccess soa(Thread::Current());
+
+  if (!IsUnmodifiableAndInitialized(field, compiler_options_)) {
+    return;
+  }
+
+  FoldFieldValue(instruction, field->GetDeclaringClass());
+}
+
+void HConstantFoldingVisitor::VisitInstanceFieldGet(HInstanceFieldGet* inst) {
+  // IsDebuggable() check is not needed here as monotonic fields can not be modified.
+  ArtField* field = inst->GetFieldInfo().GetField();
+  if (!field->IsMonotonic()) {
+    return;
+  }
+  DCHECK(field->IsFinal());
+  HInstruction* input = inst->InputAt(0u);
+  if (input->IsFieldAccess() &&
+      input->AsFieldAccess()->HasConstantValue()) {
+    Handle<mirror::Object> receiver = input->AsFieldAccess()->GetConstantValue();
+    ScopedObjectAccess soa(Thread::Current());
+    FoldFieldValue(inst, receiver.Get());
+  }
+}
+
+void HConstantFoldingVisitor::FoldFieldValue(HFieldAccess* instruction,
+                                             ObjPtr<mirror::Object> receiver) {
+  ArtField* field = instruction->GetFieldInfo().GetField();
+  DCHECK_IMPLIES(field->IsStatic(), IsUnmodifiableAndInitialized(field, compiler_options_));
+  DCHECK_IMPLIES(!field->IsStatic(), field->IsMonotonic());
+  DCHECK(!receiver.IsNull());
+  HConstant* constant = nullptr;
+  switch (instruction->GetFieldType()) {
+    case DataType::Type::kBool: {
+      uint8_t value = field->GetBoolean(receiver);
+      constant = GetGraph()->GetConstant(DataType::Type::kBool, value);
+      break;
+    }
+    case DataType::Type::kInt8: {
+      int8_t value = field->GetByte(receiver);
+      constant = GetGraph()->GetConstant(DataType::Type::kInt8, value);
+      break;
+    }
+    case DataType::Type::kUint16: {
+      uint16_t value = field->GetChar(receiver);
+      constant = GetGraph()->GetConstant(DataType::Type::kUint16, value);
+      break;
+    }
+    case DataType::Type::kInt16: {
+      int16_t value = field->GetShort(receiver);
+      constant = GetGraph()->GetConstant(DataType::Type::kInt16, value);
+      break;
+    }
+    case DataType::Type::kInt32: {
+      uint32_t value = field->Get32(receiver);
+      constant = GetGraph()->GetIntConstant(value);
+      break;
+    }
+    case DataType::Type::kFloat32: {
+      // On x86-32 ArtField::GetFloat might canonicalize NaNs when floats are put and read
+      // back from FP register stack.
+      uint32_t raw_bits = field->Get32(receiver);
+      float value = bit_cast<float, uint32_t>(raw_bits);
+      constant = GetGraph()->GetFloatConstant(value);
+      break;
+    }
+    case DataType::Type::kInt64: {
+      uint64_t value = field->Get64(receiver);
+      constant = GetGraph()->GetLongConstant(static_cast<int64_t>(value));
+      break;
+    }
+    case DataType::Type::kFloat64: {
+      // On x86-32 ArtField::GetDouble might canonicalize NaNs when doubles are put and read
+      // back from FP register stack.
+      uint64_t raw_bits = field->Get64(receiver);
+      double value = bit_cast<double, uint64_t>(raw_bits);
+      constant = GetGraph()->GetDoubleConstant(value);
+      break;
+    }
+    case DataType::Type::kReference: {
+      if (instruction->HasConstantValue()) {
+        // Constant folding is run multiple times. Setting value only once, but making sure that
+        // its value is still the same.
+        DCHECK_EQ(field->GetObject(receiver),
+                  instruction->GetConstantValue().Get());
+      } else {
+        ObjPtr<mirror::Object> obj = field->GetObject(receiver);
+        if (obj.IsNull()) {
+          constant = GetGraph()->GetNullConstant();
+        } else {
+          instruction->SetConstantValue(
+              GetGraph()->GetHandleCache()->GetHandles()->NewHandle(obj));
+          optimizations_occurred_ = true;
+        }
+      }
+      break;
+    }
+    default:
+      break;
+    }
 
   if (constant != nullptr) {
     instruction->ReplaceWith(constant);

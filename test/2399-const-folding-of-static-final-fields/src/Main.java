@@ -49,6 +49,10 @@ public final class Main {
     private static final List<String> ARRAY_LIST = new ArrayList<>();
     private static final List<String> EMPTY_LIST = List.of();
 
+    private static final IntHolder INT_HOLDER = new IntHolder(Values.INT);
+    private static final RefHolder REF_HOLDER = new RefHolder(INT_HOLDER);
+    private static final RefHolder REF_HOLDER_WITH_NULL = new RefHolder(null);
+
     public static final class Values {
         static volatile boolean BOOLEAN;
         static volatile byte BYTE;
@@ -92,6 +96,9 @@ public final class Main {
         static volatile double NON_CANONICAL_NAN = Double.longBitsToDouble(0xfffeeeefffffffffL);
     }
 
+    private record IntHolder(int value) {}
+    private record RefHolder(IntHolder ref) {}
+
     public static void main(String[] args) {
         System.loadLibrary(args[0]);
 
@@ -124,41 +131,36 @@ public final class Main {
 
         ensureJitCompiled(Main.class, "$noinline$testInvocation");
         $noinline$testInvocation();
-    }
 
-    private static void $noinline$testInvocation() {
-        int total = ARRAY_LIST.size() + EMPTY_LIST.size();
-
-        if (total != 0) {
-            throw new AssertionError("Expected 0 elements, got " + total);
-        }
+        ensureJitCompiled(Main.class, "$noinline$testRecords");
+        $noinline$testRecords();
     }
 
     private static void $noinline$testBoolean() {
         boolean actual = BOOLEAN;
         if (actual != Values.BOOLEAN) {
-            throw new AssertionError("Expected to be " + Values.BOOLEAN + ", got " + actual);
+            fail("Expected to be " + Values.BOOLEAN + ", got " + actual);
         }
     }
 
     private static void $noinline$testByte() {
         byte actual = BYTE;
         if (actual != Values.BYTE) {
-            throw new AssertionError("Expected: " + Values.BYTE + ", got: " + actual);
+            fail("Expected: " + Values.BYTE + ", got: " + actual);
         }
     }
 
     private static void $noinline$testChar() {
         char actual = CHAR;
         if (actual != Values.CHAR) {
-            throw new AssertionError("Expected: " + Values.CHAR + ", got: " + actual);
+            fail("Expected: " + Values.CHAR + ", got: " + actual);
         }
     }
 
     private static void $noinline$testShort() {
         short actual = SHORT;
         if (actual != Values.SHORT) {
-            throw new AssertionError("Expected: " + Values.SHORT + ", got: " + actual);
+            fail("Expected: " + Values.SHORT + ", got: " + actual);
         }
     }
 
@@ -168,39 +170,22 @@ public final class Main {
 
     private static void $noinline$testInteger() {
         assertEquals(BOXED_INT.intValue(), Values.INT);
-        assertThrowsNPE(() -> BOXED_INT_NULL.intValue());
+        try {
+            BOXED_INT_NULL.intValue();
+            fail("NPE is expected");
+        } catch (NullPointerException expected) {}
     }
 
     private static void assertEquals(int actual, int expected) {
         if (actual != expected) {
-            throw new AssertionError("Expected: " + expected + ", got: " + actual);
-        }
-    }
-
-    private interface ThrowingRunnable {
-        void run() throws Exception;
-    }
-
-    private static void assertThrowsNPE(ThrowingRunnable subject) {
-        Objects.requireNonNull(subject);
-        boolean observedNpe = false;
-        try {
-            subject.run();
-        } catch (NullPointerException expected) {
-            observedNpe = true;
-        } catch (Exception e) {
-            throw new AssertionError("Expected NPE, got: ", e);
-        }
-
-        if (!observedNpe) {
-            throw new AssertionError("Expected NPE, but nothing was thrown");
+            fail("Expected: " + expected + ", got: " + actual);
         }
     }
 
     private static void $noinline$testLong() {
         long actual = LONG;
         if (actual != Values.LONG) {
-            throw new AssertionError("Expected: " + Values.LONG + ", got: " + actual);
+            fail("Expected: " + Values.LONG + ", got: " + actual);
         }
     }
 
@@ -219,7 +204,7 @@ public final class Main {
         int expectedBits = Float.floatToRawIntBits(expected);
 
         if (actualBits != expectedBits) {
-            throw new AssertionError("Expected bits: " + expectedBits + ", got: " + actualBits);
+            fail("Expected bits: " + expectedBits + ", got: " + actualBits);
         }
     }
 
@@ -227,7 +212,7 @@ public final class Main {
         if (!Float.isNaN(subject)) {
             String msg = String.format(
                 "%f (bits: 0x%x) is not NaN", subject, Float.floatToRawIntBits(subject));
-            throw new AssertionError(msg);
+            fail(msg);
         }
     }
 
@@ -246,7 +231,7 @@ public final class Main {
         long expectedBits = Double.doubleToRawLongBits(expected);
 
         if (actualBits != expectedBits) {
-            throw new AssertionError("Expected bits: " + expectedBits + ", got: " + actualBits);
+            fail("Expected bits: " + expectedBits + ", got: " + actualBits);
         }
     }
 
@@ -254,8 +239,29 @@ public final class Main {
         if (!Double.isNaN(subject)) {
             String msg = String.format(
                 "%f (bits: 0x%x) is not NaN", subject, Double.doubleToRawLongBits(subject));
-            throw new AssertionError(msg);
+            fail(msg);
         }
+    }
+
+    private static void $noinline$testInvocation() {
+        int total = ARRAY_LIST.size() + EMPTY_LIST.size();
+
+        if (total != 0) {
+            fail("Expected 0 elements, got " + total);
+        }
+    }
+
+    private static void $noinline$testRecords() {
+        assertEquals(INT_HOLDER.value(), Values.INT);
+        assertEquals(REF_HOLDER.ref().value(), Values.INT);
+        try {
+            REF_HOLDER_WITH_NULL.ref().value();
+            fail("NPE is expected");
+        } catch (NullPointerException expected) {}
+    }
+
+    private static void fail(String msg) {
+        throw new AssertionError(msg);
     }
 
     private native static void ensureJitCompiled(Class<?> clazz, String method);

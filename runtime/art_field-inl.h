@@ -521,7 +521,7 @@ inline bool ArtField::IsUnmodifiable(auto&& get_field_type) {
     return false;
   }
 
-  if ((GetAccessFlags() & kAccMonotonic) != 0) {
+  if (IsMonotonic()) {
     return true;
   }
 
