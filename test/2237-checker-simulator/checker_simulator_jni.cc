@@ -104,8 +104,8 @@ extern "C" jbyte JNICALL Java_Main_jniMethodWithManyParameters(JNIEnv*,
 }
 
 extern "C" jdouble JNICALL Java_Main_jniNonStaticReturnsDouble(JNIEnv*,
-                                                           jobject thisObj,
-                                                           jdouble val) {
+                                                               jobject thisObj,
+                                                               jdouble val) {
   CHECK(thisObj != NULL);
 
   std::cout << "Java_Main_jniNonStaticReturnsDouble REACHED!" << std::endl;
