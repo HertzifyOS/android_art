@@ -2658,9 +2658,11 @@ void InstructionCodeGeneratorRISCV64::GenerateMethodEntryExitHook(HInstruction* 
   // Check if there is place in the buffer to store a new entry, if no, take the slow path.
   int32_t trace_buffer_curr_entry_offset =
       Thread::TraceBufferCurrPtrOffset<kRiscv64PointerSize>().Int32Value();
+  int slots_required =
+      instruction->IsMethodExitHook() ? kNumEntriesForWallClockExit : kNumEntriesForWallClockEntry;
   __ Loadd(tmp, TR, trace_buffer_curr_entry_offset);
   __ Loadd(tmp2, TR, Thread::TraceBufferPtrOffset<kRiscv64PointerSize>().SizeValue());
-  __ Addi(tmp, tmp, -dchecked_integral_cast<int32_t>(kNumEntriesForWallClock * sizeof(void*)));
+  __ Addi(tmp, tmp, -dchecked_integral_cast<int32_t>(slots_required * sizeof(void*)));
   __ Blt(tmp, tmp2, slow_path->GetEntryLabel());
 
   // Update the index in the `Thread`. Temporarily free `tmp2` to be used by `Stored()`.
@@ -2669,22 +2671,30 @@ void InstructionCodeGeneratorRISCV64::GenerateMethodEntryExitHook(HInstruction* 
   tmp2 = temps.AllocateXRegister();
 
   // Record method pointer and trace action.
-  __ Ld(tmp2, SP, 0);
-  // Use last two bits to encode trace method action. For MethodEntry it is 0
-  // so no need to set the bits since they are 0 already.
-  DCHECK_GE(ArtMethod::Alignment(kRuntimePointerSize), static_cast<size_t>(4));
-  static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodEnter) == 0);
-  static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodExit) == 1);
-  if (instruction->IsMethodExitHook()) {
-    __ Ori(tmp2, tmp2, enum_cast<int32_t>(TraceAction::kTraceMethodExit));
+  if (instruction->IsMethodEntryHook()) {
+    __ Ld(tmp2, SP, 0);
+    static_assert(
+        IsInt<12>(kMethodOffsetInBytesEntry));  // No free scratch register for `Stored()`.
+    __ Sd(tmp2, tmp, kMethodOffsetInBytesEntry);
   }
-  static_assert(IsInt<12>(kMethodOffsetInBytes));  // No free scratch register for `Stored()`.
-  __ Sd(tmp2, tmp, kMethodOffsetInBytes);
-
   // Record the timestamp.
   __ RdTime(tmp2);
-  static_assert(IsInt<12>(kTimestampOffsetInBytes));  // No free scratch register for `Stored()`.
-  __ Sd(tmp2, tmp, kTimestampOffsetInBytes);
+  // Use least significant two bits to encode trace method action.
+  __ Slli(tmp2, tmp2, 2);
+  DCHECK_GE(ArtMethod::Alignment(kRuntimePointerSize), static_cast<size_t>(4));
+  if (instruction->IsMethodEntryHook()) {
+    // For MethodEntry trace action is 0
+    static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodEnter) == 0);
+    static_assert(
+        IsInt<12>(kTimestampOffsetInBytesEntry));  // No free scratch register for `Stored()`.
+    __ Sd(tmp2, tmp, kTimestampOffsetInBytesEntry);
+  } else {
+    static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodExit) == 1);
+    static_assert(
+        IsInt<12>(kTimestampOffsetInBytesExit));  // No free scratch register for `Stored()`.
+    __ Ori(tmp2, tmp2, enum_cast<int32_t>(TraceAction::kTraceMethodExit));
+    __ Sd(tmp2, tmp, kTimestampOffsetInBytesExit);
+  }
 
   __ Bind(slow_path->GetExitLabel());
 }
