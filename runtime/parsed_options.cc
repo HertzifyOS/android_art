@@ -434,7 +434,7 @@ std::unique_ptr<RuntimeParser> ParsedOptions::MakeParser(bool ignore_unrecognize
           .WithValueMap(hiddenapi_policy_valuemap)
           .IntoKey(M::HiddenApiPolicy)
       .Define("-Xcore-platform-api-policy:_")
-          .WithHelp("Ignored if the hiddenapi_platform_enforcement flag is set.")
+          .WithHelp("Ignored on API level 37+ if the hiddenapi_platform_enforcement flag is set.")
           .WithType<hiddenapi::EnforcementPolicy>()
           .WithValueMap(hiddenapi_policy_valuemap)
           .IntoKey(M::CorePlatformApiPolicy)

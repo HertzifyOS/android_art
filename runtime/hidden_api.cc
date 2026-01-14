@@ -38,6 +38,11 @@
 #include "thread-inl.h"
 #include "well_known_classes.h"
 
+#ifdef ART_TARGET_ANDROID
+#include <android/api-level.h>
+#include <sys/system_properties.h>
+#endif
+
 namespace art HIDDEN {
 namespace hiddenapi {
 
@@ -303,7 +308,25 @@ void InitializeCorePlatformApiPrivateFields() {
   }
 }
 
+bool EnableHiddenapiPlatformEnforcement() {
+  if (!com::android::art::flags::hiddenapi_platform_enforcement()) {
+    return false;
+  }
+#ifdef ART_TARGET_ANDROID
+  static bool res = []() {
+    int device_api_level = android_get_device_api_level();
+    char codename[PROP_VALUE_MAX];
+    __system_property_get("ro.build.version.codename", codename);
+    return device_api_level >= 37 || (device_api_level == 36 && strcmp(codename, "REL") != 0);
+  }();
+  return res;
+#else
+  return true;
+#endif
+}
+
 static bool EnableNativeCallerCheckForApp() {
+  CHECK(com::android::art::flags::hiddenapi_jni_api_callers());
   uint32_t target_sdk_version = Runtime::Current()->GetTargetSdkVersion();
   // Enable if the target SDK is higher than 36 (Android 16). Also enable if the
   // target SDK version is not set, e.g. in the zygote.
@@ -340,7 +363,7 @@ bool ShouldDenyJniAccessToMember(T* member,
     }
   } ctx{.self = self, .native_caller_addr = native_caller_addr};
 
-  if (com::android::art::flags::hiddenapi_platform_enforcement() &&
+  if (EnableHiddenapiPlatformEnforcement() &&
       (!com::android::art::flags::hiddenapi_jni_api_callers() ||
        !EnableNativeCallerCheckForApp())) {
     // Special case to avoid false alarms when accesses from platform to
@@ -412,8 +435,7 @@ bool ShouldDenyJniAccessToMember(T* member,
               case Domain::kPlatform:
                 // If the native caller is platform then it should only be used if
                 // the SDK level is recent enough.
-                // TODO(b/377676642): Replace flag with SDK level check when ramped.
-                if (com::android::art::flags::hiddenapi_platform_enforcement()) {
+                if (EnableHiddenapiPlatformEnforcement()) {
                   VLOG(hiddenapi) << "hiddenapi: Native JNI caller " << context << " from "
                                   << context.GetDomain();
                   return context;

@@ -211,6 +211,10 @@ class ScopedHiddenApiEnforcementPolicySetting {
 
 void InitializeCorePlatformApiPrivateFields() REQUIRES(!Locks::mutator_lock_);
 
+// TODO(b/377676642): Replace this with an inline android_get_device_api_level()
+// >= 37 check once the flag is fully ramped.
+bool EnableHiddenapiPlatformEnforcement();
+
 template <typename T>
 bool ShouldDenyJniAccessToMember(T* member,
                                  Thread* self,
