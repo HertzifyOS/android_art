@@ -253,8 +253,7 @@ apex {
 }
 
 // "Debug" version of the ART APEX module (containing both release and
-// debug variants, as well as additional tools), included in userdebug and
-// eng build.
+// debug variants, as well as additional tools), included in eng builds.
 apex {
     name: "com.android.art.debug",
     defaults: ["com.android.art-devel-defaults"],
@@ -277,6 +276,11 @@ apex {
 
     visibility: [
         "//packages/modules/common/build",
+    ],
+
+    overrides: [
+        "com.google.android.art",
+        "com.google.android.go.art",
     ],
 }
 
