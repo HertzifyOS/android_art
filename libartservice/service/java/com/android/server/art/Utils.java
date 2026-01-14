@@ -47,7 +47,6 @@ import android.util.SparseArray;
 
 import androidx.annotation.RequiresApi;
 
-import com.android.art.flags.Flags;
 import com.android.modules.utils.build.SdkLevel;
 import com.android.modules.utils.pm.PackageStateModulesUtils;
 import com.android.server.art.model.DexoptParams;
@@ -115,7 +114,7 @@ public final class Utils {
     @NonNull
     public static List<Abi> getAllPrimaryDexAbis(@NonNull PackageState pkgState) {
         String pkgPrimaryCpuAbi = pkgState.getPrimaryCpuAbi();
-        if (Flags.dexoptSecondaryIsaOnlyWhenNeeded() && pkgPrimaryCpuAbi == null) {
+        if (pkgPrimaryCpuAbi == null) {
             // The package has no native code. Its DEX files can be loaded by apps using any of the
             // device's supported native ABIs. Mark the preferred ABI as primary.
             return getNativeAbis()

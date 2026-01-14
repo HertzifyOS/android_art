@@ -41,7 +41,6 @@ import android.util.SparseArray;
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
-import com.android.art.flags.Flags;
 import com.android.server.art.DexUseManagerLocal;
 import com.android.server.art.Utils;
 import com.android.server.art.testing.StaticMockitoRule;
@@ -146,21 +145,6 @@ public class UtilsTest {
                 .containsExactly(Utils.Abi.create("armeabi-v7a", "arm", true /* isPrimaryAbi */));
     }
 
-    @Test
-    @RequiresFlagsDisabled(FLAGS_PREFIX + Flags.FLAG_DEXOPT_SECONDARY_ISA_ONLY_WHEN_NEEDED)
-    public void testGetAllAbisNone() {
-        var pkgState = newPackageState(PKG_NAME).clearAbis().build();
-
-        assertThat(Utils.getAllPrimaryDexAbis(pkgState))
-                .containsExactly(Utils.Abi.create("arm64-v8a", "arm64", true /* isPrimaryAbi */));
-
-        // Make sure the result does come from `Constants.getPreferredAbi()` rather than somewhere
-        // else.
-        when(Constants.getPreferredAbi()).thenReturn("armeabi-v7a");
-        assertThat(Utils.getAllPrimaryDexAbis(pkgState))
-                .containsExactly(Utils.Abi.create("armeabi-v7a", "arm", true /* isPrimaryAbi */));
-    }
-
     @Test(expected = IllegalStateException.class)
     public void testGetAllAbisInvalidNativeIsa() {
         lenient().when(SystemProperties.get(eq("ro.dalvik.vm.isa.x86_64"))).thenReturn("x86");
@@ -183,7 +167,6 @@ public class UtilsTest {
     }
 
     @Test
-    @RequiresFlagsEnabled(FLAGS_PREFIX + Flags.FLAG_DEXOPT_SECONDARY_ISA_ONLY_WHEN_NEEDED)
     public void testGetUsedPrimaryDexAbisRemoveUnusedSecondaryAbi() {
         lenient()
                 .when(mDexUseManager.getPrimaryDexLoaders(eq(PKG_NAME), any() /* dexPath */))
@@ -195,7 +178,6 @@ public class UtilsTest {
     }
 
     @Test
-    @RequiresFlagsEnabled(FLAGS_PREFIX + Flags.FLAG_DEXOPT_SECONDARY_ISA_ONLY_WHEN_NEEDED)
     public void testGetUsedPrimaryDexAbisAddMissingUsedAbi() {
         String pkgName1 = "com.example.foo.1";
         String pkgName2 = "com.example.foo.2";
@@ -219,7 +201,6 @@ public class UtilsTest {
     }
 
     @Test
-    @RequiresFlagsEnabled(FLAGS_PREFIX + Flags.FLAG_DEXOPT_SECONDARY_ISA_ONLY_WHEN_NEEDED)
     public void testGetUsedPrimaryDexAbisKeepSecondaryAbiIfWebviewPackage() {
         lenient()
                 .when(mDexUseManager.getPrimaryDexLoaders(
@@ -233,7 +214,6 @@ public class UtilsTest {
     }
 
     @Test
-    @RequiresFlagsEnabled(FLAGS_PREFIX + Flags.FLAG_DEXOPT_SECONDARY_ISA_ONLY_WHEN_NEEDED)
     public void testGetUsedPrimaryDexAbisOneAbi() {
         var pkgState = newPackageState(PKG_NAME).clearAbis().build();
 
@@ -243,7 +223,6 @@ public class UtilsTest {
     }
 
     @Test
-    @RequiresFlagsEnabled(FLAGS_PREFIX + Flags.FLAG_DEXOPT_SECONDARY_ISA_ONLY_WHEN_NEEDED)
     public void testGetUsedPrimaryDexAbisTwoAbis() {
         var pkgState = newPackageState(PKG_NAME).clearAbis().build();
 

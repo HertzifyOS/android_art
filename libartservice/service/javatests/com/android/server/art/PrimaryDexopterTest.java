@@ -48,7 +48,6 @@ import android.os.UserHandle;
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
-import com.android.art.flags.Flags;
 import com.android.server.art.model.ArtFlags;
 import com.android.server.art.model.DexoptParams;
 import com.android.server.art.model.DexoptResult;
@@ -260,16 +259,6 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
                 eq(mDefaultDexoptTrigger), any());
         checkDexoptWithNoProfile(verify(mArtd), mSplit0DexPath, "arm64", "verify");
 
-        if (!Flags.dexoptSecondaryIsaOnlyWhenNeeded()) {
-            verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm"), any(), eq("speed-profile"),
-                    eq(mDefaultDexoptTrigger), any());
-            checkDexoptWithProfile(
-                    verify(mArtd), mDexPath, "arm", mRefProfile, false /* isOtherReadable */);
-
-            verify(mArtd).getDexoptNeeded(eq(mSplit0DexPath), eq("arm"), any(), eq("verify"),
-                    eq(mDefaultDexoptTrigger), any());
-            checkDexoptWithNoProfile(verify(mArtd), mSplit0DexPath, "arm", "verify");
-        }
         verifyProfileNotUsed(mPrebuiltProfile);
         verifyProfileNotUsed(mDmProfile);
         verifyEmbeddedProfileNotUsed(mDexPath);

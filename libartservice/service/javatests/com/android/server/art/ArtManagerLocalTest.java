@@ -76,7 +76,6 @@ import android.system.OsConstants;
 
 import androidx.test.filters.SmallTest;
 
-import com.android.art.flags.Flags;
 import com.android.modules.utils.pm.PackageStateModulesUtils;
 import com.android.server.art.DexUseManagerLocal.DexLoader;
 import com.android.server.art.PreRebootDexoptJob.StagedFilesAge;
@@ -514,7 +513,7 @@ public class ArtManagerLocalTest {
                                 false /* isPrimaryDex */, true /* isPrimaryAbi */, "arm64-v8a",
                                 "unknown", "unknown", "error")));
 
-        if (mIsSecondaryAbiUsedByOtherApps || !Flags.dexoptSecondaryIsaOnlyWhenNeeded()) {
+        if (mIsSecondaryAbiUsedByOtherApps) {
             doReturn(createGetDexoptStatusResult("speed-profile", "compilation-reason-1",
                              "location-debug-string-1", ArtifactsLocation.NEXT_TO_DEX,
                              false /* isBackedByVdexOnly */))
@@ -570,10 +569,7 @@ public class ArtManagerLocalTest {
 
         List<DexContainerFileDexoptStatus> statuses = result.getDexContainerFileDexoptStatuses();
         assertThat(statuses.size())
-                .isEqualTo(
-                        mIsSecondaryAbiUsedByOtherApps || !Flags.dexoptSecondaryIsaOnlyWhenNeeded()
-                                ? 6
-                                : 4);
+                .isEqualTo(mIsSecondaryAbiUsedByOtherApps ? 6 : 4);
 
         for (DexContainerFileDexoptStatus status : statuses) {
             assertThat(status.getCompilerFilter()).isEqualTo("error");
@@ -1342,7 +1338,7 @@ public class ArtManagerLocalTest {
         runtimeArtifactsPaths.add(AidlUtils.buildRuntimeArtifactsPath(
                 PKG_NAME_1, "/somewhere/app/foo/split_0.apk", "arm64"));
         var vdexPaths = new ArrayList<>();
-        if (mIsSecondaryAbiUsedByOtherApps || !Flags.dexoptSecondaryIsaOnlyWhenNeeded()) {
+        if (mIsSecondaryAbiUsedByOtherApps) {
             // It should only keep VDEX files and runtime images.
             doReturn(createGetDexoptStatusResult("verify", "vdex", "location",
                              ArtifactsLocation.NEXT_TO_DEX, true /* isBackedByVdexOnly */))
@@ -1426,7 +1422,7 @@ public class ArtManagerLocalTest {
         expectedRuntimeArtifactsPaths.add(AidlUtils.buildRuntimeArtifactsPath(
                 PKG_NAME_1, "/somewhere/app/foo/split_0.apk", "arm64"));
 
-        if (mIsSecondaryAbiUsedByOtherApps || !Flags.dexoptSecondaryIsaOnlyWhenNeeded()) {
+        if (mIsSecondaryAbiUsedByOtherApps) {
             // It should keep the SDM file, but not runtime images.
             doReturn(createGetDexoptStatusResult("speed-profile", "cloud", "location",
                              ArtifactsLocation.SDM_DALVIK_CACHE, false /* isBackedByVdexOnly */))
@@ -1515,7 +1511,7 @@ public class ArtManagerLocalTest {
         int expectedGetArtifactsSizeCalls = 3;
         int expectedGetVdexFileSizeCalls = 0;
         int expectedGetRuntimeArtifactsSizeCalls = 1;
-        if (mIsSecondaryAbiUsedByOtherApps || !Flags.dexoptSecondaryIsaOnlyWhenNeeded()) {
+        if (mIsSecondaryAbiUsedByOtherApps) {
             // If other apps are using the secondary ABI, then we expect to get
             // the artifact calls for the secondary ABI as well.
             // It should only count VDEX files and runtime images.
@@ -1651,7 +1647,7 @@ public class ArtManagerLocalTest {
         long expectedTotalSize = (1l << 0) + (1l << 2) + (1l << 3);
         int expectedNumberofSdmFiles = 2;
         int expectedNumberofRuntimeArtifacts = 1;
-        if (mIsSecondaryAbiUsedByOtherApps || !Flags.dexoptSecondaryIsaOnlyWhenNeeded()) {
+        if (mIsSecondaryAbiUsedByOtherApps) {
             // It should count the SDM file, but not runtime images.
             doReturn(createGetDexoptStatusResult("speed-profile", "cloud", "location",
                              ArtifactsLocation.SDM_DALVIK_CACHE, false /* isBackedByVdexOnly */))
