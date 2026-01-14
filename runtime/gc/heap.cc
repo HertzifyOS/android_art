@@ -3920,7 +3920,10 @@ void Heap::GrowForUtilization(collector::GarbageCollector* collector_ran,
         uint64_t expected_gc_cost_ms = NsToMs(current_gc_iteration_.GetThreadCpuTimeNs());
         time_based_gc_threshold_ = time_based_gc_threshold_factor_ * expected_gc_cost_ms;
         last_gc_start_time_ = current_gc_iteration_.GetStartTime();
-
+        if (com::android::art::rw::flags::time_based_gc_triggering_via_integral()) {
+          time_based_gc_threshold_progress_.Reset();
+          time_based_gc_threshold_native_progress_.Reset();
+        }
         RequestTimeBasedGcThresholdCheck(self);
       }
 
@@ -4324,7 +4327,20 @@ size_t Heap::ComputeTimeBasedGcThresholdFactor(double memory_gc_cost_factor) {
   double num_pages = static_cast<double>(sysconf(_SC_PHYS_PAGES));
   double page_size = static_cast<double>(sysconf(_SC_PAGESIZE));
   double total_memory_kb = num_pages * page_size / KB;
+
+  if (com::android::art::rw::flags::time_based_gc_triggering_via_integral()) {
+    // The time weighted average of Java heap is half the max value for apps
+    // that allocate at a constant rate. Adjust the memory_gc_cost_factor
+    // accordingly to allow for fair comparison between the two approaches.
+    memory_gc_cost_factor *= 2.0;
+  }
+
   return static_cast<size_t>(total_memory_kb / memory_gc_cost_factor);
+}
+
+void Heap::TimeIntegral::Reset() {
+  integral_.store(0);
+  time_.store(NanoTime());
 }
 
 class Heap::TimeBasedGcThresholdCheckTask : public HeapTask {
@@ -4374,7 +4390,16 @@ void Heap::TimeBasedGcThresholdCheck(Thread* self) {
   size_t bytes_allocated_since_last_gc_kb = (bytes_allocated - num_bytes_alive_after_gc_) / KB;
   uint64_t now = NanoTime();
   uint64_t time_since_last_gc_ms = NsToMs(now - last_gc_start_time_);
-  if (bytes_allocated_since_last_gc_kb * time_since_last_gc_ms >= time_based_gc_threshold_) {
+
+  uint64_t threshold_progress;
+  if (com::android::art::rw::flags::time_based_gc_triggering_via_integral()) {
+    threshold_progress =
+        time_based_gc_threshold_progress_.AddSample(bytes_allocated_since_last_gc_kb);
+  } else {
+    threshold_progress = bytes_allocated_since_last_gc_kb * time_since_last_gc_ms;
+  }
+
+  if (threshold_progress >= time_based_gc_threshold_) {
     ScopedTrace t2("PureTimeGcTrigger");
     RequestConcurrentGC(self, kGcCauseBackground, false, GetCurrentGcNum());
 
@@ -4393,7 +4418,14 @@ void Heap::TimeBasedGcThresholdCheck(Thread* self) {
     return;
   }
 
-  uint64_t time_delta_ms = time_based_gc_threshold_ / bytes_allocated_since_last_gc_kb;
+  uint64_t time_delta_ms;
+  if (com::android::art::rw::flags::time_based_gc_triggering_via_integral()) {
+    time_delta_ms = time_since_last_gc_ms + (time_based_gc_threshold_ - threshold_progress) /
+                                                bytes_allocated_since_last_gc_kb;
+  } else {
+    time_delta_ms = time_based_gc_threshold_ / bytes_allocated_since_last_gc_kb;
+  }
+
   if (bytes_allocated > bytes_allocated_at_last_gc_threshold_check_) {
     // There have been allocations since the last check, which suggests the
     // application is actively allocating objects. Schedule the next check
@@ -4480,12 +4512,22 @@ inline float Heap::NativeMemoryOverTarget(size_t current_native_bytes, bool is_g
              static_cast<float>(java_gc_start_bytes);
     }
 
-    size_t new_num_bytes_allocated = GetBytesAllocated() + new_native_bytes;
-    size_t bytes_allocated_since_last_gc_kb =
-        (new_num_bytes_allocated - num_bytes_alive_after_gc_) / KB;
-    uint64_t time_since_last_gc_ms = NsToMs(NanoTime() - last_gc_start_time_);
-    return static_cast<float>(bytes_allocated_since_last_gc_kb * time_since_last_gc_ms) /
-           static_cast<float>(time_based_gc_threshold_);
+    uint64_t threshold_progress;
+    if (com::android::art::rw::flags::time_based_gc_triggering_via_integral()) {
+      size_t bytes_allocated_since_last_gc_kb =
+          (GetBytesAllocated() - num_bytes_alive_after_gc_) / KB;
+      threshold_progress =
+          time_based_gc_threshold_progress_.AddSample(bytes_allocated_since_last_gc_kb);
+      threshold_progress +=
+          time_based_gc_threshold_native_progress_.AddSample(new_native_bytes / KB);
+    } else {
+      size_t new_num_bytes_allocated = GetBytesAllocated() + new_native_bytes;
+      size_t bytes_allocated_since_last_gc_kb =
+          (new_num_bytes_allocated - num_bytes_alive_after_gc_) / KB;
+      uint64_t time_since_last_gc_ms = NsToMs(NanoTime() - last_gc_start_time_);
+      threshold_progress = bytes_allocated_since_last_gc_kb * time_since_last_gc_ms;
+    }
+    return static_cast<float>(threshold_progress) / static_cast<float>(time_based_gc_threshold_);
   }
 
   size_t add_bytes_allowed =
@@ -5045,6 +5087,10 @@ void Heap::PostForkChildAction(Thread* self) {
     // based on historical concurrent_start_bytes_ rather than time based
     // thresholding.
     time_based_gc_threshold_ = 0;
+    if (com::android::art::rw::flags::time_based_gc_triggering_via_integral()) {
+      time_based_gc_threshold_progress_.Reset();
+      time_based_gc_threshold_native_progress_.Reset();
+    }
   }
 
   // Shrink heap after kPostForkMaxHeapDurationMS, to force a memory hog process to GC.

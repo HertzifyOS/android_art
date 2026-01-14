@@ -62,6 +62,18 @@ flag {
 }
 
 flag {
+  name: "time_based_gc_triggering_via_integral"
+  namespace: "system_performance"
+  description: "Trigger based on area under Java heap curve."
+  bug: "468021712"
+  metadata {
+    purpose: PURPOSE_BUGFIX
+  }
+  is_fixed_read_only: false
+  is_exported: false
+}
+
+flag {
   name: "post_ur_job"
   namespace: "art_cloud"
   description: "Flag to enable post unattended reboot job."
