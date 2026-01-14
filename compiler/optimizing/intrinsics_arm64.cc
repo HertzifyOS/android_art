@@ -6289,13 +6289,12 @@ void IntrinsicCodeGeneratorARM64::VisitMethodHandleInvokeExact(HInvoke* invoke) 
     __ And(temp, access_flags, Operand(kAccPrivate));
     __ Cbnz(temp, &execute_target_method);
 
-    // The register ip1 is required to be used for the hidden argument in
-    // art_quick_imt_conflict_trampoline, so prevent VIXL from using it.
-    UseScratchRegisterScope scratch_scope(masm);
-    scratch_scope.Exclude(ip1);
+    // The register x15 is used as the hidden argument for `art_quick_imt_conflict_trampoline`,
+    // so make sure VIXL is not using it as a scratch register.
+    DCHECK(!UseScratchRegisterScope(GetVIXLAssembler()).IsAvailable(x15));
 
     // Set the hidden argument.
-    __ Mov(ip1, method);
+    __ Mov(x15, method);
 
     vixl::aarch64::Label get_imt_index_from_method_index;
     vixl::aarch64::Label do_imt_dispatch;
