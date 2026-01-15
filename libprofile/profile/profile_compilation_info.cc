@@ -229,15 +229,20 @@ enum class ProfileCompilationInfo::FileSectionType : uint32_t {
   // Classes included in the profile.
   kClasses = 2,
 
+  // Classes included in the profile that should not be initialized by zygote or dex2oat
+  // (usually due to some logic in the class initializer that should not be shared between
+  // processes, e.g. initializing random seed).
+  kClassesNoPreload = 3,
+
   // Methods included in the profile, their hotness flags and inline caches.
-  kMethods = 3,
+  kMethods = 4,
 
   // The aggregation counts of the profile, classes and methods. This section is
   // an optional reserved section not implemented on client yet.
-  kAggregationCounts = 4,
+  kAggregationCounts = 5,
 
   // The number of known sections.
-  kNumberOfSections = 5
+  kNumberOfSections = 6
 };
 
 class ProfileCompilationInfo::FileSectionInfo {
@@ -982,6 +987,7 @@ static bool WriteBuffer(int fd, const void* buffer, size_t byte_count) {
  *   DexFiles - mandatory, plaintext
  *   ExtraDescriptors - optional, zipped
  *   Classes - optional, zipped
+ *   ClassesNoPreload - optional, zipped
  *   Methods - optional, zipped
  *   AggregationCounts - optional, zipped, server-side
  *
@@ -1001,6 +1007,8 @@ static bool WriteBuffer(int fd, const void* buffer, size_t byte_count) {
  *    type_index_diff[number_of_classes]
  * where instead of storing plain sorted type indexes, we store their differences
  * as smaller numbers are likely to compress better.
+ *
+ * ClassesNoPreload: the same format as 'Classes' section
  *
  * Methods contains records for any number of dex files, each consisting of:
  *    profile_index  // Index of the dex file in DexFiles section.
@@ -1040,6 +1048,7 @@ bool ProfileCompilationInfo::Save(int fd, bool flush) {
   }
   uint64_t dex_files_section_size = sizeof(ProfileIndexType);  // Number of dex files.
   uint64_t classes_section_size = 0u;
+  uint64_t classes_no_preload_section_size = 0u;
   uint64_t methods_section_size = 0u;
   DCHECK_LE(info_.size(), MaxProfileIndex());
   for (const std::unique_ptr<DexFileData>& dex_data : info_) {
@@ -1052,6 +1061,7 @@ bool ProfileCompilationInfo::Save(int fd, bool flush) {
         // Length-prefixed string, the length is `uint16_t`.
         sizeof(uint16_t) + dex_data->profile_key.size();
     classes_section_size += dex_data->ClassesDataSize();
+    classes_no_preload_section_size += dex_data->ClassesNoPreloadDataSize();
     methods_section_size += dex_data->MethodsDataSize();
   }
 
@@ -1059,18 +1069,16 @@ bool ProfileCompilationInfo::Save(int fd, bool flush) {
       /* dex files */ 1u +
       /* extra descriptors */ (extra_descriptors_section_size != 0u ? 1u : 0u) +
       /* classes */ (classes_section_size != 0u ? 1u : 0u) +
+      /* classes-no-preload */ (classes_no_preload_section_size != 0u ? 1u : 0u) +
       /* methods */ (methods_section_size != 0u ? 1u : 0u);
   uint64_t header_and_infos_size =
       sizeof(FileHeader) + file_section_count * sizeof(FileSectionInfo);
 
   // Check size limit. Allow large profiles for non target builds for the case
   // where we are merging many profiles to generate a boot image profile.
-  uint64_t total_uncompressed_size =
-      header_and_infos_size +
-      dex_files_section_size +
-      extra_descriptors_section_size +
-      classes_section_size +
-      methods_section_size;
+  uint64_t total_uncompressed_size = header_and_infos_size + dex_files_section_size +
+                                     extra_descriptors_section_size + classes_section_size +
+                                     classes_no_preload_section_size + methods_section_size;
   VLOG(profiler) << "Required capacity: " << total_uncompressed_size << " bytes.";
   if (total_uncompressed_size > GetSizeErrorThresholdBytes()) {
     LOG(WARNING) << "Profile data size exceeds "
@@ -1143,7 +1151,7 @@ bool ProfileCompilationInfo::Save(int fd, bool flush) {
   if (classes_section_size != 0u) {
     SafeBuffer buffer(classes_section_size);
     for (const std::unique_ptr<DexFileData>& dex_data : info_) {
-      dex_data->WriteClasses(buffer);
+      dex_data->WriteClasses(buffer, /*no_preload=*/false);
     }
     if (!buffer.Deflate()) {
       return false;
@@ -1152,6 +1160,22 @@ bool ProfileCompilationInfo::Save(int fd, bool flush) {
       return false;
     }
     add_section_info(FileSectionType::kClasses, buffer.Size(), classes_section_size);
+  }
+
+  // Write the classes-no-preload section.
+  if (classes_no_preload_section_size != 0u) {
+    SafeBuffer buffer(classes_no_preload_section_size);
+    for (const std::unique_ptr<DexFileData>& dex_data : info_) {
+      dex_data->WriteClasses(buffer, /*no_preload=*/true);
+    }
+    if (!buffer.Deflate()) {
+      return false;
+    }
+    if (!WriteBuffer(fd, buffer.Get(), buffer.Size())) {
+      return false;
+    }
+    add_section_info(
+        FileSectionType::kClassesNoPreload, buffer.Size(), classes_no_preload_section_size);
   }
 
   // Write the methods section.
@@ -1757,7 +1781,8 @@ ProfileCompilationInfo::ProfileLoadStatus ProfileCompilationInfo::ReadClassesSec
     const dchecked_vector<ProfileIndexType>& dex_profile_index_remap,
     const dchecked_vector<ExtraDescriptorIndex>& extra_descriptors_remap,
     /*out*/ std::string* error) {
-  DCHECK(section_info.GetType() == FileSectionType::kClasses);
+  bool is_no_preload_section = (section_info.GetType() == FileSectionType::kClassesNoPreload);
+  DCHECK(section_info.GetType() == FileSectionType::kClasses || is_no_preload_section);
   SafeBuffer buffer;
   ProfileLoadStatus status = ReadSectionData(source, section_info, &buffer, error);
   if (status != ProfileLoadStatus::kSuccess) {
@@ -1767,18 +1792,21 @@ ProfileCompilationInfo::ProfileLoadStatus ProfileCompilationInfo::ReadClassesSec
   while (buffer.GetAvailableBytes() != 0u) {
     ProfileIndexType profile_index;
     if (!buffer.ReadUintAndAdvance(&profile_index)) {
-      *error = "Error profile index in classes section.";
+      *error = is_no_preload_section ? "Error profile index in classes-no-preload section."
+                                     : "Error profile index in classes section.";
       return ProfileLoadStatus::kBadData;
     }
     if (profile_index >= dex_profile_index_remap.size()) {
-      *error = "Invalid profile index in classes section.";
+      *error = is_no_preload_section ? "Invalid profile index in classes-no-preload section."
+                                     : "Invalid profile index in classes section.";
       return ProfileLoadStatus::kBadData;
     }
     profile_index = dex_profile_index_remap[profile_index];
     if (profile_index == MaxProfileIndex()) {
       status = DexFileData::SkipClasses(buffer, error);
     } else {
-      status = info_[profile_index]->ReadClasses(buffer, extra_descriptors_remap, error);
+      status = info_[profile_index]->ReadClasses(
+          buffer, extra_descriptors_remap, error, is_no_preload_section);
     }
     if (status != ProfileLoadStatus::kSuccess) {
       return status;
@@ -1931,6 +1959,7 @@ ProfileCompilationInfo::ProfileLoadStatus ProfileCompilationInfo::LoadInternal(
             *source, section_info, &extra_descriptors_remap, error);
         break;
       case FileSectionType::kClasses:
+      case FileSectionType::kClassesNoPreload:
         // Skip if all dex files were filtered out.
         if (!info_.empty() && merge_classes) {
           status = ReadClassesSection(
@@ -2226,6 +2255,14 @@ std::string ProfileCompilationInfo::DumpInfo(const std::vector<const DexFile*>& 
         os << type_index.index_ << ",";
       }
     }
+    os << "\n\tclasses-no-preload: ";
+    for (dex::TypeIndex type_index : dex_data->class_set_no_preload) {
+      if (dex_file != nullptr) {
+        os << "\n\t\t" << PrettyDescriptor(GetTypeDescriptor(dex_file, type_index));
+      } else {
+        os << type_index.index_ << ",";
+      }
+    }
   }
   return os.str();
 }
@@ -2374,7 +2411,7 @@ bool ProfileCompilationInfo::GenerateTestProfile(
     uint32_t classes_required_in_profile = (number_of_classes * class_percentage) / 100;
 
     DexFileData* const data = info.GetOrAddDexFileData(
-          profile_key, checksum, dex_file->NumTypeIds(), dex_file->NumMethodIds());
+        profile_key, checksum, dex_file->NumTypeIds(), dex_file->NumMethodIds());
     for (uint32_t class_index : create_shuffled_range(classes_required_in_profile,
                                                       number_of_classes)) {
       data->class_set.insert(dex_file->GetClassDef(class_index).class_idx_);
@@ -2633,19 +2670,31 @@ uint32_t ProfileCompilationInfo::DexFileData::ClassesDataSize() const {
         sizeof(uint16_t) * class_set.size();  // Type index diffs.
 }
 
-void ProfileCompilationInfo::DexFileData::WriteClasses(SafeBuffer& buffer) const {
-  if (class_set.empty()) {
+uint32_t ProfileCompilationInfo::DexFileData::ClassesNoPreloadDataSize() const {
+  return class_set_no_preload.empty()
+             ? 0u
+             : sizeof(ProfileIndexType) +                           // Which dex file.
+                   sizeof(uint16_t) +                               // Number of no-preload classes.
+                   sizeof(uint16_t) * class_set_no_preload.size();  // Type index diffs.
+}
+
+void ProfileCompilationInfo::DexFileData::WriteClasses(SafeBuffer& buffer,
+                                                       bool is_no_preload_classes_section) const {
+  const ArenaSet<dex::TypeIndex>& classes =
+      is_no_preload_classes_section ? class_set_no_preload : class_set;
+  if (classes.empty()) {
     return;
   }
   buffer.WriteUintAndAdvance(profile_index);
-  buffer.WriteUintAndAdvance(dchecked_integral_cast<uint16_t>(class_set.size()));
-  WriteClassSet(buffer, class_set);
+  buffer.WriteUintAndAdvance(dchecked_integral_cast<uint16_t>(classes.size()));
+  WriteClassSet(buffer, classes);
 }
 
 ProfileCompilationInfo::ProfileLoadStatus ProfileCompilationInfo::DexFileData::ReadClasses(
     SafeBuffer& buffer,
     const dchecked_vector<ExtraDescriptorIndex>& extra_descriptors_remap,
-    std::string* error) {
+    std::string* error,
+    bool no_preload_section) {
   uint16_t classes_size;
   if (!buffer.ReadUintAndAdvance(&classes_size)) {
     *error = "Error reading classes size.";
@@ -2669,15 +2718,16 @@ ProfileCompilationInfo::ProfileLoadStatus ProfileCompilationInfo::DexFileData::R
       return ProfileLoadStatus::kBadData;
     }
     type_index += type_index_diff;
+    ArenaSet<dex::TypeIndex>& classes = no_preload_section ? class_set_no_preload : class_set;
     if (type_index >= num_type_ids) {
       uint32_t new_extra_descriptor_index = extra_descriptors_remap[type_index - num_type_ids];
       if (new_extra_descriptor_index >= DexFile::kDexNoIndex16 - num_type_ids) {
         *error = "Remapped type index out of range.";
         return ProfileLoadStatus::kMergeError;
       }
-      class_set.insert(dex::TypeIndex(num_type_ids + new_extra_descriptor_index));
+      classes.insert(dex::TypeIndex(num_type_ids + new_extra_descriptor_index));
     } else {
-      class_set.insert(dex::TypeIndex(type_index));
+      classes.insert(dex::TypeIndex(type_index));
     }
   }
   return ProfileLoadStatus::kSuccess;

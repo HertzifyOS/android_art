@@ -2129,4 +2129,24 @@ TEST_F(ProfileCompilationInfoTest, MergeFlattenData) {
   }
 }
 
+// Test addition, saving and loading of no-preload classes in the profile.
+TEST_F(ProfileCompilationInfoTest, NoPreloadClasses) {
+  ScratchFile profile;
+
+  // Add a few no-preload classes.
+  ProfileCompilationInfo info1;
+  for (uint32_t type_index = 0; type_index < 10; ++type_index) {
+    ASSERT_TRUE(info1.AddClassNoPreload(*dex1, dex::TypeIndex(type_index)));
+  }
+
+  // Save profile.
+  ASSERT_TRUE(info1.Save(profile.GetFd()));
+  ASSERT_EQ(0, profile.GetFile()->Flush());
+
+  // Load profile and ensure it's identical to the saved one.
+  ProfileCompilationInfo info2;
+  ASSERT_TRUE(info2.Load(profile.GetFd()));
+  ASSERT_TRUE(info2.Equals(info1));
+}
+
 }  // namespace art
