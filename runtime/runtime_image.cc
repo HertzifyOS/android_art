@@ -903,6 +903,7 @@ class RuntimeImageHelper {
     native_relocations_.Put(cur_methods,
                             std::make_pair(NativeRelocationKind::kArtMethodArray, offset));
 
+    uint16_t hotness_threshold = jit::Jit::GetInitialHotnessThreshold();
     for (size_t i = 0; i != number_of_methods; ++i) {
       ArtMethod* method = &cur_methods->At(i);
       ArtMethod* copy = &dest_array->At(i);
@@ -978,6 +979,10 @@ class RuntimeImageHelper {
             code_item - method->GetDexFile()->DataBegin());;
         copy->SetDataPtrSize(
             reinterpret_cast<const void*>(code_item_offset), kRuntimePointerSize);
+      }
+
+      if (method->HasCodeItem()) {
+        copy->ResetCounter(hotness_threshold);
       }
     }
   }
