@@ -33,7 +33,6 @@ import android.util.Pair;
 
 import androidx.annotation.RequiresApi;
 
-import com.android.art.flags.Flags;
 import com.android.internal.annotations.Immutable;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.LocalManagerRegistry;
@@ -75,13 +74,8 @@ public class ArtFileManager {
         if (options.forPrimaryDex()) {
             for (DetailedPrimaryDexInfo dexInfo :
                     PrimaryDexUtils.getDetailedDexInfo(pkgState, pkg)) {
-                List<Abi> abis;
-                if (Flags.dexoptSecondaryIsaOnlyWhenNeeded()) {
-                    abis = Utils.getUsedPrimaryDexAbis(
-                            mInjector.getDexUseManager(), snapshot, pkgState, dexInfo.dexPath());
-                } else {
-                    abis = Utils.getAllPrimaryDexAbis(pkgState);
-                }
+                List<Abi> abis = Utils.getUsedPrimaryDexAbis(
+                    mInjector.getDexUseManager(), snapshot, pkgState, dexInfo.dexPath());
                 for (Abi abi : abis) {
                     dexAndAbis.add(Pair.create(dexInfo, abi));
                 }

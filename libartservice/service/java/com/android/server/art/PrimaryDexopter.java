@@ -33,7 +33,6 @@ import android.os.UserHandle;
 
 import androidx.annotation.RequiresApi;
 
-import com.android.art.flags.Flags;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.modules.utils.build.SdkLevel;
 import com.android.modules.utils.pm.PackageStateModulesUtils;
@@ -156,11 +155,8 @@ public class PrimaryDexopter extends Dexopter<DetailedPrimaryDexInfo> {
     @Override
     @NonNull
     protected List<Abi> getAllAbis(@NonNull DetailedPrimaryDexInfo dexInfo) {
-        if (Flags.dexoptSecondaryIsaOnlyWhenNeeded()) {
-            return Utils.getUsedPrimaryDexAbis(
-                    mInjector.getDexUseManager(), mSnapshot, mPkgState, dexInfo.dexPath());
-        }
-        return Utils.getAllPrimaryDexAbis(mPkgState);
+        return Utils.getUsedPrimaryDexAbis(
+            mInjector.getDexUseManager(), mSnapshot, mPkgState, dexInfo.dexPath());
     }
 
     @Override
