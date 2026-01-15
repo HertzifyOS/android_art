@@ -55,8 +55,33 @@ class HiddenApi {
   }
 
   std::optional<std::string> GetFlag(const std::string& name) const {
-    auto it = flagged_apis_.find(name);
-    return (it == flagged_apis_.end()) ? std::nullopt : std::make_optional(it->second);
+    if (flagged_apis_.empty()) {
+      return std::nullopt;
+    }
+
+    // Search for a prefix match
+    auto it = flagged_apis_.upper_bound(name);
+    while (it != flagged_apis_.begin()) {
+      it = std::prev(it);
+      const std::string& key = it->first;
+      if (name.size() >= key.size() && name.compare(0, key.size(), key) == 0) {
+        // Exact match
+        bool is_boundary = (name.size() == key.size());
+        if (!is_boundary) {
+          // If not exact match, check if the prefix ends with any of class name
+          // boundary characters (';', '$', or '-')
+          char next_char = name[key.size()];
+          if (next_char == ';' || next_char == '$' || next_char == '-') {
+            is_boundary = true;
+          }
+        }
+
+        if (is_boundary) {
+          return std::make_optional(it->second);
+        }
+      }
+    }
+    return std::nullopt;
   }
 
   void AddSignatureSource(const std::string &signature, SignatureSource source) {
