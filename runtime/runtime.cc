@@ -1809,6 +1809,10 @@ bool Runtime::Init(RuntimeArgumentMap&& runtime_options_in) {
   //   agents_.push_back(lib);
   // }
 
+  if (InstructionSetFeatures::IsRuntimeDetectionSupported()) {
+    runtime_instruction_set_features_ = InstructionSetFeatures::FromRuntimeDetection();
+  }
+
   float foreground_heap_growth_multiplier;
   if (is_low_memory_mode_ && !runtime_options.Exists(Opt::ForegroundHeapGrowthMultiplier)) {
     // If low memory mode, use 1.0 as the multiplier by default.
