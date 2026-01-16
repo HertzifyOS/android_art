@@ -4404,9 +4404,8 @@ void InstructionCodeGeneratorRISCV64::VisitLoadClass(HLoadClass* instruction)
       CodeGeneratorRISCV64::PcRelativePatchInfo* info_high =
           codegen_->NewAppImageTypePatch(instruction->GetDexFile(), instruction->GetTypeIndex());
       codegen_->EmitPcRelativeAuipcPlaceholder(info_high, out);
-      CodeGeneratorRISCV64::PcRelativePatchInfo* info_low =
-          codegen_->NewAppImageTypePatch(
-              instruction->GetDexFile(), instruction->GetTypeIndex(), info_high);
+      CodeGeneratorRISCV64::PcRelativePatchInfo* info_low = codegen_->NewAppImageTypePatch(
+          instruction->GetDexFile(), instruction->GetTypeIndex(), info_high);
       codegen_->EmitPcRelativeLwuPlaceholder(info_low, out, out);
       break;
     }
@@ -4539,6 +4538,16 @@ void InstructionCodeGeneratorRISCV64::VisitLoadString(HLoadString* instruction)
       DCHECK(!codegen_->GetCompilerOptions().IsBootImage());
       uint32_t boot_image_offset = codegen_->GetBootImageOffset(instruction);
       codegen_->LoadBootImageRelRoEntry(out, boot_image_offset);
+      return;
+    }
+    case HLoadString::LoadKind::kAppImageRelRo: {
+      DCHECK(codegen_->GetCompilerOptions().IsAppImage());
+      CodeGeneratorRISCV64::PcRelativePatchInfo* info_high = codegen_->NewAppImageStringPatch(
+          instruction->GetDexFile(), instruction->GetStringIndex());
+      codegen_->EmitPcRelativeAuipcPlaceholder(info_high, out);
+      CodeGeneratorRISCV64::PcRelativePatchInfo* info_low = codegen_->NewAppImageStringPatch(
+          instruction->GetDexFile(), instruction->GetStringIndex(), info_high);
+      codegen_->EmitPcRelativeLwuPlaceholder(info_low, out, out);
       return;
     }
     case HLoadString::LoadKind::kBssEntry: {
@@ -6058,6 +6067,7 @@ CodeGeneratorRISCV64::CodeGeneratorRISCV64(HGraph* graph,
       public_type_bss_entry_patches_(graph->GetAllocator()->Adapter(kArenaAllocCodeGenerator)),
       package_type_bss_entry_patches_(graph->GetAllocator()->Adapter(kArenaAllocCodeGenerator)),
       boot_image_string_patches_(graph->GetAllocator()->Adapter(kArenaAllocCodeGenerator)),
+      app_image_string_patches_(graph->GetAllocator()->Adapter(kArenaAllocCodeGenerator)),
       string_bss_entry_patches_(graph->GetAllocator()->Adapter(kArenaAllocCodeGenerator)),
       boot_image_jni_entrypoint_patches_(graph->GetAllocator()->Adapter(kArenaAllocCodeGenerator)),
       boot_image_other_patches_(graph->GetAllocator()->Adapter(kArenaAllocCodeGenerator)),
@@ -6647,6 +6657,7 @@ HLoadString::LoadKind CodeGeneratorRISCV64::GetSupportedLoadStringKind(
   switch (desired_string_load_kind) {
     case HLoadString::LoadKind::kBootImageLinkTimePcRelative:
     case HLoadString::LoadKind::kBootImageRelRo:
+    case HLoadString::LoadKind::kAppImageRelRo:
     case HLoadString::LoadKind::kBssEntry:
       DCHECK(!Runtime::Current()->UseJitCompilation());
       break;
@@ -6765,6 +6776,11 @@ CodeGeneratorRISCV64::PcRelativePatchInfo* CodeGeneratorRISCV64::NewTypeBssEntry
 CodeGeneratorRISCV64::PcRelativePatchInfo* CodeGeneratorRISCV64::NewBootImageStringPatch(
     const DexFile& dex_file, dex::StringIndex string_index, const PcRelativePatchInfo* info_high) {
   return NewPcRelativePatch(&dex_file, string_index.index_, info_high, &boot_image_string_patches_);
+}
+
+CodeGeneratorRISCV64::PcRelativePatchInfo* CodeGeneratorRISCV64::NewAppImageStringPatch(
+    const DexFile& dex_file, dex::StringIndex string_index, const PcRelativePatchInfo* info_high) {
+  return NewPcRelativePatch(&dex_file, string_index.index_, info_high, &app_image_string_patches_);
 }
 
 CodeGeneratorRISCV64::PcRelativePatchInfo* CodeGeneratorRISCV64::NewStringBssEntryPatch(
@@ -6903,6 +6919,7 @@ void CodeGeneratorRISCV64::EmitLinkerPatches(ArenaVector<linker::LinkerPatch>* l
       public_type_bss_entry_patches_.size() +
       package_type_bss_entry_patches_.size() +
       boot_image_string_patches_.size() +
+      app_image_string_patches_.size() +
       string_bss_entry_patches_.size() +
       boot_image_jni_entrypoint_patches_.size() +
       boot_image_other_patches_.size();
@@ -6921,6 +6938,7 @@ void CodeGeneratorRISCV64::EmitLinkerPatches(ArenaVector<linker::LinkerPatch>* l
   }
   DCHECK_IMPLIES(!GetCompilerOptions().IsAppImage(), app_image_method_patches_.empty());
   DCHECK_IMPLIES(!GetCompilerOptions().IsAppImage(), app_image_type_patches_.empty());
+  DCHECK_IMPLIES(!GetCompilerOptions().IsAppImage(), app_image_string_patches_.empty());
   if (GetCompilerOptions().IsBootImage()) {
     EmitPcRelativeLinkerPatches<NoDexFileAdapter<linker::LinkerPatch::IntrinsicReferencePatch>>(
         boot_image_other_patches_, linker_patches);
@@ -6931,6 +6949,8 @@ void CodeGeneratorRISCV64::EmitLinkerPatches(ArenaVector<linker::LinkerPatch>* l
         app_image_method_patches_, linker_patches);
     EmitPcRelativeLinkerPatches<linker::LinkerPatch::TypeAppImageRelRoPatch>(
         app_image_type_patches_, linker_patches);
+    EmitPcRelativeLinkerPatches<linker::LinkerPatch::StringAppImageRelRoPatch>(
+        app_image_string_patches_, linker_patches);
   }
   EmitPcRelativeLinkerPatches<linker::LinkerPatch::MethodBssEntryPatch>(
       method_bss_entry_patches_, linker_patches);

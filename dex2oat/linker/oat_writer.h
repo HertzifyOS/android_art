@@ -517,21 +517,28 @@ class OatWriter {
   SafeMap<const DexFile*, BitVector> bss_string_entry_references_;
 
   // Map for allocating app image ArtMethod entries in .data.img.rel.ro. Indexed by MethodReference
-  // for the target method in the dex file with the "method reference value comparator" for
-  // deduplication. The value is the target offset for patching, starting at
-  // `data_img_rel_ro_start_`.
+  // for the target method in the dex file. The value is the target offset for patching, starting
+  // at `data_img_rel_ro_start_`.
   BssMap<MethodReference> app_image_rel_ro_method_entries_;
   // Vector containing iterators to `app_image_rel_ro_method_entries_`, sorted using
   // MethodReferenceValueComparator.
   std::vector<BssMap<MethodReference>::iterator> app_image_rel_ro_method_entries_sorted_;
 
   // Map for allocating app image Class entries in .data.img.rel.ro. Indexed by TypeReference for
-  // the source type in the dex file with the "type value comparator" for deduplication. The value
-  // is the target offset for patching, starting at `data_img_rel_ro_start_`.
+  // the source type in the dex file. The value is the target offset for patching, starting at
+  // `data_img_rel_ro_start_`.
   BssMap<TypeReference> app_image_rel_ro_type_entries_;
-  // Vector containing iterators to `app_image_rel_ro_type_entries_sorted_`, sorted using
+  // Vector containing iterators to `app_image_rel_ro_type_entries_`, sorted using
   // TypeReferenceValueComparator.
   std::vector<BssMap<TypeReference>::iterator> app_image_rel_ro_type_entries_sorted_;
+
+  // Map for allocating app image String entries in .data.img.rel.ro. Indexed by StringReference
+  // for the source string in the dex file. The value is the target offset for patching, starting
+  // at `data_img_rel_ro_start_`.
+  BssMap<StringReference> app_image_rel_ro_string_entries_;
+  // Vector containing iterators to `app_image_rel_ro_string_entries_`, sorted using
+  // StringReferenceValueComparator.
+  std::vector<BssMap<StringReference>::iterator> app_image_rel_ro_string_entries_sorted_;
 
   // Map for allocating ArtMethod entries in .bss. Indexed by MethodReference for the target
   // method in the dex file with the "method reference value comparator" for deduplication.

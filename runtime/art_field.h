@@ -90,6 +90,10 @@ class EXPORT ArtField final {
     return (GetAccessFlags() & kAccPrivate) != 0;
   }
 
+  bool IsMonotonic() {
+    return (GetAccessFlags() & kAccMonotonic) != 0;
+  }
+
   uint32_t GetDexFieldIndex() {
     return field_dex_idx_;
   }

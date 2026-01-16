@@ -1753,18 +1753,17 @@ bool Runtime::Init(RuntimeArgumentMap&& runtime_options_in) {
   // hiddenapi_platform_enforcement flag is set, otherwise the checks are
   // disabled by default and can be enabled with a command line flag.
   // AndroidRuntime will pass the flag if a system property is set.
-  // TODO(b/377676642): Replace flag with SDK level check when ramped.
   {
     bool always_enable = false;
 #ifdef ART_TARGET_ANDROID
-    if (com::android::art::flags::hiddenapi_platform_enforcement()) {
+    if (hiddenapi::EnableHiddenapiPlatformEnforcement()) {
       always_enable = true;
     }
 #endif
     const char* reason;
     if (always_enable) {
       core_platform_api_policy_ = hiddenapi::EnforcementPolicy::kEnabled;
-      reason = "from the hiddenapi_platform_enforcement flag";
+      reason = "from the hiddenapi_platform_enforcement flag and the device API level";
     } else {
       core_platform_api_policy_ = runtime_options.GetOrDefault(Opt::CorePlatformApiPolicy);
       reason = "by runtime option";
@@ -1808,6 +1807,10 @@ bool Runtime::Init(RuntimeArgumentMap&& runtime_options_in) {
   // for (auto lib : runtime_options.ReleaseOrDefault(Opt::AgentLib)) {
   //   agents_.push_back(lib);
   // }
+
+  if (InstructionSetFeatures::IsRuntimeDetectionSupported()) {
+    runtime_instruction_set_features_ = InstructionSetFeatures::FromRuntimeDetection();
+  }
 
   float foreground_heap_growth_multiplier;
   if (is_low_memory_mode_ && !runtime_options.Exists(Opt::ForegroundHeapGrowthMultiplier)) {

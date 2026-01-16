@@ -18,7 +18,9 @@
 #include <string.h>
 
 #include "arch/arm64/asm_support_arm64.h"
+#include "arch/arm64/instruction_set_features_arm64.h"
 #include "base/bit_utils.h"
+#include "com_android_art_rw_flags.h"
 #include "entrypoints/entrypoint_utils.h"
 #include "entrypoints/jni/jni_entrypoints.h"
 #include "entrypoints/quick/quick_alloc_entrypoints.h"
@@ -83,6 +85,11 @@ extern "C" void art_quick_record_exit_trace_event_with_flush();
 extern "C" void art_quick_record_long_running_entry_trace_event();
 extern "C" void art_quick_record_long_running_exit_trace_event();
 
+extern "C" void art_quick_lock_object_lse(mirror::Object*);
+extern "C" void art_quick_unlock_object_lse(mirror::Object*);
+extern "C" void art_jni_lock_object_lse(mirror::Object*);
+extern "C" void art_jni_unlock_object_lse(mirror::Object*);
+
 extern "C" void art_quick_nop_record_entry_trace_event() {
   return;
 }
@@ -94,6 +101,26 @@ extern "C" void art_quick_nop_record_exit_trace_event() {
 extern "C" void art_quick_nop_uprobe_method_entry_hook() {
   return;
 }
+
+namespace {
+
+bool ShouldUseLSEQuickLock() {
+  if (!com::android::art::rw::flags::lse_quick_lock()) {
+    return false;
+  }
+
+  const Runtime* runtime = Runtime::Current();
+  if (runtime == nullptr) {
+    return false;
+  }
+  const InstructionSetFeatures* features = runtime->GetRuntimeInstructionSetFeatures();
+  if (features == nullptr) {
+    return false;
+  }
+  return features->AsArm64InstructionSetFeatures()->HasLSE();
+}
+
+}  // namespace
 
 void UpdateReadBarrierEntrypoints(QuickEntryPoints* qpoints, bool is_active) {
   // ARM64 is the architecture with the largest number of core
@@ -228,6 +255,13 @@ void InitEntryPoints(JniEntryPoints* jpoints,
     // These are used for always-on-tracing, currently only supported on arm64 devices.
     qpoints->SetRecordEntryTraceEvent(art_quick_nop_record_entry_trace_event);
     qpoints->SetRecordExitTraceEvent(art_quick_nop_record_exit_trace_event);
+  }
+
+  if (ShouldUseLSEQuickLock() && !UNLIKELY(VLOG_IS_ON(systrace_lock_logging))) {
+    qpoints->SetLockObject(art_quick_lock_object_lse);
+    qpoints->SetUnlockObject(art_quick_unlock_object_lse);
+    qpoints->SetJniLockObject(art_jni_lock_object_lse);
+    qpoints->SetJniUnlockObject(art_jni_unlock_object_lse);
   }
 }
 

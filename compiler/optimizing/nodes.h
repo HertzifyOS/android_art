@@ -6187,6 +6187,10 @@ class HLoadString final : public HInstruction {
     // Used for boot image strings referenced by apps in AOT-compiled code.
     kBootImageRelRo,
 
+    // Load from an app image entry in the .data.img.rel.ro using a PC-relative load.
+    // Used for app image strings referenced by apps in AOT-compiled code.
+    kAppImageRelRo,
+
     // Load from an entry in the .bss section using a PC-relative load.
     // Used for strings outside boot image referenced by AOT-compiled app and boot image code.
     kBssEntry,
@@ -6233,6 +6237,7 @@ class HLoadString final : public HInstruction {
   bool HasPcRelativeLoadKind() const {
     return GetLoadKind() == LoadKind::kBootImageLinkTimePcRelative ||
            GetLoadKind() == LoadKind::kBootImageRelRo ||
+           GetLoadKind() == LoadKind::kAppImageRelRo ||
            GetLoadKind() == LoadKind::kBssEntry;
   }
 
@@ -6264,6 +6269,7 @@ class HLoadString final : public HInstruction {
     LoadKind load_kind = GetLoadKind();
     if (load_kind == LoadKind::kBootImageLinkTimePcRelative ||
         load_kind == LoadKind::kBootImageRelRo ||
+        load_kind == LoadKind::kAppImageRelRo ||
         load_kind == LoadKind::kJitBootImageAddress ||
         load_kind == LoadKind::kJitTableAddress) {
       return false;
@@ -6334,6 +6340,7 @@ inline void HLoadString::AddSpecialInput(HInstruction* special_input) {
   // including literal pool loads, which are PC-relative too.
   DCHECK(GetLoadKind() == LoadKind::kBootImageLinkTimePcRelative ||
          GetLoadKind() == LoadKind::kBootImageRelRo ||
+         GetLoadKind() == LoadKind::kAppImageRelRo ||
          GetLoadKind() == LoadKind::kBssEntry ||
          GetLoadKind() == LoadKind::kJitBootImageAddress) << GetLoadKind();
   // HLoadString::GetInputRecords() returns an empty array at this point,

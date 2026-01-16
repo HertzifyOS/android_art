@@ -107,6 +107,7 @@ class CompilerCallbacks;
 class Dex2oatImageTest;
 class DexFile;
 enum class InstructionSet;
+class InstructionSetFeatures;
 class InternTable;
 class IsMarkedVisitor;
 class JavaVMExt;
@@ -1013,6 +1014,10 @@ class Runtime {
   // suspended to call this function.
   EXPORT void SetJniIdType(JniIdType t);
 
+  const InstructionSetFeatures* GetRuntimeInstructionSetFeatures() const {
+    return runtime_instruction_set_features_.get();
+  }
+
   uint32_t GetVerifierLoggingThresholdMs() const {
     return verifier_logging_threshold_ms_;
   }
@@ -1616,6 +1621,8 @@ class Runtime {
 #ifdef ART_USE_SIMULATOR
   std::unique_ptr<CodeSimulatorContainer> simulator_container_;
 #endif
+
+  std::unique_ptr<const InstructionSetFeatures> runtime_instruction_set_features_;
 
   // Note: See comments on GetFaultMessage.
   friend std::string GetFaultMessageForAbortLogging();
