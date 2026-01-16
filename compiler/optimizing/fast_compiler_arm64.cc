@@ -2564,7 +2564,11 @@ bool FastCompilerARM64::BuildInstanceFieldGet(const Instruction& instruction,
              next)) {
     return false;
   }
-  UpdateNonNullMask(obj_reg, /* can_be_null= */ false);
+  // Update the information that the object on which we do the field access is
+  // not null, unless its dex register aliases with the destination register.
+  if (obj_reg != source_or_dest_reg) {
+    UpdateNonNullMask(obj_reg, /* can_be_null= */ false);
+  }
   return true;
 }
 
