@@ -163,3 +163,12 @@ flag {
   is_fixed_read_only: false
   is_exported: false
 }
+
+flag {
+    name: "enable_secure_compilation"
+    namespace: "hardware_backed_security"
+    description: "Flag for API to enable secure compilation"
+    bug: "419024976"
+    is_fixed_read_only: false
+    is_exported: false
+}
