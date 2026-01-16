@@ -84,7 +84,7 @@ class HConstantFoldingVisitor final : public CRTPGraphVisitor<HConstantFoldingVi
   void VisitInstanceFieldGet(HInstanceFieldGet* inst);
 
   void FoldFieldValue(HFieldAccess* inst, ObjPtr<mirror::Object> receiver)
-      REQUIRES_SHARED (Locks::mutator_lock_);
+      REQUIRES_SHARED(Locks::mutator_lock_);
 
   void PropagateValue(HBasicBlock* starting_block,
                       HInstruction* variable,
