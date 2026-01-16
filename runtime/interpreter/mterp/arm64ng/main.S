@@ -109,6 +109,7 @@
 #define xNEW_FP   x12
 #define xNEW_REFS x13
 #define CFI_NEW_REFS 13
+#define xHIDDEN_ARG x15 // The hidden argument register for invoke-interface/-range.
 
 // +8 for the ArtMethod of the caller.
 #define OFFSET_TO_FIRST_ARGUMENT_IN_STACK (CALLEE_SAVES_SIZE + 8)
@@ -836,7 +837,7 @@
 %  pass
 .endm
 
-.macro COMMON_INVOKE_NON_RANGE is_static=0, is_interface=0, suffix="", is_string_init=0, is_polymorphic=0, is_custom=0
+.macro COMMON_INVOKE_NON_RANGE is_static=0, suffix="", is_string_init=0, is_polymorphic=0, is_custom=0
    .if \is_polymorphic
      // We always go to compiled code for polymorphic calls.
 %    pass
@@ -911,10 +912,6 @@
 %      pass
      .endif
 .Linvoke_fast_path_\suffix:
-     .if \is_interface
-       // Setup hidden argument.
-       mov x15, xCSTMP
-     .endif
      ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
      FETCH_ADVANCE_INST 3
@@ -955,10 +952,6 @@
      b.eq .Lget_shorty_and_invoke_\suffix
      # TODO: Use some other register for shorty and prefetch the instruction directly to wINST.
      mov xINST, x14
-     .if \is_interface
-       // Setup hidden argument.
-       mov x15, xCSTMP
-     .endif
      ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
      ADVANCE 3
@@ -1036,10 +1029,6 @@
    .elseif \is_custom
      bl art_quick_invoke_custom
    .else
-      .if \is_interface
-        // Setup hidden argument.
-        mov x15, xCSTMP
-      .endif
       ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
       blr lr
    .endif
@@ -1208,7 +1197,7 @@
     b 1b
 .endm
 
-.macro COMMON_INVOKE_RANGE is_static=0, is_interface=0, suffix="", is_string_init=0, is_polymorphic=0, is_custom=0
+.macro COMMON_INVOKE_RANGE is_static=0, suffix="", is_string_init=0, is_polymorphic=0, is_custom=0
    .if \is_polymorphic
      // We always go to compiled code for polymorphic calls.
 %    pass
@@ -1296,10 +1285,6 @@
 %      pass
      .endif
 .Linvoke_fast_path_range_\suffix:
-     .if \is_interface
-       // Setup hidden argument.
-       mov x15, xCSTMP
-     .endif
      ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
      FETCH_ADVANCE_INST 3
@@ -1335,10 +1320,6 @@
      b.eq .Lget_shorty_and_invoke_range_\suffix
      # TODO: Use some other register for shorty and prefetch the instruction directly to wINST.
      mov xINST, x14
-     .if \is_interface
-       // Setup hidden argument.
-       mov x15, xCSTMP
-     .endif
      ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
      ADVANCE 3
@@ -1428,10 +1409,6 @@
    .elseif \is_custom
      bl art_quick_invoke_custom
    .else
-      .if \is_interface
-        // Setup hidden argument.
-        mov x15, xCSTMP
-      .endif
       ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
       blr lr
    .endif
@@ -1864,15 +1841,6 @@ NterpCommonInvokeInstance:
 
 NterpCommonInvokeInstanceRange:
     COMMON_INVOKE_RANGE suffix="invokeInstance"
-
-NterpCommonInvokeInterface:
-#ifdef USE_HEAP_POISONING
-    ldr x0, [x2, w3, uxtw #3]
-#endif
-    COMMON_INVOKE_NON_RANGE is_interface=1, suffix="invokeInterface"
-
-NterpCommonInvokeInterfaceRange:
-    COMMON_INVOKE_RANGE is_interface=1, suffix="invokeInterface"
 
 NterpCommonInvokePolymorphic:
     COMMON_INVOKE_NON_RANGE is_polymorphic=1, suffix="invokePolymorphic"
