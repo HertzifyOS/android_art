@@ -226,10 +226,9 @@ class ThreadList {
 
   void VisitReflectiveTargets(ReflectiveValueVisitor* visitor) const REQUIRES(Locks::mutator_lock_);
 
-  EXPORT void SweepInterpreterCaches(IsMarkedVisitor* visitor) const
+  EXPORT void ClearInterpreterCaches() const
       REQUIRES(Locks::mutator_lock_, !Locks::thread_list_lock_);
 
-  void ClearInterpreterCaches() const REQUIRES(Locks::mutator_lock_, !Locks::thread_list_lock_);
   // Return a copy of the thread list.
   std::list<Thread*> GetList() REQUIRES(Locks::thread_list_lock_) {
     return list_;

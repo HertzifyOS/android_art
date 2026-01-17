@@ -368,12 +368,16 @@ class MANAGED DexCache final : public Object {
   ObjPtr<CallSite> SetResolvedCallSite(uint32_t call_site_idx, ObjPtr<CallSite> resolved)
       REQUIRES_SHARED(Locks::mutator_lock_) WARN_UNUSED;
 
+  static constexpr MemberOffset DexFileOffset() {
+    return MemberOffset(OFFSET_OF_OBJECT_MEMBER(DexCache, dex_file_));
+  }
+
   const DexFile* GetDexFile() ALWAYS_INLINE REQUIRES_SHARED(Locks::mutator_lock_) {
-    return GetFieldPtr<const DexFile*>(OFFSET_OF_OBJECT_MEMBER(DexCache, dex_file_));
+    return GetFieldPtr<const DexFile*>(DexFileOffset());
   }
 
   void SetDexFile(const DexFile* dex_file) REQUIRES_SHARED(Locks::mutator_lock_) {
-    SetFieldPtr<false>(OFFSET_OF_OBJECT_MEMBER(DexCache, dex_file_), dex_file);
+    SetFieldPtr<false>(DexFileOffset(), dex_file);
   }
 
   EXPORT void SetLocation(ObjPtr<String> location) REQUIRES_SHARED(Locks::mutator_lock_);

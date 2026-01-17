@@ -1718,13 +1718,6 @@ void ThreadList::VisitReflectiveTargets(ReflectiveValueVisitor *visitor) const {
   }
 }
 
-void ThreadList::SweepInterpreterCaches(IsMarkedVisitor* visitor) const {
-  MutexLock mu(Thread::Current(), *Locks::thread_list_lock_);
-  for (const auto& thread : list_) {
-    thread->SweepInterpreterCache(visitor);
-  }
-}
-
 void ThreadList::ClearInterpreterCaches() const {
   Thread* self = Thread::Current();
   Locks::mutator_lock_->AssertExclusiveHeld(self);

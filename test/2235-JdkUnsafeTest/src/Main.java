@@ -146,6 +146,8 @@ public class Main {
     testCasIntConstantOffset(unsafe);
     testCasLongConstantOffset(unsafe);
     testCasReferenceConstantOffset(unsafe);
+
+    testFinalFields();
   }
 
   private static void testArrayBaseOffset(Unsafe unsafe) {
@@ -1413,6 +1415,24 @@ public class Main {
     public int intVar = 0;
     public long longVar = 0;
     public Object objectVar = null;
+  }
+
+  private static void testFinalFields() throws NoSuchFieldException {
+    Field theUnsafeField = Unsafe.class.getDeclaredField("theUnsafe");
+    theUnsafeField.setAccessible(true);
+
+    try {
+      theUnsafeField.set(null, null);
+      throw new AssertionError("IAE was expected");
+    } catch (IllegalAccessException expected) {}
+
+    Field longArrayBaseOffsetField = Unsafe.class.getDeclaredField("ARRAY_LONG_BASE_OFFSET");
+    longArrayBaseOffsetField.setAccessible(true);
+
+    try {
+      longArrayBaseOffsetField.set(null, 0);
+      throw new AssertionError("IAE was expected");
+    } catch (IllegalAccessException expected) {}
   }
 
   private static class TestVolatileClass {

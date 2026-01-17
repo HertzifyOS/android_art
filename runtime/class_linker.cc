@@ -3711,6 +3711,17 @@ ObjPtr<mirror::Class> ClassLinker::DefineClass(Thread* self,
         }
       }
     }
+
+    static constexpr const std::string_view kUnsafeClasses[] = {
+      "Ljdk/internal/misc/Unsafe;"sv,
+      "Lsun/misc/Unsafe;"sv
+    };
+
+    for (const std::string_view unsafe : kUnsafeClasses) {
+      if (class_name == unsafe) {
+        all_final_fields_are_monotonic = true;
+      }
+    }
   }
 
   if (all_final_fields_are_monotonic) {

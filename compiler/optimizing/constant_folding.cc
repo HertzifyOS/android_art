@@ -84,7 +84,7 @@ class HConstantFoldingVisitor final : public CRTPGraphVisitor<HConstantFoldingVi
   void VisitInstanceFieldGet(HInstanceFieldGet* inst);
 
   void FoldFieldValue(HFieldAccess* inst, ObjPtr<mirror::Object> receiver)
-      REQUIRES_SHARED (Locks::mutator_lock_);
+      REQUIRES_SHARED(Locks::mutator_lock_);
 
   void PropagateValue(HBasicBlock* starting_block,
                       HInstruction* variable,
@@ -788,6 +788,10 @@ static bool IsUnmodifiableAndInitialized(ArtField* field, const CompilerOptions&
     return false;
   }
 
+  if (field->IsMonotonic()) {
+    return true;
+  }
+
   // Can't use Runtime::GetSdkVersion in the compiler. See Runtime.sdk_version_ comment.
   if (IsSdkVersionSetAndAtMost(compiler_options.GetAssumeValueOptions().SdkInt(), SdkVersion::kB)) {
     return false;
@@ -921,7 +925,7 @@ void HConstantFoldingVisitor::FoldFieldValue(HFieldAccess* instruction,
     }
     default:
       break;
-    }
+  }
 
   if (constant != nullptr) {
     instruction->ReplaceWith(constant);

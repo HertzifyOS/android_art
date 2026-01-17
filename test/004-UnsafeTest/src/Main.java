@@ -69,6 +69,8 @@ public class Main {
     testGetAndPutAndCAS(unsafe);
     testGetAndPutVolatile(unsafe);
     testCopyMemoryPrimitiveArrays(unsafe);
+
+    testFinalFields();
   }
 
   private static void testArrayBaseOffset(Unsafe unsafe) {
@@ -323,6 +325,16 @@ public class Main {
     public volatile int volatileIntVar = 0;
     public volatile long volatileLongVar = 0;
     public volatile Object volatileObjectVar = null;
+  }
+
+  private static void testFinalFields() throws NoSuchFieldException {
+    Field theUnsafeField = Unsafe.class.getDeclaredField("theUnsafe");
+    theUnsafeField.setAccessible(true);
+
+    try {
+      theUnsafeField.set(null, null);
+      throw new AssertionError("IAE was expected");
+    } catch (IllegalAccessException expected) {}
   }
 
   private static native int vmArrayBaseOffset(Class<?> clazz);

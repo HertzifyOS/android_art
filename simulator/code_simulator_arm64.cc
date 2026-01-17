@@ -142,8 +142,49 @@ class ARTSimulator final : public Simulator {
     RegisterBranchInterception(artInitializeStaticStorageFromCode);
     RegisterBranchInterception(artResolveStringFromCode);
     RegisterBranchInterception(artResolveMethodTypeFromCode);
+    RegisterBranchInterception(artAllocObjectFromCodeWithChecksRosAlloc);
+    RegisterBranchInterception(artInvokePolymorphic);
+    RegisterBranchInterception(artLockObjectFromCode);
+    RegisterBranchInterception(artUnlockObjectFromCode);
+    RegisterBranchInterception(artDeliverExceptionFromCode);
+    RegisterBranchInterception(artStringBuilderAppend);
+    RegisterBranchInterception(fmodf);
+    RegisterBranchInterception(fmod);
+    RegisterBranchInterception(artAllocArrayFromCodeResolvedRosAllocInstrumented);
+    RegisterBranchInterception(artAllocObjectFromCodeInitializedRosAllocInstrumented);
+    RegisterBranchInterception(artAllocObjectFromCodeWithChecksRosAllocInstrumented);
+    RegisterBranchInterception(artAllocObjectFromCodeResolvedRosAllocInstrumented);
+    RegisterBranchInterception(artGetByteStaticFromCompiledCode);
+    RegisterBranchInterception(artGetCharStaticFromCompiledCode);
+    RegisterBranchInterception(artGet32StaticFromCompiledCode);
+    RegisterBranchInterception(artGet64StaticFromCompiledCode);
+    RegisterBranchInterception(artGetObjStaticFromCompiledCode);
+    RegisterBranchInterception(artGetByteInstanceFromCompiledCode);
+    RegisterBranchInterception(artGetCharInstanceFromCompiledCode);
+    RegisterBranchInterception(artGet32InstanceFromCompiledCode);
+    RegisterBranchInterception(artGet64InstanceFromCompiledCode);
+    RegisterBranchInterception(artGetObjInstanceFromCompiledCode);
+    RegisterBranchInterception(artSet8StaticFromCompiledCode);
+    RegisterBranchInterception(artSet16StaticFromCompiledCode);
+    RegisterBranchInterception(artSet32StaticFromCompiledCode);
+    RegisterBranchInterception(artSet64StaticFromCompiledCode);
+    RegisterBranchInterception(artSetObjStaticFromCompiledCode);
+    RegisterBranchInterception(artSet8InstanceFromCompiledCode);
+    RegisterBranchInterception(artSet16InstanceFromCompiledCode);
+    RegisterBranchInterception(artSet32InstanceFromCompiledCode);
+    RegisterBranchInterception(artSet64InstanceFromCompiledCode);
+    RegisterBranchInterception(artSetObjInstanceFromCompiledCode);
+    RegisterBranchInterception(artResolveMethodHandleFromCode);
+    RegisterBranchInterception(artAllocStringObjectRosAlloc);
+    RegisterBranchInterception(artDeoptimizeIfNeeded);
+    RegisterBranchInterception(artInvokeCustom);
 
     RegisterTwoWordReturnInterception(artInvokeSuperTrampolineWithAccessCheck);
+    RegisterTwoWordReturnInterception(artInvokeStaticTrampolineWithAccessCheck);
+    RegisterTwoWordReturnInterception(artInvokeInterfaceTrampoline);
+    RegisterTwoWordReturnInterception(artInvokeVirtualTrampolineWithAccessCheck);
+    RegisterTwoWordReturnInterception(artInvokeDirectTrampolineWithAccessCheck);
+    RegisterTwoWordReturnInterception(artInvokeInterfaceTrampolineWithAccessCheck);
 
     RegisterBranchInterception(
         artArm64SimulatorGenericJNIPlaceholder,

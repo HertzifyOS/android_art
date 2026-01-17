@@ -81,7 +81,15 @@ HiddenApi::HiddenApi(const char* filename,
         LOG(WARNING) << "Invalid line in flagged apis file: " << str;
         continue;
       }
-      flagged_apis_.emplace(std::move(values[0]), std::move(values[1]));
+
+      // Remove the last semicolon if exist.
+      // We are using the prefix matching with the flagged apis to match with
+      // inner classes.
+      std::string& key = values[0];
+      if (!key.empty() && key.back() == ';') {
+        key.pop_back();
+      }
+      flagged_apis_.emplace(std::move(key), std::move(values[1]));
     }
   }
 }
