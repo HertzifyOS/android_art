@@ -76,7 +76,7 @@
 %  slow_path = add_slow_path(invoke_interface_slow_path, range)
    EXPORT_PC
    // Fast-path which gets the method from thread-local cache.
-%  fetch_from_thread_cache("xCSTMP", miss_label=slow_path)
+%  fetch_from_thread_cache("xHIDDEN_ARG", miss_label=slow_path)
 .L${opcode}_resume:
    // Load the C-F arguments to wARGS (w8) and get the receiver to x1 (the 'this' pointer).
    FETCH wARGS, 2
@@ -87,22 +87,24 @@
    // Test the first two bits of the fetched ArtMethod:
    // - If the first bit is set, this is a method on j.l.Object
    // - If the second bit is set, this is a default method.
-   tst xCSTMP, #0x3
+   tst xHIDDEN_ARG, #0x3
    b.ne .L${opcode}_slow_path_edge_cases
-   ldrh w3, [xCSTMP, #ART_METHOD_IMT_INDEX_OFFSET]
+   ldrh w3, [xHIDDEN_ARG, #ART_METHOD_IMT_INDEX_OFFSET]
 .L${opcode}_resume_with_imt_index:
    ldr x2, [x2, #MIRROR_CLASS_IMT_PTR_OFFSET_64]
 %  if range:
      ldr x0, [x2, w3, uxtw #3]
-     b NterpCommonInvokeInterfaceRange
+     b NterpCommonInvokeInstanceRange
 %  else:
 #ifdef USE_HEAP_POISONING
      // The unpoisoning above means we need to move the LDR to the
-     // `NterpCommonInvokeInterface` to keep the handler size 64B.
+     // slow path to keep the handler size 64B.
+     b .L${opcode}_slow_path_load_method_for_heap_poisoning
 #else
      ldr x0, [x2, w3, uxtw #3]
+     b NterpCommonInvokeInstance
 #endif
-     b NterpCommonInvokeInterface
+%    pass
 
 %def invoke_interface_slow_path(range):
    mov x0, xSELF
@@ -110,22 +112,31 @@
    mov x2, xPC
    mov x3, xFP
    bl nterp_get_method
-   mov xCSTMP, x0
+   mov xHIDDEN_ARG, x0
    b .L${opcode}_resume
 .L${opcode}_slow_path_edge_cases:
-   tbnz xCSTMP, #0, 2f
-   and xCSTMP, xCSTMP, #-4
-   ldrh w3, [xCSTMP, #ART_METHOD_METHOD_INDEX_OFFSET]
+   tbnz xHIDDEN_ARG, #0, 2f
+   and xHIDDEN_ARG, xHIDDEN_ARG, #-4
+   ldrh w3, [xHIDDEN_ARG, #ART_METHOD_METHOD_INDEX_OFFSET]
    and w3, w3, #ART_METHOD_IMT_MASK
    b .L${opcode}_resume_with_imt_index
 2:
-   lsr xCSTMP, xCSTMP, #16
+   // The method resolved to a non-interface method in j.l.Object.
+   // Perform virtual call with the vtable index in bits 31:16 of xHIDDEN_ARG.
+   lsr ip, xHIDDEN_ARG, #16
    add w2, w2, #MIRROR_CLASS_VTABLE_OFFSET_64
-   ldr x0, [x2, xCSTMP, lsl #3]
+   ldr x0, [x2, ip, lsl #3]
 %  if range:
      b NterpCommonInvokeInstanceRange
 %  else:
      b NterpCommonInvokeInstance
+%  pass
+#ifdef USE_HEAP_POISONING
+.L${opcode}_slow_path_load_method_for_heap_poisoning:
+   ldr x0, [x2, w3, uxtw #3]
+   b NterpCommonInvokeInstance
+#endif
+%  pass
 
 %def op_invoke_interface():
 %  invoke_interface()
