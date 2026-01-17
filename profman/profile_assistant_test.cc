@@ -40,6 +40,7 @@
 #include "profile/profile_test_helper.h"
 #include "profman/profman_result.h"
 #include "scoped_thread_state_change-inl.h"
+#include "synthetic_class_format_util.h"
 
 namespace art {
 
