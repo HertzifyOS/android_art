@@ -824,10 +824,9 @@
 .endm
 
 .macro SETUP_RETURN_VALUE shorty
-   ldrb wip, [\shorty]
-   cmp ip, #68       // Test if result type char == 'D'.
+   cmp \shorty, #68  // Test if result type char == 'D'.
    b.eq 1f
-   cmp ip, #70       // Test if result type char == 'F'.
+   cmp \shorty, #70  // Test if result type char == 'F'.
    b.ne 2f
    fmov w0, s0
    b 2f
@@ -949,10 +948,12 @@
      GOTO_OPCODE
 .Lget_shorty_and_invoke_\suffix:
      FETCH w7, 1
-     GET_SHORTY_AND_LENGTH xCSTMP, w10, x7, slow_path=.Lget_shorty_and_invoke_slow_path_\suffix
+     GET_SHORTY_AND_LENGTH x14, w10, x7, slow_path=.Lget_shorty_and_invoke_slow_path_\suffix
+.Lget_shorty_and_invoke_resume_\suffix:
+     ldrb wCSTMP, [x14]  // load return arg character
      b .Lgpr_setup_finished_\suffix
 .Lget_shorty_and_invoke_slow_path_\suffix:
-     GET_SHORTY_AND_LENGTH_SLOW_PATH xCSTMP, w10, resume=.Lgpr_setup_finished_\suffix
+     GET_SHORTY_AND_LENGTH_SLOW_PATH x14, w10, resume=.Lget_shorty_and_invoke_resume_\suffix
    .endif
 
 .Lget_shorty_\suffix:
@@ -961,27 +962,27 @@
      ldr x0, [sp, #16]
      mov x1, xPC
      bl NterpGetShortyFromInvokeCustom
-     mov xCSTMP, x0
+     mov x14, x0
      ldp x0, x1, [sp], #16
      FETCH wARGS, 2
    .else
      .if \is_polymorphic
        FETCH w7, 3
-       GET_SHORTY_AND_LENGTH xCSTMP, w10, x7, slow_path=.Lget_shorty_slow_path_\suffix, \
+       GET_SHORTY_AND_LENGTH x14, w10, x7, slow_path=.Lget_shorty_slow_path_\suffix, \
            is_proto_index=1
      .else
        FETCH w7, 1
-       GET_SHORTY_AND_LENGTH xCSTMP, w10, x7, slow_path=.Lget_shorty_slow_path_\suffix
+       GET_SHORTY_AND_LENGTH x14, w10, x7, slow_path=.Lget_shorty_slow_path_\suffix
      .endif
    .endif
 .Lget_shorty_resume_\suffix:
    // From this point:
-   // - xCSTMP contains shorty (in callee-save to switch over return value after call).
+   // - x14 contains shorty (in callee-save to switch over return value after call).
    // - x0 contains method
    // - x1 contains 'this' pointer for instance method.
    // - except for polymorphic and custom invokes, lr contains the entrypoint.
-   // - for interface calls, xHIDDEN_ARG contains the interface method.
-   add x9, xCSTMP, #1  // shorty + 1  ; ie skip return arg character
+   // - for interface calls, xHIDDEN_ARG (x15) contains the interface method.
+   add x9, x14, #1  // shorty + 1  ; ie skip return arg character
    .if \is_string_init
      lsr w11, wARGS, #4
      mov x10, #1       // ignore first argument
@@ -998,23 +999,23 @@
    LOOP_OVER_SHORTY_LOADING_FPS d3, s3, x11, x9, x10, .Lxmm_setup_finished_\suffix
    LOOP_OVER_SHORTY_LOADING_FPS d4, s4, x11, x9, x10, .Lxmm_setup_finished_\suffix
 .Lxmm_setup_finished_\suffix:
-   add x9, xCSTMP, #1  // shorty + 1  ; ie skip return arg character
+   ldrb wCSTMP, [x14], #1  // load return arg character, advance to args at shorty + 1
    .if \is_string_init
      lsr w11, wARGS, #4
      mov x10, #1       // ignore first argument
-     LOOP_OVER_SHORTY_LOADING_GPRS x1, w1, x11, x9, x10, .Lgpr_setup_finished_\suffix
+     LOOP_OVER_SHORTY_LOADING_GPRS x1, w1, x11, x14, x10, .Lgpr_setup_finished_\suffix
    .elseif \is_static
      mov w11, wARGS
      mov x10, xzr      // arg_index
-     LOOP_OVER_SHORTY_LOADING_GPRS x1, w1, x11, x9, x10, .Lgpr_setup_finished_\suffix
+     LOOP_OVER_SHORTY_LOADING_GPRS x1, w1, x11, x14, x10, .Lgpr_setup_finished_\suffix
    .else
      lsr w11, wARGS, #4
      mov x10, #1       // ignore first argument
    .endif
-   LOOP_OVER_SHORTY_LOADING_GPRS x2, w2, x11, x9, x10, .Lgpr_setup_finished_\suffix
-   LOOP_OVER_SHORTY_LOADING_GPRS x3, w3, x11, x9, x10, .Lgpr_setup_finished_\suffix
-   LOOP_OVER_SHORTY_LOADING_GPRS x4, w4, x11, x9, x10, .Lgpr_setup_finished_\suffix
-   LOOP_OVER_SHORTY_LOADING_GPRS x5, w5, x11, x9, x10, .Lgpr_setup_finished_\suffix
+   LOOP_OVER_SHORTY_LOADING_GPRS x2, w2, x11, x14, x10, .Lgpr_setup_finished_\suffix
+   LOOP_OVER_SHORTY_LOADING_GPRS x3, w3, x11, x14, x10, .Lgpr_setup_finished_\suffix
+   LOOP_OVER_SHORTY_LOADING_GPRS x4, w4, x11, x14, x10, .Lgpr_setup_finished_\suffix
+   LOOP_OVER_SHORTY_LOADING_GPRS x5, w5, x11, x14, x10, .Lgpr_setup_finished_\suffix
 .Lgpr_setup_finished_\suffix:
    .if \is_polymorphic
      bl art_quick_invoke_polymorphic
@@ -1023,7 +1024,9 @@
    .else
       blr lr
    .endif
-   SETUP_RETURN_VALUE xCSTMP
+   .if !\is_string_init
+     SETUP_RETURN_VALUE wCSTMP
+   .endif
 .Ldone_return_\suffix:
    /* resume execution of caller */
    .if \is_string_init
@@ -1043,7 +1046,7 @@
 
    .if !\is_custom
 .Lget_shorty_slow_path_\suffix:
-     GET_SHORTY_AND_LENGTH_SLOW_PATH xCSTMP, w10, resume=.Lget_shorty_resume_\suffix
+     GET_SHORTY_AND_LENGTH_SLOW_PATH x14, w10, resume=.Lget_shorty_resume_\suffix
    .endif
 .endm
 
@@ -1310,11 +1313,13 @@
      GOTO_OPCODE
 .Lget_shorty_and_invoke_range_\suffix:
      FETCH w7, 1
-     GET_SHORTY_AND_LENGTH xCSTMP, w10, x7, \
+     GET_SHORTY_AND_LENGTH x14, w10, x7, \
          slow_path=.Lget_shorty_and_invoke_range_slow_path_\suffix
+.Lget_shorty_and_invoke_range_resume_\suffix:
+     ldrb wCSTMP, [x14]  // load return arg character
      b .Lgpr_setup_finished_range_\suffix
 .Lget_shorty_and_invoke_range_slow_path_\suffix:
-     GET_SHORTY_AND_LENGTH_SLOW_PATH xCSTMP, w10, resume=.Lgpr_setup_finished_range_\suffix
+     GET_SHORTY_AND_LENGTH_SLOW_PATH x14, w10, resume=.Lget_shorty_and_invoke_range_resume_\suffix
    .endif
 
 .Lget_shorty_range_\suffix:
@@ -1323,27 +1328,27 @@
      ldr x0, [sp, #16]
      mov x1, xPC
      bl NterpGetShortyFromInvokeCustom
-     mov xCSTMP, x0
+     mov x14, x0
      ldp x0, x1, [sp], #16
      FETCH wARGS, 2
    .else
      .if \is_polymorphic
        FETCH w7, 3
-       GET_SHORTY_AND_LENGTH xCSTMP, w10, x7, slow_path=.Lget_shorty_range_slow_path_\suffix, \
+       GET_SHORTY_AND_LENGTH x14, w10, x7, slow_path=.Lget_shorty_range_slow_path_\suffix, \
            is_proto_index=1
      .else
        FETCH w7, 1
-       GET_SHORTY_AND_LENGTH xCSTMP, w10, x7, slow_path=.Lget_shorty_range_slow_path_\suffix
+       GET_SHORTY_AND_LENGTH x14, w10, x7, slow_path=.Lget_shorty_range_slow_path_\suffix
      .endif
    .endif
 .Lget_shorty_range_resume_\suffix:
    // From this point:
-   // - xCSTMP contains shorty (in callee-save to switch over return value after call).
+   // - x14 contains shorty (in callee-save to switch over return value after call).
    // - x0 contains method
    // - x1 contains 'this' pointer for instance method.
    // - except for polymorphic and custom invokes, lr contains the entrypoint.
-   // - for interface calls, xHIDDEN_ARG contains the interface method.
-   add x9, xCSTMP, #1  // shorty + 1  ; ie skip return arg character
+   // - for interface calls, xHIDDEN_ARG (x15) contains the interface method.
+   add x9, x14, #1  // shorty + 1  ; ie skip return arg character
    .if \is_string_init
      add w10, wARGS, #1   // arg start index
      mov x11, #1          // index in stack
@@ -1366,28 +1371,28 @@
    add x11, x11, #2 // Add two words for the ArtMethod stored before the outs.
    LOOP_RANGE_OVER_FPs x9, w10, w11, .Lxmm_setup_finished_range_\suffix
 .Lxmm_setup_finished_range_\suffix:
-   add x9, xCSTMP, #1  // shorty + 1  ; ie skip return arg character
+   ldrb wCSTMP, [x14], #1  // load return arg character, advance to args at shorty + 1
    .if \is_string_init
      add w10, wARGS, #1   // arg start index
      mov x11, #1          // index in stack
-     LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x1, w1, x9, w10, w11, .Lgpr_setup_finished_range_\suffix
+     LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x1, w1, x14, w10, w11, .Lgpr_setup_finished_range_\suffix
    .elseif \is_static
      mov w10, wARGS       // arg start index
      mov x11, xzr         // index in stack
-     LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x1, w1, x9, w10, w11 .Lgpr_setup_finished_range_\suffix
+     LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x1, w1, x14, w10, w11 .Lgpr_setup_finished_range_\suffix
    .else
      add w10, wARGS, #1   // arg start index
      mov x11, #1          // index in stack
    .endif
-   LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x2, w2, x9, w10, w11, .Lgpr_setup_finished_range_\suffix
-   LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x3, w3, x9, w10, w11, .Lgpr_setup_finished_range_\suffix
-   LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x4, w4, x9, w10, w11, .Lgpr_setup_finished_range_\suffix
-   LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x5, w5, x9, w10, w11, .Lgpr_setup_finished_range_\suffix
-   LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x6, w6, x9, w10, w11, .Lgpr_setup_finished_range_\suffix
-   LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x7, w7, x9, w10, w11, .Lgpr_setup_finished_range_\suffix
+   LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x2, w2, x14, w10, w11, .Lgpr_setup_finished_range_\suffix
+   LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x3, w3, x14, w10, w11, .Lgpr_setup_finished_range_\suffix
+   LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x4, w4, x14, w10, w11, .Lgpr_setup_finished_range_\suffix
+   LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x5, w5, x14, w10, w11, .Lgpr_setup_finished_range_\suffix
+   LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x6, w6, x14, w10, w11, .Lgpr_setup_finished_range_\suffix
+   LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x7, w7, x14, w10, w11, .Lgpr_setup_finished_range_\suffix
    // Store in the outs array (stored above the ArtMethod in the stack)
    add x11, x11, #2 // Add two words for the ArtMethod stored before the outs.
-   LOOP_RANGE_OVER_INTs x9, w10, w11, .Lgpr_setup_finished_range_\suffix
+   LOOP_RANGE_OVER_INTs x14, w10, w11, .Lgpr_setup_finished_range_\suffix
 .Lgpr_setup_finished_range_\suffix:
    .if \is_polymorphic
      bl art_quick_invoke_polymorphic
@@ -1396,7 +1401,9 @@
    .else
      blr lr
    .endif
-   SETUP_RETURN_VALUE xCSTMP
+   .if !\is_string_init
+     SETUP_RETURN_VALUE wCSTMP
+   .endif
 .Ldone_return_range_\suffix:
    /* resume execution of caller */
    .if \is_string_init
@@ -1415,7 +1422,7 @@
 
    .if !\is_custom
 .Lget_shorty_range_slow_path_\suffix:
-     GET_SHORTY_AND_LENGTH_SLOW_PATH xCSTMP, w10, resume=.Lget_shorty_range_resume_\suffix
+     GET_SHORTY_AND_LENGTH_SLOW_PATH x14, w10, resume=.Lget_shorty_range_resume_\suffix
    .endif
 .endm
 
