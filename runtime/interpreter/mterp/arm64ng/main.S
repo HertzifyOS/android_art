@@ -845,15 +845,13 @@
      // We always go to compiled code for custom calls.
 %    pass
    .else
-     N2N_ENTRY_POINT_CHECK x2, x3, .Lcall_compiled_code_\suffix
+     N2N_ENTRY_POINT_CHECK x2, entrypoint=lr, call_compiled_code=.Lcall_compiled_code_\suffix
      .if \is_string_init
-       FETCH w8, 2                // Load the C-F arguments to w8.
        ubfx wip, wINST, #8, #4    // Extract G
        lsr wARGS, wARGS, #4       // Shift args D-F to C-E for string init.
        bfi wARGS, wip, #12, #4    // Insert arg G as F for string init.
        bl nterp_to_nterp_static_non_range
      .elseif \is_static
-       FETCH w8, 2                // Load the C-F arguments to w8.
        bl nterp_to_nterp_static_non_range
      .else
        bl nterp_to_nterp_instance_non_range
@@ -874,45 +872,42 @@
    .else
      ldr wip, [x0, #ART_METHOD_ACCESS_FLAGS_OFFSET]
      tbz wip, #ART_METHOD_NTERP_INVOKE_FAST_PATH_FLAG_BIT, .Lfast_path_with_few_args_\suffix
-     FETCH_B wip2, 0, 1
-     asr ip, ip2, #4
+     ubfx wip, wINST, #12, #4
      .if \is_static
-       cbz ip, .Linvoke_fast_path_\suffix
+       cbz wip, .Linvoke_fast_path_\suffix
      .else
-       cmp ip, #1
+       cmp wip, #1
        b.eq .Linvoke_fast_path_\suffix
      .endif
-     FETCH w8, 2
-     cmp ip, #2
+     cmp wip, #2
      .if \is_static
        b.lt .Lone_arg_fast_path_\suffix
      .endif
      b.eq .Ltwo_args_fast_path_\suffix
-     cmp ip, #4
+     cmp wip, #4
      b.lt .Lthree_args_fast_path_\suffix
      b.eq .Lfour_args_fast_path_\suffix
 
-     and         ip, ip2, #15
+     ubfx        wip, wINST, #8, #4
      GET_VREG    w5, wip
 .Lfour_args_fast_path_\suffix:
-     asr         ip, x8, #12
+     ubfx        wip, wARGS, #12, #4
      GET_VREG    w4, wip
 .Lthree_args_fast_path_\suffix:
-     ubfx        ip, x8, #8, #4
+     ubfx        wip, wARGS, #8, #4
      GET_VREG    w3, wip
 .Ltwo_args_fast_path_\suffix:
-     ubfx        ip, x8, #4, #4
+     ubfx        wip, wARGS, #4, #4
      GET_VREG    w2, wip
 .Lone_arg_fast_path_\suffix:
      .if \is_static
-       and         ip, x8, #0xf
+       ubfx        wip, wARGS, #0, #4
        GET_VREG    w1, wip
      .else
        // First argument already in w1.
 %      pass
      .endif
 .Linvoke_fast_path_\suffix:
-     ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
      FETCH_ADVANCE_INST 3
      PREPARE_OPCODE_DISPATCH
@@ -921,48 +916,43 @@
 .Lfast_path_with_few_args_\suffix:
      // Fast path when we have zero or one argument (modulo 'this'). If there
      // is one argument, we can put it in both floating point and core register.
-     FETCH_B w2, 0, 1
      .if \is_static
-       cmp w2, #(2 << 4)
+       cmp wINST, #(2 << 12)
      .else
-       cmp w2, #(3 << 4)
+       cmp wINST, #(3 << 12)
      .endif
      b.ge .Lget_shorty_\suffix
      .if \is_static
-       tbz w2, #4, .Linvoke_with_few_args_\suffix
+       tbz wINST, #12, .Linvoke_with_few_args_\suffix
      .else
-       tbnz w2, #4, .Linvoke_with_few_args_\suffix
+       tbnz wINST, #12, .Linvoke_with_few_args_\suffix
      .endif
-     FETCH w2, 2
      .if \is_static
-       and w2, w2, #0xf  // dex register of first argument
+       ubfx w2, wARGS, #0, #4  // dex register of first argument
        GET_VREG w1, w2
        fmov s0, w1
      .else
-       ubfx x2, x2, #4, #4  // dex register of second argument
+       ubfx w2, wARGS, #4, #4  // dex register of second argument
        GET_VREG w2, w2
        fmov s0, w2
      .endif
 .Linvoke_with_few_args_\suffix:
      // Check if the next instruction is move-result or move-result-wide.
      // If it is, we fetch the shorty and jump to the regular invocation.
-     FETCH w14, 3
-     and ip, x14, #0xfe
-     cmp ip, #0x0a
+     FETCH wINST, 3
+     and wip, wINST, #0xfe
+     cmp wip, #0x0a
      b.eq .Lget_shorty_and_invoke_\suffix
-     # TODO: Use some other register for shorty and prefetch the instruction directly to wINST.
-     mov xINST, x14
-     ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
      ADVANCE 3
      PREPARE_OPCODE_DISPATCH
      GOTO_OPCODE
 .Lget_shorty_and_invoke_\suffix:
      FETCH w7, 1
-     GET_SHORTY_AND_LENGTH xINST, w10, x7, slow_path=.Lget_shorty_and_invoke_slow_path_\suffix
+     GET_SHORTY_AND_LENGTH xCSTMP, w10, x7, slow_path=.Lget_shorty_and_invoke_slow_path_\suffix
      b .Lgpr_setup_finished_\suffix
 .Lget_shorty_and_invoke_slow_path_\suffix:
-     GET_SHORTY_AND_LENGTH_SLOW_PATH xINST, w10, resume=.Lgpr_setup_finished_\suffix
+     GET_SHORTY_AND_LENGTH_SLOW_PATH xCSTMP, w10, resume=.Lgpr_setup_finished_\suffix
    .endif
 
 .Lget_shorty_\suffix:
@@ -971,33 +961,35 @@
      ldr x0, [sp, #16]
      mov x1, xPC
      bl NterpGetShortyFromInvokeCustom
-     mov xINST, x0
+     mov xCSTMP, x0
      ldp x0, x1, [sp], #16
+     FETCH wARGS, 2
    .else
      .if \is_polymorphic
        FETCH w7, 3
-       GET_SHORTY_AND_LENGTH xINST, w10, x7, slow_path=.Lget_shorty_slow_path_\suffix, \
+       GET_SHORTY_AND_LENGTH xCSTMP, w10, x7, slow_path=.Lget_shorty_slow_path_\suffix, \
            is_proto_index=1
      .else
        FETCH w7, 1
-       GET_SHORTY_AND_LENGTH xINST, w10, x7, slow_path=.Lget_shorty_slow_path_\suffix
+       GET_SHORTY_AND_LENGTH xCSTMP, w10, x7, slow_path=.Lget_shorty_slow_path_\suffix
      .endif
    .endif
 .Lget_shorty_resume_\suffix:
    // From this point:
-   // - xINST contains shorty (in callee-save to switch over return value after call).
+   // - xCSTMP contains shorty (in callee-save to switch over return value after call).
    // - x0 contains method
    // - x1 contains 'this' pointer for instance method.
-   // - for interface calls, xCSTMP contains the interface method.
-   add x9, xINST, #1  // shorty + 1  ; ie skip return arg character
-   FETCH w11, 2 // arguments
+   // - except for polymorphic and custom invokes, lr contains the entrypoint.
+   // - for interface calls, xHIDDEN_ARG contains the interface method.
+   add x9, xCSTMP, #1  // shorty + 1  ; ie skip return arg character
    .if \is_string_init
-     lsr x11, x11, #4
+     lsr w11, wARGS, #4
      mov x10, #1       // ignore first argument
    .elseif \is_static
+     mov w11, wARGS
      mov x10, xzr      // arg_index
    .else
-     lsr x11, x11, #4
+     lsr w11, wARGS, #4
      mov x10, #1       // ignore first argument
    .endif
    LOOP_OVER_SHORTY_LOADING_FPS d0, s0, x11, x9, x10, .Lxmm_setup_finished_\suffix
@@ -1006,17 +998,17 @@
    LOOP_OVER_SHORTY_LOADING_FPS d3, s3, x11, x9, x10, .Lxmm_setup_finished_\suffix
    LOOP_OVER_SHORTY_LOADING_FPS d4, s4, x11, x9, x10, .Lxmm_setup_finished_\suffix
 .Lxmm_setup_finished_\suffix:
-   add x9, xINST, #1  // shorty + 1  ; ie skip return arg character
-   FETCH w11, 2 // arguments
+   add x9, xCSTMP, #1  // shorty + 1  ; ie skip return arg character
    .if \is_string_init
-     lsr x11, x11, #4
+     lsr w11, wARGS, #4
      mov x10, #1       // ignore first argument
      LOOP_OVER_SHORTY_LOADING_GPRS x1, w1, x11, x9, x10, .Lgpr_setup_finished_\suffix
    .elseif \is_static
+     mov w11, wARGS
      mov x10, xzr      // arg_index
      LOOP_OVER_SHORTY_LOADING_GPRS x1, w1, x11, x9, x10, .Lgpr_setup_finished_\suffix
    .else
-     lsr x11, x11, #4
+     lsr w11, wARGS, #4
      mov x10, #1       // ignore first argument
    .endif
    LOOP_OVER_SHORTY_LOADING_GPRS x2, w2, x11, x9, x10, .Lgpr_setup_finished_\suffix
@@ -1029,10 +1021,9 @@
    .elseif \is_custom
      bl art_quick_invoke_custom
    .else
-      ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
       blr lr
    .endif
-   SETUP_RETURN_VALUE xINST
+   SETUP_RETURN_VALUE xCSTMP
 .Ldone_return_\suffix:
    /* resume execution of caller */
    .if \is_string_init
@@ -1052,7 +1043,7 @@
 
    .if !\is_custom
 .Lget_shorty_slow_path_\suffix:
-     GET_SHORTY_AND_LENGTH_SLOW_PATH xINST, w10, resume=.Lget_shorty_resume_\suffix
+     GET_SHORTY_AND_LENGTH_SLOW_PATH xCSTMP, w10, resume=.Lget_shorty_resume_\suffix
    .endif
 .endm
 
@@ -1205,13 +1196,11 @@
      // We always go to compiled code for custom calls.
 %    pass
    .else
-     N2N_ENTRY_POINT_CHECK x2, x3, .Lcall_compiled_code_range_\suffix
+     N2N_ENTRY_POINT_CHECK x2, entrypoint=lr, call_compiled_code=.Lcall_compiled_code_range_\suffix
      .if \is_string_init
-       FETCH w8, 2                // Load the first argument number to w8.
-       add w8, w8, #1             // Adjust the first argument number for string init.
+       add wARGS, wARGS, #1       // Adjust the first argument number for string init.
        bl nterp_to_nterp_static_range
      .elseif \is_static
-       FETCH w8, 2                // Load the first argument number to w8.
        bl nterp_to_nterp_static_range
      .else
        bl nterp_to_nterp_instance_range
@@ -1232,15 +1221,14 @@
    .else
      ldr wip, [x0, #ART_METHOD_ACCESS_FLAGS_OFFSET]
      tbz wip, #ART_METHOD_NTERP_INVOKE_FAST_PATH_FLAG_BIT, .Lfast_path_with_few_args_range_\suffix
-     FETCH_B wip2, 0, 1  // Number of arguments
+     lsr wip2, wINST, #8  // Number of arguments
      .if \is_static
        cbz ip2, .Linvoke_fast_path_range_\suffix
      .else
        cmp ip2, #1
        b.eq .Linvoke_fast_path_range_\suffix
      .endif
-     FETCH wip, 2  // dex register of first argument
-     add x8, xFP, wip, uxtw #2  // location of first dex register value
+     add x9, xFP, wARGS, uxtw #2  // location of first dex register value
      cmp ip2, #2
      .if \is_static
        b.lt .Lone_arg_fast_path_range_\suffix
@@ -1254,38 +1242,37 @@
      b.eq .Lsix_args_fast_path_range_\suffix
      cmp ip2, #7
      b.eq .Lseven_args_fast_path_range_\suffix
-     // Setup x8 to point to the stack location of parameters we do not need
-     // to put parameters in.
-     add x9, sp, #8  // Add space for the ArtMethod
+     // Setup x10 to point to the stack location of parameters. We do not need to copy
+     // parameters that are passed in registers to their reserved stack slots.
+     add x10, sp, #8  // Add space for the ArtMethod
 
 .Lloop_over_fast_path_range_\suffix:
      sub ip2, ip2, #1
-     ldr wip, [x8, ip2, lsl #2]
-     str wip, [x9, ip2, lsl #2]
+     ldr wip, [x9, ip2, lsl #2]
+     str wip, [x10, ip2, lsl #2]
      cmp ip2, #7
      b.ne .Lloop_over_fast_path_range_\suffix
 
 .Lseven_args_fast_path_range_\suffix:
-     ldr w7, [x8, #24]
+     ldr w7, [x9, #24]
 .Lsix_args_fast_path_range_\suffix:
-     ldr w6, [x8, #20]
+     ldr w6, [x9, #20]
 .Lfive_args_fast_path_range_\suffix:
-     ldr w5, [x8, #16]
+     ldr w5, [x9, #16]
 .Lfour_args_fast_path_range_\suffix:
-     ldr w4, [x8, #12]
+     ldr w4, [x9, #12]
 .Lthree_args_fast_path_range_\suffix:
-     ldr w3, [x8, #8]
+     ldr w3, [x9, #8]
 .Ltwo_args_fast_path_range_\suffix:
-     ldr w2, [x8, #4]
+     ldr w2, [x9, #4]
 .Lone_arg_fast_path_range_\suffix:
      .if \is_static
-       ldr w1, [x8, #0]
+       ldr w1, [x9, #0]
      .else
        // First argument already in w1.
 %      pass
      .endif
 .Linvoke_fast_path_range_\suffix:
-     ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
      FETCH_ADVANCE_INST 3
      PREPARE_OPCODE_DISPATCH
@@ -1294,7 +1281,7 @@
 .Lfast_path_with_few_args_range_\suffix:
      // Fast path when we have zero or one argument (modulo 'this'). If there
      // is one argument, we can put it in both floating point and core register.
-     FETCH_B w2, 0, 1 // number of arguments
+     lsr w2, wINST, #8 // number of arguments
      .if \is_static
        cmp w2, #1
      .else
@@ -1302,36 +1289,32 @@
      .endif
      b.lt .Linvoke_with_few_args_range_\suffix
      b.ne .Lget_shorty_range_\suffix
-     FETCH w3, 2  // dex register of first argument
      .if \is_static
-       GET_VREG w1, w3
+       GET_VREG w1, wARGS
        fmov s0, w1
      .else
-       add w3, w3, #1  // Add 1 for next argument
-       GET_VREG w2, w3
+       add w2, wARGS, #1  // Add 1 for next argument
+       GET_VREG w2, w2
        fmov s0, w2
      .endif
 .Linvoke_with_few_args_range_\suffix:
      // Check if the next instruction is move-result or move-result-wide.
      // If it is, we fetch the shorty and jump to the regular invocation.
-     FETCH w14, 3
-     and ip, x14, #0xfe
-     cmp ip, #0x0a
+     FETCH wINST, 3
+     and wip, wINST, #0xfe
+     cmp wip, #0x0a
      b.eq .Lget_shorty_and_invoke_range_\suffix
-     # TODO: Use some other register for shorty and prefetch the instruction directly to wINST.
-     mov xINST, x14
-     ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
      blr lr
      ADVANCE 3
      PREPARE_OPCODE_DISPATCH
      GOTO_OPCODE
 .Lget_shorty_and_invoke_range_\suffix:
      FETCH w7, 1
-     GET_SHORTY_AND_LENGTH xINST, w10, x7, \
+     GET_SHORTY_AND_LENGTH xCSTMP, w10, x7, \
          slow_path=.Lget_shorty_and_invoke_range_slow_path_\suffix
      b .Lgpr_setup_finished_range_\suffix
 .Lget_shorty_and_invoke_range_slow_path_\suffix:
-     GET_SHORTY_AND_LENGTH_SLOW_PATH xINST, w10, resume=.Lgpr_setup_finished_range_\suffix
+     GET_SHORTY_AND_LENGTH_SLOW_PATH xCSTMP, w10, resume=.Lgpr_setup_finished_range_\suffix
    .endif
 
 .Lget_shorty_range_\suffix:
@@ -1340,34 +1323,36 @@
      ldr x0, [sp, #16]
      mov x1, xPC
      bl NterpGetShortyFromInvokeCustom
-     mov xINST, x0
+     mov xCSTMP, x0
      ldp x0, x1, [sp], #16
+     FETCH wARGS, 2
    .else
      .if \is_polymorphic
        FETCH w7, 3
-       GET_SHORTY_AND_LENGTH xINST, w10, x7, slow_path=.Lget_shorty_range_slow_path_\suffix, \
+       GET_SHORTY_AND_LENGTH xCSTMP, w10, x7, slow_path=.Lget_shorty_range_slow_path_\suffix, \
            is_proto_index=1
      .else
        FETCH w7, 1
-       GET_SHORTY_AND_LENGTH xINST, w10, x7, slow_path=.Lget_shorty_range_slow_path_\suffix
+       GET_SHORTY_AND_LENGTH xCSTMP, w10, x7, slow_path=.Lget_shorty_range_slow_path_\suffix
      .endif
    .endif
 .Lget_shorty_range_resume_\suffix:
    // From this point:
-   // - xINST contains shorty (in callee-save to switch over return value after call).
+   // - xCSTMP contains shorty (in callee-save to switch over return value after call).
    // - x0 contains method
    // - x1 contains 'this' pointer for instance method.
-   // - for interface calls, xCSTMP contains the interface method.
-   add x9, xINST, #1  // shorty + 1  ; ie skip return arg character
-   FETCH w10, 2 // arguments
+   // - except for polymorphic and custom invokes, lr contains the entrypoint.
+   // - for interface calls, xHIDDEN_ARG contains the interface method.
+   add x9, xCSTMP, #1  // shorty + 1  ; ie skip return arg character
    .if \is_string_init
-     add x10, x10, #1  // arg start index
-     mov x11, #1       // index in stack
+     add w10, wARGS, #1   // arg start index
+     mov x11, #1          // index in stack
    .elseif \is_static
-     mov x11, xzr      // index in stack
+     mov w10, wARGS       // arg start index
+     mov x11, xzr         // index in stack
    .else
-     add x10, x10, #1  // arg start index
-     mov x11, #1       // index in stack
+     add w10, wARGS, #1   // arg start index
+     mov x11, #1          // index in stack
    .endif
    LOOP_RANGE_OVER_SHORTY_LOADING_FPS d0, s0, x9, w10, w11, .Lxmm_setup_finished_range_\suffix
    LOOP_RANGE_OVER_SHORTY_LOADING_FPS d1, s1, x9, w10, w11, .Lxmm_setup_finished_range_\suffix
@@ -1381,18 +1366,18 @@
    add x11, x11, #2 // Add two words for the ArtMethod stored before the outs.
    LOOP_RANGE_OVER_FPs x9, w10, w11, .Lxmm_setup_finished_range_\suffix
 .Lxmm_setup_finished_range_\suffix:
-   add x9, xINST, #1  // shorty + 1  ; ie skip return arg character
-   FETCH w10, 2 // arguments
+   add x9, xCSTMP, #1  // shorty + 1  ; ie skip return arg character
    .if \is_string_init
-     add x10, x10, #1  // arg start index
-     mov x11, #1       // index in stack
+     add w10, wARGS, #1   // arg start index
+     mov x11, #1          // index in stack
      LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x1, w1, x9, w10, w11, .Lgpr_setup_finished_range_\suffix
    .elseif \is_static
-     mov x11, xzr      // index in stack
+     mov w10, wARGS       // arg start index
+     mov x11, xzr         // index in stack
      LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x1, w1, x9, w10, w11 .Lgpr_setup_finished_range_\suffix
    .else
-     add x10, x10, #1  // arg start index
-     mov x11, #1       // index in stack
+     add w10, wARGS, #1   // arg start index
+     mov x11, #1          // index in stack
    .endif
    LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x2, w2, x9, w10, w11, .Lgpr_setup_finished_range_\suffix
    LOOP_RANGE_OVER_SHORTY_LOADING_GPRS x3, w3, x9, w10, w11, .Lgpr_setup_finished_range_\suffix
@@ -1409,10 +1394,9 @@
    .elseif \is_custom
      bl art_quick_invoke_custom
    .else
-      ldr lr, [x0, #ART_METHOD_QUICK_CODE_OFFSET_64]
-      blr lr
+     blr lr
    .endif
-   SETUP_RETURN_VALUE xINST
+   SETUP_RETURN_VALUE xCSTMP
 .Ldone_return_range_\suffix:
    /* resume execution of caller */
    .if \is_string_init
@@ -1431,7 +1415,7 @@
 
    .if !\is_custom
 .Lget_shorty_range_slow_path_\suffix:
-     GET_SHORTY_AND_LENGTH_SLOW_PATH xINST, w10, resume=.Lget_shorty_range_resume_\suffix
+     GET_SHORTY_AND_LENGTH_SLOW_PATH xCSTMP, w10, resume=.Lget_shorty_range_resume_\suffix
    .endif
 .endm
 
@@ -1678,7 +1662,8 @@ OAT_ENTRY ExecuteNterpImpl
 
     ldr xPC, [x0, #ART_METHOD_DATA_OFFSET_64]
     // Setup the stack for executing the method. Use xINST as a callee-save temporary.
-    SETUP_STACK_FRAME xPC, xREFS, xFP, CFI_REFS, xINST, regs_ins=w14, access_flags=wCSTMP
+    // Load access flags to x8 (wARGS is not used here).
+    SETUP_STACK_FRAME xPC, xREFS, xFP, CFI_REFS, xINST, regs_ins=w14, access_flags=w8
     lsr w15, w14, #16  // Extract inputs size
     // Update xPC to point to instructions.
     add xPC, xPC, #CODE_ITEM_INSNS_OFFSET
@@ -1689,7 +1674,7 @@ OAT_ENTRY ExecuteNterpImpl
     sub wip2, w14, w15  // inputs start index in low 16 bits (high bits have inputs size)
     ubfiz w11, wip2, #2, #16  // x11 is now the offset for inputs into the registers array.
 
-    tbz wCSTMP, #ART_METHOD_NTERP_ENTRY_POINT_FAST_PATH_FLAG_BIT, .Lsetup_slow_path
+    tbz w8, #ART_METHOD_NTERP_ENTRY_POINT_FAST_PATH_FLAG_BIT, .Lsetup_slow_path
     // Setup pointer to inputs in FP and pointer to inputs in REFS
     add x10, xFP, x11
     add x11, xREFS, x11
@@ -1708,15 +1693,15 @@ OAT_ENTRY ExecuteNterpImpl
 .Lsetup_slow_path:
     // If the method is not static and there is one argument ('this'), we don't need to fetch the
     // shorty.
-    tbnz wCSTMP, #ART_METHOD_IS_STATIC_FLAG_BIT, .Lsetup_with_shorty
+    tbnz w8, #ART_METHOD_IS_STATIC_FLAG_BIT, .Lsetup_with_shorty
     str w1, [xFP, x11]
     str w1, [xREFS, x11]
     cmp w15, #1
     b.eq .Lxmm_setup_finished
 
 .Lsetup_with_shorty:
-    ldr w8, [x0, #ART_METHOD_DEX_METHOD_INDEX_OFFSET]
-    GET_SHORTY_AND_LENGTH xIBASE, w9, x8, slow_path=.Lsetup_with_shorty_slow_path
+    ldr w10, [x0, #ART_METHOD_DEX_METHOD_INDEX_OFFSET]
+    GET_SHORTY_AND_LENGTH xIBASE, w9, x10, slow_path=.Lsetup_with_shorty_slow_path
 .Lsetup_with_shorty_continue:
 
     // Setup pointer to inputs in FP and pointer to inputs in REFS
@@ -1725,7 +1710,7 @@ OAT_ENTRY ExecuteNterpImpl
     mov x14, #0
 
     add x9, xIBASE, #1  // shorty + 1  ; ie skip return arg character
-    tbnz wCSTMP, #ART_METHOD_IS_STATIC_FLAG_BIT, .Lhandle_static_method
+    tbnz w8, #ART_METHOD_IS_STATIC_FLAG_BIT, .Lhandle_static_method
     add x10, x10, #4
     add x11, x11, #4
     add xINST, xINST, #4

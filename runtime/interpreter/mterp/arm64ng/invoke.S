@@ -42,6 +42,7 @@
      b .L${opcode}_resume
 %  else:
      tbz x0, #0, .L${opcode}_resume
+     FETCH wARGS, 2
      and x0, x0, #-2 // Remove the extra bit that marks it's a String.<init> method.
 %    if range:
        b NterpHandleStringInitRange
@@ -148,6 +149,7 @@
    EXPORT_PC
    // Fast-path which gets the method from thread-local cache.
 %  fetch_from_thread_cache("x0", miss_label="1f")
+   FETCH wARGS, 2
    b $helper
 1:
    mov x0, xSELF
@@ -155,6 +157,7 @@
    mov x2, xPC
    mov x3, xFP
    bl nterp_get_method
+   FETCH wARGS, 2
    b $helper
 
 %def op_invoke_static():
