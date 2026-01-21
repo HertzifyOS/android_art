@@ -4574,7 +4574,13 @@ void ClassLinker::RegisterDexFileLocked(const DexFile& dex_file,
     }
   }
   if (initialize_oat_file_data) {
-    oat_file->InitializeRelocations();
+    // Boot images oat files and oat files that require the app image have
+    // their relocations initialized when loading their image spaces.
+    if (!runtime->GetHeap()->IsBootImageAddress(oat_file->Begin()) && !oat_file->RequiresImage()) {
+      uint32_t boot_image_start = runtime->GetHeap()->GetBootImagesStartAddress();
+      oat_file->InitializeRelocations(Runtime::Current()->GetResolutionMethod(),
+                                      reinterpret_cast32<const void*>(boot_image_start));
+    }
     // Notify the fault handler about the new executable code range if needed.
     size_t exec_offset = oat_file->GetOatHeader().GetExecutableOffset();
     DCHECK_LE(exec_offset, oat_file->Size());

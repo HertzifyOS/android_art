@@ -195,12 +195,6 @@ class OatFile {
                               bool executable,
                               /*out*/ std::string* error_msg);
 
-  // Set the start of the app image.
-  // Needed for initializing app image relocations in the .data.img.rel.ro section.
-  void SetAppImageBegin(uint8_t* app_image_begin) const {
-    app_image_begin_ = app_image_begin;
-  }
-
   // Return whether the `OatFile` uses a vdex-only file.
   bool IsBackedByVdexOnly() const;
 
@@ -411,7 +405,9 @@ class OatFile {
   EXPORT ArrayRef<GcRoot<mirror::Object>> GetBssStrings() const;  // Note: typed as `Object`.
 
   // Initialize relocation sections (.data.img.rel.ro and .bss).
-  void InitializeRelocations() const;
+  void InitializeRelocations(ArtMethod* resolution_method,
+                             const void* boot_image_begin,
+                             const void* app_image_begin = nullptr) const;
 
   // Finds the associated oat class for a dex_file and descriptor. Returns an invalid OatClass on
   // error and sets found to false.
@@ -498,9 +494,6 @@ class OatFile {
 
   // Pointer to the end of the .vdex section, if present, otherwise null.
   uint8_t* vdex_end_;
-
-  // Pointer to the beginning of the app image, if any.
-  mutable uint8_t* app_image_begin_;
 
   // Owning storage for the OatDexFile objects.
   std::vector<const OatDexFile*> oat_dex_files_storage_;

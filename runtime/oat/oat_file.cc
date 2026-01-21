@@ -2173,7 +2173,6 @@ OatFile::OatFile(const std::string& location, bool is_executable)
       is_executable_(is_executable),
       vdex_begin_(nullptr),
       vdex_end_(nullptr),
-      app_image_begin_(nullptr),
       secondary_lookup_lock_("OatFile secondary lookup lock", kOatFileSecondaryLookupLock) {
   CHECK(!location_.empty());
 }
@@ -2677,7 +2676,9 @@ static void DCheckIndexToBssMapping(const OatFile* oat_file,
   }
 }
 
-void OatFile::InitializeRelocations() const {
+void OatFile::InitializeRelocations(ArtMethod* resolution_method,
+                                    const void* boot_image_begin,
+                                    const void* app_image_begin) const {
   DCHECK(IsExecutable());
 
   // Initialize the .data.img.rel.ro section.
@@ -2688,15 +2689,14 @@ void OatFile::InitializeRelocations() const {
                 reloc_begin,
                 DataImgRelRoSize(),
                 PROT_READ | PROT_WRITE);
-    uint32_t boot_image_begin = Runtime::Current()->GetHeap()->GetBootImagesStartAddress();
+    CHECK(boot_image_begin != nullptr);
     for (const uint32_t& relocation : GetBootImageRelocations()) {
-      const_cast<uint32_t&>(relocation) += boot_image_begin;
+      const_cast<uint32_t&>(relocation) += reinterpret_cast32<uint32_t>(boot_image_begin);
     }
     if (!GetAppImageRelocations().empty()) {
-      CHECK(app_image_begin_ != nullptr);
-      uint32_t app_image_begin = reinterpret_cast32<uint32_t>(app_image_begin_);
+      CHECK(app_image_begin != nullptr);
       for (const uint32_t& relocation : GetAppImageRelocations()) {
-        const_cast<uint32_t&>(relocation) += app_image_begin;
+        const_cast<uint32_t&>(relocation) += reinterpret_cast32<uint32_t>(app_image_begin);
       }
     }
     CheckedCall(mprotect,
@@ -2729,7 +2729,6 @@ void OatFile::InitializeRelocations() const {
 
   // Initialize the .bss section.
   // TODO: Pre-initialize from boot/app image?
-  ArtMethod* resolution_method = Runtime::Current()->GetResolutionMethod();
   for (ArtMethod*& entry : GetBssMethods()) {
     entry = resolution_method;
   }
