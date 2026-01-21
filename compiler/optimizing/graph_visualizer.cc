@@ -684,7 +684,7 @@ class HGraphVisualizerPrinter final : public CRTPGraphVisitor<HGraphVisualizerPr
 #endif
 
   bool IsPass(const char* name) {
-    return strcmp(pass_name_, name) == 0;
+    return strstr(pass_name_, name) == pass_name_;
   }
 
   bool IsDebugDump() {
@@ -776,6 +776,7 @@ class HGraphVisualizerPrinter final : public CRTPGraphVisitor<HGraphVisualizerPr
     // For the builder and the inliner, we want to add extra information on HInstructions
     // that have reference types, and also HInstanceOf/HCheckcast.
     if ((IsPass(HGraphBuilder::kBuilderPassName)
+        || IsPass(ReferenceTypePropagation::kReferenceTypePropagationPassName)
         || IsPass(HInliner::kInlinerPassName)
         || IsDebugDump())
         && (instruction->GetType() == DataType::Type::kReference ||
