@@ -56,7 +56,7 @@ luci.project(
                 acl.PROJECT_CONFIGS_READER,
                 acl.SCHEDULER_READER,
             ],
-            groups = "googlers",
+            groups = "mdb/android-team",
         ),
         acl.entry(
             roles = [
@@ -77,7 +77,7 @@ luci.project(
         ),
         luci.binding(
             roles = "role/swarming.poolViewer",
-            groups = "googlers",
+            groups = "mdb/android-team",
         ),
     ],
 )
@@ -191,7 +191,7 @@ luci.cq_group(
             roles = [
                 acl.CQ_COMMITTER,
             ],
-            groups = "googlers",
+            groups = "mdb/android-team",
         ),
     ],
 )
