@@ -1454,7 +1454,10 @@ art_cc_test {
         // Archive which contains all run-test data and test-specific bash scripts to run them.
         ":art-test-target-fg",
     ],
-    test_suites: ["general-tests"],
+    test_suites: [
+        "general-tests",
+        "mts-art",
+    ],
     test_config: "ArtTest.xml",
 }
 

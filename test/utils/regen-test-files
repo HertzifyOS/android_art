@@ -282,6 +282,10 @@ art_gtest_eng_only_module_names = [
     "libnativeloader_e2e_tests",
 ]
 
+art_eng_only_module_names = [
+    "ArtTest",
+]
+
 # All supported ART gtests.
 art_gtest_module_names = sorted(art_gtest_user_module_names + art_gtest_eng_only_module_names)
 
@@ -1055,7 +1059,7 @@ class Generator:
     # well with `MtsTestShard` at the moment).
     eng_only_test_list_file = os.path.join(self.mts_config_dir, ENG_ONLY_TEST_LIST_NAME + ".xml")
     gen_mts_test_list_file(
-        art_gtest_eng_only_module_names, eng_only_test_list_file,
+        art_gtest_eng_only_module_names + art_eng_only_module_names, eng_only_test_list_file,
         copyright_year = 2020,
         configuration_description = "List of ART MTS tests that need root access.",
         tests_description = "ART gtests")
