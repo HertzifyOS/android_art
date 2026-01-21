@@ -284,7 +284,8 @@ extern "C" const char* NterpGetShortyFromInvokePolymorphic(ArtMethod* caller, ui
   return caller->GetDexFile()->GetShorty(proto_idx);
 }
 
-extern "C" const char* NterpGetShortyFromInvokeCustom(ArtMethod* caller, uint16_t* dex_pc_ptr)
+// Note: arm64 uses the shorty length instead of checking for the terminating zero.
+extern "C" TwoWordReturn NterpGetShortyFromInvokeCustom(ArtMethod* caller, uint16_t* dex_pc_ptr)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   ScopedAssertNoThreadSuspension sants("In nterp");
   const Instruction* inst = Instruction::At(dex_pc_ptr);
@@ -293,7 +294,11 @@ extern "C" const char* NterpGetShortyFromInvokeCustom(ArtMethod* caller, uint16_
       : inst->VRegB_3rc());
   const DexFile* dex_file = caller->GetDexFile();
   dex::ProtoIndex proto_idx = dex_file->GetProtoIndexForCallSite(call_site_index);
-  return dex_file->GetShorty(proto_idx);
+  dex::StringIndex shorty_idx = dex_file->GetProtoId(proto_idx).shorty_idx_;
+  uint32_t length;
+  const char* shorty = dex_file->GetStringDataAndUtf16Length(shorty_idx, &length);
+  DCHECK_EQ(shorty[length], '\0');  // Shorty is ASCII, UTF16 length is also length in bytes.
+  return GetTwoWordSuccessValue(length, reinterpret_cast<uintptr_t>(shorty));
 }
 
 static constexpr uint8_t kInvalidInvokeType = 255u;

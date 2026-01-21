@@ -45,8 +45,12 @@
      FETCH wARGS, 2
      and x0, x0, #-2 // Remove the extra bit that marks it's a String.<init> method.
 %    if range:
+       add wARGS, wARGS, #1       // Adjust the first argument number.
        b NterpHandleStringInitRange
 %    else:
+       ubfx wip, wINST, #8, #4    // Extract G
+       lsr wARGS, wARGS, #4       // Shift args D-F to C-E for string init.
+       bfi wARGS, wip, #12, #4    // Insert arg G as F for string init.
        b NterpHandleStringInit
 
 %def op_invoke_direct():
