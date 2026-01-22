@@ -16,25 +16,7 @@
 
 package com.android.server.art;
 
-import static android.app.ActivityManager.RunningAppProcessInfo;
-
 import static com.android.art.rw.flags.Flags.postUrJob;
-import static com.android.server.art.ArtFileManager.ProfileLists;
-import static com.android.server.art.ArtFileManager.UsableArtifactLists;
-import static com.android.server.art.ArtFileManager.WritableArtifactLists;
-import static com.android.server.art.DexMetadataHelper.DexMetadataInfo;
-import static com.android.server.art.PrimaryDexUtils.DetailedPrimaryDexInfo;
-import static com.android.server.art.PrimaryDexUtils.PrimaryDexInfo;
-import static com.android.server.art.ProfilePath.PrimaryCurProfilePath;
-import static com.android.server.art.ProfilePath.WritableProfilePath;
-import static com.android.server.art.ReasonMapping.BatchDexoptReason;
-import static com.android.server.art.ReasonMapping.BootReason;
-import static com.android.server.art.Utils.Abi;
-import static com.android.server.art.Utils.InitProfileResult;
-import static com.android.server.art.model.ArtFlags.GetStatusFlags;
-import static com.android.server.art.model.ArtFlags.ScheduleStatus;
-import static com.android.server.art.model.Config.Callback;
-import static com.android.server.art.model.DexoptStatus.DexContainerFileDexoptStatus;
 
 import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
@@ -42,6 +24,7 @@ import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.app.ActivityManager;
+import android.app.ActivityManager.RunningAppProcessInfo;
 import android.app.job.JobInfo;
 import android.apphibernation.AppHibernationManager;
 import android.content.BroadcastReceiver;
@@ -71,16 +54,33 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.modules.utils.build.SdkLevel;
 import com.android.server.LocalManagerRegistry;
+import com.android.server.art.ArtFileManager.ProfileLists;
+import com.android.server.art.ArtFileManager.UsableArtifactLists;
+import com.android.server.art.ArtFileManager.WritableArtifactLists;
+import com.android.server.art.DexMetadataHelper.DexMetadataInfo;
+import com.android.server.art.PreRebootDexoptJob.JobSynchronicity;
 import com.android.server.art.PreRebootDexoptJob.StagedFilesAge;
+import com.android.server.art.PrimaryDexUtils.DetailedPrimaryDexInfo;
+import com.android.server.art.PrimaryDexUtils.PrimaryDexInfo;
+import com.android.server.art.ProfilePath.PrimaryCurProfilePath;
+import com.android.server.art.ProfilePath.WritableProfilePath;
+import com.android.server.art.ReasonMapping.BatchDexoptReason;
+import com.android.server.art.ReasonMapping.BootReason;
+import com.android.server.art.Utils.Abi;
+import com.android.server.art.Utils.InitProfileResult;
 import com.android.server.art.model.ArtFlags;
+import com.android.server.art.model.ArtFlags.GetStatusFlags;
+import com.android.server.art.model.ArtFlags.ScheduleStatus;
 import com.android.server.art.model.ArtManagedFileStats;
 import com.android.server.art.model.BatchDexoptParams;
 import com.android.server.art.model.Config;
+import com.android.server.art.model.Config.Callback;
 import com.android.server.art.model.DeleteResult;
 import com.android.server.art.model.DetailedDexInfo;
 import com.android.server.art.model.DexoptParams;
 import com.android.server.art.model.DexoptResult;
 import com.android.server.art.model.DexoptStatus;
+import com.android.server.art.model.DexoptStatus.DexContainerFileDexoptStatus;
 import com.android.server.art.model.OperationProgress;
 import com.android.server.art.prereboot.PreRebootStatsReporter;
 import com.android.server.pm.PackageManagerLocal;
@@ -1108,7 +1108,8 @@ public final class ArtManagerLocal {
     @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
     public void onApexStaged(@NonNull String[] stagedApexModuleNames) {
         AsLog.d("onApexStaged");
-        mInjector.getPreRebootDexoptJob().onUpdateReady(null /* otaSlot */);
+        mInjector.getPreRebootDexoptJob().onUpdateReady(
+                null /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC);
     }
 
     /**
