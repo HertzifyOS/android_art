@@ -30,6 +30,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.os.Build;
 import android.os.CancellationSignal;
+import android.os.Environment;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 
@@ -44,11 +45,11 @@ import com.android.server.art.model.Config;
 import com.android.server.art.model.DexoptResult;
 import com.android.server.art.model.OperationProgress;
 import com.android.server.pm.PackageManagerLocal;
-import android.os.Environment;
 
 import com.google.auto.value.AutoValue;
 
 import java.io.File;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -180,6 +181,11 @@ public class BackgroundDexoptJob implements ArtServiceJobInterface {
                 Utils.executeAndWait(
                         callback.executor(), () -> { callback.get().onOverrideJobInfo(builder); });
             }
+        } else {
+            Utils.check(jobType == JobType.POST_UNATTENDED_REBOOT);
+            // There are many things going on right after reboot, so we wait for a while to avoid
+            // resource contention.
+            builder.setMinimumLatency(Duration.ofMinutes(10).toMillis());
         }
 
         JobInfo info = builder.build();
