@@ -1313,7 +1313,8 @@
                   "2286-method-tracing-aot-code",
                   "2396-unmodifiable-final-fields",
                   "2398-method-trace-opt-code",
-                  "2401-serialize-constructor"],
+                  "2401-serialize-constructor",
+                  "2403-class-isinstance-constant-folding"],
         "variant": "jvm",
         "description": ["Doesn't run on RI."]
     },
