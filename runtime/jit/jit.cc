@@ -1261,13 +1261,14 @@ void Jit::RegisterDexFiles(const std::vector<std::unique_ptr<const DexFile>>& de
 
 static bool SupportsFastCompiler() {
   return kRuntimeISA == InstructionSet::kArm64 &&
+      !Runtime::Current()->IsJavaDebuggable() &&
       com::android::art::flags::fast_baseline_compiler();
 }
 
 uint16_t Jit::GetInitialHotnessThreshold() {
   Runtime* runtime = Runtime::Current();
   Jit* jit = runtime->GetJit();
-  if (jit == nullptr || !jit->UseFastCompiler() || Runtime::Current()->IsJavaDebuggable()) {
+  if (jit == nullptr || !jit->UseFastCompiler()) {
     return runtime->GetJITOptions()->GetWarmupThreshold();
   }
   static constexpr uint16_t kFastThreshold = 4;
