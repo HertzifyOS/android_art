@@ -350,10 +350,14 @@ std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat(
             LOG(INFO) << "Failed to open app image " << art_file.c_str() << " " << error_msg;
           }
         }
-        // Load the runtime image. This logic must be aligned with the one that determines when to
+        // Load the runtime image if the oat file does not require its own app image.
+        // This logic must be aligned with the one that determines when to
         // keep runtime images in `ArtManagerLocal.cleanup` in
         // `art/libartservice/service/java/com/android/server/art/ArtManagerLocal.java`.
-        if (kEnableRuntimeAppImage && image_space == nullptr && !compilation_enabled) {
+        if (kEnableRuntimeAppImage &&
+            image_space == nullptr &&
+            !compilation_enabled &&
+            !oat_file->RequiresImage()) {
           std::string art_file = RuntimeImage::GetRuntimeImagePath(dex_location);
           std::string error_msg;
           image_space = gc::space::ImageSpace::CreateFromAppImage(

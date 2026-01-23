@@ -61,6 +61,7 @@
 #include "thread-inl.h"
 #include "thread_list.h"
 #include "well_known_classes-inl.h"
+#include "write_barrier.h"
 
 namespace art HIDDEN {
 namespace jit {
@@ -802,21 +803,21 @@ bool JitCodeCache::Commit(Thread* self,
         ScopedDebugDisallowReadBarriers sddrb(self);
         zygote_map_.Put(code_ptr, method);
       } else {
-        ScopedDebugDisallowReadBarriers sddrb(self);
         WriterMutexLock mu2(self, *Locks::jit_mutator_lock_);
-        method_code_map_.Put(code_ptr, method);
+        {
+          ScopedDebugDisallowReadBarriers sddrb(self);
+          method_code_map_.Put(code_ptr, method);
+        }
 
         // Searching for MethodType-s in roots. They need to be treated as strongly reachable while
         // the corresponding ArtMethod is not removed.
         ObjPtr<mirror::Class> method_type_class =
-            WellKnownClasses::java_lang_invoke_MethodType.Get<kWithoutReadBarrier>();
+            WellKnownClasses::java_lang_invoke_MethodType.Get();
 
         for (const Handle<mirror::Object>& root : roots) {
-          ObjPtr<mirror::Class> klass = root->GetClass<kDefaultVerifyFlags, kWithoutReadBarrier>();
+          ObjPtr<mirror::Class> klass = root->GetClass<kDefaultVerifyFlags>();
           if ((com::android::art::flags::weak_const_string() && klass->IsStringClass()) ||
-              klass == method_type_class ||
-              klass == ReadBarrier::IsMarked(method_type_class.Ptr()) ||
-              ReadBarrier::IsMarked(klass.Ptr()) == method_type_class) {
+              klass == method_type_class) {
             auto it = method_code_map_reversed_.FindOrAdd(method, std::vector<const void*>());
             std::vector<const void*>& code_ptrs = it->second;
 
@@ -825,7 +826,7 @@ bool JitCodeCache::Commit(Thread* self,
 
             // `String`s (with `weak_const_string` enabled) and `MethodType`s are strong
             // GC roots and need a write barrier.
-            WriteBarrier::ForEveryFieldWrite(method->GetDeclaringClass<kWithoutReadBarrier>());
+            WriteBarrier::ForEveryFieldWrite(method->GetDeclaringClass());
             break;
           }
         }

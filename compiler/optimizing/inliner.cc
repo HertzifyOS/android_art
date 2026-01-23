@@ -491,13 +491,21 @@ bool HInliner::TryInline(HInvoke* invoke_instruction) {
     receiver_info = receiver->GetReferenceTypeInfo();
     if (!receiver_info.IsValid()) {
       // We have to run the extra type propagation now as we are requiring the RTI.
-      DCHECK(run_extra_type_propagation_);
       run_extra_type_propagation_ = false;
       ReferenceTypePropagation rtp_fixup(graph_,
                                          outer_compilation_unit_.GetDexCache(),
                                          /* is_first_run= */ false);
       rtp_fixup.Run();
       receiver_info = receiver->GetReferenceTypeInfo();
+    }
+
+    // Unresolvable type, as seen in b/477529788. Bail out.
+    if (!receiver_info.IsValid() && receiver->IsPhi()) {
+      LOG_FAIL_NO_STAT() << "Receiver for "
+                         << invoke_instruction->GetMethodReference().PrettyMethod()
+                         << " has an invalid type and is a Phi. Not inlining. "
+                         << receiver->DebugName();
+      return false;
     }
 
     DCHECK(receiver_info.IsValid()) << "Invalid RTI for " << receiver->DebugName();
