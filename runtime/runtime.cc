@@ -143,7 +143,6 @@
 #include "native/java_lang_reflect_Method.h"
 #include "native/java_lang_reflect_Parameter.h"
 #include "native/java_lang_reflect_Proxy.h"
-#include "native/java_util_concurrent_atomic_AtomicLong.h"
 #include "native/jdk_internal_misc_Unsafe.h"
 #include "native/jdk_internal_vm_Continuation.h"
 #include "native/libcore_io_Memory.h"
@@ -542,7 +541,6 @@ Runtime::~Runtime() {
   delete oat_file_manager_;
   oat_file_manager_ = nullptr;
   Thread::Shutdown();
-  QuasiAtomic::Shutdown();
 
   // Destroy allocators before shutting down the MemMap because they may use it.
   java_vm_.reset();
@@ -1640,8 +1638,6 @@ bool Runtime::Init(RuntimeArgumentMap&& runtime_options_in) {
 
   VLOG(startup) << "Runtime::Init -verbose:startup enabled";
 
-  QuasiAtomic::Startup();
-
   oat_file_manager_ = new OatFileManager();
 
   jni_id_manager_.reset(new jni::JniIdManager());
@@ -2508,7 +2504,6 @@ void Runtime::RegisterRuntimeNativeMethods(JNIEnv* env) {
   register_java_lang_Thread(env);
   register_java_lang_Throwable(env);
   register_java_lang_VMClassLoader(env);
-  register_java_util_concurrent_atomic_AtomicLong(env);
   register_jdk_internal_misc_Unsafe(env);
   register_jdk_internal_vm_Continuation(env);
   register_libcore_io_Memory(env);

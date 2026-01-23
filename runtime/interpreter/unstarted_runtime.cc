@@ -1997,17 +1997,6 @@ void UnstartedRuntime::UnstartedJNIMathExp([[maybe_unused]] Thread* self,
   result->SetD(exp(value.GetD()));
 }
 
-void UnstartedRuntime::UnstartedJNIAtomicLongVMSupportsCS8(
-    [[maybe_unused]] Thread* self,
-    [[maybe_unused]] ArtMethod* method,
-    [[maybe_unused]] mirror::Object* receiver,
-    [[maybe_unused]] uint32_t* args,
-    JValue* result) {
-  result->SetZ(QuasiAtomic::LongAtomicsUseMutexes(Runtime::Current()->GetInstructionSet())
-                   ? 0
-                   : 1);
-}
-
 void UnstartedRuntime::UnstartedJNIClassGetNameNative(Thread* self,
                                                       [[maybe_unused]] ArtMethod* method,
                                                       mirror::Object* receiver,
