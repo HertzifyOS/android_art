@@ -118,7 +118,6 @@ struct OsrData {
 // We keep the info here to avoid dirtying the `ArtMethod`'s page.
 struct SharedMethodInfo {
   uint8_t counter = kIndividualSharedMethodHotnessThreshold;
-  bool previously_warm = false;
 };
 
 /**
