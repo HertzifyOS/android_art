@@ -26,18 +26,18 @@ import static com.android.server.art.testing.TestingUtils.inAnyOrderDeepEquals;
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.AdditionalMatchers.not;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.matches;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.argThat;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.isNull;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.matches;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.same;
@@ -81,6 +81,7 @@ import com.android.server.art.model.DexoptResult.DexContainerFileDexoptResult;
 import com.android.server.art.model.DexoptResult.PackageDexoptResult;
 import com.android.server.art.model.DexoptStatus;
 import com.android.server.art.model.DexoptStatus.DexContainerFileDexoptStatus;
+import com.android.server.art.model.VerifyDexoptArtifactsResult;
 import com.android.server.art.prereboot.PreRebootStatsReporter;
 import com.android.server.art.proto.DexMetadataConfig;
 import com.android.server.art.testing.PreRebootStatsReporterHarness;
@@ -1851,6 +1852,24 @@ public class ArtManagerLocalTest {
 
         verify(mBackgroundDexoptJob, never())
                 .schedule(BackgroundDexoptJob.JobType.POST_UNATTENDED_REBOOT);
+    }
+
+    @Test
+    public void testVerifyDexoptArtifacts() throws Exception {
+        lenient().when(mPkgState1.shouldVerifyCompilationArtifacts()).thenReturn(true);
+        lenient()
+                .when(mSnapshot.getPackageState(PKG_NAME_2).shouldVerifyCompilationArtifacts())
+                .thenReturn(false);
+
+        var result = new VerifyDexoptArtifactsResult(true /* isVerified */);
+        when(mDexoptHelper.verifyDexoptArtifacts(any(), any())).thenReturn(result);
+
+        VerifyDexoptArtifactsResult actualResult =
+                mArtManagerLocal.verifyDexoptArtifacts(mSnapshot);
+
+        assertThat(actualResult).isSameInstanceAs(result);
+        assertThat(actualResult.isVerified()).isTrue();
+        verify(mDexoptHelper).verifyDexoptArtifacts(eq(mSnapshot), any(Executor.class));
     }
 
     private PackageStateBuilder newPackageStateWithDefaults(String packageName) {

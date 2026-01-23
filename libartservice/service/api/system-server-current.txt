@@ -38,6 +38,7 @@ package com.android.server.art {
     method @NonNull public android.os.ParcelFileDescriptor snapshotBootImageProfile(@NonNull com.android.server.pm.PackageManagerLocal.FilteredSnapshot) throws com.android.server.art.ArtManagerLocal.SnapshotProfileException;
     method public void startBackgroundDexoptJob();
     method public void unscheduleBackgroundDexoptJob();
+    method @FlaggedApi("com.android.art.rw.flags.secure_compilation") @NonNull public com.android.server.art.model.VerifyDexoptArtifactsResult verifyDexoptArtifacts(@NonNull com.android.server.pm.PackageManagerLocal.FilteredSnapshot);
   }
 
   public static interface ArtManagerLocal.AdjustCompilerFilterCallback {
@@ -222,6 +223,10 @@ package com.android.server.art.model {
     field @FlaggedApi("com.android.art.flags.art_managed_install_files_validation_api") public static final int RESULT_SHOULD_DELETE_AND_CONTINUE = 2; // 0x2
     field @FlaggedApi("com.android.art.flags.art_managed_install_files_validation_api") public static final int RESULT_SHOULD_FAIL = 3; // 0x3
     field @FlaggedApi("com.android.art.flags.art_managed_install_files_validation_api") public static final int RESULT_UNRECOGNIZED = 1; // 0x1
+  }
+
+  @FlaggedApi("com.android.art.rw.flags.secure_compilation") public final class VerifyDexoptArtifactsResult {
+    method @FlaggedApi("com.android.art.rw.flags.secure_compilation") public boolean isVerified();
   }
 
 }
