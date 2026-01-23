@@ -105,7 +105,9 @@ struct EXPORT WellKnownClasses {
   static jclass java_util_concurrent_atomic_AIFU;
   static jclass java_util_concurrent_atomic_ALFU;
   static jclass java_util_concurrent_atomic_ARFU;
+  static jclass jdk_internal_misc_Unsafe;
   static jclass libcore_reflect_AnnotationMember__array;
+  static jclass sun_misc_Unsafe;
 
   static ArtMethod* dalvik_system_BaseDexClassLoader_getLdLibraryPath;
   static ArtMethod* dalvik_system_DelegateLastClassLoader_init;  // Only for the declaring class.

@@ -533,8 +533,8 @@ inline bool ArtField::IsUnmodifiable(auto&& get_field_type) {
     return false;
   }
 
-  // `static final` fields with declared VarHandle, MethodHandle or Atomic*FieldUpdater types
-  // are unmodifiable on apps targeting C or higher.
+  // `static final` fields with declared VarHandle, MethodHandle, Atomic*FieldUpdater or Unsafe
+  // types are unmodifiable on apps targeting C or higher.
   if (IsStatic()) {
     ObjPtr<mirror::Class> field_type = get_field_type();
     DCHECK(field_type != nullptr);
@@ -548,7 +548,12 @@ inline bool ArtField::IsUnmodifiable(auto&& get_field_type) {
           field_type == WellKnownClasses::ToClass(
               WellKnownClasses::java_util_concurrent_atomic_ALFU) ||
           field_type == WellKnownClasses::ToClass(
-              WellKnownClasses::java_util_concurrent_atomic_ARFU)) {
+              WellKnownClasses::java_util_concurrent_atomic_ARFU) ||
+          // Unsafe classes are final and there is only one instance of them.
+          field_type == WellKnownClasses::ToClass(
+              WellKnownClasses::jdk_internal_misc_Unsafe) ||
+          field_type == WellKnownClasses::ToClass(
+              WellKnownClasses::sun_misc_Unsafe)) {
         return true;
       }
     }
