@@ -97,7 +97,6 @@
   V(VMStackGetStackClass2, "Ldalvik/system/VMStack;", "getStackClass2", "()Ljava/lang/Class;") \
   V(MathLog, "Ljava/lang/Math;", "log", "(D)D") \
   V(MathExp, "Ljava/lang/Math;", "exp", "(D)D") \
-  V(AtomicLongVMSupportsCS8, "Ljava/util/concurrent/atomic/AtomicLong;", "VMSupportsCS8", "()Z") \
   V(ClassGetNameNative, "Ljava/lang/Class;", "getNameNative", "()Ljava/lang/String;") \
   V(DoubleLongBitsToDouble, "Ljava/lang/Double;", "longBitsToDouble", "(J)D") \
   V(ExecutableGetParameterTypesInternal, "Ljava/lang/reflect/Executable;", "getParameterTypesInternal", "()[Ljava/lang/Class;") \
