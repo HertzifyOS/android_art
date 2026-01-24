@@ -1889,6 +1889,7 @@ static void EmitLSESwap(CodeGeneratorARM64* codegen,
     assembler->MaybePoisonHeapReference(value);
   }
   switch (type) {
+    case DataType::Type::kBool:
     case DataType::Type::kUint8:
     case DataType::Type::kInt8:
       if (acquire && release) {
