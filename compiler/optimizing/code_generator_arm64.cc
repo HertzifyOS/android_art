@@ -5673,7 +5673,9 @@ bool CodeGeneratorARM64::NeedsThunkCode(const linker::LinkerPatch& patch) const 
 void CodeGeneratorARM64::EmitThunkCode(const linker::LinkerPatch& patch,
                                        /*out*/ ArenaVector<uint8_t>* code,
                                        /*out*/ std::string* debug_name) {
-  Arm64Assembler assembler(GetGraph()->GetAllocator());
+  Arm64Assembler assembler(
+      GetGraph()->GetAllocator(),
+      GetCompilerOptions().GetInstructionSetFeatures()->AsArm64InstructionSetFeatures());
   switch (patch.GetType()) {
     case linker::LinkerPatch::Type::kCallRelative: {
       // The thunk just uses the entry point in the ArtMethod. This works even for calls

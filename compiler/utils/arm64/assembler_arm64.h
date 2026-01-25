@@ -77,8 +77,8 @@ enum StoreOperandType {
 
 class Arm64Assembler final : public Assembler {
  public:
-  explicit Arm64Assembler(
-      ArenaAllocator* allocator, const Arm64InstructionSetFeatures* features = nullptr);
+  // `art_features` is optional and may be null.
+  Arm64Assembler(ArenaAllocator* allocator, const Arm64InstructionSetFeatures* art_features);
 
   virtual ~Arm64Assembler() {}
 
