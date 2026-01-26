@@ -2424,7 +2424,7 @@ class ImageSpace::BootImageLoader {
       const void* boot_image_begin = spaces.front()->Begin();
       ArtMethod* resolution_method =
           spaces.front()->GetImageHeader().GetImageMethod(ImageHeader::kResolutionMethod);
-      for(const std::unique_ptr<ImageSpace>& space : spaces) {
+      for (const std::unique_ptr<ImageSpace>& space : spaces) {
         DCHECK(space->oat_file_non_owned_->IsExecutable());
         space->oat_file_non_owned_->InitializeRelocations(resolution_method, boot_image_begin);
       }
