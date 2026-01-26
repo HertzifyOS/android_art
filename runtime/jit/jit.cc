@@ -1797,9 +1797,17 @@ void Jit::MaybeEnqueueCompilation(ArtMethod* method, Thread* self) {
     }
   }
 
-  if (!UseFastCompiler() && !method->IsMemorySharedMethod()) {
-    // Mark the method as warm for the profile saver.
-    method->SetPreviouslyWarm();
+  if (UseFastCompiler()) {
+    if (!Runtime::Current()->GetStartupCompleted()) {
+      // If startup hasn't completed yet, avoid JIT compiling to not be in the
+      // way of startup.
+      return;
+    }
+  } else {
+    if (!method->IsMemorySharedMethod()) {
+      // Mark the method as warm for the profile saver.
+      method->SetPreviouslyWarm();
+    }
   }
 
   if (!method->IsNative() && GetCodeCache()->CanAllocateProfilingInfo()) {
