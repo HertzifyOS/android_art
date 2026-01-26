@@ -2658,6 +2658,10 @@ TEST_F(OatFileAssistantBaseTest, GetDexLocation) {
 // Test that a dex file on the platform location gets the right hiddenapi domain,
 // regardless of whether it has a backing oat file.
 TEST_F(OatFileAssistantBaseTest, SystemFrameworkDir) {
+  // Host tests rely on ANDROID_ROOT, but it's not supported by
+  // OatFileManager::OpenDexFilesFromOat.
+  TEST_DISABLED_FOR_HOST();
+
   std::string filebase = "OatFileAssistantTestSystemFrameworkDir";
   std::string dex_location = GetAndroidRoot() + "/framework/" + filebase + ".jar";
   Copy(GetDexSrc1(), dex_location);

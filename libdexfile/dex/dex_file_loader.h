@@ -187,6 +187,9 @@ class DexFileLoader {
   DexFileLoader(const char* filename, const std::string& location)
       : DexFileLoader(filename, /*file=*/&kInvalidFile, location) {}
 
+  // This constructor uses the same path to both load the file and set the dex
+  // location, and hence it must not be used in dex2oat where they may be
+  // different (cf. DexFile.location_ comment).
   explicit DexFileLoader(const std::string& location)
       : DexFileLoader(location.c_str(), /*file=*/&kInvalidFile, location) {}
 
@@ -333,16 +336,8 @@ class DexFileLoader {
   std::optional<File> owned_file_;  // May be used as backing storage for 'file_'.
   std::shared_ptr<DexFileContainer> root_container_;
 
-  // The full absolute path to the dex file, if it was loaded from disk.
-  //
-  // Can also be a path to a multidex container (typically apk), followed by
-  // kMultiDexSeparator and the file inside the container.
-  //
-  // On host this may not be an absolute path.
-  //
-  // On device libnativeloader uses this to determine the location of the java
-  // package or shared library, which decides where to load native libraries
-  // from.
+  // The full absolute path to the dex file, if it was loaded from disk. See
+  // DexFile.location_ for details.
   const std::string location_;
 };
 
