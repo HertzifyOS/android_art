@@ -24,6 +24,7 @@
 #include "base/locks.h"
 #include "base/logging.h"
 #include "base/sdk_version.h"
+#include "class_root-inl.h"
 #include "dex/dex_file-inl.h"
 #include "driver/compiler_options.h"
 #include "intrinsics_enum.h"
