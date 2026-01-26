@@ -110,6 +110,9 @@ static const std::vector<std::string> kCorePlatformApiExemptions = {
     "Ljava/io/FileDescriptor;-><init>(I)V",
     "Ljava/lang/Thread;->dispatchUncaughtException(Ljava/lang/Throwable;)V",
     "Ljava/util/zip/ZipEntry;-><init>(Ljava/lang/String;Ljava/lang/String;JJJII[BJ)V",
+    // Other de-facto core platform APIs
+    "Landroid/security/net/config/RootTrustManager;->isSameTrustConfiguration(Ljava/lang/"
+    "String;Ljava/lang/String;)Z",
 };
 
 static std::optional<std::string> FindDsoForNativeCaller(void* native_caller_addr) {
