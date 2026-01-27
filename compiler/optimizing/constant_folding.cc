@@ -24,6 +24,7 @@
 #include "base/locks.h"
 #include "base/logging.h"
 #include "base/sdk_version.h"
+#include "class_root-inl.h"
 #include "dex/dex_file-inl.h"
 #include "driver/compiler_options.h"
 #include "intrinsics_enum.h"
@@ -792,12 +793,37 @@ static bool IsUnmodifiableAndInitialized(ArtField* field, const CompilerOptions&
     return true;
   }
 
-  // Can't use Runtime::GetSdkVersion in the compiler. See Runtime.sdk_version_ comment.
-  if (IsSdkVersionSetAndAtMost(compiler_options.GetAssumeValueOptions().SdkInt(), SdkVersion::kB)) {
+  if (IsSdkVersionSetAndAtMost(Runtime::Current()->GetTargetSdkVersion(), SdkVersion::kB)) {
     return false;
   }
 
-  if (IsSdkVersionSetAndAtMost(Runtime::Current()->GetTargetSdkVersion(), SdkVersion::kB)) {
+  ObjPtr<mirror::Class> field_type = field->LookupResolvedType();
+  if (field_type == nullptr) {
+    return false;
+  }
+
+  if (field_type->IsBootStrapClassLoaded()) {
+    // These classes are abstract and exact implementations are exposed neither to apps
+    // nor in the platform, hence plain comparison instead of subtype checks.
+    if (field_type == GetClassRoot(ClassRoot::kJavaLangInvokeMethodHandle) ||
+        field_type == GetClassRoot(ClassRoot::kJavaLangInvokeVarHandle) ||
+        field_type == WellKnownClasses::ToClass(
+            WellKnownClasses::java_util_concurrent_atomic_AIFU) ||
+        field_type == WellKnownClasses::ToClass(
+            WellKnownClasses::java_util_concurrent_atomic_ALFU) ||
+        field_type == WellKnownClasses::ToClass(
+            WellKnownClasses::java_util_concurrent_atomic_ARFU) ||
+        // Unsafe classes are final and there is only one instance of them.
+        field_type == WellKnownClasses::ToClass(
+            WellKnownClasses::jdk_internal_misc_Unsafe) ||
+        field_type == WellKnownClasses::ToClass(
+            WellKnownClasses::sun_misc_Unsafe)) {
+      return true;
+    }
+  }
+
+  // Can't use Runtime::GetSdkVersion in the compiler. See Runtime.sdk_version_ comment.
+  if (IsSdkVersionSetAndAtMost(compiler_options.GetAssumeValueOptions().SdkInt(), SdkVersion::kB)) {
     return false;
   }
 

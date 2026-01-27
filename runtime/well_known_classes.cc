@@ -61,7 +61,9 @@ jclass WellKnownClasses::java_lang_Void;
 jclass WellKnownClasses::java_util_concurrent_atomic_AIFU;
 jclass WellKnownClasses::java_util_concurrent_atomic_ALFU;
 jclass WellKnownClasses::java_util_concurrent_atomic_ARFU;
+jclass WellKnownClasses::jdk_internal_misc_Unsafe;
 jclass WellKnownClasses::libcore_reflect_AnnotationMember__array;
+jclass WellKnownClasses::sun_misc_Unsafe;
 
 ArtMethod* WellKnownClasses::dalvik_system_BaseDexClassLoader_getLdLibraryPath;
 ArtMethod* WellKnownClasses::dalvik_system_DelegateLastClassLoader_init;
@@ -401,7 +403,9 @@ void WellKnownClasses::Init(JNIEnv* env) {
       CacheClass(env, "java/util/concurrent/atomic/AtomicLongFieldUpdater");
   java_util_concurrent_atomic_ARFU =
       CacheClass(env, "java/util/concurrent/atomic/AtomicReferenceFieldUpdater");
+  jdk_internal_misc_Unsafe = CacheClass(env, "jdk/internal/misc/Unsafe");
   libcore_reflect_AnnotationMember__array = CacheClass(env, "[Llibcore/reflect/AnnotationMember;");
+  sun_misc_Unsafe = CacheClass(env, "sun/misc/Unsafe");
 
   InitFieldsAndMethodsOnly(env);
 }
@@ -1019,7 +1023,9 @@ void WellKnownClasses::Clear() {
   java_util_concurrent_atomic_AIFU = nullptr;
   java_util_concurrent_atomic_ALFU = nullptr;
   java_util_concurrent_atomic_ARFU = nullptr;
+  jdk_internal_misc_Unsafe = nullptr;
   libcore_reflect_AnnotationMember__array = nullptr;
+  sun_misc_Unsafe = nullptr;
 
   dalvik_system_BaseDexClassLoader_getLdLibraryPath = nullptr;
   WellKnownClasses::dalvik_system_DelegateLastClassLoader_init = nullptr;

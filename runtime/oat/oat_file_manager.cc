@@ -383,7 +383,6 @@ std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat(
         Handle<mirror::ClassLoader> h_loader(
             hs.NewHandle(soa.Decode<mirror::ClassLoader>(class_loader)));
         DCHECK(h_loader != nullptr);  // Non-null strong reference is decoded as non-null.
-        oat_file->SetAppImageBegin(image_space->Begin());
         std::string temp_error_msg;
         // Add image space has a race condition since other threads could be reading from the
         // spaces array.
@@ -415,7 +414,6 @@ std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat(
           }
         } else {
           LOG(INFO) << "Failed to add image file: " << temp_error_msg;
-          oat_file->SetAppImageBegin(nullptr);
           dex_files.clear();
           {
             ScopedThreadSuspension sts(self, ThreadState::kSuspended);

@@ -1788,14 +1788,26 @@ void Jit::MaybeEnqueueCompilation(ArtMethod* method, Thread* self) {
         DCHECK_LE(it->second.counter, kIndividualSharedMethodHotnessThreshold);
         it->second.counter--;
         return;
-      } else {
-        it->second.counter = kIndividualSharedMethodHotnessThreshold;
-        it->second.previously_warm = true;
+      } else if (!Runtime::Current()->IsZygote()) {
+        // The JIT is about to compile this method, which will dirty the memory
+        // containing its entrypoint. If this is not the zygote, we will stop
+        // treating it as a shared method.
+        method->ClearMemorySharedMethod();
       }
     }
-  } else if (!UseFastCompiler()) {
-    // Mark the method as warm for the profile saver.
-    method->SetPreviouslyWarm();
+  }
+
+  if (UseFastCompiler()) {
+    if (!Runtime::Current()->GetStartupCompleted()) {
+      // If startup hasn't completed yet, avoid JIT compiling to not be in the
+      // way of startup.
+      return;
+    }
+  } else {
+    if (!method->IsMemorySharedMethod()) {
+      // Mark the method as warm for the profile saver.
+      method->SetPreviouslyWarm();
+    }
   }
 
   if (!method->IsNative() && GetCodeCache()->CanAllocateProfilingInfo()) {
@@ -1815,8 +1827,8 @@ bool Jit::CompileMethod(ArtMethod* method,
     // Mark the method as warm for the profile saver.
     if (method->IsMemorySharedMethod()) {
       if (!method->IsIntrinsic()) {
-        MutexLock mu(self, lock_);
-        shared_method_info_map_[method].previously_warm = true;
+        method->ClearMemorySharedMethod();
+        method->SetPreviouslyWarm();
       }
     } else {
       // We set the method as warm when being baseline compiled.

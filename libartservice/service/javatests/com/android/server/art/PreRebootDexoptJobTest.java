@@ -47,6 +47,8 @@ import android.provider.DeviceConfig;
 
 import androidx.test.filters.SmallTest;
 
+import com.android.server.art.PreRebootDexoptJob.JobSynchronicity;
+import com.android.server.art.PreRebootDexoptJob.OnUpdateReadyResponse;
 import com.android.server.art.PreRebootDexoptJob.StagedFilesAge;
 import com.android.server.art.model.ArtFlags;
 import com.android.server.art.prereboot.PreRebootDriver;
@@ -152,7 +154,9 @@ public class PreRebootDexoptJobTest {
 
     @Test
     public void testSchedule() throws Exception {
-        assertThat(mPreRebootDexoptJob.onUpdateReadyImpl(null /* otaSlot */))
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        assertThat(Utils.getFuture(response.asynchronousJobScheduling()))
                 .isEqualTo(ArtFlags.SCHEDULE_SUCCESS);
 
         assertThat(mJobInfo.isPeriodic()).isFalse();
@@ -169,8 +173,9 @@ public class PreRebootDexoptJobTest {
         when(SystemProperties.getBoolean(eq("pm.dexopt.disable_bg_dexopt"), anyBoolean()))
                 .thenReturn(true);
 
-        assertThat(mPreRebootDexoptJob.onUpdateReadyImpl(null /* otaSlot */))
-                .isEqualTo(ArtFlags.SCHEDULE_DISABLED_BY_SYSPROP);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        assertThat(response.asynchronousJobScheduling()).isNull();
 
         verify(mJobScheduler, never()).schedule(any());
 
@@ -183,10 +188,10 @@ public class PreRebootDexoptJobTest {
         when(SystemProperties.getBoolean(eq("pm.dexopt.disable_bg_dexopt"), anyBoolean()))
                 .thenReturn(true);
 
-        CompletableFuture<Void> future = mPreRebootDexoptJob.onUpdateReadyStartNow(
-                null /* otaSlot */, true /* isUpdataEngineReady */);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, true /* isUpdateEngineReady */, JobSynchronicity.SYNC));
 
-        assertThat(future).isNull();
+        assertThat(response.synchronousJob()).isNull();
         verify(mPreRebootDriver, never()).run(any(), anyBoolean(), any());
 
         mPreRebootStatsReporterHarness.recordFakeAfterRebootDataAndReport();
@@ -198,8 +203,9 @@ public class PreRebootDexoptJobTest {
         when(SystemProperties.getBoolean(eq("dalvik.vm.enable_pr_dexopt"), anyBoolean()))
                 .thenReturn(false);
 
-        assertThat(mPreRebootDexoptJob.onUpdateReadyImpl(null /* otaSlot */))
-                .isEqualTo(ArtFlags.SCHEDULE_DISABLED_BY_SYSPROP);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        assertThat(response.asynchronousJobScheduling()).isNull();
 
         verify(mJobScheduler, never()).schedule(any());
 
@@ -212,10 +218,10 @@ public class PreRebootDexoptJobTest {
         when(SystemProperties.getBoolean(eq("dalvik.vm.enable_pr_dexopt"), anyBoolean()))
                 .thenReturn(false);
 
-        CompletableFuture<Void> future = mPreRebootDexoptJob.onUpdateReadyStartNow(
-                null /* otaSlot */, true /* isUpdataEngineReady */);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, true /* isUpdateEngineReady */, JobSynchronicity.SYNC));
 
-        assertThat(future).isNull();
+        assertThat(response.synchronousJob()).isNull();
         verify(mPreRebootDriver, never()).run(any(), anyBoolean(), any());
 
         mPreRebootStatsReporterHarness.recordFakeAfterRebootDataAndReport();
@@ -232,7 +238,9 @@ public class PreRebootDexoptJobTest {
                         eq(DeviceConfig.NAMESPACE_RUNTIME), eq("enable_pr_dexopt"), anyBoolean()))
                 .thenReturn(true);
 
-        assertThat(mPreRebootDexoptJob.onUpdateReadyImpl(null /* otaSlot */))
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        assertThat(Utils.getFuture(response.asynchronousJobScheduling()))
                 .isEqualTo(ArtFlags.SCHEDULE_SUCCESS);
 
         verify(mJobScheduler).schedule(any());
@@ -254,8 +262,9 @@ public class PreRebootDexoptJobTest {
                      eq("force_disable_pr_dexopt"), anyBoolean()))
                 .thenReturn(true);
 
-        assertThat(mPreRebootDexoptJob.onUpdateReadyImpl(null /* otaSlot */))
-                .isEqualTo(ArtFlags.SCHEDULE_DISABLED_BY_SYSPROP);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        assertThat(response.asynchronousJobScheduling()).isNull();
 
         verify(mJobScheduler, never()).schedule(any());
 
@@ -265,7 +274,9 @@ public class PreRebootDexoptJobTest {
 
     @Test
     public void testUnschedule() {
-        mPreRebootDexoptJob.onUpdateReadyImpl(null /* otaSlot */);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
         verify(mJobScheduler).cancel(JOB_ID);
     }
 
@@ -278,7 +289,9 @@ public class PreRebootDexoptJobTest {
                     return new PreRebootResult(Status.STATUS_FINISHED);
                 });
 
-        mPreRebootDexoptJob.onUpdateReadyImpl(otaSlot);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                otaSlot, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
         mPreRebootDexoptJob.onStartJobImpl(mJobService, mJobParameters);
         assertThat(jobStarted.tryAcquire(TIMEOUT_SEC, TimeUnit.SECONDS)).isTrue();
 
@@ -319,7 +332,9 @@ public class PreRebootDexoptJobTest {
                 .when(mUpdateEngine)
                 .triggerPostinstall("system");
 
-        mPreRebootDexoptJob.onUpdateReadyImpl("_b");
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                "_b", false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
         mPreRebootDexoptJob.onStartJobImpl(mJobService, mJobParameters);
 
         mPreRebootDexoptJob.waitForRunningJob();
@@ -336,7 +351,9 @@ public class PreRebootDexoptJobTest {
                 .when(mUpdateEngine)
                 .triggerPostinstall("system");
 
-        mPreRebootDexoptJob.onUpdateReadyImpl("_b");
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                "_b", false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
         mPreRebootDexoptJob.onStartJobImpl(mJobService, mJobParameters);
 
         mPreRebootDexoptJob.waitForRunningJob();
@@ -350,10 +367,10 @@ public class PreRebootDexoptJobTest {
         when(mPreRebootDriver.run(eq("_b"), eq(expectedMapSnapshotsForOta), any()))
                 .thenReturn(new PreRebootResult(Status.STATUS_FINISHED));
 
-        CompletableFuture<Void> future =
-                mPreRebootDexoptJob.onUpdateReadyStartNow("_b" /* otaSlot */, isUpdateEngineReady);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                "_b" /* otaSlot */, isUpdateEngineReady, JobSynchronicity.SYNC));
 
-        Utils.getFuture(future);
+        Utils.getFuture(response.synchronousJob());
 
         mPreRebootStatsReporterHarness.recordFakeAfterRebootDataAndReport();
         mPreRebootStatsReporterHarness.verifyJobStats(Status.STATUS_FINISHED);
@@ -362,20 +379,20 @@ public class PreRebootDexoptJobTest {
     @Test
     @EnableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testSyncStartWithUpdateEngineApi() throws Exception {
-        checkSyncStart(false /* isUpdataEngineReady */, false /* expectedMapSnapshotsForOta */);
+        checkSyncStart(false /* isUpdateEngineReady */, false /* expectedMapSnapshotsForOta */);
         verify(mUpdateEngine).triggerPostinstall("system");
     }
 
     @Test
     @DisableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testSyncStartWithoutUpdateEngineApi() throws Exception {
-        checkSyncStart(false /* isUpdataEngineReady */, true /* expectedMapSnapshotsForOta */);
+        checkSyncStart(false /* isUpdateEngineReady */, true /* expectedMapSnapshotsForOta */);
         verify(mUpdateEngine, never()).triggerPostinstall(any());
     }
 
     @Test
     public void testSyncStartWithIsUpdateEngineReady() throws Exception {
-        checkSyncStart(true /* isUpdataEngineReady */, false /* expectedMapSnapshotsForOta */);
+        checkSyncStart(true /* isUpdateEngineReady */, false /* expectedMapSnapshotsForOta */);
         verify(mUpdateEngine, never()).triggerPostinstall(any());
     }
 
@@ -391,7 +408,9 @@ public class PreRebootDexoptJobTest {
             return new PreRebootResult(Status.STATUS_FINISHED);
         });
 
-        mPreRebootDexoptJob.onUpdateReadyImpl(null /* otaSlot */);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
         mPreRebootDexoptJob.onStartJobImpl(mJobService, mJobParameters);
         mPreRebootDexoptJob.onStopJobImpl(mJobParameters);
 
@@ -415,9 +434,9 @@ public class PreRebootDexoptJobTest {
             return new PreRebootResult(Status.STATUS_FINISHED);
         });
 
-        CompletableFuture<Void> future = mPreRebootDexoptJob.onUpdateReadyStartNow(
-                null /* otaSlot */, true /* isUpdataEngineReady */);
-        mPreRebootDexoptJob.cancelGiven(future, false /* expectInterrupt */);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, true /* isUpdateEngineReady */, JobSynchronicity.SYNC));
+        mPreRebootDexoptJob.cancelGiven(response.synchronousJob(), false /* expectInterrupt */);
 
         // Check that `cancelGiven` is really blocking. If it wasn't, the check below might still
         // pass due to a race, but we would have a flaky test.
@@ -429,8 +448,12 @@ public class PreRebootDexoptJobTest {
 
     @Test
     public void testUpdateOtaSlotOtaThenMainline() {
-        mPreRebootDexoptJob.onUpdateReadyImpl("_b" /* otaSlot */);
-        mPreRebootDexoptJob.onUpdateReadyImpl(null /* otaSlot */);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                "_b" /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
+        response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
 
         when(mPreRebootDriver.run(eq("_b"), anyBoolean(), any()))
                 .thenReturn(new PreRebootResult(Status.STATUS_FINISHED));
@@ -441,8 +464,12 @@ public class PreRebootDexoptJobTest {
 
     @Test
     public void testUpdateOtaSlotMainlineThenOta() {
-        mPreRebootDexoptJob.onUpdateReadyImpl(null /* otaSlot */);
-        mPreRebootDexoptJob.onUpdateReadyImpl("_a" /* otaSlot */);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
+        response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                "_a" /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
 
         when(mPreRebootDriver.run(eq("_a"), anyBoolean(), any()))
                 .thenReturn(new PreRebootResult(Status.STATUS_FINISHED));
@@ -453,8 +480,12 @@ public class PreRebootDexoptJobTest {
 
     @Test
     public void testUpdateOtaSlotMainlineThenMainline() {
-        mPreRebootDexoptJob.onUpdateReadyImpl(null /* otaSlot */);
-        mPreRebootDexoptJob.onUpdateReadyImpl(null /* otaSlot */);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
+        response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
 
         when(mPreRebootDriver.run(isNull(), anyBoolean(), any()))
                 .thenReturn(new PreRebootResult(Status.STATUS_FINISHED));
@@ -465,8 +496,12 @@ public class PreRebootDexoptJobTest {
 
     @Test
     public void testUpdateOtaSlotOtaThenOta() {
-        mPreRebootDexoptJob.onUpdateReadyImpl("_b" /* otaSlot */);
-        mPreRebootDexoptJob.onUpdateReadyImpl("_b" /* otaSlot */);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                "_b" /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
+        response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                "_b" /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
 
         when(mPreRebootDriver.run(eq("_b"), anyBoolean(), any()))
                 .thenReturn(new PreRebootResult(Status.STATUS_FINISHED));
@@ -477,25 +512,35 @@ public class PreRebootDexoptJobTest {
 
     @Test(expected = IllegalStateException.class)
     public void testUpdateOtaSlotOtaThenOtaDifferentSlots() {
-        mPreRebootDexoptJob.onUpdateReadyImpl("_b" /* otaSlot */);
-        mPreRebootDexoptJob.onUpdateReadyImpl("_a" /* otaSlot */);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                "_b" /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
+        response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                "_a" /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
     }
 
     @Test(expected = IllegalStateException.class)
     public void testUpdateOtaSlotOtaBogusSlot() {
-        mPreRebootDexoptJob.onUpdateReadyImpl("_bogus" /* otaSlot */);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                "_bogus" /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
     }
 
     @Test
     public void testStatsReportingForSuperseded() throws Exception {
-        mPreRebootDexoptJob.onUpdateReadyImpl(null /* otaSlot */);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
 
         when(mArtd.checkPreRebootStagedFilesStatus())
                 .thenReturn(TestingUtils.createPreRebootStagedFilesStatus(
                         false /* isCommittable */, 200 /* createdAtMillis */));
         when(mInjector.getCurrentTimeMillis()).thenReturn(800l);
 
-        mPreRebootDexoptJob.onUpdateReadyImpl("_a" /* otaSlot */);
+        response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                "_a" /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
 
         mPreRebootStatsReporterHarness.verifyArtifactsStats(
                 PreRebootStatsReporter.END_STATUS_SUPERSEDED, 600 /* ageMillis */);
@@ -517,7 +562,9 @@ public class PreRebootDexoptJobTest {
         });
 
         // An update arrives. A job is scheduled.
-        mPreRebootDexoptJob.onUpdateReadyImpl(null /* otaSlot */);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
 
         // The job scheduler starts the job.
         mPreRebootDexoptJob.onStartJobImpl(mJobService, mJobParameters);
@@ -528,7 +575,9 @@ public class PreRebootDexoptJobTest {
             // Another update arrives. A new job is scheduled, replacing the old job. The old job
             // doesn't exit immediately, so this call is blocked.
             JobParameters oldParameters = mJobParameters;
-            mPreRebootDexoptJob.onUpdateReadyImpl(null /* otaSlot */);
+            OnUpdateReadyResponse response2 = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                    null /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+            Utils.getFuture(response2.asynchronousJobScheduling());
 
             // The job scheduler tries to cancel the old job because of the new update. This call
             // doesn't matter because the job has already been cancelled by ourselves during the
@@ -570,7 +619,9 @@ public class PreRebootDexoptJobTest {
     @Test
     public void testRace2() throws Exception {
         // An update arrives. A job is scheduled.
-        mPreRebootDexoptJob.onUpdateReadyImpl(null /* otaSlot */);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
         JobParameters oldParameters = mJobParameters;
 
         // The job scheduler starts the job. In the meantime, another update arrives. It's not
@@ -578,7 +629,9 @@ public class PreRebootDexoptJobTest {
         // because `onUpdateReadyImpl` unschedules the old job. However, since both calls acquire a
         // lock, the order of execution may be reversed. When this happens, the `onStartJob` request
         // should not succeed.
-        mPreRebootDexoptJob.onUpdateReadyImpl(null /* otaSlot */);
+        response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
         mPreRebootDexoptJob.onStartJobImpl(mJobService, oldParameters);
         assertThat(mPreRebootDexoptJob.hasRunningJob()).isFalse();
 
@@ -603,24 +656,26 @@ public class PreRebootDexoptJobTest {
         });
 
         // An update arrives. A job is scheduled.
-        mPreRebootDexoptJob.onUpdateReadyImpl(null /* otaSlot */);
+        OnUpdateReadyResponse response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+        Utils.getFuture(response.asynchronousJobScheduling());
 
         // The job scheduler starts the job.
         mPreRebootDexoptJob.onStartJobImpl(mJobService, mJobParameters);
 
         // Another update arrives, requesting a synchronous job run, replacing the old job. The new
         // job, which is synchronous, is started right after the old job is cancelled by
-        // `onUpdateReadyStartNow`, before the job scheduler calls `onStartJob`.
+        // `onUpdateReady`, before the job scheduler calls `onStartJob`.
         JobParameters oldParameters = mJobParameters;
-        CompletableFuture<Void> future = mPreRebootDexoptJob.onUpdateReadyStartNow(
-                null /* otaSlot */, true /* isUpdataEngineReady */);
+        response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
+                null /* otaSlot */, true /* isUpdateEngineReady */, JobSynchronicity.SYNC));
 
         // The old job should be cancelled at this point.
         // This cannot be the new job having exited because jobs are serialized.
         assertThat(jobExited.tryAcquire()).isTrue();
 
         // The `onStopJob` call finally arrives. This call should be a no-op because the job has
-        // already been cancelled by ourselves during the `onUpdateReadyStartNow` call above. It
+        // already been cancelled by ourselves during the second `onUpdateReady` call above. It
         // should not cancel the new job.
         mPreRebootDexoptJob.onStopJobImpl(oldParameters);
 
@@ -628,7 +683,7 @@ public class PreRebootDexoptJobTest {
         assertThat(jobExited.tryAcquire()).isFalse();
 
         // Now cancel the new job.
-        mPreRebootDexoptJob.cancelGiven(future, false /* expectInterrupt */);
+        mPreRebootDexoptJob.cancelGiven(response.synchronousJob(), false /* expectInterrupt */);
 
         // Now the new job should be cancelled.
         assertThat(jobExited.tryAcquire()).isTrue();

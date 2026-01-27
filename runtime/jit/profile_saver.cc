@@ -655,13 +655,6 @@ void ProfileSaver::GetClassesAndMethodsHelper::CollectClasses(Thread* self) {
 }
 
 static bool IsMethodPreviouslyWarm(ArtMethod* method) {
-  if (method->IsMemorySharedMethod()) {
-    jit::Jit* jit = Runtime::Current()->GetJit();
-    if (jit == nullptr) {
-      return false;
-    }
-    return jit->GetSharedMethodInfo(method).previously_warm;
-  }
   return method->PreviouslyWarm();
 }
 

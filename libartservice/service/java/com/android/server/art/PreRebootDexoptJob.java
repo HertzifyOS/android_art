@@ -204,38 +204,23 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
     /**
      * Notifies this class that an update (OTA or Mainline) is ready.
      *
-     * @param otaSlot The slot that contains the OTA update, "_a" or "_b", or null for a Mainline
+     * @param otaSlot the slot that contains the OTA update, "_a" or "_b", or null for a Mainline
      *         update.
-     */
-    public void onUpdateReady(@Nullable String otaSlot) {
-        // `onUpdateReadyImpl` can take time, especially on `resetLocked` when there are staged
-        // files from a previous run to be cleaned up, so we put it on a separate thread.
-        mSerializedExecutor.execute(() -> onUpdateReadyImpl(otaSlot));
-    }
-
-    /** For internal and testing use only. */
-    public synchronized @ScheduleStatus int onUpdateReadyImpl(@Nullable String otaSlot) {
-        cancelAnyLocked();
-        resetLocked();
-        updateOtaSlotLocked(otaSlot);
-        // If we can't call update_engine to map snapshot devices, then we have to map snapshot
-        // devices ourselves. This only happens on a few OEM devices that have
-        // "dalvik.vm.pr_dexopt_async_for_ota=true" and only on Android V.
-        mMapSnapshotsForOta = !android.os.Flags.updateEngineApi();
-        return scheduleLocked();
-    }
-
-    /**
-     * Same as {@link #onUpdateReady}, but starts the job immediately, instead of going through the
-     * job scheduler.
-     *
      * @param isUpdateEngineReady whether update_engine has mapped snapshot devices. Only applicable
      *         to an OTA update.
-     * @return The future of the job, or null if Pre-reboot Dexopt is not enabled.
      */
-    @Nullable
-    public synchronized CompletableFuture<Void> onUpdateReadyStartNow(
-            @Nullable String otaSlot, boolean isUpdateEngineReady) {
+    public CompletableFuture<OnUpdateReadyResponse> onUpdateReady(
+            @Nullable String otaSlot, boolean isUpdateEngineReady, JobSynchronicity synchronicity) {
+        // `onUpdateReadyImpl` can take time, especially on `resetLocked` when there are staged
+        // files from a previous run to be cleaned up, so we put it on a separate thread.
+        return CompletableFuture.supplyAsync(() -> {
+            return onUpdateReadyImpl(otaSlot, isUpdateEngineReady, synchronicity);
+        }, mSerializedExecutor);
+    }
+
+    /** For internal use only. */
+    private synchronized OnUpdateReadyResponse onUpdateReadyImpl(
+            @Nullable String otaSlot, boolean isUpdateEngineReady, JobSynchronicity synchronicity) {
         cancelAnyLocked();
         resetLocked();
         updateOtaSlotLocked(otaSlot);
@@ -244,13 +229,30 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
         // the `pm art pr-dexopt-job --run` command for local development purposes and only on
         // Android V.
         mMapSnapshotsForOta = !isUpdateEngineReady && !android.os.Flags.updateEngineApi();
+
+        if (synchronicity == JobSynchronicity.AUTO) {
+            if (isOtaUpdate()) {
+                synchronicity = isAsyncForOta() ? JobSynchronicity.ASYNC : JobSynchronicity.SYNC;
+            } else {
+                synchronicity = JobSynchronicity.ASYNC;
+            }
+        }
+
         if (!isEnabled()) {
             mInjector.getStatsReporter().recordJobNotScheduled(
                     Status.STATUS_NOT_SCHEDULED_DISABLED, isOtaUpdate());
-            return null;
+            return new OnUpdateReadyResponse(
+                    null /* synchronousJob */, null /* asynchronousJobScheduling */);
         }
+
+        if (synchronicity == JobSynchronicity.ASYNC) {
+            var asynchronousJobScheduling = CompletableFuture.completedFuture(scheduleLocked());
+            return new OnUpdateReadyResponse(null /* synchronousJob */, asynchronousJobScheduling);
+        }
+
         mInjector.getStatsReporter().recordJobScheduled(false /* isAsync */, isOtaUpdate());
-        return startLocked(null /* onJobFinishedLocked */, isUpdateEngineReady);
+        var synchronousJob = startLocked(null /* onJobFinishedLocked */, isUpdateEngineReady);
+        return new OnUpdateReadyResponse(synchronousJob, null /* asynchronousJobScheduling */);
     }
 
     public synchronized void test() {
@@ -609,7 +611,7 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
         return true;
     }
 
-    public boolean isAsyncForOta() {
+    private boolean isAsyncForOta() {
         if (android.os.Flags.updateEngineApi()) {
             return true;
         }
@@ -674,6 +676,31 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
     }
 
     public record StagedFilesAge(Duration age, boolean isExpired) {}
+
+    public enum JobSynchronicity {
+        /** Automatically pick the best synchronicity. */
+        AUTO,
+        /** Runs the job synchronously. The call is blocked until the entire job is done. */
+        SYNC,
+        /**
+           Runs the job asynchronously, when the device is idle and charging and the battery is not
+           low. The call is non-blocking.
+         */
+        ASYNC,
+    }
+
+    /**
+     * The response of {@link #onUpdateReady}.
+     *
+     * Either future may be {@code null} depending on the provided {@code synchronicity} and whether
+     * Pre-reboot Dexopt is enabled. If both are present, the synchronous job is guaranteed to
+     * complete (success or failure) before the scheduling of the asynchronous job takes place.
+     *
+     * @param synchronousJob the synchronous job
+     * @param asynchronousJobScheduling the scheduling of the asynchronous job (not the job itself)
+     */
+    public record OnUpdateReadyResponse(@Nullable CompletableFuture<Void> synchronousJob,
+            @Nullable CompletableFuture<@ScheduleStatus Integer> asynchronousJobScheduling) {}
 
     /**
      * Injector pattern for testing purpose.

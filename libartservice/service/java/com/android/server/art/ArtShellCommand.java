@@ -16,19 +16,7 @@
 
 package com.android.server.art;
 
-import static android.os.ParcelFileDescriptor.AutoCloseInputStream;
-
 import static com.android.art.rw.flags.Flags.pmCompileVerboseLogging;
-import static com.android.server.art.ArtManagerLocal.SnapshotProfileException;
-import static com.android.server.art.PrimaryDexUtils.PrimaryDexInfo;
-import static com.android.server.art.ReasonMapping.BatchDexoptReason;
-import static com.android.server.art.model.ArtFlags.BatchDexoptPass;
-import static com.android.server.art.model.ArtFlags.DexoptFlags;
-import static com.android.server.art.model.ArtFlags.PriorityClassApi;
-import static com.android.server.art.model.DexoptResult.DexContainerFileDexoptResult;
-import static com.android.server.art.model.DexoptResult.DexoptResultStatus;
-import static com.android.server.art.model.DexoptResult.PackageDexoptResult;
-import static com.android.server.art.model.DexoptStatus.DexContainerFileDexoptStatus;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -36,6 +24,7 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.CancellationSignal;
 import android.os.ParcelFileDescriptor;
+import android.os.ParcelFileDescriptor.AutoCloseInputStream;
 import android.os.Process;
 import android.system.ErrnoException;
 import android.system.Os;
@@ -49,11 +38,24 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.modules.utils.BasicShellCommandHandler;
 import com.android.modules.utils.build.SdkLevel;
+import com.android.server.art.ArtManagerLocal.SnapshotProfileException;
+import com.android.server.art.PreRebootDexoptJob.JobSynchronicity;
+import com.android.server.art.PreRebootDexoptJob.OnUpdateReadyResponse;
+import com.android.server.art.PrimaryDexUtils.PrimaryDexInfo;
+import com.android.server.art.ReasonMapping.BatchDexoptReason;
 import com.android.server.art.model.ArtFlags;
+import com.android.server.art.model.ArtFlags.BatchDexoptPass;
+import com.android.server.art.model.ArtFlags.DexoptFlags;
+import com.android.server.art.model.ArtFlags.PriorityClassApi;
+import com.android.server.art.model.ArtFlags.ScheduleStatus;
 import com.android.server.art.model.DeleteResult;
 import com.android.server.art.model.DexoptParams;
 import com.android.server.art.model.DexoptResult;
+import com.android.server.art.model.DexoptResult.DexContainerFileDexoptResult;
+import com.android.server.art.model.DexoptResult.DexoptResultStatus;
+import com.android.server.art.model.DexoptResult.PackageDexoptResult;
 import com.android.server.art.model.DexoptStatus;
+import com.android.server.art.model.DexoptStatus.DexContainerFileDexoptStatus;
 import com.android.server.art.model.OperationProgress;
 import com.android.server.art.prereboot.PreRebootDriver;
 import com.android.server.pm.PackageManagerLocal;
@@ -720,12 +722,10 @@ public final class ArtShellCommand extends BasicShellCommandHandler {
                 return 1;
             }
 
-            if (mInjector.getArtManagerLocal().getPreRebootDexoptJob().isAsyncForOta()) {
-                return handleSchedulePrDexoptJob(pw, otaSlot);
-            } else {
-                // In the synchronous case, `update_engine` has already mapped snapshots for us.
-                return handleRunPrDexoptJob(pw, otaSlot, true /* isUpdateEngineReady */);
-            }
+            PreRebootDexoptJob job = mInjector.getArtManagerLocal().getPreRebootDexoptJob();
+            OnUpdateReadyResponse response = Utils.getFuture(job.onUpdateReady(
+                    otaSlot, true /* isUpdateEngineReady */, JobSynchronicity.AUTO));
+            return handleOnUpdateReadyResponse(pw, response);
         }
     }
 
@@ -770,25 +770,37 @@ public final class ArtShellCommand extends BasicShellCommandHandler {
             throw new SecurityException("Only root can specify '--slot'");
         }
 
+        PreRebootDexoptJob job = mInjector.getArtManagerLocal().getPreRebootDexoptJob();
+
         switch (mode) {
-            case "--version":
+            case "--version": {
                 pw.println(3);
                 return 0;
-            case "--test":
+            }
+            case "--test": {
                 return handleTestPrDexoptJob(pw);
-            case "--run":
+            }
+            case "--run": {
                 // Passing isUpdateEngineReady=false will make the job call update_engine's
                 // triggerPostinstall to map the snapshot devices if the API is available.
                 // It's always safe to do so because triggerPostinstall can be called at any time
                 // any number of times to map the snapshots if any are available.
-                return handleRunPrDexoptJob(pw, otaSlot, false /* isUpdateEngineReady */);
-            case "--schedule":
-                return handleSchedulePrDexoptJob(pw, otaSlot);
-            case "--cancel":
+                OnUpdateReadyResponse response = Utils.getFuture(job.onUpdateReady(
+                        otaSlot, false /* isUpdateEngineReady */, JobSynchronicity.SYNC));
+                return handleOnUpdateReadyResponse(pw, response);
+            }
+            case "--schedule": {
+                OnUpdateReadyResponse response = Utils.getFuture(job.onUpdateReady(
+                        otaSlot, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
+                return handleOnUpdateReadyResponse(pw, response);
+            }
+            case "--cancel": {
                 return handleCancelPrDexoptJob(pw);
-            default:
+            }
+            default: {
                 // Can't happen.
                 throw new IllegalStateException("Unknown mode: " + mode);
+            }
         }
     }
 
@@ -806,20 +818,6 @@ public final class ArtShellCommand extends BasicShellCommandHandler {
     }
 
     @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
-    private int handleRunPrDexoptJob(
-            @NonNull PrintWriter pw, @Nullable String otaSlot, boolean isUpdateEngineReady) {
-        PreRebootDexoptJob job = mInjector.getArtManagerLocal().getPreRebootDexoptJob();
-
-        CompletableFuture<Void> future = job.onUpdateReadyStartNow(otaSlot, isUpdateEngineReady);
-        if (future == null) {
-            pw.println("Job disabled by system property");
-            return 1;
-        }
-
-        return handlePrDexoptJobRunning(pw, future);
-    }
-
-    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
     private int handleOnOtaStagedStart(@NonNull PrintWriter pw) {
         PreRebootDexoptJob job = mInjector.getArtManagerLocal().getPreRebootDexoptJob();
 
@@ -833,6 +831,37 @@ public final class ArtShellCommand extends BasicShellCommandHandler {
         }
 
         return handlePrDexoptJobRunning(pw, future);
+    }
+
+    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    private int handleCancelPrDexoptJob(@NonNull PrintWriter pw) {
+        mInjector.getArtManagerLocal().getPreRebootDexoptJob().cancelAny();
+        pw.println("Pre-reboot Dexopt job cancelled");
+        return 0;
+    }
+
+    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    private int handleOnUpdateReadyResponse(PrintWriter pw, OnUpdateReadyResponse response) {
+        if (response.synchronousJob() == null && response.asynchronousJobScheduling() == null) {
+            pw.println("Pre-reboot Dexopt job disabled by system property");
+            return 1;
+        }
+
+        if (response.synchronousJob() != null) {
+            int res = handlePrDexoptJobRunning(pw, response.synchronousJob());
+            if (res != 0) {
+                return res;
+            }
+        }
+
+        if (response.asynchronousJobScheduling() != null) {
+            int res = handlePrDexoptJobScheduling(pw, response.asynchronousJobScheduling());
+            if (res != 0) {
+                return res;
+            }
+        }
+
+        return 0;
     }
 
     @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
@@ -887,30 +916,20 @@ public final class ArtShellCommand extends BasicShellCommandHandler {
     }
 
     @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
-    private int handleSchedulePrDexoptJob(@NonNull PrintWriter pw, @Nullable String otaSlot) {
-        int code =
-                mInjector.getArtManagerLocal().getPreRebootDexoptJob().onUpdateReadyImpl(otaSlot);
+    private int handlePrDexoptJobScheduling(
+            @NonNull PrintWriter pw, @Nullable CompletableFuture<@ScheduleStatus Integer> future) {
+        int code = Utils.getFuture(future);
         switch (code) {
             case ArtFlags.SCHEDULE_SUCCESS:
-                pw.println("Pre-reboot Dexopt job scheduled");
+                pw.println("Asynchronous Pre-reboot Dexopt job scheduled");
                 return 0;
-            case ArtFlags.SCHEDULE_DISABLED_BY_SYSPROP:
-                pw.println("Pre-reboot Dexopt job disabled by system property");
-                return 1;
             case ArtFlags.SCHEDULE_JOB_SCHEDULER_FAILURE:
-                pw.println("Failed to schedule Pre-reboot Dexopt job");
+                pw.println("Failed to schedule asynchronous Pre-reboot Dexopt job");
                 return 1;
             default:
                 // Can't happen.
                 throw new IllegalStateException("Unknown result code: " + code);
         }
-    }
-
-    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
-    private int handleCancelPrDexoptJob(@NonNull PrintWriter pw) {
-        mInjector.getArtManagerLocal().getPreRebootDexoptJob().cancelAny();
-        pw.println("Pre-reboot Dexopt job cancelled");
-        return 0;
     }
 
     private int handleConfigureBatchDexopt(@NonNull PrintWriter pw) {

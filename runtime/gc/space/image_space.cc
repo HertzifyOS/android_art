@@ -995,6 +995,13 @@ class ImageSpace::Loader {
         }
       }
 
+      if (oat_file->IsExecutable() && oat_file->RequiresImage()) {
+        TimingLogger::ScopedTiming timing("InitializeRelocations", &logger);
+        oat_file->InitializeRelocations(Runtime::Current()->GetResolutionMethod(),
+                                        boot_image_spaces.front()->Begin(),
+                                        space->Begin());
+      }
+
       DCHECK_LE(boot_image_space_dependencies, boot_image_spaces.size());
       if (boot_image_space_dependencies != boot_image_spaces.size()) {
         TimingLogger::ScopedTiming timing("DeduplicateInternedStrings", &logger);
@@ -2412,6 +2419,17 @@ class ImageSpace::BootImageLoader {
     }
 
     MaybeRelocateSpaces(spaces, logger);
+
+    if (executable_) {
+      const void* boot_image_begin = spaces.front()->Begin();
+      ArtMethod* resolution_method =
+          spaces.front()->GetImageHeader().GetImageMethod(ImageHeader::kResolutionMethod);
+      for (const std::unique_ptr<ImageSpace>& space : spaces) {
+        DCHECK(space->oat_file_non_owned_->IsExecutable());
+        space->oat_file_non_owned_->InitializeRelocations(resolution_method, boot_image_begin);
+      }
+    }
+
     DeduplicateInternedStrings(ArrayRef<const std::unique_ptr<ImageSpace>>(spaces), logger);
     boot_image_spaces->swap(spaces);
     *extra_reservation = std::move(local_extra_reservation);
