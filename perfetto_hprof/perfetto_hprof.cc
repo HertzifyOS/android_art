@@ -1324,12 +1324,12 @@ extern "C" bool ArtPlugin_Initialize() {
         g_state = State::kUninitialized;
         GetStateCV().Broadcast(nullptr);
       }
-
       return;
     }
+    // After attaching, any early thread exit must be paired with DetachCurrentThread.
     art::Thread* self = art::Thread::Current();
     if (!self) {
-      LOG(FATAL_WITHOUT_ABORT) << "no thread in perfetto_hprof_listener";
+      LOG(FATAL) << "no thread in perfetto_hprof_listener";
       return;
     }
     {
@@ -1341,16 +1341,13 @@ extern "C" bool ArtPlugin_Initialize() {
     }
     char buf[1];
     for (;;) {
-      int res;
-      do {
-        res = read(g_signal_pipe_fds[0], buf, sizeof(buf));
-      } while (res == -1 && errno == EINTR);
-
+      int res = TEMP_FAILURE_RETRY(read(g_signal_pipe_fds[0], buf, sizeof(buf)));
       if (res <= 0) {
         if (res == -1) {
-          PLOG(ERROR) << "failed to read";
+          PLOG(ERROR) << "hprof pipe read failed";
         }
         close(g_signal_pipe_fds[0]);
+        runtime->DetachCurrentThread();
         return;
       }
 
