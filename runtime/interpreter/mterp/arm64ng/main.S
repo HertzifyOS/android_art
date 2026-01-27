@@ -202,6 +202,9 @@
 .macro GET_VREG reg, vreg
     ldr     \reg, [xFP, \vreg, uxtw #2]
 .endm
+.macro GET_VREG_PRESCALED reg, scaled_vreg
+    ldr     \reg, [xFP, \scaled_vreg, uxtw]
+.endm
 .macro GET_VREG_OBJECT reg, vreg
     ldr     \reg, [xREFS, \vreg, uxtw #2]
 .endm
@@ -926,34 +929,39 @@
 %  else:
      adr xLOADW, .Lnon_range_load_w2_${suffix}
      adr xLOADX, .Lnon_range_load_x2_${suffix}
-   ubfx wip, wINST, #8, #4        // Extract G
+%  if is_static:
+     ubfiz wINST, wINST, #8, #12  // Move G to bits 19:16. Opcode bits shall be replaced below.
+%  elif not is_string_init:
+     ubfiz wINST, wINST, #4, #12  // Move G to bits 15:12. Opcode bits shall be replaced below.
    adr xLOADS, .Lnon_range_load_s0_${suffix}
-   bfi wARGS, wip, #16, #4        // Insert arg G to wARGS
+%  if is_static:
+     bfxil wINST, wARGS, #0, #16  // Insert args C-F to bits 15:0.
+%  elif is_string_init:
+     mov wINST, wARGS
+%  else:
+     bfxil wINST, wARGS, #4, #12  // Insert args D-F to bits 11:0.
    adr xLOADD, .Lnon_range_load_d0_${suffix}
 
 .Lnon_range_load_regs_${suffix}:
    ldrb wip2, [xSHORTY], #1       // Load next character in signature, and increment.
-%  if is_static or is_string_init:
-     ubfx wip, wARGS, #0, #4
-%  else:
-     ubfx wip, wARGS, #4, #4
+   ubfiz wip, wINST, #2, #4       // Extract and prescale current argument vreg.
    sub wSHORTY_LEN, wSHORTY_LEN, #1
    cmp wip2, #'J'                 // Is this a long?
    beq .Lnon_range_load_long_${suffix}
    cmp w17, #'D'                  // Is this a double?
    beq .Lnon_range_load_double_${suffix}
-   lsr wARGS, wARGS, #4
+   lsr wINST, wINST, #4
    cmp  w17, #'F'                 // Is this a float?
    beq .Lnon_range_load_float_${suffix}
    // Everything else uses a 4-byte GPR.
    br xLOADW
 .Lnon_range_load_long_${suffix}:
-   lsr wARGS, wARGS, #8
+   lsr wINST, wINST, #8
    br xLOADX
 .Lnon_range_load_float_${suffix}:
    br xLOADS
 .Lnon_range_load_double_${suffix}:
-   lsr wARGS, wARGS, #8
+   lsr wINST, wINST, #8
    br xLOADD
 
    // The `cont` can have a special value "LOAD_LAST_VREG" to specify that the last vreg
@@ -961,9 +969,9 @@
    // This is an optimization for invokes with 5 vregs with non-wide last argument.
 %  def non_range_load_vreg(reg, done, cont):
 .Lnon_range_load_${reg}_${suffix}:
-     // Note: `GET_VREG_DOUBLE` just forwards args to `GET_WREG_WIDE`.
+     // Note: `GET_VREG_DOUBLE_PRESCALED` just forwards args to `GET_WREG_WIDE_PRESCALED`.
 %    get_vreg_suffix = "_WIDE" if reg[0] == 'x' or reg[0] == 'd' else ""
-     GET_VREG${get_vreg_suffix} ${reg}, wip
+     GET_VREG${get_vreg_suffix}_PRESCALED ${reg}, wip
 %    if done != cont:
        cbz wSHORTY_LEN, ${done}_${suffix}
 %    next_reg_number = int(re.sub(r"[wxsd]", r"", reg)) + 1
@@ -971,10 +979,7 @@
        // Load the last vreg to both W register and S register.
        // We take this path only if all previous arguments have the same type (all FP
        // or all non-FP), so the register of other type is known (w1/w2, s0).
-%      if is_static or is_string_init:
-         ubfx wip, wARGS, #0, #4
-%      else:
-         ubfx wip, wARGS, #4, #4
+       ubfx wip, wINST, #0, #4    // Extract last argument vreg.
 %      if reg[0] == 'w' or reg[0] == 'x':
          GET_VREG w${next_reg_number}, wip
          fmov s0, w${next_reg_number}
