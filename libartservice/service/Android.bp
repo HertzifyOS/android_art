@@ -90,6 +90,7 @@ java_defaults {
         "aconfig-annotations-lib",
         "art-aconfig-flags-java-lib",
         "auto_value_annotations",
+        "libcore-aconfig-flags-lib",
         "sdk_module-lib_current_framework-configinfrastructure",
         "sdk_module-lib_current_framework-permission-s",
         // TODO(b/256866172): Transitive dependency, for r8 only.

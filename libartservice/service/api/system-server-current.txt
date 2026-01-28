@@ -87,6 +87,7 @@ package com.android.server.art {
     field public static final String REASON_INSTALL_BULK_SECONDARY_DOWNGRADED = "install-bulk-secondary-downgraded";
     field public static final String REASON_INSTALL_FAST = "install-fast";
     field public static final String REASON_PRE_REBOOT_DEXOPT = "ab-ota";
+    field @FlaggedApi("com.android.libcore.openjdk_25_v1_apis") public static final String REASON_PRE_REBOOT_DEXOPT_SYNC = "ab-ota-sync";
   }
 
 }

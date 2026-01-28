@@ -65,10 +65,16 @@ public class ReasonMapping {
     /** Downgrading the compiler filter when an app is not used for a long time. */
     public static final String REASON_INACTIVE = "inactive";
     /**
-     * Dexopting apps before the reboot for an OTA or a mainline update, known as Pre-reboot
-     * Dexopt.
+     * Dexopting apps before the reboot for an OTA or a mainline update <b>asynchronously</b>, known
+     * as Asynchronous Pre-reboot Dexopt.
      */
     public static final String REASON_PRE_REBOOT_DEXOPT = "ab-ota";
+    /**
+     * Dexopting apps before the reboot for an OTA or a mainline update <b>synchronously</b>, known
+     * as Synchronous Pre-reboot Dexopt.
+     */
+    @FlaggedApi(com.android.libcore.Flags.FLAG_OPENJDK_25_V1_APIS)
+    public static final String REASON_PRE_REBOOT_DEXOPT_SYNC = "ab-ota-sync";
     /**
      * Dexopting apps after the reboot for an OTA or a mainline update, if the reboot is
      * unattended, known as Post-UR Dexopt.
