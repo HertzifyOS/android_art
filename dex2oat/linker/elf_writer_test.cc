@@ -52,8 +52,7 @@ class ElfWriterTest : public CommonCompilerDriverTest {
                 size_t bss_size,
                 size_t bss_methods_offset,
                 size_t bss_roots_offset,
-                size_t bss_strings_offset,
-                size_t dex_section_size) {
+                size_t bss_strings_offset) {
     std::unique_ptr<ElfWriter> elf_writer = CreateElfWriterQuick(
       compiler_driver_->GetCompilerOptions(),
       oat_file);
@@ -68,8 +67,7 @@ class ElfWriterTest : public CommonCompilerDriverTest {
                                       bss_size,
                                       bss_methods_offset,
                                       bss_roots_offset,
-                                      bss_strings_offset,
-                                      dex_section_size);
+                                      bss_strings_offset);
 
     ASSERT_TRUE(rodata_section->WriteFully(rodata.data(), rodata.size()));
     elf_writer->EndRoData(rodata_section);
@@ -221,15 +219,13 @@ TEST_F(ElfWriterTest, CheckDynamicSection) {
                        size_t bss_methods_offset,
                        size_t bss_roots_offset,
                        size_t bss_strings_offset,
-                       size_t dex_section_size,
                        /*out*/ size_t* number_of_dynamic_symbols) {
     SCOPED_TRACE(::testing::Message()
                  << "rodata_size: " << rodata_size << ", text_size: " << text_size
                  << ", data_img_rel_ro_size: " << data_img_rel_ro_size
                  << ", data_img_rel_ro_app_image_offset: " << data_img_rel_ro_app_image_offset
                  << ", bss_size: " << bss_size << ", bss_methods_offset: " << bss_methods_offset
-                 << ", bss_roots_offset: " << bss_roots_offset
-                 << ", dex_section_size: " << dex_section_size);
+                 << ", bss_roots_offset: " << bss_roots_offset);
 
     *number_of_dynamic_symbols = 1;  // "oatdata".
     std::vector<uint8_t> rodata(rodata_size, 0xAA);
@@ -247,8 +243,7 @@ TEST_F(ElfWriterTest, CheckDynamicSection) {
              bss_size,
              bss_methods_offset,
              bss_roots_offset,
-             bss_strings_offset,
-             dex_section_size);
+             bss_strings_offset);
 
     std::string error_msg;
     std::unique_ptr<ElfFile> ef(ElfFile::Open(tmp_oat.GetFile(),
@@ -338,16 +333,6 @@ TEST_F(ElfWriterTest, CheckDynamicSection) {
         EXPECT_EQ(static_cast<size_t>(oatbsslastword_ptr - bss_ptr), bss_size - elf_word_size);
       }
     }
-
-    if (dex_section_size != 0u) {
-      *number_of_dynamic_symbols += 1;
-      const uint8_t* dex_ptr = ef->FindDynamicSymbolAddress("oatdex");
-      ASSERT_NE(dex_ptr, nullptr);
-      ASSERT_TRUE(IsAlignedParam(dex_ptr, page_size));
-      const uint8_t* oatdexlastword_ptr = ef->FindDynamicSymbolAddress("oatdexlastword");
-      EXPECT_EQ(static_cast<size_t>(oatdexlastword_ptr - dex_ptr),
-          dex_section_size - elf_word_size);
-    }
   };
 
   // If a symbol requires some other ones (e.g. kBssMethods requires kBss),
@@ -361,8 +346,7 @@ TEST_F(ElfWriterTest, CheckDynamicSection) {
     kBssMethods,
     kBssRoots,
     kBssStrings,
-    kDex,
-    kLast = kDex
+    kLast = kBssStrings
   };
 
   constexpr size_t kNumberOfSymbols = static_cast<size_t>(Symbol::kLast) + 1;
@@ -394,8 +378,8 @@ TEST_F(ElfWriterTest, CheckDynamicSection) {
   // We start with the case where all symbols exist (corresponding to the bitset 11111111)
   // and continue to the case where only "oatdata" exists:
   //  11111111 - all symbols exist.
-  //  01111111 - "oatdex" doesn't exist (least significant bit corresponds to "oatdata").
-  //  00111111 - "oatdex" and "oatbss" don't exist.
+  //  01111111 - "oatbssstrings" doesn't exist (least significant bit corresponds to "oatdata").
+  //  00111111 - "oatbssstrings" and "oatbssroots" don't exist.
   //  ...
   //  00000001 - only "oatdata" exists.
   while (symbols.any()) {
@@ -419,7 +403,6 @@ TEST_F(ElfWriterTest, CheckDynamicSection) {
            exists(Symbol::kBssMethods, symbols) ? kBssMethodsOffset : bss_size,
            exists(Symbol::kBssRoots, symbols) ? kBssRootsOffset : bss_size,
            exists(Symbol::kBssStrings, symbols) ? kBssStringsOffset : bss_size,
-           get_size(Symbol::kDex, symbols),
            &number_of_dynamic_symbols);
     EXPECT_EQ(number_of_dynamic_symbols, symbols.count())
         << "number_of_dynamic_symbols: " << number_of_dynamic_symbols

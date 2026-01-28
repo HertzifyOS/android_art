@@ -4251,17 +4251,6 @@ bool OatWriter::OatClass::Write(OatWriter* oat_writer, OutputStream* out) const 
 debug::DebugInfo OatWriter::GetDebugInfo() const {
   debug::DebugInfo debug_info{};
   debug_info.compiled_methods = ArrayRef<const debug::MethodDebugInfo>(method_info_);
-  if (VdexWillContainDexFiles()) {
-    DCHECK_EQ(dex_files_->size(), oat_dex_files_.size());
-    for (size_t i = 0, size = dex_files_->size(); i != size; ++i) {
-      const DexFile* dex_file = (*dex_files_)[i];
-      const OatDexFile& oat_dex_file = oat_dex_files_[i];
-      uint32_t dex_file_offset = oat_dex_file.dex_file_offset_;
-      if (dex_file_offset != 0) {
-        debug_info.dex_files.emplace(dex_file_offset, dex_file);
-      }
-    }
-  }
   return debug_info;
 }
 
