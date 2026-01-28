@@ -759,18 +759,14 @@
    b.ne 1b
 .endm
 
-.macro SETUP_RETURN_VALUE shorty
-   cmp \shorty, #68  // Test if result type char == 'D'.
-   b.eq 1f
-   cmp \shorty, #70  // Test if result type char == 'F'.
-   b.ne 2f
-   fmov w0, s0
-   b 2f
-1:
-   fmov x0, d0
-2:
-%  pass
-.endm
+%def setup_return_value(shorty):
+   // Note: We shall move d0 to x0 for both 'D' and 'F'. For 'F', this means moving garbage
+   // into the higher 32 bits of x0 but the only way that x0 can be used for return shorty 'F'
+   // is by `move-result` which shall ignore the high 32 bits anyway.
+   sub wip, ${shorty}, #'D'
+   fmov ip2, d0
+   tst wip, #~2      // Test if result type char == 'D' or 'F'.
+   csel x0, x0, ip2, ne
 
 %def common_invoke_non_range(is_static=False, suffix="", is_string_init=False, is_polymorphic=False, is_custom=False):
 %  if is_polymorphic:
@@ -1056,7 +1052,7 @@
 %  else:
      blr lr
 %  if not is_string_init:
-     SETUP_RETURN_VALUE wCSTMP
+%    setup_return_value("wCSTMP")
 %  pass
 .Ldone_return_${suffix}:
    /* resume execution of caller */
@@ -1362,7 +1358,7 @@
 %  else:
      blr lr
 %  if not is_string_init:
-     SETUP_RETURN_VALUE wCSTMP
+%    setup_return_value("wCSTMP")
 %  pass
 .Ldone_return_range_${suffix}:
    /* resume execution of caller */
