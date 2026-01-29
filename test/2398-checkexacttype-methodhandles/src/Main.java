@@ -43,6 +43,9 @@ public class Main {
         ensureJitCompiled(Main.class, "$noinline$testInvokeExact");
         $noinline$testInvokeExact(/*useCombinator=*/ false);
 
+        ensureJitCompiled(Main.class, "$noinline$testInvokeExactWithKnownMethodHandle");
+        $noinline$testInvokeExactWithKnownMethodHandle();
+
         testNull();
         testWrongCallSite();
     }
@@ -79,6 +82,17 @@ public class Main {
         Object x = 42;
         Object y = identity.invokeExact(x);
         assertEquals(x, y);
+    }
+
+    private static void $noinline$testInvokeExactWithKnownMethodHandle() throws Throwable {
+        boolean[] array = new boolean[SIZE];
+        boolean ignored = (boolean) getter.invokeExact(array, 0);
+        setter.invokeExact(array, 0, true);
+
+        try {
+            setter.invokeExact();
+            fail("WMTE is expected");
+        } catch (WrongMethodTypeException expected) {}
     }
 
     private static void testNull() throws Throwable {
