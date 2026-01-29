@@ -1198,7 +1198,7 @@
    // Check for zero args for invoke-custom or string-init.
    // Zero args for invoke-static are handled above.
 %  if is_custom or is_string_init:
-     cbz wSHORTY_LEN, .Lsetup_finished_${suffix}
+     cbz wSHORTY_LEN, .Lsetup_finished_range_${suffix}
 %  if is_static or is_string_init:
      adr xLOADW, .Lrange_load_w1_${suffix}
 %  else:
