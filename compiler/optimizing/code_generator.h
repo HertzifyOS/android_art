@@ -482,7 +482,17 @@ class CodeGenerator : public DeletableArenaObject<kArenaAllocCodeGenerator> {
     // If the target class is in the boot or app image, it's non-moveable and it doesn't matter
     // if we compare it with a from-space or to-space reference, the result is the same.
     // It's OK to traverse a class hierarchy jumping between from-space and to-space.
-    return EmitReadBarrier() && !instance_of->GetTargetClass()->IsInImage();
+    if (EmitBakerReadBarrier()) {
+      HInstruction* target_class = instance_of->GetTargetClass();
+      if (target_class->IsLoadClass()) {
+        return !target_class->AsLoadClass()->IsInImage();
+      } else {
+        DCHECK(target_class->IsFieldAccess());
+        // This could be more precise. Assuming the worst.
+        return true;
+      }
+    }
+    return false;
   }
 
   ReadBarrierOption ReadBarrierOptionForInstanceOf(HInstanceOf* instance_of) {
@@ -496,8 +506,9 @@ class CodeGenerator : public DeletableArenaObject<kArenaAllocCodeGenerator> {
       case TypeCheckKind::kClassHierarchyCheck:
       case TypeCheckKind::kArrayObjectCheck:
       case TypeCheckKind::kInterfaceCheck: {
+        DCHECK(check_cast->GetTargetClass()->IsLoadClass());
         bool needs_read_barrier =
-            EmitReadBarrier() && !check_cast->GetTargetClass()->IsInImage();
+            EmitReadBarrier() && !check_cast->GetTargetClass()->AsLoadClass()->IsInImage();
         // We do not emit read barriers for HCheckCast, so we can get false negatives
         // and the slow path shall re-check and simply return if the cast is actually OK.
         return !needs_read_barrier;

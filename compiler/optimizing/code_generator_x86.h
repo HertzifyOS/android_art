@@ -49,6 +49,7 @@ static constexpr size_t kRuntimeParameterFpuRegistersLength =
     arraysize(kRuntimeParameterFpuRegisters);
 
 #define UNIMPLEMENTED_INTRINSIC_LIST_X86(V) \
+  V(ClassIsAssignableFrom)                  \
   V(MathSignumFloat)                        \
   V(MathSignumDouble)                       \
   V(MathCopySignFloat)                      \

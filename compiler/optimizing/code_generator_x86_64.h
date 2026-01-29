@@ -56,6 +56,7 @@ static constexpr size_t kRuntimeParameterFpuRegistersLength =
 static constexpr FloatRegister non_volatile_xmm_regs[] = { XMM12, XMM13, XMM14, XMM15 };
 
 #define UNIMPLEMENTED_INTRINSIC_LIST_X86_64(V) \
+  V(ClassIsAssignableFrom)                     \
   V(MathSignumFloat)                           \
   V(MathSignumDouble)                          \
   V(MathCopySignFloat)                         \

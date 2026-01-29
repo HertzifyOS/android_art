@@ -126,6 +126,7 @@
 
 // Intrinics without specialized intermediate representation in the compiler, using `HInvoke`.
 #define ART_INTRINSICS_WITH_HINVOKE_LIST(V) \
+  V(ClassIsAssignableFrom, kVirtual, kNeedsEnvironment, kNoSideEffects, kCanThrow, "Ljava/lang/Class;", "isAssignableFrom", "(Ljava/lang/Class;)Z") \
   V(DoubleDoubleToRawLongBits, kStatic, kNeedsEnvironment, kNoSideEffects, kNoThrow, "Ljava/lang/Double;", "doubleToRawLongBits", "(D)J") \
   V(DoubleDoubleToLongBits, kStatic, kNeedsEnvironment, kNoSideEffects, kNoThrow, "Ljava/lang/Double;", "doubleToLongBits", "(D)J") \
   V(DoubleIsInfinite, kStatic, kNeedsEnvironment, kNoSideEffects, kNoThrow, "Ljava/lang/Double;", "isInfinite", "(D)Z") \

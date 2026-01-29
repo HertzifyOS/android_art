@@ -6952,15 +6952,22 @@ class HTypeCheckInstruction : public HVariableInputSizeInstruction {
       SetRawInputAt(2, bitstring_path_to_root);
       SetRawInputAt(3, bitstring_mask);
     } else {
-      DCHECK(target_class_or_null->IsLoadClass());
+      if (kind == kCheckCast) {
+        DCHECK(target_class_or_null->IsLoadClass());
+      } else {
+        DCHECK_EQ(kind, kInstanceOf);
+        DCHECK(target_class_or_null->IsLoadClass() || target_class_or_null->IsFieldAccess());
+        DCHECK_IMPLIES(target_class_or_null->IsFieldAccess(),
+                       target_class_or_null->AsFieldAccess()->HasConstantValue());
+      }
     }
   }
 
-  HLoadClass* GetTargetClass() const {
+  HInstruction* GetTargetClass() const {
     DCHECK_NE(GetTypeCheckKind(), TypeCheckKind::kBitstringCheck);
-    HInstruction* load_class = InputAt(1);
-    DCHECK(load_class->IsLoadClass());
-    return load_class->AsLoadClass();
+    HInstruction* target_class = InputAt(1);
+    DCHECK(target_class->IsLoadClass() || target_class->IsFieldAccess());
+    return target_class;
   }
 
   uint32_t GetBitstringPathToRoot() const {

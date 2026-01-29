@@ -104,14 +104,12 @@
 #define wMR w20
 #endif
 
-// Temporary registers while setting up a frame for nterp-to-nterp calls.
+// Temporary registers while setting up a frame for calls.
 #define wARGS        w8  // args C-F for non-range calls, first arg for range calls.
 #define xARGS        x8  // 64-bit register version of the wARGS register.
 #define wSHORTY_LEN  w9  // Shorty length during nterp-to-non-nterp calls.
 #define xLOADW      x10  // Pointer to W register loading code during nterp-to-non-nterp calls.
-#define xLOADX      x11  // Pointer to X register loading code during nterp-to-non-nterp calls.
-#define xLOADS      x12  // Pointer to S register loading code during nterp-to-non-nterp calls.
-#define xLOADD      x13  // Pointer to D register loading code during nterp-to-non-nterp calls.
+#define xLOADS      x11  // Pointer to S register loading code during nterp-to-non-nterp calls.
 #define xNEW_FP     x12  // New FP during nterp-to-nterp calls.
 #define xNEW_REFS   x13  // New REFS during nterp-to-nterp calls.
 #define CFI_NEW_REFS 13
@@ -925,10 +923,8 @@
      cbz wSHORTY_LEN, .Lsetup_finished_${suffix}
 %  if is_static or is_string_init:
      adr xLOADW, .Lnon_range_load_w1_${suffix}
-     adr xLOADX, .Lnon_range_load_x1_${suffix}
 %  else:
      adr xLOADW, .Lnon_range_load_w2_${suffix}
-     adr xLOADX, .Lnon_range_load_x2_${suffix}
 %  if is_static:
      ubfiz wINST, wINST, #8, #12  // Move G to bits 19:16. Opcode bits shall be replaced below.
 %  elif not is_string_init:
@@ -940,41 +936,56 @@
      mov wINST, wARGS
 %  else:
      bfxil wINST, wARGS, #4, #12  // Insert args D-F to bits 11:0.
-   adr xLOADD, .Lnon_range_load_d0_${suffix}
 
+   // Each load handler has 16 bytes, except for the "LOAD_LAST_VREG" handler which has 32 bytes.
+%  load_w_to_x_offset = 16 * (4 if is_static or is_string_init else 3) + 32
+%  load_s_to_d_offset = 16 * (4 if is_static else 3) + 32
 .Lnon_range_load_regs_${suffix}:
    ldrb wip2, [xSHORTY], #1       // Load next character in signature, and increment.
    ubfiz wip, wINST, #2, #4       // Extract and prescale current argument vreg.
    sub wSHORTY_LEN, wSHORTY_LEN, #1
    cmp wip2, #'J'                 // Is this a long?
    beq .Lnon_range_load_long_${suffix}
-   cmp w17, #'D'                  // Is this a double?
+   cmp wip2, #'D'                 // Is this a double?
    beq .Lnon_range_load_double_${suffix}
    lsr wINST, wINST, #4
-   cmp  w17, #'F'                 // Is this a float?
+   cmp wip2, #'F'                 // Is this a float?
    beq .Lnon_range_load_float_${suffix}
    // Everything else uses a 4-byte GPR.
    br xLOADW
 .Lnon_range_load_long_${suffix}:
+   add ip2, xLOADW, ${load_w_to_x_offset}
    lsr wINST, wINST, #8
-   br xLOADX
+   br ip2
 .Lnon_range_load_float_${suffix}:
    br xLOADS
 .Lnon_range_load_double_${suffix}:
+   add ip2, xLOADS, ${load_s_to_d_offset}
    lsr wINST, wINST, #8
-   br xLOADD
+   br ip2
 
    // The `cont` can have a special value "LOAD_LAST_VREG" to specify that the last vreg
    // should be loaded to both W register and S register without looking at the shorty.
    // This is an optimization for invokes with 5 vregs with non-wide last argument.
+   // Without "LOAD_LAST_VREG", the handler has 16 bytes (or less if `cont == done`),
+   // with "LOAD_LAST_VREG" it has over 16 bytes but no more than 32 bytes, so
+   // `.balign 16` shall round it up to 32 bytes for the following handler.
 %  def non_range_load_vreg(reg, done, cont):
+%    narrow = 'w' if reg[0] == 'w' or reg[0] == 'x' else 's'
+%    reg_number = int(reg[1:])
+%    if reg[0] == 'x' or reg[0] == 'd':
+%      load_narrow_to_wide_offset = load_w_to_x_offset if reg[0] == 'x' else load_s_to_d_offset
+       .org .Lnon_range_load_${narrow}${reg_number}_${suffix} + ${load_narrow_to_wide_offset}
+%    else:
+       .balign 16
+%    pass
 .Lnon_range_load_${reg}_${suffix}:
      // Note: `GET_VREG_DOUBLE_PRESCALED` just forwards args to `GET_WREG_WIDE_PRESCALED`.
 %    get_vreg_suffix = "_WIDE" if reg[0] == 'x' or reg[0] == 'd' else ""
      GET_VREG${get_vreg_suffix}_PRESCALED ${reg}, wip
 %    if done != cont:
        cbz wSHORTY_LEN, ${done}_${suffix}
-%    next_reg_number = int(re.sub(r"[wxsd]", r"", reg)) + 1
+%    next_reg_number = reg_number + 1
 %    if cont == "LOAD_LAST_VREG":
        // Load the last vreg to both W register and S register.
        // We take this path only if all previous arguments have the same type (all FP
@@ -993,21 +1004,23 @@
        b ${done}_${suffix}
 %    else:
 %      if done != cont:
-%        if reg[0] == 'w' or reg[0] == 'x':
-           adr xLOADW, .Lnon_range_load_w${next_reg_number}_${suffix}
-           adr xLOADX, .Lnon_range_load_x${next_reg_number}_${suffix}
-%        else:
-           adr xLOADS, .Lnon_range_load_s${next_reg_number}_${suffix}
-           adr xLOADD, .Lnon_range_load_d${next_reg_number}_${suffix}
+%        narrow_upper = narrow.upper()
+         adr xLOAD${narrow_upper}, .Lnon_range_load_${narrow}${next_reg_number}_${suffix}
        b ${cont}_${suffix}
 %  pass
+
+   // Note: To keep the distances from wN to xN (and from sN to dN) handlers identical in the
+   // presence of 32-byte handlers with "LOAD_LAST_VREG", we reorder the last narrow handler
+   // (which does not have a corresponding wide handler) after the narrow handler corresponding
+   // to the wide "LOAD_LAST_VREG" handler. The narrow "LOAD_LAST_VREG" handler ends up last,
+   // corresponding to the last wide handler.
 
 %  if is_static or is_string_init:
 %    non_range_load_vreg("w1", ".Lsetup_finished", ".Lnon_range_load_regs")
 %  non_range_load_vreg("w2", ".Lsetup_finished", ".Lnon_range_load_regs")
 %  non_range_load_vreg("w3", ".Lsetup_finished", ".Lnon_range_load_regs")
+%  non_range_load_vreg("w5", ".Lsetup_finished", ".Lsetup_finished")  // See above for ordering.
 %  non_range_load_vreg("w4", ".Lsetup_finished", "LOAD_LAST_VREG")
-%  non_range_load_vreg("w5", ".Lsetup_finished", ".Lsetup_finished")
 
 %  if is_static or is_string_init:
 %    non_range_load_vreg("x1", ".Lsetup_finished", ".Lnon_range_load_regs")
@@ -1019,11 +1032,11 @@
 %  non_range_load_vreg("s1", ".Lsetup_finished", ".Lnon_range_load_regs")
 %  if is_static:
 %    non_range_load_vreg("s2", ".Lsetup_finished", ".Lnon_range_load_regs")
+%    non_range_load_vreg("s4", ".Lsetup_finished", ".Lsetup_finished")  // See above for ordering.
 %    non_range_load_vreg("s3", ".Lsetup_finished", "LOAD_LAST_VREG")
-%    non_range_load_vreg("s4", ".Lsetup_finished", ".Lsetup_finished")
 %  else:
+%    non_range_load_vreg("s3", ".Lsetup_finished", ".Lsetup_finished")  // See above for ordering.
 %    non_range_load_vreg("s2", ".Lsetup_finished", "LOAD_LAST_VREG")
-%    non_range_load_vreg("s3", ".Lsetup_finished", ".Lsetup_finished")
 
 %  non_range_load_vreg("d0", ".Lsetup_finished", ".Lnon_range_load_regs")
 %  if is_static:
@@ -1230,12 +1243,9 @@
      cbz wSHORTY_LEN, .Lsetup_finished_${suffix}
 %  if is_static or is_string_init:
      adr xLOADW, .Lrange_load_w1_${suffix}
-     adr xLOADX, .Lrange_load_x1_${suffix}
 %  else:
      adr xLOADW, .Lrange_load_w2_${suffix}
-     adr xLOADX, .Lrange_load_x2_${suffix}
    adr xLOADS, .Lrange_load_s0_${suffix}
-   adr xLOADD, .Lrange_load_d0_${suffix}
    add xARGS, xFP, wARGS, uxtw #2 // args pointer in the FP array.
 %  if is_static or is_string_init:
      add xINST, sp, #8            // args pointer in the stack out area.
@@ -1244,46 +1254,45 @@
      add xARGS, xARGS, 4          // skip `this`
 %  pass
 
+   // Each load handler has 20 bytes and the copy handler has 16 bytes.
+%  load_w_to_x_offset = 20 * (7 if is_static or is_string_init else 6) + 16
+%  load_s_to_d_offset = 20 * 8 + 16
 .Lrange_load_regs_${suffix}:
    ldrb wip2, [xSHORTY], #1       // Load next character in signature, and increment.
    sub wSHORTY_LEN, wSHORTY_LEN, #1
    cmp wip2, #'J'                 // Is this a long?
    beq .Lrange_load_long_${suffix}
-   cmp w17, #'D'                  // Is this a double?
+   cmp wip2, #'D'                 // Is this a double?
    beq .Lrange_load_double_${suffix}
-   cmp  w17, #'F'                 // Is this a float?
+   cmp wip2, #'F'                 // Is this a float?
    beq .Lrange_load_float_${suffix}
    // Everything else uses a 4-byte GPR.
    br xLOADW
 .Lrange_load_long_${suffix}:
-   br xLOADX
+   add ip2, xLOADW, #${load_w_to_x_offset}
+   br ip2
 .Lrange_load_float_${suffix}:
    br xLOADS
 .Lrange_load_double_${suffix}:
-   br xLOADD
+   add ip2, xLOADS, #${load_s_to_d_offset}
+   br ip2
 
+   // Each handler has exactly five instructions (20 bytes).
 %  def range_load_vreg(reg, done, cont, last=False):
+%    narrow = 'w' if reg[0] == 'w' or reg[0] == 'x' else 's'
+%    reg_number = int(reg[1:])
+%    if reg[0] == 'x' or reg[0] == 'd':
+%      load_narrow_to_wide_offset = load_w_to_x_offset if reg[0] == 'x' else load_s_to_d_offset
+       .org .Lrange_load_${narrow}${reg_number}_${suffix} + ${load_narrow_to_wide_offset}
+%    pass
 .Lrange_load_${reg}_${suffix}:
-     // Note: `GET_VREG_DOUBLE` just forwards args to `GET_WREG_WIDE`.
 %    reg_size = 8 if reg[0] == 'x' or reg[0] == 'd' else 4
      ldr ${reg}, [xARGS], #${reg_size}
-     add xINST, xINST, ${reg_size}
      cbz wSHORTY_LEN, ${done}_${suffix}
-%    if last:
-%      if reg[0] == 'w' or reg[0] == 'x':
-         adr xLOADW, .Lrange_copy32_${suffix}
-         adr xLOADX, .Lrange_copy64_${suffix}
-%      else:
-         adr xLOADS, .Lrange_copy32_${suffix}
-         adr xLOADD, .Lrange_copy64_${suffix}
-%    else:
-%      next_reg_number = int(re.sub(r"[wxsd]", r"", reg)) + 1
-%      if reg[0] == 'w' or reg[0] == 'x':
-         adr xLOADW, .Lrange_load_w${next_reg_number}_${suffix}
-         adr xLOADX, .Lrange_load_x${next_reg_number}_${suffix}
-%      else:
-         adr xLOADS, .Lrange_load_s${next_reg_number}_${suffix}
-         adr xLOADD, .Lrange_load_d${next_reg_number}_${suffix}
+     add xINST, xINST, ${reg_size}
+%    narrow_upper = narrow.upper()
+%    label = r"copy_{}".format(narrow) if last else r"load_{}{}".format(narrow, reg_number + 1)
+     adr xLOAD${narrow_upper}, .Lrange_${label}_${suffix}
      b ${cont}_${suffix}
 %  pass
 
@@ -1295,7 +1304,7 @@
 %  range_load_vreg("w5", ".Lsetup_finished_range", ".Lrange_load_regs")
 %  range_load_vreg("w6", ".Lsetup_finished_range", ".Lrange_load_regs")
 %  range_load_vreg("w7", ".Lsetup_finished_range", ".Lrange_load_regs", last=True)
-.Lrange_copy32_${suffix}:
+.Lrange_copy_w_${suffix}:
    ldr wip, [xARGS], #4
    str wip, [xINST], #4
    cbz wSHORTY_LEN, .Lsetup_finished_range_${suffix}
@@ -1309,7 +1318,8 @@
 %  range_load_vreg("x5", ".Lsetup_finished_range", ".Lrange_load_regs")
 %  range_load_vreg("x6", ".Lsetup_finished_range", ".Lrange_load_regs")
 %  range_load_vreg("x7", ".Lsetup_finished_range", ".Lrange_load_regs", last=True)
-.Lrange_copy64_${suffix}:
+   .org .Lrange_copy_w_${suffix} + ${load_w_to_x_offset}
+.Lrange_copy_x_${suffix}:
    ldr ip, [xARGS], #8
    str ip, [xINST], #8
    cbz wSHORTY_LEN, .Lsetup_finished_range_${suffix}
@@ -1323,6 +1333,11 @@
 %  range_load_vreg("s5", ".Lsetup_finished_range", ".Lrange_load_regs")
 %  range_load_vreg("s6", ".Lsetup_finished_range", ".Lrange_load_regs")
 %  range_load_vreg("s7", ".Lsetup_finished_range", ".Lrange_load_regs", last=True)
+.Lrange_copy_s_${suffix}:
+   ldr wip, [xARGS], #4
+   str wip, [xINST], #4
+   cbz wSHORTY_LEN, .Lsetup_finished_range_${suffix}
+   b .Lrange_load_regs_${suffix}
 
 %  range_load_vreg("d0", ".Lsetup_finished_range", ".Lrange_load_regs")
 %  range_load_vreg("d1", ".Lsetup_finished_range", ".Lrange_load_regs")
@@ -1332,6 +1347,12 @@
 %  range_load_vreg("d5", ".Lsetup_finished_range", ".Lrange_load_regs")
 %  range_load_vreg("d6", ".Lsetup_finished_range", ".Lrange_load_regs")
 %  range_load_vreg("d7", ".Lsetup_finished_range", ".Lrange_load_regs", last=True)
+   .org .Lrange_copy_s_${suffix} + ${load_s_to_d_offset}
+.Lrange_copy_d_${suffix}:
+   ldr ip, [xARGS], #8
+   str ip, [xINST], #8
+   cbz wSHORTY_LEN, .Lsetup_finished_range_${suffix}
+   b .Lrange_load_regs_${suffix}
 
 .Lsetup_finished_range_${suffix}:
 %  if is_polymorphic:

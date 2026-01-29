@@ -133,6 +133,7 @@ Location ARM64ReturnLocation(DataType::Type return_type);
 vixl::aarch64::Condition ARM64PCondition(HVecPredToBoolean::PCondKind cond);
 
 #define UNIMPLEMENTED_INTRINSIC_LIST_ARM64(V) \
+  V(ClassIsAssignableFrom)                    \
   V(MathSignumFloat)                          \
   V(MathSignumDouble)                         \
   V(MathCopySignFloat)                        \

@@ -121,6 +121,7 @@ using VIXLInt32Literal = vixl::aarch32::Literal<int32_t>;
 using VIXLUInt32Literal = vixl::aarch32::Literal<uint32_t>;
 
 #define UNIMPLEMENTED_INTRINSIC_LIST_ARM(V)                                \
+  V(ClassIsAssignableFrom)                                                 \
   V(MathSignumFloat)                                                       \
   V(MathSignumDouble)                                                      \
   V(MathCopySignFloat)                                                     \

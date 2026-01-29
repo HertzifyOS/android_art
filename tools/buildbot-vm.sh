@@ -45,8 +45,9 @@ if [[ $action = create ]]; then
 
     # sudo apt install qemu-system-<arch> qemu-efi cloud-image-utils
 
-    # Get the cloud image for Ubuntu 24.04 LTS (Noble Numbat)
-    wget "http://cloud-images.ubuntu.com/releases/24.04/release/$ART_TEST_VM_IMG"
+    # Get the cloud image for Ubuntu 24.10 LTS (Noble Numbat)
+    wget "http://cloud-images.ubuntu.com/releases/24.10/release/$ART_TEST_VM_IMG"
+
 
     if [[ "$TARGET_ARCH" = "riscv64" ]]; then
         # Get U-Boot
