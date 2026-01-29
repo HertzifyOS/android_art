@@ -67,7 +67,11 @@ class ALIGNED(16) InterpreterCache {
 
   ALWAYS_INLINE bool Get(Thread* self, const void* key, /* out */ size_t* value);
 
+  ALWAYS_INLINE bool GetInt64(Thread* self, const void* key, /* out */ uint64_t* value);
+
   ALWAYS_INLINE void Set(Thread* self, const void* key, size_t value);
+
+  ALWAYS_INLINE void SetInt64(Thread* self, const void* key, uint64_t value);
 
   std::array<Entry, kSize>& GetArray() {
     return data_;
