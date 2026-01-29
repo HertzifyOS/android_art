@@ -700,6 +700,11 @@
         "description": [ "The test expects native-allocation GCs to finish within certain time-limit." ]
     },
     {
+        "tests": ["2271-profile-inline-cache"],
+        "variant": "continuous-gc",
+        "description": [ "The test expects background GCs not to be repeatedly happening." ]
+    },
+    {
         "tests": ["638-checker-inline-cache-intrinsic",
                   "566-polymorphic-inlining"
         ],
