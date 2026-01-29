@@ -2661,6 +2661,7 @@ genrule_defaults {
         // Files needed to generate runner scripts.
         "testrunner/*.py",
         "knownfailures.json",
+        "knownfailures.py",
         "default_run.py",
         "globals.py",
         "run-test",
@@ -5782,6 +5783,7 @@ genrule_defaults {
         // Files needed to generate runner scripts.
         "testrunner/*.py",
         "knownfailures.json",
+        "knownfailures.py",
         "default_run.py",
         "globals.py",
         "run-test",
@@ -8903,6 +8905,7 @@ genrule_defaults {
         // Files needed to generate runner scripts.
         "testrunner/*.py",
         "knownfailures.json",
+        "knownfailures.py",
         "default_run.py",
         "globals.py",
         "run-test",
