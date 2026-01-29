@@ -17,8 +17,8 @@
 #ifndef ART_LIBELFFILE_ELF_ELF_BUILDER_H_
 #define ART_LIBELFFILE_ELF_ELF_BUILDER_H_
 
-#include <vector>
 #include <deque>
+#include <vector>
 
 #include "arch/instruction_set.h"
 #include "base/array_ref.h"
@@ -203,9 +203,30 @@ class ElfBuilder final {
     Elf_Word AddSection() {
       if (section_index_ == 0) {
         std::vector<Section*>& sections = owner_->sections_;
-        Elf_Word last = sections.empty() ? PF_R : sections.back()->phdr_flags_;
-        if (phdr_flags_ != last) {
-          header_.sh_addralign = kElfSegmentAlignment;  // Page-align if R/W/X flags changed.
+        // Add alignment if the section needs to be mapped at runtime and its R/W/X flags differ
+        // from the previous section.
+        if ((header_.sh_flags & SHF_ALLOC) != 0) {
+          Section* prev = !sections.empty() ? sections.back() : nullptr;
+          bool align = false;
+
+          if (prev != nullptr && (prev->header_.sh_flags & SHF_ALLOC) == 0) {
+            // ALLOC flag changed.
+            align = true;
+          } else if (header_.sh_type == SHT_NOBITS) {
+            // Always align NOBITS sections. It costs no disk space and ensures the virtual address
+            // starts on a clean page boundary.
+            align = true;
+          } else if (prev != nullptr && prev->header_.sh_type == SHT_NOBITS) {
+            // NOBITS mode changed.
+            align = true;
+          } else if ((prev != nullptr ? prev->phdr_flags_ : PF_R) != phdr_flags_) {
+            // R/W/X flags changed.
+            align = true;
+          }
+
+          if (align) {
+            header_.sh_addralign = kElfSegmentAlignment;
+          }
         }
         sections.push_back(this);
         section_index_ = sections.size();  // First ELF section has index 1.
