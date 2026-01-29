@@ -1,5 +1,7 @@
 %def op_check_cast():
 %  slow_path = add_slow_path(op_check_cast_slow_path)
+%  check_hierarchy = add_slow_path_for_last_prefix( \
+%      op_check_cast_check_hierarchy, suffix="_check_hierarchy")
    // Fast-path which gets the class from thread-local cache.
 %  fetch_from_thread_cache("x1", miss_label=slow_path)
 .L${opcode}_resume:
@@ -10,7 +12,7 @@
    UNPOISON_HEAP_REF w2
    // Fast path: do a comparison without read barrier.
    cmp     w1, w2
-   bne     .L${opcode}_slow_path_check_hierarchy
+   bne     ${check_hierarchy}
 .L${opcode}_next:
    FETCH_ADVANCE_INST 2
    PREPARE_OPCODE_DISPATCH
@@ -24,7 +26,8 @@
    bl      nterp_get_class
    mov     x1, x0
    b       .L${opcode}_resume
-.L${opcode}_slow_path_check_hierarchy:
+
+%def op_check_cast_check_hierarchy():
    // We don't do read barriers for simplicity. However, this means that x1
    // (and all other fetched objects) may be a from-space reference. That's OK as
    // we only fetch constant information from the references.
