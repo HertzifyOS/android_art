@@ -734,16 +734,15 @@
 
 // Check if method entrypoint is the nterp entrypoint for quick nterp-to-nterp transition.
 // Loads the code item and entrypoint to specified registers for potential reuse.
-.macro N2N_ENTRY_POINT_CHECK code_item, entrypoint, call_compiled_code
+%def n2n_entry_point_check(code_item, entrypoint, call_compiled_code):
    // On entry, the method is x0, the instance is x1
 #if ART_METHOD_QUICK_CODE_OFFSET_64 != ART_METHOD_DATA_OFFSET_64 + 8
 #error Unexpected offsets, cannot use LDP.
 #endif
-   ldp \code_item, \entrypoint, [x0, #ART_METHOD_DATA_OFFSET_64]
+   ldp ${code_item}, ${entrypoint}, [x0, #ART_METHOD_DATA_OFFSET_64]
    adr ip, ExecuteNterpImpl
-   cmp \entrypoint, ip
-   b.ne  \call_compiled_code
-.endm
+   cmp ${entrypoint}, ip
+   b.ne ${call_compiled_code}
 
 .macro UPDATE_REGISTERS_FOR_STRING_INIT old_value, new_value
    mov wip, wzr
@@ -769,24 +768,6 @@
    csel x0, x0, ip2, ne
 
 %def common_invoke_non_range(is_static=False, suffix="", is_string_init=False, is_polymorphic=False, is_custom=False):
-%  if is_polymorphic:
-     // We always go to compiled code for polymorphic calls.
-%    pass
-%  elif is_custom:
-     // We always go to compiled code for custom calls.
-%    pass
-%  else:
-     N2N_ENTRY_POINT_CHECK x2, entrypoint=lr, call_compiled_code=.Lcall_compiled_code_${suffix}
-%    if is_string_init:
-       bl nterp_to_nterp_static_non_range
-%    elif is_static:
-       bl nterp_to_nterp_static_non_range
-%    else:
-       bl nterp_to_nterp_instance_non_range
-     b .Ldone_return_${suffix}
-%  pass
-
-.Lcall_compiled_code_${suffix}:
 %  if is_polymorphic:
      // No fast path for polymorphic calls.
 %    pass
@@ -1074,25 +1055,6 @@
      GET_SHORTY_AND_LENGTH_SLOW_PATH xSHORTY, wSHORTY_LEN, resume=.Lget_shorty_resume_${suffix}
 
 %def common_invoke_range(is_static=False, suffix="", is_string_init=False, is_polymorphic=False, is_custom=False):
-%  if is_polymorphic:
-     // We always go to compiled code for polymorphic calls.
-%    pass
-%  elif is_custom:
-     // We always go to compiled code for custom calls.
-%    pass
-%  else:
-     N2N_ENTRY_POINT_CHECK \
-         x2, entrypoint=lr, call_compiled_code=.Lcall_compiled_code_range_${suffix}
-%    if is_string_init:
-       bl nterp_to_nterp_static_range
-%    elif is_static:
-       bl nterp_to_nterp_static_range
-%    else:
-       bl nterp_to_nterp_instance_range
-     b .Ldone_return_range_${suffix}
-%  pass
-
-.Lcall_compiled_code_range_${suffix}:
 %  if is_polymorphic:
      // No fast path for polymorphic calls.
 %    pass
@@ -1742,9 +1704,21 @@ NterpCommonInvokeStaticRange:
 %   common_invoke_range(is_static=True, suffix="invokeStatic")
 
 NterpCommonInvokeInstance:
+%   n2n_entry_point_check("x2", entrypoint="lr", call_compiled_code="1f")
+    bl nterp_to_nterp_instance_non_range
+    FETCH_ADVANCE_INST 3
+    PREPARE_OPCODE_DISPATCH
+    GOTO_OPCODE
+1:
 %   common_invoke_non_range(suffix="invokeInstance")
 
 NterpCommonInvokeInstanceRange:
+%   n2n_entry_point_check("x2", entrypoint="lr", call_compiled_code="1f")
+    bl nterp_to_nterp_instance_range
+    FETCH_ADVANCE_INST 3
+    PREPARE_OPCODE_DISPATCH
+    GOTO_OPCODE
+1:
 %   common_invoke_range(suffix="invokeInstance")
 
 NterpCommonInvokePolymorphic:
@@ -1760,9 +1734,21 @@ NterpCommonInvokeCustomRange:
 %   common_invoke_range(is_static=True, is_custom=True, suffix="invokeCustom")
 
 NterpHandleStringInit:
+    ubfx wip, wINST, #8, #4           // Extract G
+    lsr wARGS, wARGS, #4              // Shift args D-F to C-E for string init.
+    bfi wARGS, wip, #12, #4           // Insert arg G as F for string init.
+%   n2n_entry_point_check("x2", entrypoint="lr", call_compiled_code="1f")
+    bl nterp_to_nterp_static_non_range
+    b .Ldone_return_stringInit        // Label defined by the `common_invoke_non_range()` below.
+1:
 %   common_invoke_non_range(is_string_init=True, suffix="stringInit")
 
 NterpHandleStringInitRange:
+    add wARGS, wARGS, #1              // Adjust the first argument number.
+%   n2n_entry_point_check("x2", entrypoint="lr", call_compiled_code="1f")
+    bl nterp_to_nterp_static_range
+    b .Ldone_return_range_stringInit  // Label defined by the `common_invoke_range()` below.
+1:
 %   common_invoke_range(is_string_init=True, suffix="stringInit")
 
 NterpHotnessCheck:

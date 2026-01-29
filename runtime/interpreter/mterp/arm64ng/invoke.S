@@ -45,12 +45,8 @@
      FETCH wARGS, 2
      and x0, x0, #-2 // Remove the extra bit that marks it's a String.<init> method.
 %    if range:
-       add wARGS, wARGS, #1       // Adjust the first argument number.
        b NterpHandleStringInitRange
 %    else:
-       ubfx wip, wINST, #8, #4    // Extract G
-       lsr wARGS, wARGS, #4       // Shift args D-F to C-E for string init.
-       bfi wARGS, wip, #12, #4    // Insert arg G as F for string init.
        b NterpHandleStringInit
 
 %def op_invoke_direct():
@@ -149,26 +145,34 @@
 %def op_invoke_interface_range():
 %  invoke_interface(range=True)
 
-%def invoke_static(helper=""):
+%def invoke_static(range):
+%  slow_path = add_slow_path(invoke_static_slow_path)
    EXPORT_PC
    // Fast-path which gets the method from thread-local cache.
-%  fetch_from_thread_cache("x0", miss_label="1f")
+%  fetch_from_thread_cache("x0", miss_label=slow_path)
+.L${opcode}_resume:
    FETCH wARGS, 2
-   b $helper
-1:
+%  helper = r"NterpCommonInvokeStatic" + (r"Range" if range else r"")
+%  n2n_entry_point_check("x2", entrypoint="lr", call_compiled_code=helper)
+%  nterp_to_nterp = r"nterp_to_nterp_static_" + (r"range" if range else r"non_range")
+   bl ${nterp_to_nterp}
+   FETCH_ADVANCE_INST 3
+   PREPARE_OPCODE_DISPATCH
+   GOTO_OPCODE
+
+%def invoke_static_slow_path():
    mov x0, xSELF
    ldr x1, [sp]
    mov x2, xPC
    mov x3, xFP
    bl nterp_get_method
-   FETCH wARGS, 2
-   b $helper
+   b .L${opcode}_resume
 
 %def op_invoke_static():
-%  invoke_static(helper="NterpCommonInvokeStatic")
+%  invoke_static(range=False)
 
 %def op_invoke_static_range():
-%  invoke_static(helper="NterpCommonInvokeStaticRange")
+%  invoke_static(range=True)
 
 %def invoke_virtual(helper="", range=False):
 %  slow_path = add_slow_path(invoke_virtual_slow_path)
