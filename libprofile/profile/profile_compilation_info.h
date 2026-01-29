@@ -368,20 +368,6 @@ class ProfileCompilationInfo {
     return true;
   }
 
-  // Add a no-preload class with the specified `type_index` to the profile.
-  // The `type_index` should be a normal index for a `TypeId` in the dex file.
-  // Returns `true` on success, `false` on failure.
-  bool AddClassNoPreload(const DexFile& dex_file, dex::TypeIndex type_index) {
-    DCHECK(type_index.IsValid());
-    DCHECK(type_index.index_ <= dex_file.NumTypeIds());
-    DexFileData* const data = GetOrAddDexFileData(&dex_file, ProfileSampleAnnotation::kNone);
-    if (data == nullptr) {  // Checksum/num_type_ids/num_method_ids mismatch or too many dex files.
-      return false;
-    }
-    data->class_set_no_preload.insert(type_index);
-    return true;
-  }
-
   // Add a class with the specified `descriptor` to the profile.
   // Returns `true` on success, `false` on failure.
   bool AddClass(const DexFile& dex_file,
@@ -812,7 +798,6 @@ class ProfileCompilationInfo {
           checksum(location_checksum),
           method_map(std::less<uint16_t>(), allocator->Adapter(kArenaAllocProfile)),
           class_set(std::less<dex::TypeIndex>(), allocator->Adapter(kArenaAllocProfile)),
-          class_set_no_preload(std::less<dex::TypeIndex>(), allocator->Adapter(kArenaAllocProfile)),
           num_type_ids(num_types),
           num_method_ids(num_methods),
           bitmap_storage(allocator->Adapter(kArenaAllocProfile)),
@@ -894,13 +879,11 @@ class ProfileCompilationInfo {
     bool ContainsClass(dex::TypeIndex type_index) const;
 
     uint32_t ClassesDataSize() const;
-    uint32_t ClassesNoPreloadDataSize() const;
-    void WriteClasses(SafeBuffer& buffer, bool no_preload) const;
+    void WriteClasses(SafeBuffer& buffer) const;
     ProfileLoadStatus ReadClasses(
         SafeBuffer& buffer,
         const dchecked_vector<ExtraDescriptorIndex>& extra_descriptors_remap,
-        std::string* error,
-        bool no_preload_section);
+        std::string* error);
     static ProfileLoadStatus SkipClasses(SafeBuffer& buffer, std::string* error);
     uint32_t CountStartupClasses() const;
 
@@ -927,10 +910,6 @@ class ProfileCompilationInfo {
     // The classes which have been profiled. Note that these don't necessarily include
     // all the classes that can be found in the inline caches reference.
     ArenaSet<dex::TypeIndex> class_set;
-    // A subset of profiled classes that should not be initialized by zygote or dex2oat
-    // (usually due to some logic in the class static initializer that should not be shared
-    // between processes, e.g. initializing random seed).
-    ArenaSet<dex::TypeIndex> class_set_no_preload;
     // Find the inline caches of the the given method index. Add an empty entry if
     // no previous data is found.
     InlineCacheMap* FindOrAddHotMethod(uint16_t method_index);
