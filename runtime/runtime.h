@@ -320,7 +320,7 @@ class Runtime {
   EXPORT void CallExitHook(jint status);
 
   // Detaches the current native thread from the runtime.
-  EXPORT void DetachCurrentThread(bool should_run_callbacks = true) REQUIRES(!Locks::mutator_lock_);
+  void DetachCurrentThread(bool should_run_callbacks = true) REQUIRES(!Locks::mutator_lock_);
 
   // If we are handling SIQQUIT return the time when we received it.
   std::optional<uint64_t> SigQuitNanoTime() const;
