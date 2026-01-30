@@ -375,7 +375,7 @@ OatFileBase* OatFileBase::OpenOatFileFromSdm(const std::string& sdm_filename,
 
   ret->PreSetup(elf_filename);
 
-  ret->vdex_ = VdexFile::OpenFromDm(dm_filename, ret->vdex_begin_, ret->vdex_end_, error_msg);
+  ret->vdex_ = VdexFile::OpenFromDm(dm_filename, error_msg);
   if (ret->vdex_ == nullptr) {
     return nullptr;
   }
@@ -391,12 +391,7 @@ OatFileBase* OatFileBase::OpenOatFileFromSdm(const std::string& sdm_filename,
 }
 
 bool OatFileBase::LoadVdex(const std::string& vdex_filename, bool low_4gb, std::string* error_msg) {
-  vdex_ = VdexFile::OpenAtAddress(vdex_begin_,
-                                  vdex_end_ - vdex_begin_,
-                                  /*mmap_reuse=*/vdex_begin_ != nullptr,
-                                  vdex_filename,
-                                  low_4gb,
-                                  error_msg);
+  vdex_ = VdexFile::Open(vdex_filename, low_4gb, error_msg);
   if (vdex_.get() == nullptr) {
     *error_msg = StringPrintf("Failed to load vdex file '%s' %s",
                               vdex_filename.c_str(),
@@ -416,15 +411,12 @@ bool OatFileBase::LoadVdex(int vdex_fd,
     if (rc == -1) {
       PLOG(WARNING) << "Failed getting length of vdex file";
     } else {
-      vdex_ = VdexFile::OpenAtAddress(vdex_begin_,
-                                      vdex_end_ - vdex_begin_,
-                                      /*mmap_reuse=*/vdex_begin_ != nullptr,
-                                      vdex_fd,
-                                      /*start=*/0,
-                                      s.st_size,
-                                      vdex_filename,
-                                      low_4gb,
-                                      error_msg);
+      vdex_ = VdexFile::Open(vdex_fd,
+                             /*start=*/0,
+                             s.st_size,
+                             vdex_filename,
+                             low_4gb,
+                             error_msg);
       if (vdex_.get() == nullptr) {
         *error_msg = "Failed opening vdex file.";
         return false;
@@ -491,20 +483,6 @@ bool OatFileBase::ComputeFields(const std::string& file_path, std::string* error
     // Find bss strings if present.
     bss_strings_ =
         const_cast<uint8_t*>(FindDynamicSymbolAddress("oatbssstrings", &symbol_error_msg));
-  }
-
-  vdex_begin_ = const_cast<uint8_t*>(FindDynamicSymbolAddress("oatdex", &symbol_error_msg));
-  if (vdex_begin_ == nullptr) {
-    // No .vdex section.
-    vdex_end_ = nullptr;
-  } else {
-    vdex_end_ = const_cast<uint8_t*>(FindDynamicSymbolAddress("oatdexlastword", &symbol_error_msg));
-    if (vdex_end_ == nullptr) {
-      *error_msg = StringPrintf("Failed to find oatdexlastword symbol in '%s'", file_path.c_str());
-      return false;
-    }
-    // Readjust to be non-inclusive upper bound.
-    vdex_end_ += sizeof(uint32_t);
   }
 
   return true;
@@ -2171,8 +2149,6 @@ OatFile::OatFile(const std::string& location, bool is_executable)
       bss_roots_(nullptr),
       bss_strings_(nullptr),
       is_executable_(is_executable),
-      vdex_begin_(nullptr),
-      vdex_end_(nullptr),
       secondary_lookup_lock_("OatFile secondary lookup lock", kOatFileSecondaryLookupLock) {
   CHECK(!location_.empty());
 }
