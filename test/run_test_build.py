@@ -757,6 +757,7 @@ def main() -> None:
         (32, "x86", ["x86"]),
         (64, "x86_64", ["x86_64"]),
       ]:
+      tags += ["root"]
       tests += create_ci_runner_scripts(out, args.mode, test_names, bitness, isa, tags)
     dst.write_text(json.dumps(tests, indent=2))
 

@@ -1068,6 +1068,7 @@ std::unique_ptr<OatFile> OatFileAssistant::OatFileInfoBackedByVdex::LoadFile(
       return nullptr;
     }
     vdex = VdexFile::Open(vdex_fd_,
+                          /*start=*/0,
                           s.st_size,
                           filename_,
                           /*low_4gb=*/false,
@@ -1092,11 +1093,7 @@ std::unique_ptr<OatFile> OatFileAssistant::OatFileInfoBackedByVdex::LoadFile(
 std::unique_ptr<OatFile> OatFileAssistant::OatFileInfoBackedByDm::LoadFile(
     std::string* error_msg) const {
   // Check to see if there is a vdex file we can make use of.
-  std::unique_ptr<ZipArchive> dm_file(ZipArchive::Open(filename_.c_str(), error_msg));
-  if (dm_file == nullptr) {
-    return nullptr;
-  }
-  std::unique_ptr<VdexFile> vdex(VdexFile::OpenFromDm(filename_, *dm_file, error_msg));
+  std::unique_ptr<VdexFile> vdex(VdexFile::OpenFromDm(filename_, error_msg));
   if (vdex == nullptr) {
     return nullptr;
   }

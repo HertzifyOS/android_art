@@ -212,8 +212,7 @@ class OatSymbolizer final {
                                     oat_file_->BssSize(),
                                     oat_file_->BssMethodsOffset(),
                                     oat_file_->BssRootsOffset(),
-                                    oat_file_->BssStringsOffset(),
-                                    oat_file_->VdexSize());
+                                    oat_file_->BssStringsOffset());
     builder_->WriteDynamicSection();
 
     const OatHeader& oat_header = oat_file_->GetOatHeader();

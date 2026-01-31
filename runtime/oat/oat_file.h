@@ -355,10 +355,6 @@ class OatFile {
     return BssEnd() - BssBegin();
   }
 
-  size_t VdexSize() const {
-    return VdexEnd() - VdexBegin();
-  }
-
   size_t BssMethodsOffset() const {
     // Note: This is used only for symbolizer and needs to return a valid .bss offset.
     return (bss_methods_ != nullptr) ? bss_methods_ - BssBegin() : BssRootsOffset();
@@ -391,9 +387,6 @@ class OatFile {
 
   const uint8_t* BssBegin() const { return bss_begin_; }
   const uint8_t* BssEnd() const { return bss_end_; }
-
-  const uint8_t* VdexBegin() const { return vdex_begin_; }
-  const uint8_t* VdexEnd() const { return vdex_end_; }
 
   EXPORT const uint8_t* DexBegin() const;
   EXPORT const uint8_t* DexEnd() const;
@@ -488,12 +481,6 @@ class OatFile {
 
   // Was this oat_file loaded executable?
   const bool is_executable_;
-
-  // Pointer to the .vdex section, if present, otherwise null.
-  uint8_t* vdex_begin_;
-
-  // Pointer to the end of the .vdex section, if present, otherwise null.
-  uint8_t* vdex_end_;
 
   // Owning storage for the OatDexFile objects.
   std::vector<const OatDexFile*> oat_dex_files_storage_;

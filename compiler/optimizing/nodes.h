@@ -6382,7 +6382,7 @@ class HLoadMethodHandle final : public HInstruction {
   }
 
   bool CanThrow() const override { return true; }
-
+  bool CanBeNull() const override { return false; }
   bool NeedsEnvironment() const override { return true; }
 
   DECLARE_INSTRUCTION(LoadMethodHandle);
@@ -6454,7 +6454,7 @@ class HLoadMethodType final : public HInstruction {
   }
 
   bool CanThrow() const override { return true; }
-
+  bool CanBeNull() const override { return false; }
   bool NeedsEnvironment() const override { return true; }
 
   DECLARE_INSTRUCTION(LoadMethodType);

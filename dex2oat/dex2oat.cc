@@ -1319,6 +1319,7 @@ class Dex2Oat final {
         } else {
           std::string error_msg;
           input_vdex_file_ = VdexFile::Open(input_vdex_fd_,
+                                            /*start=*/0,
                                             s.st_size,
                                             "vdex",
                                             /*low_4gb=*/false,
@@ -1375,7 +1376,7 @@ class Dex2Oat final {
     if (dm_file_ != nullptr) {
       if (input_vdex_file_ == nullptr) {
         std::string error_msg;
-        input_vdex_file_ = VdexFile::OpenFromDm(dm_file_location_, *dm_file_, &error_msg);
+        input_vdex_file_ = VdexFile::OpenFromDm(*dm_file_, dm_file_location_, &error_msg);
         if (input_vdex_file_ != nullptr) {
           VLOG(verifier) << "Doing fast verification with vdex from DexMetadata archive";
         } else {
@@ -2180,8 +2181,7 @@ class Dex2Oat final {
                                           oat_writer->GetBssSize(),
                                           oat_writer->GetBssMethodsOffset(),
                                           oat_writer->GetBssRootsOffset(),
-                                          oat_writer->GetBssStringsOffset(),
-                                          oat_writer->GetVdexSize());
+                                          oat_writer->GetBssStringsOffset());
         if (IsImage()) {
           // Update oat layout.
           DCHECK(image_writer_ != nullptr);

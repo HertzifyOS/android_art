@@ -28,6 +28,8 @@
 #include "dex/dex_file-inl.h"
 #include "driver/compiler_options.h"
 #include "intrinsics_enum.h"
+#include "mirror/method_type.h"
+#include "mirror/object.h"
 #include "obj_ptr.h"
 #include "optimizing/data_type.h"
 #include "handle_cache-inl.h"
@@ -972,6 +974,39 @@ void InstructionWithAbsorbingInputSimplifier::HandleShift(HBinaryOperation* inst
   }
 }
 
+static ObjPtr<mirror::Object> ExtractConstant(HInstruction* inst)
+    REQUIRES_SHARED(Locks::mutator_lock_) {
+  if (inst->IsLoadClass()) {
+    Handle<mirror::Class> cls = inst->AsLoadClass()->GetClass();
+    if (cls.GetReference() != nullptr) {
+      return cls.Get();
+    }
+  }
+
+  if (inst->IsLoadString()) {
+    Handle<mirror::String> string = inst->AsLoadString()->GetString();
+    if (string.GetReference() != nullptr) {
+      return string.Get();
+    }
+  }
+
+  if (inst->IsLoadMethodType()) {
+    Handle<mirror::MethodType> method_type = inst->AsLoadMethodType()->GetMethodType();
+    if (method_type.GetReference() != nullptr) {
+      return method_type.Get();
+    }
+  }
+
+  if (inst->IsFieldAccess()) {
+    HFieldAccess* field_access = inst->AsFieldAccess();
+    if (field_access->HasConstantValue()) {
+      return field_access->GetConstantValue().Get();
+    }
+  }
+
+  return nullptr;
+}
+
 void InstructionWithAbsorbingInputSimplifier::VisitEqual(HEqual* instruction) {
   HInstruction* left = instruction->GetLeft();
   HInstruction* right = instruction->GetRight();
@@ -989,6 +1024,16 @@ void InstructionWithAbsorbingInputSimplifier::VisitEqual(HEqual* instruction) {
     // where lhs cannot be null with
     //    CONSTANT false
     SetReplacement(GetGraph()->GetConstant(DataType::Type::kBool, 0));
+  } else {
+    ScopedObjectAccess soa(Thread::Current());
+    ObjPtr<mirror::Object> maybe_left_constant = ExtractConstant(left);
+    if (maybe_left_constant != nullptr) {
+      ObjPtr<mirror::Object> maybe_right_constant = ExtractConstant(right);
+      if (maybe_right_constant != nullptr) {
+        bool result = maybe_left_constant == maybe_right_constant;
+        SetReplacement(GetGraph()->GetConstant(DataType::Type::kBool, result ? 1 : 0));
+      }
+    }
   }
 }
 
@@ -1009,6 +1054,16 @@ void InstructionWithAbsorbingInputSimplifier::VisitNotEqual(HNotEqual* instructi
     // where lhs cannot be null with
     //    CONSTANT true
     SetReplacement(GetGraph()->GetConstant(DataType::Type::kBool, 1));
+  } else {
+    ScopedObjectAccess soa(Thread::Current());
+    ObjPtr<mirror::Object> maybe_left_constant = ExtractConstant(left);
+    if (maybe_left_constant != nullptr) {
+      ObjPtr<mirror::Object> maybe_right_constant = ExtractConstant(right);
+      if (maybe_right_constant != nullptr) {
+        bool result = maybe_left_constant != maybe_right_constant;
+        SetReplacement(GetGraph()->GetConstant(DataType::Type::kBool, result ? 1 : 0));
+      }
+    }
   }
 }
 

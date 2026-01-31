@@ -50,8 +50,7 @@ oatdump --oat-file=$OUT/system/framework/arm64/boot.oat --header-only
 # Note: "android.os.Looper" is in framework.jar (boot extension).
 # For java.util.* (core-oj), check the ART APEX path.
 oatdump --oat-file=$OUT/system/framework/arm64/boot.oat \
-        --class-filter=android.os.Looper \
-        --disassemble-code
+        --class-filter=android.os.Looper
 ```
 
 **Tip:** If you see "NO CODE", the method might not have been compiled
@@ -70,8 +69,7 @@ adb root && adb shell
 
 # Dump to a file (recommended for large outputs)
 oatdump --oat-file=/system/framework/arm64/boot.oat \
-        --class-filter=android.os.Looper \
-        --disassemble-code > /data/local/tmp/dump.txt
+        --class-filter=android.os.Looper > /data/local/tmp/dump.txt
 
 # Exit and pull
 exit
@@ -164,8 +162,7 @@ WindowManager, etc.).
 # On device
 adb shell oatdump --oat-file=/system/framework/oat/arm64/services.odex \
                   --boot-image=/system/framework/boot.art \
-                  --class-filter=com.android.server.am.ActivityManagerService \
-                  --disassemble-code
+                  --class-filter=com.android.server.am.ActivityManagerService
 ```
 
 **Important:** When dumping `.odex` or app `.oat` files, you often must provide
@@ -190,7 +187,7 @@ For installed APKs:
 2.  Run `oatdump`:
 
     ```bash
-    bash adb shell oatdump --oat-file=/data/app/.../base.odex --disassemble-code
+    bash adb shell oatdump --oat-file=/data/app/.../base.odex
     ```
 
 ## 5. ARM64 Disassembly Guide
