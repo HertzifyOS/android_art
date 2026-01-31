@@ -107,13 +107,13 @@
 // Temporary registers while setting up a frame for calls.
 #define wARGS        w8  // args C-F for non-range calls, first arg for range calls.
 #define xARGS        x8  // 64-bit register version of the wARGS register.
-#define wSHORTY_LEN  w9  // Shorty length during nterp-to-non-nterp calls.
-#define xLOADW      x10  // Pointer to W register loading code during nterp-to-non-nterp calls.
-#define xLOADS      x11  // Pointer to S register loading code during nterp-to-non-nterp calls.
+#define xSHORTY     x10  // Shorty pointer during nterp-to-non-nterp calls.
+#define wSHORTY_LEN w11  // Shorty length during nterp-to-non-nterp calls.
+#define xLOADW      x12  // Pointer to W register loading code during nterp-to-non-nterp calls.
+#define xLOADS      x13  // Pointer to S register loading code during nterp-to-non-nterp calls.
 #define xNEW_FP     x12  // New FP during nterp-to-nterp calls.
 #define xNEW_REFS   x13  // New REFS during nterp-to-nterp calls.
 #define CFI_NEW_REFS 13
-#define xSHORTY     x14  // Shorty length during nterp-to-non-nterp calls.
 #define xHIDDEN_ARG x15  // The hidden argument register for invoke-interface/-range.
 
 // +8 for the ArtMethod of the caller.
@@ -771,12 +771,8 @@
    ubfx wip, wINST, #12, #4
 %  if is_static:
      cbz wip, .Linvoke_fast_path_${suffix}
-%  else:
-     cmp wip, #1
-     b.eq .Linvoke_fast_path_${suffix}
    cmp wip, #2
-%  if is_static:
-     b.lt .Lone_arg_fast_path_${suffix}
+   b.lt .Lone_arg_fast_path_${suffix}
    b.eq .Ltwo_args_fast_path_${suffix}
    cmp wip, #4
    b.lt .Lthree_args_fast_path_${suffix}
@@ -874,24 +870,21 @@
      ldp x0, x1, [sp], #16
      FETCH wARGS, 2
 %  else:
-%    if is_polymorphic:
-       FETCH w7, 3
-       GET_SHORTY_AND_LENGTH xSHORTY, wSHORTY_LEN, x7, \
-           slow_path=.Lget_shorty_slow_path_${suffix}, is_proto_index=1
-%    else:
-       FETCH w7, 1
-       GET_SHORTY_AND_LENGTH xSHORTY, wSHORTY_LEN, x7, slow_path=.Lget_shorty_slow_path_${suffix}
+%    index_code_unit = 3 if is_polymorphic else 1
+     FETCH w7, ${index_code_unit}
+     GET_SHORTY_AND_LENGTH xSHORTY, wSHORTY_LEN, x7, \
+         slow_path=.Lget_shorty_slow_path_${suffix}, is_proto_index=${is_polymorphic}
 %  pass
 .Lget_shorty_resume_${suffix}:
    // At this point:
    // - x0 contains method
    // - x1 contains 'this' pointer for instance method.
    // - wARGS (x8) contains arguments C-F.
-   // - xSHORTY_LEN (x9) contains the shorty length.
-   // - xSHORTY (x14) contains shorty (in callee-save to switch over return value after call).
+   // - xSHORTY (x10) contains the shorty pointer.
+   // - xSHORTY_LEN (x11) contains the shorty length.
    // - xHIDDEN_ARG (x15) contains the interface method for interface calls.
    // - wINST (w23) contains the number of arguments in bits 15:12 and the argument G in bits 11:8.
-   // - except for polymorphic and custom invokes, lr contains the entrypoint.
+   // - lr contains the entrypoint, except for polymorphic and custom invokes.
    ldrb wCSTMP, [xSHORTY], #1  // load return arg character, advance to args at shorty + 1
    sub wSHORTY_LEN, wSHORTY_LEN, 1  // reduce the remaining shorty length.
    // Check for zero args for invoke-custom or string-init.
@@ -1031,12 +1024,8 @@
 %  else:
      blr lr
 %  setup_return_value("wCSTMP")
-.Ldone_return_${suffix}:
-   /* resume execution of caller */
-%  if is_polymorphic:
-     FETCH_ADVANCE_INST 4
-%  else:
-     FETCH_ADVANCE_INST 3
+%  invoke_code_units = 4 if is_polymorphic else 3
+   FETCH_ADVANCE_INST ${invoke_code_units}
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
 
@@ -1048,13 +1037,9 @@
    lsr wip2, wINST, #8  // Number of arguments
 %  if is_static:
      cbz ip2, .Linvoke_fast_path_range_${suffix}
-%  else:
-     cmp ip2, #1
-     b.eq .Linvoke_fast_path_range_${suffix}
    add x9, xFP, wARGS, uxtw #2  // location of first dex register value
    cmp ip2, #2
-%  if is_static:
-     b.lt .Lone_arg_fast_path_range_${suffix}
+   b.lt .Lone_arg_fast_path_range_${suffix}
    b.eq .Ltwo_args_fast_path_range_${suffix}
    cmp ip2, #4
    b.lt .Lthree_args_fast_path_range_${suffix}
@@ -1164,25 +1149,21 @@
      ldp x0, x1, [sp], #16
      FETCH wARGS, 2
 %  else:
-%    if is_polymorphic:
-       FETCH w7, 3
-       GET_SHORTY_AND_LENGTH xSHORTY, wSHORTY_LEN, x7, \
-           slow_path=.Lget_shorty_range_slow_path_${suffix}, is_proto_index=1
-%    else:
-       FETCH w7, 1
-       GET_SHORTY_AND_LENGTH xSHORTY, wSHORTY_LEN, x7, \
-           slow_path=.Lget_shorty_range_slow_path_${suffix}
+%    index_code_unit = 3 if is_polymorphic else 1
+     FETCH w7, ${index_code_unit}
+     GET_SHORTY_AND_LENGTH xSHORTY, wSHORTY_LEN, x7, \
+         slow_path=.Lget_shorty_range_slow_path_${suffix}, is_proto_index=${is_polymorphic}
 %  pass
 .Lget_shorty_range_resume_${suffix}:
    // At this point:
    // - x0 contains method
    // - x1 contains 'this' pointer for instance method.
    // - wARGS (x8) contains the first arg
-   // - xSHORTY_LEN (x9) contains the shorty length.
-   // - xSHORTY (x14) contains shorty (in callee-save to switch over return value after call).
+   // - xSHORTY (x10) contains the shorty pointer.
+   // - xSHORTY_LEN (x11) contains the shorty length.
    // - xHIDDEN_ARG (x15) contains the interface method for interface calls.
    // - wINST (w23) contains the number of arguments in bits 15:8.
-   // - except for polymorphic and custom invokes, lr contains the entrypoint.
+   // - lr contains the entrypoint, except for polymorphic and custom invokes.
    ldrb wCSTMP, [xSHORTY], #1  // load return arg character, advance to args at shorty + 1
    sub wSHORTY_LEN, wSHORTY_LEN, 1  // reduce the remaining shorty length.
    // Check for zero args for invoke-custom or string-init.
@@ -1310,12 +1291,8 @@
 %  else:
      blr lr
 %  setup_return_value("wCSTMP")
-.Ldone_return_range_${suffix}:
-   /* resume execution of caller */
-%  if is_polymorphic:
-     FETCH_ADVANCE_INST 4
-%  else:
-     FETCH_ADVANCE_INST 3
+%  invoke_code_units = 4 if is_polymorphic else 3
+   FETCH_ADVANCE_INST ${invoke_code_units}
    PREPARE_OPCODE_DISPATCH
    GOTO_OPCODE
 
