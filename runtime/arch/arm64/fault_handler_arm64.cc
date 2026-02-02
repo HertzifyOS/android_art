@@ -82,6 +82,9 @@ static uintptr_t nterp_op_aget_start() {
 }
 
 bool NullPointerHandler::Action([[maybe_unused]] int sig, siginfo_t* info, void* context) {
+  // If changing this function, also update CodeSimulatorArm64::HandleNullPointer as that should
+  // stay in sync.
+
   uintptr_t fault_address = reinterpret_cast<uintptr_t>(info->si_addr);
   if (!IsValidFaultAddress(fault_address)) {
     return false;
