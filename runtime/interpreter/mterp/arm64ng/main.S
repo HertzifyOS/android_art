@@ -767,7 +767,7 @@
    tst wip, #~2      // Test if result type char == 'D' or 'F'.
    csel x0, x0, ip2, ne
 
-%def common_invoke_non_range_fast_path_call(is_static, suffix):
+%def common_invoke_non_range_fast_path_setup(is_static, suffix):
    ubfx wip, wINST, #12, #4
 %  if is_static:
      cbz wip, .Linvoke_fast_path_${suffix}
@@ -798,7 +798,7 @@
 %    pass
 %  pass
 .Linvoke_fast_path_${suffix}:
-   blr lr
+%  pass
 
 %def common_invoke_non_range(is_static=False, suffix="", is_polymorphic=False, is_custom=False):
 %  if is_polymorphic:
@@ -810,8 +810,9 @@
 %  else:
      ldr wip, [x0, #ART_METHOD_ACCESS_FLAGS_OFFSET]
      tbz wip, #ART_METHOD_NTERP_INVOKE_FAST_PATH_FLAG_BIT, .Lfast_path_with_few_args_${suffix}
-%    common_invoke_non_range_fast_path_call(is_static, suffix)
+%    common_invoke_non_range_fast_path_setup(is_static, suffix)
      FETCH_ADVANCE_INST 3
+     blr lr
      PREPARE_OPCODE_DISPATCH
      GOTO_OPCODE
 
@@ -1017,23 +1018,23 @@
 %  pass
 
 .Lsetup_finished_${suffix}:
+%  invoke_code_units = 4 if is_polymorphic else 3
+   FETCH_ADVANCE_INST ${invoke_code_units}
 %  if is_polymorphic:
      bl art_quick_invoke_polymorphic
 %  elif is_custom:
      bl art_quick_invoke_custom
 %  else:
      blr lr
-%  setup_return_value("wCSTMP")
-%  invoke_code_units = 4 if is_polymorphic else 3
-   FETCH_ADVANCE_INST ${invoke_code_units}
    PREPARE_OPCODE_DISPATCH
+%  setup_return_value("wCSTMP")
    GOTO_OPCODE
 
 %  if not is_custom:
 .Lget_shorty_slow_path_${suffix}:
      GET_SHORTY_AND_LENGTH_SLOW_PATH xSHORTY, wSHORTY_LEN, resume=.Lget_shorty_resume_${suffix}
 
-%def common_invoke_range_fast_path_call(is_static, suffix):
+%def common_invoke_range_fast_path_setup(is_static, suffix):
    lsr wip2, wINST, #8  // Number of arguments
 %  if is_static:
      cbz ip2, .Linvoke_fast_path_range_${suffix}
@@ -1080,7 +1081,7 @@
 %    pass
 %  pass
 .Linvoke_fast_path_range_${suffix}:
-   blr lr
+%  pass
 
 %def common_invoke_range(is_static=False, suffix="", is_polymorphic=False, is_custom=False):
 %  if is_polymorphic:
@@ -1092,8 +1093,9 @@
 %  else:
      ldr wip, [x0, #ART_METHOD_ACCESS_FLAGS_OFFSET]
      tbz wip, #ART_METHOD_NTERP_INVOKE_FAST_PATH_FLAG_BIT, .Lfast_path_with_few_args_range_${suffix}
-%    common_invoke_range_fast_path_call(is_static, suffix)
+%    common_invoke_range_fast_path_setup(is_static, suffix)
      FETCH_ADVANCE_INST 3
+     blr lr
      PREPARE_OPCODE_DISPATCH
      GOTO_OPCODE
 
@@ -1284,16 +1286,16 @@
    b .Lrange_load_regs_${suffix}
 
 .Lsetup_finished_range_${suffix}:
+%  invoke_code_units = 4 if is_polymorphic else 3
+   FETCH_ADVANCE_INST ${invoke_code_units}
 %  if is_polymorphic:
      bl art_quick_invoke_polymorphic
 %  elif is_custom:
      bl art_quick_invoke_custom
 %  else:
      blr lr
-%  setup_return_value("wCSTMP")
-%  invoke_code_units = 4 if is_polymorphic else 3
-   FETCH_ADVANCE_INST ${invoke_code_units}
    PREPARE_OPCODE_DISPATCH
+%  setup_return_value("wCSTMP")
    GOTO_OPCODE
 
 %  if not is_custom:
@@ -1694,6 +1696,7 @@ NterpCommonInvokeCustomRange:
 %   common_invoke_range(is_static=True, is_custom=True, suffix="invokeCustom")
 
 NterpHandleStringInit:
+    ubfx wCSTMP, wARGS, #0, #4        // Remember `this` vreg number in a callee-save register.
     ubfx wip, wINST, #8, #4           // Extract G
     lsr wARGS, wARGS, #4              // Shift args D-F to C-E for string init.
     sub wINST, wINST, (1 << 12)       // Adjust the number of arguments.
@@ -1709,17 +1712,17 @@ NterpHandleStringInit:
     brk 0
 9:
 #endif  // NDEBUG
-%   common_invoke_non_range_fast_path_call(is_static=True, suffix="stringInit")
+%   common_invoke_non_range_fast_path_setup(is_static=True, suffix="stringInit")
+    blr lr
 .Ldone_return_stringInit:
-    FETCH w1, 2                       // Re-fetch arguments.
-    and x1, x1, #0xf                  // Extract vC for `this`.
-    GET_VREG w1, w1                   // Get `this`.
-    UPDATE_REGISTERS_FOR_STRING_INIT w1, w0
     FETCH_ADVANCE_INST 3
+    GET_VREG w1, wCSTMP               // Get `this`.
+    UPDATE_REGISTERS_FOR_STRING_INIT w1, w0
     PREPARE_OPCODE_DISPATCH
     GOTO_OPCODE
 
 NterpHandleStringInitRange:
+    mov wCSTMP, wARGS                 // Remember `this` vreg number in a callee-save register.
     add wARGS, wARGS, #1              // Adjust the first argument number.
     sub wINST, wINST, (1 << 8)        // Adjust the number of arguments.
 %   n2n_entry_point_check("x2", entrypoint="lr", call_compiled_code="1f")
@@ -1733,12 +1736,12 @@ NterpHandleStringInitRange:
     brk 0
 9:
 #endif  // NDEBUG
-%   common_invoke_range_fast_path_call(is_static=True, suffix="stringInit")
+%   common_invoke_range_fast_path_setup(is_static=True, suffix="stringInit")
+    blr lr
 .Ldone_return_range_stringInit:
-    FETCH w1, 2                       // Re-fetch arguments.
-    GET_VREG w1, w1                   // Get `this`.
-    UPDATE_REGISTERS_FOR_STRING_INIT w1, w0
     FETCH_ADVANCE_INST 3
+    GET_VREG w1, wCSTMP               // Get `this`.
+    UPDATE_REGISTERS_FOR_STRING_INIT w1, w0
     PREPARE_OPCODE_DISPATCH
     GOTO_OPCODE
 
