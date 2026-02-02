@@ -430,7 +430,10 @@ std::string escapeString(std::string_view s) {
         }
         break;
       case 4:
-        oss << '\\' << '0' + (c / 64) << '0' + ((c % 64) / 8) << '0' + (c % 8);
+        oss << '\\'
+            << static_cast<char>('0' + (c / 64))
+            << static_cast<char>('0' + ((c % 64) / 8))
+            << static_cast<char>('0' + (c % 8));
         break;
     }
   }
@@ -1913,7 +1916,12 @@ static void dumpCallSite(const DexFile* pDexFile, u4 idx) {
     }
 
     if (gOptions.outputFormat == OUTPUT_PLAIN) {
-      fprintf(gOutFile, "  link_argument[%zu] : %s (%s)\n", argument, value.c_str(), type);
+      if (needsEscape(value)) {
+        std::string escaped = escapeString(value);
+        fprintf(gOutFile, "  link_argument[%zu] : %s (%s)\n", argument, escaped.c_str(), type);
+      } else {
+        fprintf(gOutFile, "  link_argument[%zu] : %s (%s)\n", argument, value.c_str(), type);
+      }
     }
 
     it.Next();
