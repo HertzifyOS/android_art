@@ -1334,6 +1334,7 @@ java.nio.file.AtomicMoveNotSupportedException
 java.nio.file.CopyMoveHelper
 java.nio.file.CopyOption
 java.nio.file.DirectoryIteratorException
+java.nio.file.DirectoryNotEmptyException
 java.nio.file.DirectoryStream$Filter
 java.nio.file.DirectoryStream
 java.nio.file.FileAlreadyExistsException
@@ -1358,6 +1359,11 @@ java.nio.file.SecureDirectoryStream
 java.nio.file.SimpleFileVisitor
 java.nio.file.StandardCopyOption
 java.nio.file.StandardOpenOption
+java.nio.file.WatchEvent$Kind
+java.nio.file.WatchEvent$Modifier
+java.nio.file.WatchEvent
+java.nio.file.WatchKey
+java.nio.file.WatchService
 java.nio.file.Watchable
 java.nio.file.attribute.AclFileAttributeView
 java.nio.file.attribute.AttributeView
@@ -3103,7 +3109,12 @@ sun.nio.fs.NativeBuffer$Deallocator
 sun.nio.fs.NativeBuffer
 sun.nio.fs.NativeBuffers$1
 sun.nio.fs.NativeBuffers
+sun.nio.fs.UnixChannelFactory$1
+sun.nio.fs.UnixChannelFactory$Flags
+sun.nio.fs.UnixChannelFactory
 sun.nio.fs.UnixConstants
+sun.nio.fs.UnixCopyFile$Flags
+sun.nio.fs.UnixCopyFile
 sun.nio.fs.UnixDirectoryStream$UnixDirectoryIterator
 sun.nio.fs.UnixDirectoryStream
 sun.nio.fs.UnixException
@@ -3453,7 +3464,10 @@ sun.util.logging.PlatformLogger
 [Ljava.nio.file.OpenOption;
 [Ljava.nio.file.StandardCopyOption;
 [Ljava.nio.file.StandardOpenOption;
+[Ljava.nio.file.WatchEvent$Kind;
+[Ljava.nio.file.WatchEvent$Modifier;
 [Ljava.nio.file.attribute.FileAttribute;
+[Ljava.nio.file.attribute.PosixFilePermission;
 [Ljava.security.CodeSigner;
 [Ljava.security.CryptoPrimitive;
 [Ljava.security.Permission;
