@@ -1705,14 +1705,17 @@ static void dumpClass(const DexFile* pDexFile, int idx, char** pLastPackage) {
 
   // End of class.
   if (gOptions.outputFormat == OUTPUT_PLAIN) {
-    const char* fileName;
-    if (pClassDef.source_file_idx_.IsValid()) {
-      fileName = pDexFile->GetStringData(pClassDef.source_file_idx_);
-    } else {
-      fileName = "unknown";
+    fprintf(gOutFile, "  source_file_idx   : %d", pClassDef.source_file_idx_.index_);
+    if (gOptions.verbose) {
+      const char* fileName;
+      if (pClassDef.source_file_idx_.IsValid()) {
+        fileName = pDexFile->GetStringData(pClassDef.source_file_idx_);
+      } else {
+        fileName = "unknown";
+      }
+      fprintf(gOutFile, " (%s)", fileName);
     }
-    fprintf(gOutFile, "  source_file_idx   : %d (%s)\n\n",
-            pClassDef.source_file_idx_.index_, fileName);
+    fprintf(gOutFile, "\n\n");
   } else if (gOptions.outputFormat == OUTPUT_XML) {
     fprintf(gOutFile, "</class>\n");
   }

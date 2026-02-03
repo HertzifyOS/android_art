@@ -731,6 +731,9 @@ TEST_F(Dex2oatImageTest, TestExtension) {
 }
 
 TEST_F(Dex2oatImageTest, InlinedString) {
+  // TODO(b/480856545): investigate and fix SIGSEGV that happens on LUCI
+  TEST_DISABLED_ON_VM();
+
   ScratchDir scratch;
   const std::string& scratch_dir = scratch.GetPath();
   std::string image_dir = scratch_dir + GetInstructionSetString(kRuntimeISA);

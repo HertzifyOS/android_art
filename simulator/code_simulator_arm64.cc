@@ -154,6 +154,9 @@ class ARTSimulator final : public Simulator {
     RegisterBranchInterception(artAllocObjectFromCodeInitializedRosAllocInstrumented);
     RegisterBranchInterception(artAllocObjectFromCodeWithChecksRosAllocInstrumented);
     RegisterBranchInterception(artAllocObjectFromCodeResolvedRosAllocInstrumented);
+    RegisterBranchInterception(artAllocStringFromBytesFromCodeRosAlloc);
+    RegisterBranchInterception(artAllocStringFromCharsFromCodeRosAlloc);
+    RegisterBranchInterception(artAllocStringFromStringFromCodeRosAlloc);
     RegisterBranchInterception(artGetByteStaticFromCompiledCode);
     RegisterBranchInterception(artGetCharStaticFromCompiledCode);
     RegisterBranchInterception(artGet32StaticFromCompiledCode);
@@ -178,6 +181,31 @@ class ARTSimulator final : public Simulator {
     RegisterBranchInterception(artAllocStringObjectRosAlloc);
     RegisterBranchInterception(artDeoptimizeIfNeeded);
     RegisterBranchInterception(artInvokeCustom);
+
+    // ART has a number of math entrypoints which operate on double type (see
+    // quick_entrypoints_list.h, entrypoints_init_arm64.cc); we need to intercept C functions
+    // called from those EPs.
+    //
+    // The C library provides function implementations for both double and float, so we have
+    // to explicitly choose the type for the interception templates - double.
+    RegisterBranchInterception<double, double>(cos);
+    RegisterBranchInterception<double, double>(sin);
+    RegisterBranchInterception<double, double>(acos);
+    RegisterBranchInterception<double, double>(asin);
+    RegisterBranchInterception<double, double>(atan);
+    RegisterBranchInterception<double, double, double>(atan2);
+    RegisterBranchInterception<double, double, double>(pow);
+    RegisterBranchInterception<double, double>(cbrt);
+    RegisterBranchInterception<double, double>(cosh);
+    RegisterBranchInterception<double, double>(exp);
+    RegisterBranchInterception<double, double>(expm1);
+    RegisterBranchInterception<double, double, double>(hypot);
+    RegisterBranchInterception<double, double>(log);
+    RegisterBranchInterception<double, double>(log10);
+    RegisterBranchInterception<double, double, double>(nextafter);
+    RegisterBranchInterception<double, double>(sinh);
+    RegisterBranchInterception<double, double>(tan);
+    RegisterBranchInterception<double, double>(tanh);
 
     RegisterTwoWordReturnInterception(artInvokeSuperTrampolineWithAccessCheck);
     RegisterTwoWordReturnInterception(artInvokeStaticTrampolineWithAccessCheck);
@@ -243,6 +271,55 @@ class ARTSimulator final : public Simulator {
       WriteXRegister(0, res.lo);
       WriteXRegister(1, res.hi);
     });
+  }
+
+  void VisitLoadStoreExclusive(const vixl::aarch64::Instruction* instr) override {
+    // Exclusive accesses are not simulated accurately enough for multi-threaded code, see
+    // external/vixl/README.md for more details. The restricted mode ensures that we shouldn't
+    // encounter any.
+    // TODO(Simulator): Separate out the exclusive accesses in VIXL that are accurately simulated
+    // and those that are not.
+    LoadStoreExclusive op = static_cast<LoadStoreExclusive>(instr->Mask(LoadStoreExclusiveMask));
+    switch (op) {
+      // Exclusive stores.
+      case STXRB_w:
+      case STXRH_w:
+      case STXR_w:
+      case STXR_x:
+      // Exclusive loads.
+      case LDXRB_w:
+      case LDXRH_w:
+      case LDXR_w:
+      case LDXR_x:
+      // Exclusive store pair.
+      case STXP_w:
+      case STXP_x:
+      // Exclusive load pair.
+      case LDXP_w:
+      case LDXP_x:
+      // Exclusive store-release variants.
+      case STLXRB_w:
+      case STLXRH_w:
+      case STLXR_w:
+      case STLXR_x:
+      // Exclusive load-acquire variants
+      case LDAXRB_w:
+      case LDAXRH_w:
+      case LDAXR_w:
+      case LDAXR_x:
+      // Exclusive store-release pair variants.
+      case STLXP_w:
+      case STLXP_x:
+      // Exclusive load-acquire pair variants.
+      case LDAXP_w:
+      case LDAXP_x:
+        LOG(FATAL) << "Unexpected exclusive operation: " << op;
+        UNREACHABLE();
+      default:
+        // Some instructions counted as exclusive such as LDAR/STLR and CAS* are simulated
+        // accurately enough to be used.
+        Simulator::VisitLoadStoreExclusive(instr);
+    }
   }
 };
 
