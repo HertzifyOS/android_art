@@ -538,7 +538,7 @@ class MarkCompact final : public GarbageCollector {
       REQUIRES(Locks::heap_bitmap_lock_);
   // Scan (only) immune spaces looking for references into the garbage collected
   // spaces.
-  void UpdateAndMarkModUnion() REQUIRES_SHARED(Locks::mutator_lock_)
+  NO_INLINE void UpdateAndMarkModUnion() REQUIRES_SHARED(Locks::mutator_lock_)
       REQUIRES(Locks::heap_bitmap_lock_);
   // Scan mod-union and card tables, covering all the spaces, to identify dirty objects.
   // These are in 'minimum age' cards, which is 'kCardAged' in case of concurrent (second round)
@@ -723,7 +723,8 @@ class MarkCompact final : public GarbageCollector {
   void SetBitForMidToOldPromotion(uint8_t* obj);
   // Scan old-gen for young GCs by looking for cards that are at least 'aged' in
   // the card-table corresponding to moving and non-moving spaces.
-  void ScanOldGenObjects() REQUIRES(Locks::heap_bitmap_lock_) REQUIRES_SHARED(Locks::mutator_lock_);
+  NO_INLINE void ScanOldGenObjects() REQUIRES(Locks::heap_bitmap_lock_)
+      REQUIRES_SHARED(Locks::mutator_lock_);
   // Return free pages from 'from-space' to be reused. Returns nullptr if 'size'
   // worth of contiguous pages are not available. 'size' must be a multiple of
   // page-size.
