@@ -633,6 +633,7 @@ Result<void> DexoptChrootSetup::SetUpChroot(const std::optional<std::string>& ot
       {"system_ext", "/system_ext"},
       {"vendor", "/vendor"},
       {"product", "/product"},
+      {"odm", "/odm"},
   };
 
   std::string partitions_from_sysprop =
