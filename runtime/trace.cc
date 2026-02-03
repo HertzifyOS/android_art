@@ -1103,6 +1103,15 @@ std::string TraceWriter::CreateSummary(int flags) {
   os << StringPrintf("clock-call-overhead-nsec=%" PRIu64 "\n", clock_overhead_ns_);
   os << StringPrintf("vm=art\n");
   os << StringPrintf("pid=%d\n", getpid());
+
+  os << "is_precise_trace=" << (flags & Trace::TraceFlag::kTraceLowOverhead ? "false" : "true")
+     << "\n";
+  std::string compiler_filter;
+  std::string compilation_reason;
+  Runtime::Current()->GetAppInfo()->GetPrimaryApkOptimizationStatus(&compiler_filter,
+                                                                    &compilation_reason);
+  os << "compilation-filter=" << compiler_filter << "\n";
+
   if ((flags & Trace::kTraceCountAllocs) != 0) {
     os << "alloc-count=" << Runtime::Current()->GetStat(KIND_ALLOCATED_OBJECTS) << "\n";
     os << "alloc-size=" << Runtime::Current()->GetStat(KIND_ALLOCATED_BYTES) << "\n";
