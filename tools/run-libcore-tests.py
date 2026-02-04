@@ -390,6 +390,9 @@ def main():
   if not args.jobs:
     if args.mode == "device":
       args.jobs = get_target_cpu_count()
+      if args.continuous_gc:
+        # For continuously running gc-thread
+        args.jobs = args.jobs // 2
     else:
       args.jobs = multiprocessing.cpu_count()
       if args.gcstress or args.continuous_gc:
