@@ -15,6 +15,7 @@
 
 #include "instruction_simplifier_x86_shared.h"
 
+#include "com_android_art_flags.h"
 #include "nodes_x86.h"
 
 namespace art HIDDEN {
@@ -119,6 +120,123 @@ bool TryGenerateMaskUptoLeastSetBit(HXor* instruction) {
     return true;
   }
   return false;
+}
+
+bool IsLeaIndexShift(HInstruction* instruction, HInstruction** index, uint32_t* shift) {
+  if (!instruction->IsShl() || !instruction->HasOnlyOneNonEnvironmentUse()) {
+    return false;
+  }
+  HShl* shl = instruction->AsShl();
+  DCHECK_EQ(shl->GetRight()->IsConstant(), shl->GetRight()->IsIntConstant());
+  if (!shl->GetRight()->IsIntConstant()) {
+    return false;
+  }
+  int32_t shift_value = shl->GetRight()->AsIntConstant()->GetValue();
+  if (shift_value < 1 || shift_value > 3) {
+    return false;
+  }
+  *index = shl->GetLeft();
+  *shift = shift_value;
+  return true;
+}
+
+std::tuple<HInstruction*, int32_t, HInstruction*> GetLeaBaseAndDisplacement(
+    HInstruction* instruction) {
+  HInstruction* base = nullptr;
+  int32_t displacement = 0;
+  HInstruction* dead = nullptr;
+  if (instruction->IsLongConstant() && IsInt<32>(instruction->AsLongConstant()->GetValue())) {
+    displacement = dchecked_integral_cast<int32_t>(instruction->AsLongConstant()->GetValue());
+  } else if (instruction->IsIntConstant()) {
+    displacement = instruction->AsIntConstant()->GetValue();
+  } else {
+    base = instruction;
+    // We can embed `HAdd` or `HSub` in the LEA under the right conditions.
+    if ((instruction->IsAdd() || instruction->IsSub()) &&
+        instruction->HasOnlyOneNonEnvironmentUse()) {
+      int32_t sign = instruction->IsAdd() ? 1 : -1;
+      HBinaryOperation* binop = instruction->AsBinaryOperation();
+      HInstruction* left = binop->GetLeft();
+      HInstruction* right = binop->GetRight();
+      if (right->IsIntConstant()) {
+        displacement = right->AsIntConstant()->GetValue() * sign;
+        base = left;
+        dead = instruction;
+      } else if (right->IsLongConstant() && IsInt<32>(right->AsLongConstant()->GetValue() * sign)) {
+        displacement = dchecked_integral_cast<int32_t>(right->AsLongConstant()->GetValue() * sign);
+        base = left;
+        dead = instruction;
+      } else if (instruction->IsAdd() && left->IsIntConstant()) {
+        DCHECK_EQ(sign, 1);
+        displacement = left->AsIntConstant()->GetValue();
+        base = right;
+        dead = instruction;
+      } else if (instruction->IsAdd() &&
+                 left->IsLongConstant() &&
+                 IsInt<32>(left->AsLongConstant()->GetValue())) {
+        DCHECK_EQ(sign, 1);
+        displacement = dchecked_integral_cast<int32_t>(left->AsLongConstant()->GetValue());
+        base = right;
+        dead = instruction;
+      }
+    }
+  }
+  return {base, displacement, dead};
+}
+
+bool TryLoadEffectiveAddressSimplification(HBinaryOperation* instruction) {
+  DCHECK(instruction->IsAdd() || instruction->IsSub());
+  DCHECK(DataType::IsIntOrLongType(instruction->GetType()));
+  if (!com::android::art::flags::x86_lea_optimizations()) {
+    return false;
+  }
+  HInstruction* left = instruction->GetLeft();
+  HInstruction* right = instruction->GetRight();
+  HInstruction* index = nullptr;
+  uint32_t shift = 0u;
+  HInstruction* base = nullptr;
+  int32_t disp = 0;
+  HInstruction* dead = nullptr;
+  HInstruction* dead2 = nullptr;
+  if (instruction->IsAdd()) {
+    if (IsLeaIndexShift(left, &index, &shift)) {
+      dead = left;
+      std::tie(base, disp, dead2) = GetLeaBaseAndDisplacement(right);
+    } else if (IsLeaIndexShift(right, &index, &shift)) {
+      dead = right;
+      std::tie(base, disp, dead2) = GetLeaBaseAndDisplacement(left);
+    }
+  } else if (right->IsConstant()) {  // For `HSub`, we simplify only with a constant `right`.
+    DCHECK(instruction->IsSub());
+    if (IsLeaIndexShift(left, &index, &shift)) {
+      dead = left;
+      if (right->IsIntConstant()) {
+        disp = -right->AsIntConstant()->GetValue();
+      } else {
+        DCHECK(right->IsLongConstant()) << right->DebugName();
+        int64_t displacement = -right->AsLongConstant()->GetValue();
+        if (IsInt<32>(displacement)) {
+          disp = dchecked_integral_cast<int32_t>(displacement);
+        } else {
+          base = instruction->GetBlock()->GetGraph()->GetLongConstant(displacement);
+        }
+      }
+    }
+  }
+  if (index == nullptr) {
+    return false;
+  }
+  ArenaAllocator* arena = instruction->GetBlock()->GetGraph()->GetAllocator();
+  HX86LoadEffectiveAddress* lea = new (arena) HX86LoadEffectiveAddress(
+      instruction->GetType(), index, base, shift, disp, instruction->GetDexPc());
+  instruction->GetBlock()->ReplaceAndRemoveInstructionWith(instruction, lea);
+  DCHECK(!dead->HasUses());
+  dead->GetBlock()->RemoveInstruction(dead);
+  if (dead2 != nullptr) {
+    DCHECK(!dead2->HasUses());
+    dead2->GetBlock()->RemoveInstruction(dead2);
+  }
+  return true;
 }
 
 bool AreLeastSetBitInputs(HInstruction* to_test, HInstruction* other) {
