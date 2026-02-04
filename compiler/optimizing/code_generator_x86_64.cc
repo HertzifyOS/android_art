@@ -1763,11 +1763,9 @@ void InstructionCodeGeneratorX86_64::GenerateMethodEntryExitHook(HInstruction* i
   DCHECK(curr_entry.AsRegister() != RDX);
   uint64_t trace_buffer_curr_entry_offset =
       Thread::TraceBufferCurrPtrOffset<kX86_64PointerSize>().SizeValue();
-  int slots_required =
-      instruction->IsMethodExitHook() ? kNumEntriesForWallClockExit : kNumEntriesForWallClockEntry;
   __ gs()->movq(CpuRegister(curr_entry),
                 Address::Absolute(trace_buffer_curr_entry_offset, /* no_rip= */ true));
-  __ subq(CpuRegister(curr_entry), Immediate(slots_required * sizeof(void*)));
+  __ subq(CpuRegister(curr_entry), Immediate(kNumEntriesForWallClock * sizeof(void*)));
   __ gs()->movq(init_entry,
                 Address::Absolute(Thread::TraceBufferPtrOffset<kX86_64PointerSize>().SizeValue(),
                                   /* no_rip= */ true));
@@ -1778,28 +1776,23 @@ void InstructionCodeGeneratorX86_64::GenerateMethodEntryExitHook(HInstruction* i
   __ gs()->movq(Address::Absolute(trace_buffer_curr_entry_offset, /* no_rip= */ true),
                 CpuRegister(curr_entry));
 
-  // Record method pointer only for method enter events.
+  // Record method pointer and action.
   CpuRegister method = init_entry;
-  if (instruction->IsMethodEntryHook()) {
-    __ movq(CpuRegister(method), Address(CpuRegister(RSP), kCurrentMethodStackOffset));
-    __ movq(Address(curr_entry, kMethodOffsetInBytesEntry), CpuRegister(method));
+  __ movq(CpuRegister(method), Address(CpuRegister(RSP), kCurrentMethodStackOffset));
+  // Use last two bits to encode trace method action. For MethodEntry it is 0
+  // so no need to set the bits since they are 0 already.
+  if (instruction->IsMethodExitHook()) {
+    DCHECK_GE(ArtMethod::Alignment(kRuntimePointerSize), static_cast<size_t>(4));
+    static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodEnter) == 0);
+    static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodExit) == 1);
+    __ orq(method, Immediate(enum_cast<int32_t>(TraceAction::kTraceMethodExit)));
   }
-
+  __ movq(Address(curr_entry, kMethodOffsetInBytes), CpuRegister(method));
   // Get the timestamp. rdtsc returns timestamp in RAX + RDX even in 64-bit architectures.
   __ rdtsc();
   __ shlq(CpuRegister(RDX), Immediate(32));
   __ orq(CpuRegister(RAX), CpuRegister(RDX));
-  // Use least significant two bits to encode trace method action.
-  __ shlq(CpuRegister(RAX), Immediate(2));
-  if (instruction->IsMethodEntryHook()) {
-    // For MethodEntry trace action is 0.
-    static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodEnter) == 0);
-    __ movq(Address(curr_entry, kTimestampOffsetInBytesEntry), CpuRegister(RAX));
-  } else {
-    static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodExit) == 1);
-    __ orq(CpuRegister(RAX), Immediate(TraceAction::kTraceMethodExit));
-    __ movq(Address(curr_entry, kTimestampOffsetInBytesExit), CpuRegister(RAX));
-  }
+  __ movq(Address(curr_entry, kTimestampOffsetInBytes), CpuRegister(RAX));
   __ Bind(slow_path->GetExitLabel());
 }
 

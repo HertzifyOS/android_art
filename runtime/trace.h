@@ -93,11 +93,11 @@ std::ostream& operator<<(std::ostream& os, TracingMode rhs);
 // All values are stored in little-endian order.
 
 enum TraceAction {
-  kTraceMethodEnter = 0x00,  // method entry
-  kTraceMethodExit = 0x01,   // method exit
-  kTraceUnroll = 0x02,       // method exited by exception unrolling
-  // 0x03 currently unused
-  kTraceActionMask = 0x03,  // two bits
+    kTraceMethodEnter = 0x00,       // method entry
+    kTraceMethodExit = 0x01,        // method exit
+    kTraceUnroll = 0x02,            // method exited by exception unrolling
+    // 0x03 currently unused
+    kTraceMethodActionMask = 0x03,  // two bits
 };
 
 enum class TraceOutputMode {
@@ -106,34 +106,24 @@ enum class TraceOutputMode {
     kStreaming
 };
 
-// We need 2 entries to store 64-bit timestamp counter as two 32-bit values on 32-bit architectures.
-static constexpr uint32_t kNumEntriesForWallClockExit =
-    (kRuntimePointerSize == PointerSize::k64) ? 1 : 2;
-// We record method pointers only for method entry events.
-static constexpr uint32_t kNumEntriesForWallClockEntry = kNumEntriesForWallClockExit + 1;
+// We need 3 entries to store 64-bit timestamp counter as two 32-bit values on 32-bit architectures.
+static constexpr uint32_t kNumEntriesForWallClock =
+    (kRuntimePointerSize == PointerSize::k64) ? 2 : 3;
 // Timestamps are stored as two 32-bit balues on 32-bit architectures.
-static constexpr uint32_t kNumEntriesForDualClockEntry = (kRuntimePointerSize == PointerSize::k64)
-                                                             ? kNumEntriesForWallClockEntry + 1
-                                                             : kNumEntriesForWallClockEntry + 2;
-static constexpr uint32_t kNumEntriesForDualClockExit = (kRuntimePointerSize == PointerSize::k64)
-                                                            ? kNumEntriesForWallClockExit + 1
-                                                            : kNumEntriesForWallClockExit + 2;
+static constexpr uint32_t kNumEntriesForDualClock = (kRuntimePointerSize == PointerSize::k64)
+                                                        ? kNumEntriesForWallClock + 1
+                                                        : kNumEntriesForWallClock + 2;
 
 // These define offsets in bytes for the individual fields of a trace entry. These are used by the
 // JITed code when storing a trace entry.
-static constexpr int32_t kMethodOffsetInBytesEntry = 0;
-static constexpr int32_t kTimestampOffsetInBytesEntry =
-    1 * static_cast<uint32_t>(kRuntimePointerSize);
+static constexpr int32_t kMethodOffsetInBytes = 0;
+static constexpr int32_t kTimestampOffsetInBytes = 1 * static_cast<uint32_t>(kRuntimePointerSize);
 // On 32-bit architectures we store 64-bit timestamp as two 32-bit values.
 // kHighTimestampOffsetInBytes is only relevant on 32-bit architectures.
-static constexpr int32_t kHighTimestampOffsetInBytesEntry =
+static constexpr int32_t kHighTimestampOffsetInBytes =
     2 * static_cast<uint32_t>(kRuntimePointerSize);
-static constexpr int32_t kTimestampOffsetInBytesExit = 0;
-static constexpr int32_t kHighTimestampOffsetInBytesExit =
-    1 * static_cast<uint32_t>(kRuntimePointerSize);
 
-static constexpr size_t TraceActionBits = MinimumBitsToStore(static_cast<size_t>(kTraceActionMask));
-static constexpr uint64_t kMaskTraceAction = ~0b11;
+static constexpr uintptr_t kMaskTraceAction = ~0b11;
 
 // Packet type encoding for the new method tracing format.
 static constexpr int kThreadInfoHeaderV2 = 0;
@@ -319,10 +309,11 @@ class TraceWriter {
                          size_t buffer_len) REQUIRES(trace_writer_lock_);
 
  private:
-  size_t ReadValuesFromRecord(uintptr_t* method_trace_entries,
-                              size_t record_index,
-                              MethodTraceRecord& record,
-                              bool has_dual_clock);
+  void ReadValuesFromRecord(uintptr_t* method_trace_entries,
+                            size_t record_index,
+                            MethodTraceRecord& record,
+                            bool has_thread_cpu_clock,
+                            bool has_wall_clock);
 
   size_t FlushEntriesFormatV2(uintptr_t* method_trace_entries, size_t tid, size_t num_records)
       REQUIRES(trace_writer_lock_);
@@ -330,7 +321,8 @@ class TraceWriter {
   size_t FlushEntriesFormatV1(uintptr_t* method_trace_entries,
                               size_t tid,
                               const std::unordered_map<ArtMethod*, std::string>& method_infos,
-                              size_t end_offset) REQUIRES(trace_writer_lock_);
+                              size_t end_offset,
+                              size_t num_records) REQUIRES(trace_writer_lock_);
   // Get a 32-bit id for the method and specify if the method hasn't been seen before. If this is
   // the first time we see this method record information (like method name, declaring class etc.,)
   // about the method.
@@ -395,8 +387,6 @@ class TraceWriter {
   // Map from thread_id to a 16-bit identifier.
   std::unordered_map<pid_t, uint16_t> thread_id_map_ GUARDED_BY(trace_writer_lock_);
   uint16_t current_thread_index_;
-
-  std::unordered_map<pid_t, std::stack<ArtMethod*>> thread_stack_ GUARDED_BY(trace_writer_lock_);
 
   // Buffer used when generating trace data from the raw entries.
   // In streaming mode, the trace data is flushed to file when the per-thread buffer gets full.

@@ -2215,10 +2215,8 @@ void InstructionCodeGeneratorARMVIXL::GenerateMethodEntryExitHook(HInstruction* 
       Thread::TraceBufferCurrPtrOffset<kArmPointerSize>().Int32Value();
   vixl32::Register curr_entry = value;
   vixl32::Register init_entry = addr;
-  int slots_required =
-      instruction->IsMethodEntryHook() ? kNumEntriesForWallClockEntry : kNumEntriesForWallClockExit;
   __ Ldr(curr_entry, MemOperand(tr, trace_buffer_curr_entry_offset));
-  __ Subs(curr_entry, curr_entry, static_cast<uint32_t>(slots_required * sizeof(void*)));
+  __ Subs(curr_entry, curr_entry, static_cast<uint32_t>(kNumEntriesForWallClock * sizeof(void*)));
   __ Ldr(init_entry, MemOperand(tr, Thread::TraceBufferPtrOffset<kArmPointerSize>().SizeValue()));
   __ Cmp(curr_entry, init_entry);
   __ B(lt, slow_path->GetEntryLabel());
@@ -2226,11 +2224,17 @@ void InstructionCodeGeneratorARMVIXL::GenerateMethodEntryExitHook(HInstruction* 
   // Update the index in the `Thread`.
   __ Str(curr_entry, MemOperand(tr, trace_buffer_curr_entry_offset));
 
-  // Record method pointer for method entry events.
-  if (instruction->IsMethodEntryHook()) {
-    __ Ldr(tmp, MemOperand(sp, 0));
-    __ Str(tmp, MemOperand(curr_entry, kMethodOffsetInBytesEntry));
+  // Record method pointer and trace action.
+  __ Ldr(tmp, MemOperand(sp, 0));
+  // Use last two bits to encode trace method action. For MethodEntry it is 0
+  // so no need to set the bits since they are 0 already.
+  if (instruction->IsMethodExitHook()) {
+    DCHECK_GE(ArtMethod::Alignment(kRuntimePointerSize), static_cast<size_t>(4));
+    static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodEnter) == 0);
+    static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodExit) == 1);
+    __ Orr(tmp, tmp, Operand(enum_cast<int32_t>(TraceAction::kTraceMethodExit)));
   }
+  __ Str(tmp, MemOperand(curr_entry, kMethodOffsetInBytes));
 
   vixl32::Register tmp1 = init_entry;
   // See Architecture Reference Manual ARMv7-A and ARMv7-R edition section B4.1.34.
@@ -2239,21 +2243,9 @@ void InstructionCodeGeneratorARMVIXL::GenerateMethodEntryExitHook(HInstruction* 
           /* coproc= */ 15,
           /* opc1= */ 1,
           /* crm= */ 14);
-  // We encode the trace action in the two lsb bits. So left shift the 64-bit timestamp by 2.
-  __ Lsl(tmp1, tmp1, 2);
-  __ Orr(tmp1, tmp1, Operand(tmp, ShiftType::LSL, 30));
-  __ Lsl(tmp, tmp, 2);
-  if (instruction->IsMethodEntryHook()) {
-    static_assert(kHighTimestampOffsetInBytesEntry ==
-                  kTimestampOffsetInBytesEntry + static_cast<uint32_t>(kRuntimePointerSize));
-    static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodEnter) == 0);
-    __ Strd(tmp, tmp1, MemOperand(curr_entry, kTimestampOffsetInBytesEntry));
-  } else {
-    static_assert(kHighTimestampOffsetInBytesExit ==
-                  kTimestampOffsetInBytesExit + static_cast<uint32_t>(kRuntimePointerSize));
-    __ Orr(tmp, tmp, Operand(enum_cast<int32_t>(TraceAction::kTraceMethodExit)));
-    __ Strd(tmp, tmp1, MemOperand(curr_entry, kTimestampOffsetInBytesExit));
-  }
+  static_assert(kHighTimestampOffsetInBytes ==
+                kTimestampOffsetInBytes + static_cast<uint32_t>(kRuntimePointerSize));
+  __ Strd(tmp, tmp1, MemOperand(curr_entry, kTimestampOffsetInBytes));
   __ Bind(slow_path->GetExitLabel());
 }
 

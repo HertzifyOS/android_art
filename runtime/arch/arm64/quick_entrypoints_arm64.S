@@ -2632,7 +2632,6 @@ ENTRY art_quick_record_entry_trace_event_with_flush
     b.lt .Lhandle_record_entry_overflow
     mrs xIP0, cntvct_el0
     str x0, [xIP1]
-    bfc xIP0, 62, 2
     str xIP0, [xIP1, 8]
     str xIP1, [xSELF, #TRACE_BUFFER_CURRENT_OFFSET]
     ret
@@ -2651,13 +2650,15 @@ ENTRY art_quick_record_exit_trace_event_with_flush
     ldr xIP1, [xSELF, #TRACE_BUFFER_CURRENT_OFFSET]
     // xIP0 has the trace buffer pointer. This is loaded on the fast path before
     // checking if we need to call this method. This will be still valid here.
-    sub xIP1, xIP1, 8
+    // TODO: Change this so we only need one entry here.
+    sub xIP1, xIP1, 16
     cmp xIP1, xIP0
     b.lt .Lhandle_record_exit_overflow
-    mrs xIP0, cntvct_el0
-    bfc xIP0, 62, 2
+    ldr xIP0, [sp] // pass ArtMethod*
     orr xIP0, xIP0, #1
     str xIP0, [xIP1]
+    mrs xIP0, cntvct_el0
+    str xIP0, [xIP1, 8]
     str xIP1, [xSELF, #TRACE_BUFFER_CURRENT_OFFSET]
     ret
 .Lhandle_record_exit_overflow:

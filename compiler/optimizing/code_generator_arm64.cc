@@ -1312,14 +1312,12 @@ void InstructionCodeGeneratorARM64::GenerateMethodEntryExitHook(HInstruction* in
   __ B(gt, slow_path->GetEntryLabel());
 
   Register init_entry = addr;
-  int slots_required =
-      instruction->IsMethodExitHook() ? kNumEntriesForWallClockExit : kNumEntriesForWallClockEntry;
   // Check if there is place in the buffer to store a new entry, if no, take slow path.
   uint32_t trace_buffer_curr_entry_offset =
       Thread::TraceBufferCurrPtrOffset<kArm64PointerSize>().Int32Value();
   __ Ldr(curr_entry, MemOperand(tr, trace_buffer_curr_entry_offset));
+  __ Sub(curr_entry, curr_entry, kNumEntriesForWallClock * sizeof(void*));
   __ Ldr(init_entry, MemOperand(tr, Thread::TraceBufferPtrOffset<kArm64PointerSize>().SizeValue()));
-  __ Sub(curr_entry, curr_entry, slots_required * sizeof(void*));
   __ Cmp(curr_entry, init_entry);
   __ B(lt, slow_path->GetEntryLabel());
 
@@ -1327,25 +1325,20 @@ void InstructionCodeGeneratorARM64::GenerateMethodEntryExitHook(HInstruction* in
   __ Str(curr_entry, MemOperand(tr, trace_buffer_curr_entry_offset));
 
   Register tmp = init_entry;
-  // Record method pointer only for MethodEntry events.
-  if (instruction->IsMethodEntryHook()) {
-    __ Ldr(tmp, MemOperand(sp, 0));
-    __ Str(tmp, MemOperand(curr_entry, kMethodOffsetInBytesEntry));
+  // Record method pointer and trace action.
+  __ Ldr(tmp, MemOperand(sp, 0));
+  // Use last two bits to encode trace method action. For MethodEntry it is 0
+  // so no need to set the bits since they are 0 already.
+  if (instruction->IsMethodExitHook()) {
+    DCHECK_GE(ArtMethod::Alignment(kRuntimePointerSize), static_cast<size_t>(4));
+    static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodEnter) == 0);
+    static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodExit) == 1);
+    __ Orr(tmp, tmp, Operand(enum_cast<int32_t>(TraceAction::kTraceMethodExit)));
   }
-
+  __ Str(tmp, MemOperand(curr_entry, kMethodOffsetInBytes));
   // Record the timestamp.
   __ Mrs(tmp, (SystemRegister)SYS_CNTVCT_EL0);
-  // Use least significant two bits to encode trace method action.
-  __ Lsl(tmp, tmp, 2);
-  if (instruction->IsMethodEntryHook()) {
-    // For MethodEntry, TraceAction encoding is 0.
-    static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodEnter) == 0);
-    __ Str(tmp, MemOperand(curr_entry, kTimestampOffsetInBytesEntry));
-  } else {
-    static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodExit) == 1);
-    __ Orr(tmp, tmp, Operand(enum_cast<uint64_t>(TraceAction::kTraceMethodExit)));
-    __ Str(tmp, MemOperand(curr_entry, kTimestampOffsetInBytesExit));
-  }
+  __ Str(tmp, MemOperand(curr_entry, kTimestampOffsetInBytes));
   __ Bind(slow_path->GetExitLabel());
 }
 
