@@ -882,8 +882,9 @@ void HConstantFoldingVisitor::VisitInstanceFieldGet(HInstanceFieldGet* inst) {
 void HConstantFoldingVisitor::FoldFieldValue(HFieldAccess* instruction,
                                              ObjPtr<mirror::Object> receiver) {
   ArtField* field = instruction->GetFieldInfo().GetField();
-  DCHECK_IMPLIES(field->IsStatic(), IsUnmodifiableAndInitialized(field, compiler_options_));
-  DCHECK_IMPLIES(!field->IsStatic(), field->IsMonotonic());
+  DCHECK_IMPLIES(field->IsStatic(), IsUnmodifiableAndInitialized(field, compiler_options_))
+      << field->PrettyField();
+  DCHECK_IMPLIES(!field->IsStatic(), field->IsMonotonic()) << field->PrettyField();
   DCHECK(!receiver.IsNull());
   HConstant* constant = nullptr;
   switch (instruction->GetFieldType()) {
