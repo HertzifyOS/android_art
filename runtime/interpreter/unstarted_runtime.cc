@@ -1603,7 +1603,10 @@ void UnstartedRuntime::UnstartedRuntimeAvailableProcessors(Thread* self,
     // 8 as a conservative upper approximation.
     result->SetI(8);
   } else if (CheckCallers(shadow_frame,
-                          { "void java.util.concurrent.ConcurrentHashMap.<clinit>()" })) {
+                          {"void java.util.concurrent.ConcurrentHashMap.<clinit>()"}) ||
+             CheckCallers(shadow_frame,
+                          {"void java.util.concurrent.ConcurrentHashMap.runtimeSetup()",
+                           "void java.util.concurrent.ConcurrentHashMap.<clinit>()"})) {
     // ConcurrentHashMap uses it for striding. 8 still seems an OK general value, as it's likely
     // a good upper bound.
     // TODO: Consider resetting in the zygote?
