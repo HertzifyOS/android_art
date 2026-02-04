@@ -867,9 +867,8 @@ class Dex2Oat final {
     }
 
 #ifdef ART_USE_RESTRICTED_MODE
-    // TODO(Simulator): support signal handling and implicit checks.
+    // TODO(Simulator): support implicit suspend checks.
     compiler_options_->implicit_suspend_checks_ = false;
-    compiler_options_->implicit_null_checks_ = false;
 #endif  // ART_USE_RESTRICTED_MODE
 
     // Done with usage checks, enable watchdog if requested

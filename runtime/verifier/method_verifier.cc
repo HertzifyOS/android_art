@@ -1412,15 +1412,13 @@ class MethodVerifierImpl : public ::art::verifier::MethodVerifier {
         opcode == Instruction::INVOKE_SUPER ||
         opcode == Instruction::INVOKE_DIRECT ||
         opcode == Instruction::INVOKE_STATIC ||
-        opcode == Instruction::INVOKE_INTERFACE ||
-        opcode == Instruction::INVOKE_CUSTOM) {
+        opcode == Instruction::INVOKE_INTERFACE) {
       return inst->VRegB_35c();
     } else if (opcode == Instruction::INVOKE_VIRTUAL_RANGE ||
                opcode == Instruction::INVOKE_SUPER_RANGE ||
                opcode == Instruction::INVOKE_DIRECT_RANGE ||
                opcode == Instruction::INVOKE_STATIC_RANGE ||
-               opcode == Instruction::INVOKE_INTERFACE_RANGE ||
-               opcode == Instruction::INVOKE_CUSTOM_RANGE) {
+               opcode == Instruction::INVOKE_INTERFACE_RANGE) {
       return inst->VRegB_3rc();
     } else if (opcode == Instruction::INVOKE_POLYMORPHIC) {
       return inst->VRegB_45cc();

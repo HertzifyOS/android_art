@@ -1985,9 +1985,8 @@ bool Runtime::Init(RuntimeArgumentMap&& runtime_options_in) {
   }
 
 #ifdef ART_USE_RESTRICTED_MODE
-  // TODO(Simulator): support signal handling and implicit checks.
+  // TODO(Simulator): support implicit suspend checks.
   implicit_suspend_checks_ = false;
-  implicit_null_checks_ = false;
 #endif  // ART_USE_RESTRICTED_MODE
 
   fault_manager.Init(!no_sig_chain_);
@@ -2008,8 +2007,13 @@ bool Runtime::Init(RuntimeArgumentMap&& runtime_options_in) {
       }
 
       if (implicit_null_checks_) {
+#ifdef ART_USE_SIMULATOR
+        fault_manager.AddHandler(new NullPointerHandlerSimulator(),
+                                 NullPointerHandlerSimulator::IsGeneratedCodeHandler());
+#else
         fault_manager.AddHandler(new NullPointerHandler(),
                                  NullPointerHandler::IsGeneratedCodeHandler());
+#endif
       }
 
       if (kEnableJavaStackTraceHandler) {
