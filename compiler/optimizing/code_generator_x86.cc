@@ -1284,9 +1284,11 @@ void InstructionCodeGeneratorX86::GenerateMethodEntryExitHook(HInstruction* inst
   uint32_t trace_buffer_ptr = Thread::TraceBufferPtrOffset<kX86PointerSize>().Int32Value();
   uint64_t trace_buffer_curr_entry_offset =
       Thread::TraceBufferCurrPtrOffset<kX86PointerSize>().Int32Value();
+  int slots_required =
+      instruction->IsMethodExitHook() ? kNumEntriesForWallClockExit : kNumEntriesForWallClockEntry;
 
   __ fs()->movl(curr_entry, Address::Absolute(trace_buffer_curr_entry_offset));
-  __ subl(curr_entry, Immediate(kNumEntriesForWallClock * sizeof(void*)));
+  __ subl(curr_entry, Immediate(slots_required * sizeof(void*)));
   __ fs()->movl(init_entry, Address::Absolute(trace_buffer_ptr));
   __ cmpl(curr_entry, init_entry);
   __ j(kLess, slow_path->GetEntryLabel());
@@ -1294,22 +1296,29 @@ void InstructionCodeGeneratorX86::GenerateMethodEntryExitHook(HInstruction* inst
   // Update the index in the `Thread`.
   __ fs()->movl(Address::Absolute(trace_buffer_curr_entry_offset), curr_entry);
 
-  // Record method pointer and trace action.
-  Register method = init_entry;
-  __ movl(method, Address(ESP, kCurrentMethodStackOffset));
-  // Use last two bits to encode trace method action. For MethodEntry it is 0
-  // so no need to set the bits since they are 0 already.
-  if (instruction->IsMethodExitHook()) {
-    DCHECK_GE(ArtMethod::Alignment(kRuntimePointerSize), static_cast<size_t>(4));
-    static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodEnter) == 0);
-    static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodExit) == 1);
-    __ orl(method, Immediate(enum_cast<int32_t>(TraceAction::kTraceMethodExit)));
+  // Record method pointer for method entry events.
+  if (instruction->IsMethodEntryHook()) {
+    Register method = init_entry;
+    __ movl(method, Address(ESP, kCurrentMethodStackOffset));
+    __ movl(Address(curr_entry, kMethodOffsetInBytesEntry), method);
   }
-  __ movl(Address(curr_entry, kMethodOffsetInBytes), method);
+
   // Get the timestamp. rdtsc returns timestamp in EAX + EDX.
   __ rdtsc();
-  __ movl(Address(curr_entry, kTimestampOffsetInBytes), EAX);
-  __ movl(Address(curr_entry, kHighTimestampOffsetInBytes), EDX);
+  // Use least significant two bits to encode trace method action.
+  __ shld(EDX, EAX, Immediate(2));
+  __ shll(EAX, Immediate(2));
+  if (instruction->IsMethodEntryHook()) {
+    // For MethodEntry trace action encoding is 0
+    static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodEnter) == 0);
+    __ movl(Address(curr_entry, kTimestampOffsetInBytesEntry), EAX);
+    __ movl(Address(curr_entry, kHighTimestampOffsetInBytesEntry), EDX);
+  } else {
+    static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodExit) == 1);
+    __ orl(EAX, Immediate(enum_cast<int32_t>(TraceAction::kTraceMethodExit)));
+    __ movl(Address(curr_entry, kTimestampOffsetInBytesExit), EAX);
+    __ movl(Address(curr_entry, kHighTimestampOffsetInBytesExit), EDX);
+  }
   __ Bind(slow_path->GetExitLabel());
 }
 

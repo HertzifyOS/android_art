@@ -385,10 +385,12 @@ bool HInstructionBuilder::Build() {
       // It is OK to not add `HMethodEntryHook`s for inlined functions. In debug mode we
       // don't inline and in release mode method tracing is best effort so OK to avoid them.
       if (!IsBuildingInlinedGraph()) {
-        AppendInstruction(new (allocator_) HSuspendCheck(0u));
+        // Do suspend check after method entry hooks. If suspend check leads to a deoptimization
+        // then we miss calling method entry listeners.
         if (graph_->IsDebuggable() && code_generator_->GetCompilerOptions().IsJitCompiler()) {
           AppendInstruction(new (allocator_) HMethodEntryHook(0u));
         }
+        AppendInstruction(new (allocator_) HSuspendCheck(0u));
       }
       AppendInstruction(new (allocator_) HGoto(0u));
       continue;
