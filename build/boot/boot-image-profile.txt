@@ -2400,7 +2400,7 @@ HSPLjava/lang/String;->indexOf(I)I
 HSPLjava/lang/String;->indexOf(II)I
 HSPLjava/lang/String;->indexOf(Ljava/lang/String;)I
 HSPLjava/lang/String;->indexOf(Ljava/lang/String;I)I
-HSPLjava/lang/String;->indexOf(Ljava/lang/String;Ljava/lang/String;I)I
+HSPLjava/lang/String;->indexOf(Ljava/lang/String;Ljava/lang/String;II)I
 HSPLjava/lang/String;->indexOf([BBILjava/lang/String;I)I
 HSPLjava/lang/String;->isEmpty()Z
 HSPLjava/lang/String;->join(Ljava/lang/CharSequence;Ljava/lang/Iterable;)Ljava/lang/String;
