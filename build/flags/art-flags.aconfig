@@ -78,6 +78,16 @@ flag {
   is_exported: false
 }
 
+# Flag for x86/x86-64 optimizations with LEA instructions.
+flag {
+  name: "x86_lea_optimizations"
+  namespace: "art_performance"
+  description: "Flag to control whether optimizations with x86/x86-64 LEA instructions are enabled"
+  bug: "481977362"
+  is_fixed_read_only: true
+  is_exported: false
+}
+
 flag {
   name: "test"
   namespace: "art_mainline"
