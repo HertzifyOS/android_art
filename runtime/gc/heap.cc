@@ -1913,13 +1913,26 @@ void Heap::RecordFree(uint64_t freed_objects, int64_t freed_bytes) {
   // free list backed space, which may increase memory footprint due to padding and binning.
   RACING_DCHECK_LE(freed_bytes,
                    static_cast<int64_t>(num_bytes_allocated_.load(std::memory_order_relaxed)));
-  // Note: This relies on 2s complement for handling negative freed_bytes.
-  num_bytes_allocated_.fetch_sub(static_cast<ssize_t>(freed_bytes), std::memory_order_relaxed);
-  if (freed_bytes > 0 && TraceEnabled()) {
-    // Use release memory-order to ensure that the updation of num_bytes_allocated_
-    // above doesn't get reordered with this store.
-    TraceHeapSize(last_reported_heap_size_.fetch_sub(freed_bytes, std::memory_order_release) -
-                  freed_bytes);
+  // Note: We rely on 2s complement for handling negative freed_bytes.
+  if (LIKELY(!TraceEnabled())) {
+    num_bytes_allocated_.fetch_sub(static_cast<ssize_t>(freed_bytes), std::memory_order_relaxed);
+  } else {
+    // Acquire load of last_reported_heap_size_ to ensure num_bytes_allocated_
+    // store is not re-ordered, potentially causing under-reporting.
+    size_t curr_reported_size = last_reported_heap_size_.load(std::memory_order_acquire);
+    size_t size_to_report = num_bytes_allocated_.fetch_sub(static_cast<ssize_t>(freed_bytes),
+                                                           std::memory_order_relaxed) -
+                            static_cast<ssize_t>(freed_bytes);
+    do {
+      // The first CAS is done unconditionally to address the possibility
+      // of being in this function with 0-initialized last_reported_heap_size_.
+      if (last_reported_heap_size_.compare_exchange_strong(
+              curr_reported_size, size_to_report, std::memory_order_release)) {
+        TraceHeapSize(size_to_report);
+        break;
+      }
+      size_to_report = GetBytesAllocated();
+    } while (UnsignedDifference(curr_reported_size, size_to_report) > 0);
   }
   if (Runtime::Current()->HasStatsEnabled()) {
     RuntimeStats* thread_stats = Thread::Current()->GetStats();
@@ -4975,7 +4988,7 @@ size_t Heap::UpdateAndReportBytesAllocated(size_t tl_bytes_allocated) {
   while (UnsignedDifference(size_to_report, curr_reported_size) >= kMinHeapSizeToReport) {
     // compare_exchange_strong() will update 'curr_reported_size' on failure.
     if (last_reported_heap_size_.compare_exchange_strong(
-            curr_reported_size, size_to_report, std::memory_order_relaxed)) {
+            curr_reported_size, size_to_report, std::memory_order_release)) {
       // Trace entries may still be written out of order. In very rare cases, this can
       // effectively cause reports of large allocations to be delayed until a subsequent
       // allocation is reported. But alternatives increase locking overhead. So, we
@@ -4984,9 +4997,10 @@ size_t Heap::UpdateAndReportBytesAllocated(size_t tl_bytes_allocated) {
       break;
     } else if (curr_reported_size < last_reported_size) {
       // The GC thread has pushed a notification of heap size lower
-      // than what we thought was the last reported size. Furthermore,
-      // that notification already took into consideration this
-      // allocation. So skip the notification.
+      // than what we thought was the last reported size. If it missed this
+      // thread's update of num_bytes_allocated then next TLAB allocation will
+      // catch it. But it's not a good idea to retry CAS as that is more likely
+      // to result in temporarily wrong reporting.
       break;
     }
     last_reported_size = curr_reported_size;

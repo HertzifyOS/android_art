@@ -18,6 +18,10 @@ set -e
 
 export LC_ALL=C  # Generic simple locale
 
+# Arbitrary version tag that we place in LUCI build output directory.
+# Change this string to force wipe of output directory (clean build).
+export LUCI_ARTIFACT_VERSION="2026-02-03" # siso
+
 . "$(dirname $0)/buildbot-utils.sh"
 
 shopt -s failglob
@@ -36,6 +40,20 @@ if [[ -z $OUT_DIR ]]; then
   fi
 else
   out_dir=${OUT_DIR}
+fi
+
+if [[ -n "$LUCI_CONTEXT" ]]; then
+  version_file="$out_dir/luci_artifact_version"
+  version="(none)"
+  if [ -f "$version_file" ]; then
+    version="$(cat $version_file)"
+  fi
+  if [ "$version" != "$LUCI_ARTIFACT_VERSION" ]; then
+    echo "Artifact version changed from '$version' to '$LUCI_ARTIFACT_VERSION'. Wiping '$out_dir'."
+    rm -rf "$out_dir"
+    mkdir -p "$out_dir"
+    echo "$LUCI_ARTIFACT_VERSION" > "$version_file"
+  fi
 fi
 
 # On master-art, we need to copy ART-local riscv64 prebuilts for conscrypt and
