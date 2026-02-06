@@ -594,11 +594,19 @@ static ArtField* FindFieldSlow(Thread* self,
       /*resolve_field_type=*/ 0);
 }
 
+static uint64_t EncodeField(ArtField* resolved_field, bool is_volatile = false)
+    REQUIRES_SHARED(Locks::mutator_lock_) {
+  uint32_t offset = resolved_field->GetOffset().Uint32Value();
+  mirror::Class* cls = resolved_field->GetDeclaringClass().Ptr();
+  return (static_cast<uint64_t>(reinterpret_cast32<uint32_t>(cls)) << 32) |
+      (is_volatile ? -offset : offset);
+}
+
 LIBART_PROTECTED
-extern "C" size_t NterpGetStaticField(Thread* self,
-                                      ArtMethod* caller,
-                                      const uint16_t* dex_pc_ptr,
-                                      size_t resolve_field_type)  // Resolve if not zero
+extern "C" uint64_t NterpGetStaticField(Thread* self,
+                                        ArtMethod* caller,
+                                        const uint16_t* dex_pc_ptr,
+                                        size_t resolve_field_type)  // Resolve if not zero
     REQUIRES_SHARED(Locks::mutator_lock_) {
   const Instruction* inst = Instruction::At(dex_pc_ptr);
   uint16_t field_index = inst->VRegB_21c();
@@ -648,20 +656,21 @@ extern "C" size_t NterpGetStaticField(Thread* self,
     // Or the result with 1 to notify to nterp this is a volatile field. We
     // also don't cache the result as we don't want nterp to have its fast path always
     // check for it.
-    return reinterpret_cast<size_t>(resolved_field) | 1;
+    return EncodeField(resolved_field, /* is_volatile= */ true);
   }
 
+  uint64_t result = EncodeField(resolved_field);
   if (update_cache) {
-    UpdateCache(self, dex_pc_ptr, resolved_field);
+    self->GetInterpreterCache()->SetInt64(self, dex_pc_ptr, result);
   }
-  return reinterpret_cast<size_t>(resolved_field);
+  return result;
 }
 
 // For faster execution, `cls` can be a from-space reference which is OK, as
 // we're only using native fields from that object, and checking for state
 // invariants that don't roll back (ie that the class is initialized).
 ALWAYS_INLINE FLATTEN
-static size_t NterpGetLocalStaticFieldInternal(mirror::Class* cls, const uint16_t* dex_pc_ptr)
+static uint64_t NterpGetLocalStaticFieldInternal(mirror::Class* cls, const uint16_t* dex_pc_ptr)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   // We're checking if we're accessing a field of the currently executing class.
   // We only need to check that the class is initialized, and don't need
@@ -675,14 +684,14 @@ static size_t NterpGetLocalStaticFieldInternal(mirror::Class* cls, const uint16_
   if (resolved_field != nullptr && resolved_field->IsStatic() && !resolved_field->IsVolatile()) {
     // Note we don't store in the thread interpreter cache to leave the cache
     // for instructions which do not have a fast path like this one.
-    return reinterpret_cast<size_t>(resolved_field);
+    return EncodeField(resolved_field);
   }
   return 0u;
 }
 
 // `cls` can be a from-space, see comment in `NterpGetLocalStaticFieldInternal`.
 FLATTEN
-extern "C" size_t NterpGetLocalStaticField(mirror::Class* cls, const uint16_t* dex_pc_ptr)
+extern "C" uint64_t NterpGetLocalStaticField(mirror::Class* cls, const uint16_t* dex_pc_ptr)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   ScopedAssertNoThreadSuspension sants("In nterp");
   return NterpGetLocalStaticFieldInternal(cls, dex_pc_ptr);
@@ -690,8 +699,8 @@ extern "C" size_t NterpGetLocalStaticField(mirror::Class* cls, const uint16_t* d
 
 // `cls` can be a from-space, see comment in `NterpGetLocalStaticFieldInternal`.
 FLATTEN
-extern "C" size_t NterpGetLocalStaticFieldForSPutObject(mirror::Class* cls,
-                                                        const uint16_t* dex_pc_ptr)
+extern "C" uint64_t NterpGetLocalStaticFieldForSPutObject(mirror::Class* cls,
+                                                          const uint16_t* dex_pc_ptr)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   ScopedAssertNoThreadSuspension sants("In nterp");
   // For object store in methods that may have type check failures, we need to

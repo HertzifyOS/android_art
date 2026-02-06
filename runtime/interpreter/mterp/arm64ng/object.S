@@ -220,7 +220,7 @@
    // "... any unused bits in the register have unspecified value" (see 6.8.2, 6.9).
    mov     w0, w0
    tbz     w0, #31, .L${opcode}_resume
-   CLEAR_INSTANCE_VOLATILE_MARKER w0
+   CLEAR_VOLATILE_MARKER w0
    lsr     w2, wINST, #12              // w2<- B
    GET_VREG w3, w2                     // w3<- object we're operating on
    ubfx    w2, wINST, #8, #4           // w2<- A
@@ -319,7 +319,7 @@
    // "... any unused bits in the register have unspecified value" (see 6.8.2, 6.9).
    mov     w0, w0
    tbz     w0, #31, .L${opcode}_resume
-   CLEAR_INSTANCE_VOLATILE_MARKER w0
+   CLEAR_VOLATILE_MARKER w0
    lsr     w2, wINST, #12              // w2<- B
    ubfx    w1, wINST, #8, #4           // w1<- A
    GET_VREG w2, w2                     // vB (object we're operating on)
@@ -368,9 +368,9 @@
    // Fast-path which gets the field from thread-local cache.
 %  fetch_from_thread_cache("x0", miss_label=slow_path)
 .L${opcode}_resume:
-   ldr     w1, [x0, #ART_FIELD_OFFSET_OFFSET]
+   sxtw    x1, w0
+   lsr     x0, x0, #32
    lsr     w2, wINST, #8               // w2 <- A
-   ldr     w0, [x0, #ART_FIELD_DECLARING_CLASS_OFFSET]
    TEST_IF_MARKING .L${opcode}_read_barrier
 .L${opcode}_resume_after_read_barrier:
 %  if wide:
@@ -406,11 +406,11 @@
    mov     x3, #0
    EXPORT_PC
    bl      nterp_get_static_field
-   tbz     x0, #0, .L${opcode}_resume
-   CLEAR_STATIC_VOLATILE_MARKER x0
-   ldr     w1, [x0, #ART_FIELD_OFFSET_OFFSET]
+   tbz     x0, #31, .L${opcode}_resume
+   sxtw    x1, w0
+   lsr     x0, x0, #32
+   CLEAR_VOLATILE_MARKER w1
    lsr     w2, wINST, #8               // w2 <- A
-   ldr     w0, [x0, #ART_FIELD_DECLARING_CLASS_OFFSET]
    TEST_IF_MARKING .L${opcode}_slow_path_read_barrier
 .L${opcode}_slow_path_resume_after_read_barrier:
    add     x0, x0, x1
@@ -469,8 +469,8 @@
    // Fast-path which gets the field from thread-local cache.
 %  fetch_from_thread_cache("x0", miss_label=slow_path)
 .L${opcode}_resume:
-   ldr     w1, [x0, #ART_FIELD_OFFSET_OFFSET]
-   ldr     w0, [x0, #ART_FIELD_DECLARING_CLASS_OFFSET]
+   sxtw    x1, w0
+   lsr     x0, x0, #32
    TEST_IF_MARKING .L${opcode}_read_barrier
 .L${opcode}_resume_after_read_barrier:
 %  if wide:
@@ -515,10 +515,10 @@
      mov     x3, #0
    EXPORT_PC
    bl      nterp_get_static_field
-   tbz     x0, #0, .L${opcode}_resume
-   CLEAR_STATIC_VOLATILE_MARKER x0
-   ldr     w1, [x0, #ART_FIELD_OFFSET_OFFSET]
-   ldr     w0, [x0, #ART_FIELD_DECLARING_CLASS_OFFSET]
+   tbz     x0, #31, .L${opcode}_resume
+   sxtw    x1, w0
+   lsr     x0, x0, #32
+   CLEAR_VOLATILE_MARKER w1
    TEST_IF_MARKING .L${opcode}_slow_path_read_barrier
 .L${opcode}_slow_path_resume_after_read_barrier:
    add     x1, x0, x1

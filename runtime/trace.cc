@@ -765,7 +765,9 @@ void Trace::Start(std::unique_ptr<File>&& trace_file_in,
           instrumentation::Instrumentation::kMethodEntered |
               instrumentation::Instrumentation::kMethodExited |
               instrumentation::Instrumentation::kMethodUnwind,
-          UseFastTraceListeners(the_trace_->GetClockSource()));
+          UseFastTraceListeners(the_trace_->GetClockSource())
+              ? instrumentation::Instrumentation::ListenerType::kFastTraceListener
+              : instrumentation::Instrumentation::ListenerType::kSlowTraceListener);
       runtime->GetInstrumentation()->EnableMethodTracing(kTracerInstrumentationKey,
                                                          the_trace_,
                                                          /*needs_interpreter=*/false);
@@ -827,7 +829,9 @@ void Trace::StopTracing(bool flush_entries) {
             instrumentation::Instrumentation::kMethodEntered |
                 instrumentation::Instrumentation::kMethodExited |
                 instrumentation::Instrumentation::kMethodUnwind,
-            UseFastTraceListeners(the_trace_->GetClockSource()));
+            UseFastTraceListeners(the_trace_->GetClockSource())
+                ? instrumentation::Instrumentation::ListenerType::kFastTraceListener
+                : instrumentation::Instrumentation::ListenerType::kSlowTraceListener);
         runtime->GetInstrumentation()->DisableMethodTracing(kTracerInstrumentationKey);
     }
 
@@ -880,9 +884,11 @@ void Trace::RemoveListeners() {
   runtime->GetInstrumentation()->RemoveListener(
       the_trace_,
       instrumentation::Instrumentation::kMethodEntered |
-      instrumentation::Instrumentation::kMethodExited |
-      instrumentation::Instrumentation::kMethodUnwind,
-      UseFastTraceListeners(the_trace_->GetClockSource()));
+          instrumentation::Instrumentation::kMethodExited |
+          instrumentation::Instrumentation::kMethodUnwind,
+      UseFastTraceListeners(the_trace_->GetClockSource())
+          ? instrumentation::Instrumentation::ListenerType::kFastTraceListener
+          : instrumentation::Instrumentation::ListenerType::kSlowTraceListener);
 }
 
 void Trace::FlushThreadBuffer(Thread* self) {

@@ -127,7 +127,13 @@ bool SendMethodExitEvents(Thread* self,
     frame.SetForcePopFrame(false);
     if (UNLIKELY(instrumentation->HasMethodExitListeners() && !frame.GetSkipMethodExitEvents())) {
       had_event = true;
-      instrumentation->MethodExitEvent(self, method, instrumentation::OptionalFrame{frame}, result);
+      instrumentation->MethodExitEvent(self,
+                                       method,
+                                       instrumentation::OptionalFrame{frame},
+                                       result,
+                                       frame.GetSkipTraceMethodExitEvent());
+      // We notified method has exited so don't call trace listeners anymore.
+      frame.SetSkipTraceMethodExitEvent(true);
     }
     // We don't send method-exit if it's a pop-frame. We still send frame_popped though.
     if (UNLIKELY(frame.NeedsNotifyPop() && instrumentation->HasWatchedFramePopListeners())) {
@@ -202,6 +208,7 @@ bool MoveToExceptionHandler(Thread* self,
       instrumentation->MethodUnwindEvent(self,
                                          shadow_frame.GetMethod(),
                                          shadow_frame.GetDexPC());
+      shadow_frame.SetSkipTraceMethodExitEvent(true);
     }
     return shadow_frame.GetForcePopFrame();
   } else {

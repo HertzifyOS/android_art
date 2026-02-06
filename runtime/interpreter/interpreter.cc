@@ -322,6 +322,8 @@ static inline JValue Execute(
         instrumentation->MethodUnwindEvent(self,
                                            method,
                                            0);
+        // We notified method has exited so don't call trace listeners anymore.
+        shadow_frame.SetSkipTraceMethodExitEvent(true);
         JValue ret = JValue();
         if (UNLIKELY(shadow_frame.GetForcePopFrame())) {
           DCHECK(Runtime::Current()->AreNonStandardExitsEnabled());
