@@ -36,18 +36,43 @@ class InstructionSimplifierX86SharedTest : public OptimizingUnitTest {
   };
 
   enum class LeaBaseOption {
-    kNoBase,
+    kDisp,
+    kBase,
     kBasePlusDisp,
     kDispPlusBase,
     kBaseMinusDisp,
     kDispMinusBase,  // Should not be split; expect `kLeaWithBase` if simplified.
   };
 
-  static constexpr LeaBaseOption kLeaBaseOptionsWithBase[] = {
-    LeaBaseOption::kBasePlusDisp,
-    LeaBaseOption::kDispPlusBase,
-    LeaBaseOption::kBaseMinusDisp,
-    LeaBaseOption::kDispMinusBase,
+  enum class LeaSubPosition {
+    kNone,        // Add(Add(., .), .) or Add(., Add(., .)).
+    kInputBinop,  // Add(Sub(., .), .) or Add(., Sub(., .)).
+    kMainBinop,   // Sub(Add(., .), .) or Sub(., Add(., .)).
+  };
+
+  enum class LeaDispPosition {
+    kOther,
+    kInputBinopLeft,
+    kInputBinopRight,
+  };
+
+  static constexpr LeaBaseOption kLeaBaseOptionsWithBaseAndDisp[] = {
+      LeaBaseOption::kBasePlusDisp,
+      LeaBaseOption::kDispPlusBase,
+      LeaBaseOption::kBaseMinusDisp,
+      LeaBaseOption::kDispMinusBase,
+  };
+
+  static constexpr LeaSubPosition kLeaSubPositions[] = {
+      LeaSubPosition::kNone,
+      LeaSubPosition::kInputBinop,
+      LeaSubPosition::kMainBinop,
+  };
+
+  static constexpr LeaDispPosition kLeaDispPositions[] = {
+      LeaDispPosition::kOther,
+      LeaDispPosition::kInputBinopLeft,
+      LeaDispPosition::kInputBinopRight,
   };
 
   static constexpr uint32_t kLea32TestShifts[] = {0u, 1u, 2u, 3u, 4u, 7u, 31u};
@@ -83,10 +108,13 @@ class InstructionSimplifierX86SharedTest : public OptimizingUnitTest {
                                   DataType::Type type,
                                   HInstruction* base,
                                   HInstruction* disp) {
-    CHECK_EQ(base_opt == LeaBaseOption::kNoBase, base == nullptr);
+    CHECK_EQ(base_opt == LeaBaseOption::kDisp, base == nullptr);
+    CHECK_EQ(base_opt == LeaBaseOption::kBase, disp == nullptr);
     switch (base_opt) {
-      case LeaBaseOption::kNoBase:
+      case LeaBaseOption::kDisp:
         return disp;
+      case LeaBaseOption::kBase:
+        return base;
       case LeaBaseOption::kBasePlusDisp:
         return MakeBinOp<HAdd>(block, type, base, disp);
       case LeaBaseOption::kDispPlusBase:
@@ -107,9 +135,12 @@ class InstructionSimplifierX86SharedTest : public OptimizingUnitTest {
                                          uint32_t shift,
                                          bool lhs_shift,
                                          int64_t disp) {
-    HInstruction* disp_cst = (type == DataType::Type::kInt32)
-        ? graph_->GetIntConstant(dchecked_integral_cast<int32_t>(disp))
-        : static_cast<HInstruction*>(graph_->GetLongConstant(disp));
+    HInstruction* disp_cst = nullptr;
+    if (base_opt != LeaBaseOption::kBase) {
+      disp_cst = (type == DataType::Type::kInt32)
+          ? graph_->GetIntConstant(dchecked_integral_cast<int32_t>(disp))
+          : static_cast<HInstruction*>(graph_->GetLongConstant(disp));
+    }
     HInstruction* shifted =
         (shift != 0u) ? MakeBinOp<HShl>(block, type, index, graph_->GetIntConstant(shift)) : index;
     HInstruction* other = PrepareLeaOperand(base_opt, block, type, base, disp_cst);
@@ -135,10 +166,18 @@ class InstructionSimplifierX86SharedTest : public OptimizingUnitTest {
     }
     ASSERT_TRUE(instruction->IsX86LoadEffectiveAddress());
     HX86LoadEffectiveAddress* lea = instruction->AsX86LoadEffectiveAddress();
-    ASSERT_INS_EQ(lea->GetIndex(), index);
-    ASSERT_EQ(lea->GetShift(), shift);
+    if (shift < 4u) {
+      ASSERT_INS_EQ(index, lea->GetIndex());
+      ASSERT_EQ(lea->GetShift(), shift);
+    } else {
+      ASSERT_TRUE(lea->GetIndex()->IsShl());
+      ASSERT_TRUE(lea->GetIndex()->AsShl()->GetRight()->IsIntConstant());
+      ASSERT_EQ(dchecked_integral_cast<int32_t>(shift),
+                lea->GetIndex()->AsShl()->GetRight()->AsIntConstant()->GetValue());
+      ASSERT_INS_EQ(index, lea->GetIndex()->AsShl()->GetLeft());
+    }
     if (expect == LeaExpect::kLeaWithDisp) {
-      CHECK(base_opt == LeaBaseOption::kNoBase);
+      CHECK(base_opt == LeaBaseOption::kDisp);
       ASSERT_FALSE(lea->HasBase());
       ASSERT_EQ(lea->GetDisplacement(), disp);
     } else if (expect == LeaExpect::kLeaWithBase) {
@@ -156,7 +195,7 @@ class InstructionSimplifierX86SharedTest : public OptimizingUnitTest {
       }
     } else {
       CHECK(expect == LeaExpect::kLeaWithBaseAndDisp);
-      CHECK(base_opt != LeaBaseOption::kNoBase);
+      CHECK(base_opt != LeaBaseOption::kDisp);
       ASSERT_TRUE(lea->HasBase());
       ASSERT_INS_EQ(base, lea->GetBase());
       int32_t expected_disp =
@@ -183,7 +222,7 @@ class InstructionSimplifierX86SharedTest : public OptimizingUnitTest {
     CHECK(type == DataType::Type::kInt32 || type == DataType::Type::kInt64);
     HBasicBlock* block = InitEntryMainExitGraph();
     HInstruction* index = MakeParam(type);
-    HInstruction* base = (base_opt != LeaBaseOption::kNoBase) ? MakeParam(type) : nullptr;
+    HInstruction* base = (base_opt != LeaBaseOption::kDisp) ? MakeParam(type) : nullptr;
     HBinaryOperation* binop = PrepareLeaExpression<HAdd>(
         base_opt, block, type, index, base, shift, lhs_shift, disp);
     HReturn* ret = MakeReturn(block, binop);
@@ -203,7 +242,7 @@ class InstructionSimplifierX86SharedTest : public OptimizingUnitTest {
     CHECK(type == DataType::Type::kInt32 || type == DataType::Type::kInt64);
     HBasicBlock* block = InitEntryMainExitGraph();
     HInstruction* index = MakeParam(type);
-    HInstruction* base = (base_opt != LeaBaseOption::kNoBase) ? MakeParam(type) : nullptr;
+    HInstruction* base = (base_opt != LeaBaseOption::kDisp) ? MakeParam(type) : nullptr;
     HBinaryOperation* binop = PrepareLeaExpression<HSub>(
         base_opt, block, type, index, base, shift, lhs_shift, disp);
     HReturn* ret = MakeReturn(block, binop);
@@ -221,6 +260,75 @@ class InstructionSimplifierX86SharedTest : public OptimizingUnitTest {
     HInstruction* ret_input = ret->InputAt(0);
     VerifyLeaSimplification(
         ret_input, binop, index, verify_base, expect, base_opt, shift, lhs_shift, verify_disp);
+  }
+
+  static bool HasNoSubOrSubWithConstRhs(LeaSubPosition sub_pos,
+                                        bool inbinop_is_left,
+                                        LeaDispPosition disp_pos) {
+    switch (sub_pos) {
+      case LeaSubPosition::kNone:
+        return true;
+      case LeaSubPosition::kMainBinop:
+        return inbinop_is_left && (disp_pos == LeaDispPosition::kOther);
+      case LeaSubPosition::kInputBinop:
+        return (disp_pos == LeaDispPosition::kInputBinopRight);
+    }
+  }
+
+  void Test_AddAdd_AddSub_SubAdd_ToLeaSimplification(LeaExpect expect,
+                                                     DataType::Type type,
+                                                     LeaSubPosition sub_pos,
+                                                     bool inbinop_is_left,
+                                                     LeaDispPosition disp_pos,
+                                                     int64_t disp) {
+    CHECK(type == DataType::Type::kInt32 || type == DataType::Type::kInt64);
+    HBasicBlock* block = InitEntryMainExitGraph();
+    HInstruction* param = MakeParam(type);
+    HInstruction* param2 = MakeParam(type);
+    HInstruction* disp_cst = (type == DataType::Type::kInt32)
+        ? graph_->GetIntConstant(dchecked_integral_cast<int32_t>(disp))
+        : static_cast<HInstruction*>(graph_->GetLongConstant(disp));
+    HInstruction* other = (disp_pos != LeaDispPosition::kOther) ? param : disp_cst;
+    HInstruction* inbinop_left = (disp_pos != LeaDispPosition::kOther)
+        ? ((disp_pos == LeaDispPosition::kInputBinopLeft) ? disp_cst : param2)
+        : param;
+    HInstruction* inbinop_right =
+        (disp_pos != LeaDispPosition::kInputBinopRight) ? param2 : disp_cst;
+    HBinaryOperation* inbinop = (sub_pos == LeaSubPosition::kInputBinop)
+        ? static_cast<HBinaryOperation*>(MakeBinOp<HSub>(block, type, inbinop_left, inbinop_right))
+        : static_cast<HBinaryOperation*>(MakeBinOp<HAdd>(block, type, inbinop_left, inbinop_right));
+    HInstruction* binop_left = inbinop_is_left ? inbinop : other;
+    HInstruction* binop_right = inbinop_is_left ? other : inbinop;
+    HBinaryOperation* binop = (sub_pos == LeaSubPosition::kMainBinop)
+        ? static_cast<HBinaryOperation*>(MakeBinOp<HSub>(block, type, binop_left, binop_right))
+        : static_cast<HBinaryOperation*>(MakeBinOp<HAdd>(block, type, binop_left, binop_right));
+    HReturn* ret = MakeReturn(block, binop);
+
+    CreateCodegenAndRunSimplifier();
+
+    HInstruction* ret_input = ret->InputAt(0);
+    ASSERT_EQ(expect == LeaExpect::kNoLea, ret_input == binop)
+        << "type: " << type << ", sub_pos: " << static_cast<int>(sub_pos) << ", disp: " << disp
+        << ", inbinop_is_left: " << inbinop_is_left << ", disp_pos: " << static_cast<int>(disp_pos);
+    if (expect == LeaExpect::kNoLea) {
+      EXPECT_INS_RETAINED(binop);
+      return;
+    }
+    EXPECT_INS_REMOVED(binop);
+    CHECK(expect == LeaExpect::kLeaWithBaseAndDisp);
+    HX86LoadEffectiveAddress* lea = ret_input->AsX86LoadEffectiveAddress();
+    int64_t expected_disp = (sub_pos != LeaSubPosition::kNone)
+        ? (type == DataType::Type::kInt64 ? -disp : static_cast<int32_t>(-disp)) :
+        disp;
+    EXPECT_EQ(expected_disp, lea->GetDisplacement());
+    ASSERT_TRUE(lea->HasBase());
+    if (disp_pos != LeaDispPosition::kOther || sub_pos != LeaSubPosition::kNone) {
+      EXPECT_INS_EQ(param, lea->GetIndex());
+      EXPECT_INS_EQ(param2, lea->GetBase());
+    } else {
+      EXPECT_INS_EQ(param2, lea->GetIndex());
+      EXPECT_INS_EQ(param, lea->GetBase());
+    }
   }
 };
 

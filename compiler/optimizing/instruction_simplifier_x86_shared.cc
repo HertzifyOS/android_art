@@ -140,15 +140,27 @@ bool IsLeaIndexShift(HInstruction* instruction, HInstruction** index, uint32_t* 
   return true;
 }
 
+bool IsLeaDisplacement(HInstruction* cst, int32_t sign, int32_t* value) {
+  DCHECK(cst->IsIntConstant() || cst->IsLongConstant());
+  DCHECK(sign == 1 || sign == -1);
+  if (cst->IsIntConstant()) {
+    *value = sign * cst->AsIntConstant()->GetValue();
+    return true;
+  } else if (IsInt<32>(sign * cst->AsLongConstant()->GetValue())) {
+    *value = dchecked_integral_cast<int32_t>(sign * cst->AsLongConstant()->GetValue());
+    return true;
+  } else {
+    return false;
+  }
+}
+
 std::tuple<HInstruction*, int32_t, HInstruction*> GetLeaBaseAndDisplacement(
     HInstruction* instruction) {
   HInstruction* base = nullptr;
-  int32_t displacement = 0;
+  int32_t disp = 0;
   HInstruction* dead = nullptr;
-  if (instruction->IsLongConstant() && IsInt<32>(instruction->AsLongConstant()->GetValue())) {
-    displacement = dchecked_integral_cast<int32_t>(instruction->AsLongConstant()->GetValue());
-  } else if (instruction->IsIntConstant()) {
-    displacement = instruction->AsIntConstant()->GetValue();
+  if (instruction->IsConstant() && IsLeaDisplacement(instruction, /*sign=*/ 1, &disp)) {
+    // `disp` has been set and `base` shall remain null.
   } else {
     base = instruction;
     // We can embed `HAdd` or `HSub` in the LEA under the right conditions.
@@ -158,30 +170,66 @@ std::tuple<HInstruction*, int32_t, HInstruction*> GetLeaBaseAndDisplacement(
       HBinaryOperation* binop = instruction->AsBinaryOperation();
       HInstruction* left = binop->GetLeft();
       HInstruction* right = binop->GetRight();
-      if (right->IsIntConstant()) {
-        displacement = right->AsIntConstant()->GetValue() * sign;
+      if (right->IsConstant() && IsLeaDisplacement(right, sign, &disp)) {
         base = left;
-        dead = instruction;
-      } else if (right->IsLongConstant() && IsInt<32>(right->AsLongConstant()->GetValue() * sign)) {
-        displacement = dchecked_integral_cast<int32_t>(right->AsLongConstant()->GetValue() * sign);
-        base = left;
-        dead = instruction;
-      } else if (instruction->IsAdd() && left->IsIntConstant()) {
-        DCHECK_EQ(sign, 1);
-        displacement = left->AsIntConstant()->GetValue();
-        base = right;
         dead = instruction;
       } else if (instruction->IsAdd() &&
-                 left->IsLongConstant() &&
-                 IsInt<32>(left->AsLongConstant()->GetValue())) {
-        DCHECK_EQ(sign, 1);
-        displacement = dchecked_integral_cast<int32_t>(left->AsLongConstant()->GetValue());
+                 left->IsConstant() &&
+                 IsLeaDisplacement(left, /*sign=*/ 1, &disp)) {
         base = right;
         dead = instruction;
       }
     }
   }
-  return {base, displacement, dead};
+  return {base, disp, dead};
+}
+
+bool IsAddForZeroShiftLea(
+    HAdd* add, HInstruction* other, HInstruction** index, HInstruction** base, int32_t* disp) {
+  if (!add->HasOnlyOneNonEnvironmentUse()) {
+    return false;
+  }
+  HInstruction* inputs[3] = { add->GetLeft(), add->GetRight(), other };
+  HInstruction** inputs_end = inputs + std::size(inputs);
+  // Check that there is exactly one constant among `inputs`.
+  auto is_constant = [](HInstruction* instruction) { return instruction->IsConstant(); };
+  auto cst_it = std::find_if(inputs, inputs_end, is_constant);
+  if (cst_it == inputs_end ||
+      std::find_if(std::next(cst_it), inputs_end, is_constant) != inputs_end) {
+    return false;
+  }
+  HInstruction* cst = *cst_it;
+  // Check if the constant can be encoded in LEA.
+  if (!IsLeaDisplacement(cst, /*sign=*/ 1, disp)) {
+    return false;
+  }
+  // It does not matter which non-constant instruction is index and which is base. Use the first
+  // non-constant `add` input as base, similar to patterns where `other` is `Shl` by 1-3.
+  *base = (inputs[0] != cst) ? inputs[0] : inputs[1];
+  *index = (inputs[2] != cst) ? inputs[2] : inputs[1];
+  return true;
+}
+
+bool IsSubForZeroShiftLea(
+    HSub* sub, HInstruction* other, HInstruction** index, HInstruction** base, int32_t* disp) {
+  if (!sub->HasOnlyOneNonEnvironmentUse()) {
+    return false;
+  }
+  // Check that only the subtracted value is constant.
+  if (other->IsConstant() ||
+      sub->GetLeft()->IsConstant() ||
+      !sub->GetRight()->IsConstant()) {
+    return false;
+  }
+  // Check if the constant can be encoded in LEA.
+  if (!IsLeaDisplacement(sub->GetRight(), /*sign=*/ -1, disp)) {
+    return false;
+  }
+  // It does not matter which non-constant instruction is index and which is base.
+  // Use the `sub`'s left input as base, similar to patterns where `other` is `Shl` by 1-3.
+  *index = other;
+  *base = sub->GetLeft();
+  return true;
 }
 
 bool TryLoadEffectiveAddressSimplification(HBinaryOperation* instruction) {
@@ -205,22 +253,39 @@ bool TryLoadEffectiveAddressSimplification(HBinaryOperation* instruction) {
     } else if (IsLeaIndexShift(right, &index, &shift)) {
       dead = right;
       std::tie(base, disp, dead2) = GetLeaBaseAndDisplacement(left);
+    } else if (left->IsAdd() && IsAddForZeroShiftLea(left->AsAdd(), right, &index, &base, &disp)) {
+      dead = left;
+      DCHECK_EQ(shift, 0u);
+    } else if (right->IsAdd() && IsAddForZeroShiftLea(right->AsAdd(), left, &index, &base, &disp)) {
+      dead = right;
+      DCHECK_EQ(shift, 0u);
+    } else if (left->IsSub() && IsSubForZeroShiftLea(left->AsSub(), right, &index, &base, &disp)) {
+      dead = left;
+      DCHECK_EQ(shift, 0u);
+    } else if (right->IsSub() && IsSubForZeroShiftLea(right->AsSub(), left, &index, &base, &disp)) {
+      dead = right;
+      DCHECK_EQ(shift, 0u);
     }
   } else if (right->IsConstant()) {  // For `HSub`, we simplify only with a constant `right`.
     DCHECK(instruction->IsSub());
     if (IsLeaIndexShift(left, &index, &shift)) {
       dead = left;
-      if (right->IsIntConstant()) {
-        disp = -right->AsIntConstant()->GetValue();
+      if (IsLeaDisplacement(right, /*sign=*/ -1, &disp)) {
+        // `disp` has been set and `base` shall remain null.
       } else {
+        // Use the negated constant as a base. Keep zero `disp`.
         DCHECK(right->IsLongConstant()) << right->DebugName();
         int64_t displacement = -right->AsLongConstant()->GetValue();
-        if (IsInt<32>(displacement)) {
-          disp = dchecked_integral_cast<int32_t>(displacement);
-        } else {
-          base = instruction->GetBlock()->GetGraph()->GetLongConstant(displacement);
-        }
+        base = instruction->GetBlock()->GetGraph()->GetLongConstant(displacement);
       }
+    } else if (left->IsAdd() &&
+               left->HasOnlyOneNonEnvironmentUse() &&
+               !left->AsAdd()->GetLeft()->IsConstant() &&
+               !left->AsAdd()->GetRight()->IsConstant() &&
+               IsLeaDisplacement(right, /*sign=*/ -1, &disp)) {
+      index = left->AsAdd()->GetLeft();
+      base = left->AsAdd()->GetRight();
+      dead = left;
     }
   }
   if (index == nullptr) {
