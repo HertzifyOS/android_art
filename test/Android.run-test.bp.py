@@ -16,11 +16,9 @@
 
 """ This script generates the Android.run-test.bp build file"""
 
-import glob
-import json
 import os
 import textwrap
-import sys
+from typing import List
 
 def main():
   os.chdir(os.path.dirname(__file__))
@@ -40,7 +38,7 @@ def main():
           "--zipalign $(location zipalign) "
     """).lstrip())
     for mode in ["host", "target", "jvm"]:
-      names = []
+      names: List[str] = []
       # Group the tests into shards based on the last two digits of the test number.
       # This keeps the number of generated genrules low so we don't overwhelm soong,
       # but it still allows iterating on single test without recompiling all tests.
@@ -150,13 +148,13 @@ def main():
         }}
         """))
 
-      name = "art-test-{mode}".format(mode=mode)
+      name = "art-run-test-{mode}-tgz".format(mode=mode)
       srcs = ("\n"+" "*16).join('":{}-tmp",'.format(n) for n in names)
       deps = ("\n"+" "*16).join('"{}",'.format(n) for n in names)
       f.write(textwrap.dedent(f"""
         java_genrule {{
             name: "{name}-tmp",
-            out: ["{name}.tgz"],
+            out: ["art-test-{mode}.tgz"],
             srcs: [
                 {srcs}
             ],

@@ -1446,19 +1446,19 @@ cc_genrule {
 }
 
 art_cc_test {
-    name: "ArtTest",
+    name: "art-test-target",
     data: [
         // We need the ART testing apex, which contains debug binaries and other utilities.
         ":com.android.art.testing",
         ":art-test-target-apex",
         // Archive which contains all run-test data and test-specific bash scripts to run them.
-        ":art-test-target-fg",
+        ":art-run-test-target-tgz-fg",
     ],
     test_suites: [
         "general-tests",
         "mts-art",
     ],
-    test_config: "ArtTest.xml",
+    test_config: "art-test-target.xml",
 }
 
 csuite_test {
