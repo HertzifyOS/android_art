@@ -58,6 +58,7 @@ RBE_D8_DISABLED_FOR = {
 TRADEFED_VARIANTS = [
     ["--baseline"],
     ["--interpreter"],
+    ["--interp-ac"],
     ["--jit", "--debuggable"],
     ["--jit"],
     ["--optimizing", "--debuggable"],
