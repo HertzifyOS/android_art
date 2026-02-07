@@ -27,6 +27,7 @@ import re
 import subprocess
 import sys
 import zipfile
+import knownfailures
 
 from argparse import ArgumentParser
 from concurrent.futures import ThreadPoolExecutor
@@ -54,27 +55,14 @@ RBE_D8_DISABLED_FOR = {
   "979-const-method-handle",  # b/228312861: RBE uses wrong inputs.
 }
 
-TRADEFED_DISABLED = {
-  "2031-zygote-compiled-frame-deopt",
-  "2254-class-value-before-and-after-u",
-  "656-annotation-lookup-generic-jni",
-  "674-hiddenapi",
-  "677-fsi",
-  "677-fsi2",
-  "689-zygote-jit-deopt",
-  "728-imt-conflict-zygote",
-  "817-hiddenapi",
-  "900-hello-plugin",
-}
-
 TRADEFED_VARIANTS = [
-    ["--debug", "--baseline"],
-    ["--debug", "--interpreter"],
-    ["--debug", "--jit", "--debuggable"],
-    ["--debug", "--jit"],
-    ["--debug", "--optimizing", "--debuggable"],
-    ["--debug", "--optimizing"],
-    ["--debug", "--speed-profile"],
+    ["--baseline"],
+    ["--interpreter"],
+    ["--jit", "--debuggable"],
+    ["--jit"],
+    ["--optimizing", "--debuggable"],
+    ["--optimizing"],
+    ["--speed-profile"],
 ]
 
 # Debug option. Report commands that are taking a lot of user CPU time.
@@ -591,32 +579,43 @@ def create_setup_script(bitness, isa):
 # This can be used in CI to execute the tests without running `testrunner.py`.
 # This takes into account any custom behaviour defined in per-test `run.py`.
 # We generate distinct scripts for all of the pre-defined variants.
-def create_ci_runner_scripts(out, mode, test_names, bitness, isa, tags) -> List[Dict[str, Any]]:
+def create_ci_runner_scripts(out, mode, test_names, bitness, isa, root, tags) -> List[Dict[str, Any]]:
   assert bitness in {32, 64}
   DEVICE_DIR = Path("/data/local/tmp/art")
   out.mkdir(parents=True, exist_ok=True)
   old_files = set(Path(out).glob("*/*.sh"))
 
-  # Very simple wrapper to isolate the test execution.
-  # It is not full/proper chroot, and uses simpler solution for now.
-  # It runs in 'unshare' to make the mount points independent for this process
-  # (which applies only to this process, so there is no unmount needed later).
-  wrapper1 = out / f"wrapper1.{isa}.sh"
-  wrapper1.write_text("\n".join([
-    "#!/bin/sh",
-    "set -e",
-    f"su root unshare --mount sh {DEVICE_DIR}/wrapper2.{isa}.sh $@",
-  ]))
+  if root:
+    # Very simple wrapper to isolate the test execution.
+    # It is not full/proper chroot, and uses simpler solution for now.
+    # It runs in 'unshare' to make the mount points independent for this process
+    # (which applies only to this process, so there is no unmount needed later).
+    wrapper1 = out / f"wrapper1.{isa}.sh"
+    wrapper1.write_text("\n".join([
+      "#!/bin/sh",
+      "set -e",
+      f"su root unshare --mount sh {DEVICE_DIR}/wrapper2.{isa}.sh $@",
+    ]))
 
-  # Inner wrapper - keep most of the file system as-is and bind-mount only the ART apex.
-  wrapper2 = out / f"wrapper2.{isa}.sh"
-  wrapper2.write_text("\n".join([
-    "#!/bin/sh",
-    "set -e",
-    f"mount --bind {DEVICE_DIR}/apex/com.android.art /apex/com.android.art",
-    "sh $@",
-  ]))
-  wrap = ["sh", f"{DEVICE_DIR}/{wrapper1.name}"]
+    # Inner wrapper - keep most of the file system as-is and bind-mount only the ART apex.
+    wrapper2 = out / f"wrapper2.{isa}.sh"
+    wrapper2.write_text("\n".join([
+      "#!/bin/sh",
+      "set -e",
+      f"mount --bind {DEVICE_DIR}/apex/com.android.art /apex/com.android.art",
+      "sh $@",
+    ]))
+    wrap = ["sh", f"{DEVICE_DIR}/{wrapper1.name}"]
+  else:
+    # All tests need signal_dumper to handle timeouts and backtraces.
+    wrapper = out / f"wrapper.{isa}.sh"
+    wrapper.write_text("\n".join([
+      "#!/bin/sh",
+      "set -e",
+      F"export PATH=$PATH:{DEVICE_DIR}/apex/com.android.art/bin",
+      "sh $@",
+    ]))
+    wrap = ["sh", f"{DEVICE_DIR}/{wrapper.name}"]
 
   setup = out / f"setup.{isa}.sh"
   setup_script = [
@@ -624,7 +623,11 @@ def create_ci_runner_scripts(out, mode, test_names, bitness, isa, tags) -> List[
     "set -e",
   ] + create_setup_script(bitness, isa)
   setup.write_text("\n".join(setup_script))
-  test_names = list(set(test_names) - TRADEFED_DISABLED)
+
+  skip = knownfailures.TRADEFED
+  if not root:
+    skip = skip | knownfailures.TRADEFED_NO_ROOT
+  test_names = list(set(test_names) - skip)
   if not test_names:
     return {}
 
@@ -643,19 +646,27 @@ def create_ci_runner_scripts(out, mode, test_names, bitness, isa, tags) -> List[
       f"--{mode}",
       f"--{bitness}",
     ] + variant
+    if root:
+      args += ["--debug"]
+    else:
+      args += ["--ndebug"]
     run([python, script] + args + test_names, env=envs, check=True)
 
+  prefix = f"run-test-{isa}" + ("-root" if root else "-no-root")
+
   def make_setup() -> Dict[str, Any]:
-    name = f"run-test-{isa}.setup#compile-boot-image"
-    cmds: List[Dict[str, Any]] = [
-      {"kind": "push", "args": ["../apex/com.android.art", f"{DEVICE_DIR}/apex/com.android.art"]},
-      {"kind": "push", "args": [f"{wrapper1.name}", f"{DEVICE_DIR}/{wrapper1.name}"]},
-      {"kind": "push", "args": [f"{wrapper2.name}", f"{DEVICE_DIR}/{wrapper2.name}"]},
-      {"kind": "shell", "args": [f"chmod +x {DEVICE_DIR}/apex/com.android.art/bin/*"]},
-      {"kind": "push", "args": [f"{setup.name}", f"{DEVICE_DIR}/{setup.name}"]},
-      {"kind": "shell", "args": ["rm", "-rf", f"{DEVICE_DIR}/test"]},
-      {"kind": "shell", "args": wrap + [f"{DEVICE_DIR}/{setup.name}"]},
-    ]
+    name = f"{prefix}.setup#compile-boot-image"
+    cmds: List[Dict[str, Any]] = []
+    cmds.append({"kind": "push", "args": ["../apex/com.android.art", f"{DEVICE_DIR}/apex/com.android.art"]})
+    if root:
+      cmds.append({"kind": "push", "args": [f"{wrapper1.name}", f"{DEVICE_DIR}/{wrapper1.name}"]})
+      cmds.append({"kind": "push", "args": [f"{wrapper2.name}", f"{DEVICE_DIR}/{wrapper2.name}"]})
+    else:
+      cmds.append({"kind": "push", "args": [f"{wrapper.name}", f"{DEVICE_DIR}/{wrapper.name}"]})
+    cmds.append({"kind": "shell", "args": [f"chmod +x {DEVICE_DIR}/apex/com.android.art/bin/*"]})
+    cmds.append({"kind": "push", "args": [f"{setup.name}", f"{DEVICE_DIR}/{setup.name}"]})
+    cmds.append({"kind": "shell", "args": ["rm", "-rf", f"{DEVICE_DIR}/test"]})
+    cmds.append({"kind": "shell", "args": wrap + [f"{DEVICE_DIR}/{setup.name}"]})
     return {"name": name, "tags": tags, "cmds": cmds}
 
   setup = make_setup()
@@ -664,7 +675,7 @@ def create_ci_runner_scripts(out, mode, test_names, bitness, isa, tags) -> List[
     test_name = runner.parent.name
     m = re.search("FULL_TEST_NAME=(.*)", runner.read_text())
     assert m, f"Can not find full test name of {test_name}"
-    full_name = f"run-test-{isa}.{test_name}#{m.group(1).replace(test_name, "")}"
+    full_name = f"{prefix}.{test_name}#{m.group(1).replace(test_name, "")}"
 
     test_hash = runner.stem
     target_dir = f"{DEVICE_DIR}/test/{test_hash}"
@@ -751,14 +762,18 @@ def main() -> None:
     out = ziproot / "runner"
     dst = out / args.out.with_suffix(".tests.json").name
     tests: List[Dict[str, Any]] = []
-    for bitness, isa, tags in [
+    for bitness, isa, adb_tags in [
         (32, "arm", ["armeabi-v7a"]),
         (64, "arm64", ["arm64-v8a"]),
         (32, "x86", ["x86"]),
         (64, "x86_64", ["x86_64"]),
       ]:
-      tags += ["root"]
-      tests += create_ci_runner_scripts(out, args.mode, test_names, bitness, isa, tags)
+      for root, root_tags in [
+        (True, ["root"]),
+        (False, ["no-root"]),
+      ]:
+        tags = adb_tags + root_tags
+        tests += create_ci_runner_scripts(out, args.mode, test_names, bitness, isa, root, tags)
     dst.write_text(json.dumps(tests, indent=2))
 
   # Create the final zip file which contains the content of the temporary directory.

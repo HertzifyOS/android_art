@@ -7893,6 +7893,32 @@ void InstructionCodeGeneratorX86_64::VisitX86MaskOrResetLeastSetBit(HX86MaskOrRe
   }
 }
 
+void LocationsBuilderX86_64::VisitX86LoadEffectiveAddress(HX86LoadEffectiveAddress* insn) {
+  LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, insn);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  if (insn->HasBase()) {
+    locations->SetInAt(1, Location::RequiresCoreRegister());
+  }
+  locations->SetOut(Location::RequiresCoreRegister());
+}
+
+void InstructionCodeGeneratorX86_64::VisitX86LoadEffectiveAddress(HX86LoadEffectiveAddress* insn) {
+  LocationSummary* locations = insn->GetLocations();
+  CpuRegister index = locations->InAt(0).AsRegister<CpuRegister>();
+  CpuRegister out = locations->Out().AsRegister<CpuRegister>();
+  ScaleFactor scale = static_cast<ScaleFactor>(insn->GetShift());
+  int32_t disp = insn->GetDisplacement();
+  Address address = insn->HasBase()
+      ? Address(locations->InAt(1).AsRegister<CpuRegister>(), index, scale, disp)
+      : Address(index, scale, disp);
+  if (insn->GetType() == DataType::Type::kInt64) {
+    __ leaq(out, address);
+  } else {
+    DCHECK_EQ(insn->GetType(), DataType::Type::kInt32);
+    __ leal(out, address);
+  }
+}
+
 void LocationsBuilderX86_64::VisitAnd(HAnd* instruction) { HandleBitwiseOperation(instruction); }
 void LocationsBuilderX86_64::VisitOr(HOr* instruction) { HandleBitwiseOperation(instruction); }
 void LocationsBuilderX86_64::VisitXor(HXor* instruction) { HandleBitwiseOperation(instruction); }

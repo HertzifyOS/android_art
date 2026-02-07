@@ -110,6 +110,15 @@ flag {
 }
 
 flag {
+  name: "madvise_optimized_readahead"
+  namespace: "system_performance"
+  description: "Flag to enable optimized readahead settings for dex/odex madvise"
+  bug: "309384435"
+  is_fixed_read_only: false
+  is_exported: false
+}
+
+flag {
   name: "pm_compile_verbose_logging"
   namespace: "art_cloud"
   description: "Flag to enable more verbose logging for the \"pm compile\" command"

@@ -9099,6 +9099,28 @@ void InstructionCodeGeneratorX86::VisitX86LoadFromConstantTable(HX86LoadFromCons
   }
 }
 
+void LocationsBuilderX86::VisitX86LoadEffectiveAddress(HX86LoadEffectiveAddress* insn) {
+  LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, insn);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  if (insn->HasBase()) {
+    locations->SetInAt(1, Location::RequiresCoreRegister());
+  }
+  locations->SetOut(Location::RequiresCoreRegister());
+}
+
+void InstructionCodeGeneratorX86::VisitX86LoadEffectiveAddress(HX86LoadEffectiveAddress* insn) {
+  DCHECK_EQ(insn->GetType(), DataType::Type::kInt32);
+  LocationSummary* locations = insn->GetLocations();
+  Register index = locations->InAt(0).AsRegister<Register>();
+  Register out = locations->Out().AsRegister<Register>();
+  ScaleFactor scale = static_cast<ScaleFactor>(insn->GetShift());
+  int32_t disp = insn->GetDisplacement();
+  Address address = insn->HasBase()
+      ? Address(locations->InAt(1).AsRegister<Register>(), index, scale, disp)
+      : Address(index, scale, disp);
+  __ leal(out, address);
+}
+
 /**
  * Class to handle late fixup of offsets into constant area.
  */
