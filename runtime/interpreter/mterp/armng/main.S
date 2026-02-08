@@ -301,7 +301,11 @@
   END \name
 .endm
 
-.macro CLEAR_VOLATILE_MARKER reg
+.macro CLEAR_STATIC_VOLATILE_MARKER reg
+  and \reg, \reg, #-2
+.endm
+
+.macro CLEAR_INSTANCE_VOLATILE_MARKER reg
   rsb \reg, \reg, #0
 .endm
 
@@ -1748,19 +1752,6 @@ OAT_ENTRY ExecuteNterpImpl
 %  else:
      ldrd     ${tmp}, ${dest_reg}, [${tmp2}]  // entry key (pc), value (field/method/etc.)
    cmp      ${tmp}, rPC
-   bne      ${miss_label}
-
-%def fetch_uint64_from_thread_cache(miss_label, dest_reg1="r1", dest_reg2="r3", tmp="r0", tmp2="r2"):
-   // Fetch some information from the thread cache.
-   // Uses `tmp`, `tmp2` (must differ from `tmp` for write-back) and `lr` as temporaries.
-   add      ${tmp2}, rSELF, #THREAD_INTERPRETER_CACHE_OFFSET  // cache address
-   ubfx     lr, rPC, #THREAD_INTERPRETER_CACHE_KEY_LOW_BIT+1, #THREAD_INTERPRETER_CACHE_SIZE_LOG2-1
-                                              // entry index
-   add      ${tmp}, ${tmp2}, lr, lsl #4      // entry address within the cache
-   ldm      ${tmp}, {${tmp}, ${dest_reg1}, ${tmp2}, ${dest_reg2}}
-   cmp      ${tmp}, rPC
-   it       eq
-   cmpeq    ${tmp2}, rPC
    bne      ${miss_label}
 
 %def footer():

@@ -585,6 +585,10 @@
 
 // *** sget ***
 
+.macro CLEAR_STATIC_VOLATILE_MARKER reg
+    andi \reg, \reg, ~0x1
+.endm
+
 // sget vAA, field@BBBB
 // Format 21c: AA|60 BBBB
 // vAA := klass.field
@@ -595,8 +599,8 @@
 %  fetch_from_thread_cache(/*resolved_field*/"a0", f".L{opcode}_slow", "t0", "t1")
 .L${opcode}_slow_resume:
 
-   sext.w t0, a0           // t0 := field offset
-   srli  a0, a0, 32        // a0 := class
+   lwu t0, ART_FIELD_OFFSET_OFFSET(a0)           // t0 := field offset
+   lwu a0, ART_FIELD_DECLARING_CLASS_OFFSET(a0)  // a0 := holder
    TEST_IF_MARKING t2, .L${opcode}_mark
 .L${opcode}_mark_resume:
 
@@ -621,7 +625,7 @@
    call nterp_get_static_field  // result a0 := resolved_field
 
    // Test for volatile bit
-   slli t0, a0, 31
+   slli t0, a0, 63
    bgez t0, .L${opcode}_slow_resume
 %  volatile_path = add_slow_path(op_sget_volatile, width, zext, "s7", "t0", "t1")
    tail $volatile_path
@@ -630,8 +634,9 @@
 // Volatile static load.
 // Temporaries: z0, z1, z2
 %def op_sget_volatile(width, zext, dst_vreg, z0, z1):
-   negw $z0, a0           // z0 := field offset
-   srli  a0, a0, 32       // a0 := class
+   CLEAR_STATIC_VOLATILE_MARKER a0
+   lwu $z0, ART_FIELD_OFFSET_OFFSET(a0)          // z0 := field offset
+   lwu a0, ART_FIELD_DECLARING_CLASS_OFFSET(a0)  // a0 := holder
    TEST_IF_MARKING $z1, .L${opcode}_volatile_mark
 .L${opcode}_volatile_mark_resume:
 
@@ -667,8 +672,8 @@
 %  fetch_from_thread_cache(/*resolved_field*/"a0", f".L{opcode}_slow", "t0", "t1")
 .L${opcode}_slow_resume:
 
-   sext.w t0, a0           // t0 := field offset
-   srli  a0, a0, 32        // a0 := class
+   lwu t0, ART_FIELD_OFFSET_OFFSET(a0)           // t0 := field offset
+   lwu a0, ART_FIELD_DECLARING_CLASS_OFFSET(a0)  // a0 := holder
    TEST_IF_MARKING t1, .L${opcode}_mark
 
    add t0, t0, a0      // t0 := field addr
@@ -707,13 +712,14 @@
    call nterp_get_static_field  // result a0 := resolved_field
 
    // Test for volatile bit
-   slli $z0, a0, 31
+   slli $z0, a0, 63
    bltz $z0, .L${opcode}_volatile
    tail .L${opcode}_slow_resume  // resume offset exceeds branch imm
 
 .L${opcode}_volatile:
-   negw $z0, a0           // z0 := field offset
-   srli  a0, a0, 32       // a0 := class
+   CLEAR_STATIC_VOLATILE_MARKER a0
+   lwu $z0, ART_FIELD_OFFSET_OFFSET(a0)          // z0 := field offset
+   lwu a0, ART_FIELD_DECLARING_CLASS_OFFSET(a0)  // a0 := holder
    TEST_IF_MARKING $z1, .L${opcode}_volatile_mark
 
    add $z0, $z0, a0  // z0 := field addr
@@ -778,8 +784,8 @@
 %  fetch_from_thread_cache(/*resolved_field*/"a0", f".L{opcode}_slow", "t0", "t1")
 .L${opcode}_slow_resume:
 
-   sext.w t0, a0           // t0 := field offset
-   srli  a0, a0, 32        // a0 := class
+   lwu t0, ART_FIELD_OFFSET_OFFSET(a0)
+   lwu a0, ART_FIELD_DECLARING_CLASS_OFFSET(a0)  // a0 := holder
    TEST_IF_MARKING t1, .L${opcode}_mark
 .L${opcode}_mark_resume:
 
@@ -802,7 +808,7 @@
    call nterp_get_static_field  // result a0 := resolved_field
 
    // Test for volatile bit
-   slli t0, a0, 31
+   slli t0, a0, 63
    bgez t0, .L${opcode}_slow_resume
 %  volatile_path = add_slow_path(op_sput_volatile, width, "s7", "t0", "t1")
    tail $volatile_path
@@ -811,8 +817,9 @@
 // Volatile static store.
 // Temporaries: z0, z1
 %def op_sput_volatile(width, value, z0, z1):
-   negw $z0, a0           // z0 := field offset
-   srli  a0, a0, 32       // a0 := class
+   CLEAR_STATIC_VOLATILE_MARKER a0
+   lwu $z0, ART_FIELD_OFFSET_OFFSET(a0)          // z0 := field offset
+   lwu a0, ART_FIELD_DECLARING_CLASS_OFFSET(a0)  // a0 := holder
    TEST_IF_MARKING $z1, .L${opcode}_volatile_mark
 .L${opcode}_volatile_mark_resume:
 
@@ -859,8 +866,8 @@
 %  fetch_from_thread_cache(/*resolved_field*/"a0", f".L{opcode}_slow", "t0", "t1")
 .L${opcode}_slow_resume:   // s8 := reference (slow path only)
 
-   sext.w t0, a0           // t0 := field offset
-   srli  a0, a0, 32        // a0 := class
+   lwu t0, ART_FIELD_OFFSET_OFFSET(a0)
+   lwu a0, ART_FIELD_DECLARING_CLASS_OFFSET(a0)  // a0 := holder
    TEST_IF_MARKING t1, .L${opcode}_mark
 .L${opcode}_mark_resume:
 
@@ -898,13 +905,14 @@
 %  get_vreg(value, src_vreg, is_unsigned=True)  # value := fp[AA], zext
 
    // Test for volatile bit
-   slli $z0, a0, 31
+   slli $z0, a0, 63
    bltz $z0, .L${opcode}_volatile
    tail .L${opcode}_slow_resume  // resume offset exceeds branch imm
 
 .L${opcode}_volatile:
-   negw $z0, a0           // z0 := field offset
-   srli  a0, a0, 32       // a0 := class
+   CLEAR_STATIC_VOLATILE_MARKER a0
+   lwu $z0, ART_FIELD_OFFSET_OFFSET(a0)          // z0 := field offset
+   lwu a0, ART_FIELD_DECLARING_CLASS_OFFSET(a0)  // a0 := holder
    TEST_IF_MARKING $z1, .L${opcode}_volatile_mark
 .L${opcode}_volatile_mark_resume:
 
