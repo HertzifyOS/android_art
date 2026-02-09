@@ -19,12 +19,13 @@
 
 #include <stdlib.h>
 
+#include <memory>
 #include <string>
 #include <string_view>
-
-#include <android-base/logging.h>
+#include <vector>
 
 #include "arch/instruction_set.h"
+#include "base/os.h"
 
 namespace art {
 
@@ -128,8 +129,12 @@ void OverrideDalvikCacheSubDirectory(std::string sub_dir);
 // `have_android_data` will be set to true if we have an ANDROID_DATA that exists,
 // `dalvik_cache_exists` will be true if there is a dalvik-cache directory that is present.
 // The flag `is_global_cache` tells whether this cache is /data/dalvik-cache.
-void GetDalvikCache(const char* subdir, bool create_if_absent, std::string* dalvik_cache,
-                    bool* have_android_data, bool* dalvik_cache_exists, bool* is_global_cache);
+void GetDalvikCache(const char* subdir,
+                    bool create_if_absent,
+                    std::string* dalvik_cache,
+                    bool* have_android_data,
+                    bool* dalvik_cache_exists,
+                    bool* is_global_cache);
 
 // Returns the absolute dalvik-cache path for a DexFile or OatFile. The path returned will be
 // rooted at `cache_location`.
@@ -256,6 +261,21 @@ int DupCloexec(int fd);
 // Returns true if `path` begins with a slash.
 inline bool IsAbsoluteLocation(const std::string& path) { return !path.empty() && path[0] == '/'; }
 
+struct CompiledBootClasspathFds {
+  std::vector<std::unique_ptr<File>> files;
+  std::vector<int> image_fds;
+  std::vector<int> oat_fds;
+  std::vector<int> vdex_fds;
+};
+
+// Opens the FDs for the compiled boot classpath artifacts (image, oat, vdex) if they exist.
+// Returns a struct containing the opened files and vectors of their raw FDs.
+// If an artifact does not exist, it's assigned an FD of -1.
+bool OpenCompiledBootClasspathFdsIfAny(const std::vector<std::string>& bcp_jars,
+                                       InstructionSet isa,
+                                       const std::vector<std::string>& boot_image_locations,
+                                       CompiledBootClasspathFds* class_path_fds,
+                                       std::string* error_msg);
 }  // namespace art
 
 #endif  // ART_LIBARTBASE_BASE_FILE_UTILS_H_

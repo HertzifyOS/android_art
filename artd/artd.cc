@@ -306,9 +306,9 @@ Result<FileVisibility> GetFileVisibility(const std::string& file) {
   }
 
   return (status.permissions() & std::filesystem::perms::others_read) !=
-                 std::filesystem::perms::none ?
-             FileVisibility::OTHER_READABLE :
-             FileVisibility::NOT_OTHER_READABLE;
+                 std::filesystem::perms::none
+             ? FileVisibility::OTHER_READABLE
+             : FileVisibility::NOT_OTHER_READABLE;
 }
 
 Result<ArtdCancellationSignal*> ToArtdCancellationSignal(IArtdCancellationSignal* input) {
@@ -1064,8 +1064,8 @@ ndk::ScopedAStatus Artd::mergeProfiles(const std::vector<ProfilePath>& in_profil
   }
 
   ProfmanResult::ProcessingResult expected_result =
-      (in_options.dumpOnly || in_options.dumpClassesAndMethods) ? ProfmanResult::kSuccess :
-                                                                  ProfmanResult::kCompile;
+      (in_options.dumpOnly || in_options.dumpClassesAndMethods) ? ProfmanResult::kSuccess
+                                                                : ProfmanResult::kCompile;
   if (result.value() != expected_result) {
     return NonFatal(ART_FORMAT("profman returned an unexpected code: {}", result.value()));
   }
@@ -1205,9 +1205,9 @@ ndk::ScopedAStatus Artd::dexopt(
   OR_RETURN_FATAL(ValidateDexPath(in_dexFile));
   // `in_profile` can be either a Pre-reboot profile or an ordinary one.
   std::optional<std::string> profile_path =
-      in_profile.has_value() ?
-          std::make_optional(OR_RETURN_FATAL(BuildProfileOrDmPath(in_profile.value()))) :
-          std::nullopt;
+      in_profile.has_value()
+          ? std::make_optional(OR_RETURN_FATAL(BuildProfileOrDmPath(in_profile.value())))
+          : std::nullopt;
   ArtdCancellationSignal* cancellation_signal =
       OR_RETURN_FATAL(ToArtdCancellationSignal(in_cancellationSignal.get()));
 
@@ -1966,6 +1966,29 @@ Result<const std::vector<std::string>*> Artd::GetBootImageLocations() {
   return &cached_boot_image_locations_.value();
 }
 
+Result<BootClasspathFds> Artd::OpenBootClasspathFds(
+    const std::vector<std::string>& bcp_jars) {
+  BootClasspathFds result;
+  for (const std::string& jar : bcp_jars) {
+    // Special treatment for Compilation OS.  When we pass in files to CompOS we also need to pass
+    // in the verity digest for those files. Verity digests are only cheaply provided if the file
+    // resides in a partition that supports fs-verity or has an accompanying `fsv_meta` file.
+    // Since APEXes do not have fs-verity enabled nor are fsv_meta files provided the verity digest
+    // would need to computed at runtime, which is slow.
+    // Since all the APEXes that contain BCP jars are mounted within the VM's file system we set
+    // the fd to -1 to indicate that the compiler should search for the BCP jars and open up the
+    // files itself.
+    if (jar.starts_with("/apex/")) {
+      result.fds.push_back(-1);
+    } else {
+      std::unique_ptr<File> jar_file = OR_RETURN(OpenFileForReading(jar.c_str()));
+      result.fds.push_back(jar_file->Fd());
+      result.files.push_back(std::move(jar_file));
+    }
+  }
+  return result;
+}
+
 Result<const std::vector<std::string>*> Artd::GetBootClassPath() {
   std::lock_guard<std::mutex> lock(cache_mu_);
 
@@ -2074,9 +2097,9 @@ bool Artd::ShouldUseDebugBinaries() {
 }
 
 Result<std::string> Artd::GetDex2Oat() {
-  std::string binary_name = ShouldUseDebugBinaries() ?
-                                (ShouldUseDex2Oat64() ? "dex2oatd64" : "dex2oatd32") :
-                                (ShouldUseDex2Oat64() ? "dex2oat64" : "dex2oat32");
+  std::string binary_name = ShouldUseDebugBinaries()
+                                ? (ShouldUseDex2Oat64() ? "dex2oatd64" : "dex2oatd32")
+                                : (ShouldUseDex2Oat64() ? "dex2oat64" : "dex2oat32");
   return BuildArtBinPath(binary_name);
 }
 
@@ -2163,8 +2186,8 @@ void Artd::AddPerfConfigFlags(PriorityClass priority_class,
 
   if (priority_class < PriorityClass::BOOT) {
     art_exec_args
-        .Add(priority_class <= PriorityClass::BACKGROUND ? "--set-task-profile=Dex2OatBackground" :
-                                                           "--set-task-profile=Dex2OatBootComplete")
+        .Add(priority_class <= PriorityClass::BACKGROUND ? "--set-task-profile=Dex2OatBackground"
+                                                         : "--set-task-profile=Dex2OatBootComplete")
         .Add("--set-priority=background");
   }
 

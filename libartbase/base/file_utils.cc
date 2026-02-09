@@ -127,8 +127,10 @@ std::string GetAndroidRootSafe(std::string* error_msg) {
   return "";
 #else
   std::string local_error_msg;
-  const char* dir = GetAndroidDirSafe(kAndroidRootEnvVar, kAndroidRootDefaultPath,
-      /*must_exist=*/ true, &local_error_msg);
+  const char* dir = GetAndroidDirSafe(kAndroidRootEnvVar,
+                                      kAndroidRootDefaultPath,
+                                      /*must_exist=*/true,
+                                      &local_error_msg);
   if (dir == nullptr) {
     if (!kIsTargetBuild) {
       // On host we assume the gtest binaries are in subdirectories like
@@ -165,8 +167,10 @@ std::string GetSystemExtRootSafe(std::string* error_msg) {
   *error_msg = "GetSystemExtRootSafe unsupported for Windows.";
   return "";
 #else
-  const char* dir = GetAndroidDirSafe(kAndroidSystemExtRootEnvVar, kAndroidSystemExtRootDefaultPath,
-      /*must_exist=*/ true, error_msg);
+  const char* dir = GetAndroidDirSafe(kAndroidSystemExtRootEnvVar,
+                                      kAndroidSystemExtRootDefaultPath,
+                                      /*must_exist=*/true,
+                                      error_msg);
   return dir ? dir : "";
 #endif
 }
@@ -613,10 +617,7 @@ static std::string GetApexDataDalvikCacheFilename(std::string_view dex_location,
     // Result:
     // "/data/misc/apexdata/com.android.art/dalvik-cache/arm/system@framework@xyz.jar@classes.odex"
     std::string result, unused_error_msg;
-    GetDalvikCacheFilename(dex_location,
-                           apex_data_dalvik_cache,
-                           &result,
-                           &unused_error_msg);
+    GetDalvikCacheFilename(dex_location, apex_data_dalvik_cache, &result, &unused_error_msg);
     return ReplaceFileExtension(result, file_extension);
   } else {
     // Arguments: "/system/framework/xyz.jar", "x86_64", false, "art"
@@ -828,9 +829,7 @@ bool LocationIsOnSystemExt(const std::string& location) {
   LOG(FATAL) << "LocationIsOnSystemExt is unsupported on Windows.";
   return false;
 #else
-  return IsLocationOn(location,
-                      kAndroidSystemExtRootEnvVar,
-                      kAndroidSystemExtRootDefaultPath) ||
+  return IsLocationOn(location, kAndroidSystemExtRootEnvVar, kAndroidSystemExtRootDefaultPath) ||
          // When the 'system_ext' partition is not present, builds will create
          // '/system/system_ext' instead.
          IsLocationOn(location,
@@ -841,8 +840,8 @@ bool LocationIsOnSystemExt(const std::string& location) {
 }
 
 bool LocationIsTrusted(const std::string& location, bool trust_art_apex_data_files) {
-  if (LocationIsOnSystem(location) || LocationIsOnSystemExt(location)
-        || LocationIsOnArtModule(location)) {
+  if (LocationIsOnSystem(location) || LocationIsOnSystemExt(location) ||
+      LocationIsOnArtModule(location)) {
     return true;
   }
   return LocationIsOnArtApexData(location) & trust_art_apex_data_files;
@@ -866,8 +865,73 @@ int DupCloexec(int fd) {
 #if defined(__linux__)
   return fcntl(fd, F_DUPFD_CLOEXEC, 0);
 #else
-  return dup(fd); // NOLINT
+  return dup(fd);  // NOLINT
 #endif
+}
+
+// Opens the FDs for the compiled boot classpath artifacts (image, oat, vdex) if they exist.
+// Returns a struct containing the opened files and vectors of their raw FDs.
+// If an artifact does not exist, it's assigned an FD of -1.
+bool OpenCompiledBootClasspathFdsIfAny(const std::vector<std::string>& bcp_jars,
+                                       InstructionSet isa,
+                                       const std::vector<std::string>& boot_image_locations,
+                                       CompiledBootClasspathFds* class_path_fds,
+                                       std::string* error_msg) {
+  DCHECK(class_path_fds != nullptr);
+  CompiledBootClasspathFds& result = *class_path_fds;
+  std::string artifact_dir;
+  for (size_t i = 0; i < bcp_jars.size(); i++) {
+    const std::string& jar = bcp_jars[i];
+    std::string basename = "boot.art";
+    if (i != 0) {
+      std::string jar_name = android::base::Basename(jar);
+      basename = "boot-" + ReplaceFileExtension(jar_name, ".art");
+    }
+    // If there is an entry in `boot_image_locations` for the current jar, update `artifact_dir` for
+    // the current jar and the subsequent jars.
+    for (const std::string& location : boot_image_locations) {
+      if (android::base::Basename(location) == basename) {
+        artifact_dir = android::base::Dirname(location);
+        break;
+      }
+    }
+    CHECK(!artifact_dir.empty());
+    std::string image_path = ART_FORMAT("{}/{}", artifact_dir, basename);
+    image_path = GetSystemImageFilename(image_path.c_str(), isa);
+    std::unique_ptr<File> image_file(OS::OpenFileForReading(image_path.c_str()));
+    if (image_file != nullptr) {
+      result.image_fds.push_back(image_file->Fd());
+      result.files.push_back(std::move(image_file));
+    } else if (errno == ENOENT) {
+      result.image_fds.push_back(-1);
+    } else {
+      *error_msg = ART_FORMAT("Failed to open boot image file '{}'", image_path);
+      return false;
+    }
+    std::string oat_path = ReplaceFileExtension(image_path, kOatExtension);
+    std::unique_ptr<File> oat_file(OS::OpenFileForReading(oat_path.c_str()));
+    if (oat_file != nullptr) {
+      result.oat_fds.push_back(oat_file->Fd());
+      result.files.push_back(std::move(oat_file));
+    } else if (errno == ENOENT) {
+      result.oat_fds.push_back(-1);
+    } else {
+      *error_msg = ART_FORMAT("Failed to open boot image file '{}'", oat_path);
+      return false;
+    }
+    std::string vdex_path = ReplaceFileExtension(image_path, kVdexExtension);
+    std::unique_ptr<File> vdex_file(OS::OpenFileForReading(vdex_path.c_str()));
+    if (vdex_file != nullptr) {
+      result.vdex_fds.push_back(vdex_file->Fd());
+      result.files.push_back(std::move(vdex_file));
+    } else if (errno == ENOENT) {
+      result.vdex_fds.push_back(-1);
+    } else {
+      *error_msg = ART_FORMAT("Failed to open boot image file '{}'", vdex_path);
+      return false;
+    }
+  }
+  return true;
 }
 
 }  // namespace art

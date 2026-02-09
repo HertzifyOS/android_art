@@ -619,8 +619,8 @@ class ArtdTest : public CommonArtTest {
     CreateFile(dex_file_);
     std::filesystem::permissions(dex_file_,
                                  std::filesystem::perms::others_read,
-                                 dex_file_other_readable_ ? std::filesystem::perm_options::add :
-                                                            std::filesystem::perm_options::remove);
+                                 dex_file_other_readable_ ? std::filesystem::perm_options::add
+                                                          : std::filesystem::perm_options::remove);
 
     // Optional files.
     if (vdex_path_.has_value()) {
@@ -634,8 +634,8 @@ class ArtdTest : public CommonArtTest {
       CreateFile(path);
       std::filesystem::permissions(path,
                                    std::filesystem::perms::others_read,
-                                   profile_other_readable_ ? std::filesystem::perm_options::add :
-                                                             std::filesystem::perm_options::remove);
+                                   profile_other_readable_ ? std::filesystem::perm_options::add
+                                                           : std::filesystem::perm_options::remove);
     }
 
     // Files to be replaced.
@@ -1093,32 +1093,33 @@ TEST_F(ArtdTest, dexoptFlagsFromSystemProps) {
       .WillOnce(Return("--flag1 --flag2  --flag3"));
   EXPECT_CALL(*mock_props_, GetProperty("ro.build.version.sdk")).WillOnce(Return("77"));
 
-  EXPECT_CALL(*mock_exec_utils_,
-              DoExecAndReturnCode(
-                  WhenSplitBy("--",
-                              _,
-                              AllOf(Not(Contains(Flag("--swap-fd=", _))),
-                                    Contains(Flag("--instruction-set-features=", "features")),
-                                    Contains(Flag("--instruction-set-variant=", "variant")),
-                                    Contains(Flag("--max-image-block-size=", "size")),
-                                    Contains(Flag("--very-large-app-threshold=", "threshold")),
-                                    Contains(Flag("--resolve-startup-const-strings=", "strings")),
-                                    Contains("--generate-debug-info"),
-                                    Contains("--generate-mini-debug-info"),
-                                    Not(Contains("-Xdeny-art-apex-data-files")),
-                                    Contains(Flag("-Xms", "xms")),
-                                    Contains(Flag("-Xmx", "xmx")),
-                                    Contains("--compile-individually"),
-                                    Contains(Flag("--image-format=", "imgfmt")),
-                                    Not(Contains("--force-jit-zygote")),
-                                    Contains(Flag("--boot-image=", "boot-image")),
-                                    Contains(Flag("--assume-value=",
-                                                  "Landroid/os/Build$VERSION;->SDK_INT:77")),
-                                    Contains("--flag1"),
-                                    Contains("--flag2"),
-                                    Contains("--flag3"))),
-                  _,
-                  _))
+  EXPECT_CALL(
+      *mock_exec_utils_,
+      DoExecAndReturnCode(
+          WhenSplitBy(
+              "--",
+              _,
+              AllOf(Not(Contains(Flag("--swap-fd=", _))),
+                    Contains(Flag("--instruction-set-features=", "features")),
+                    Contains(Flag("--instruction-set-variant=", "variant")),
+                    Contains(Flag("--max-image-block-size=", "size")),
+                    Contains(Flag("--very-large-app-threshold=", "threshold")),
+                    Contains(Flag("--resolve-startup-const-strings=", "strings")),
+                    Contains("--generate-debug-info"),
+                    Contains("--generate-mini-debug-info"),
+                    Not(Contains("-Xdeny-art-apex-data-files")),
+                    Contains(Flag("-Xms", "xms")),
+                    Contains(Flag("-Xmx", "xmx")),
+                    Contains("--compile-individually"),
+                    Contains(Flag("--image-format=", "imgfmt")),
+                    Not(Contains("--force-jit-zygote")),
+                    Contains(Flag("--boot-image=", "boot-image")),
+                    Contains(Flag("--assume-value=", "Landroid/os/Build$VERSION;->SDK_INT:77")),
+                    Contains("--flag1"),
+                    Contains("--flag2"),
+                    Contains("--flag3"))),
+          _,
+          _))
       .WillOnce(Return(0));
   RunDexopt();
 }
@@ -3207,20 +3208,20 @@ TEST_F(ArtdPreRebootTest, preRebootInit) {
 
   InSequence seq;
 
-  EXPECT_CALL(*mock_exec_utils_,
-              DoExecAndReturnCode(
-                  AllOf(WhenSplitBy("--",
-                                    AllOf(Contains(art_root_ + "/bin/art_exec"),
-                                          Contains("--drop-capabilities")),
-                                    AllOf(Contains("/apex/com.android.sdkext/bin/derive_classpath"),
-                                          Contains(Flag("--override-device-sdk-version=",
-                                                        kDefaultBuildVersionSdk)),
-                                          Contains(Flag("--override-device-codename=", "Baklava")),
-                                          Contains(Flag("--override-device-known-codenames=",
-                                                        "VanillaIceCream,Baklava")))),
-                        HasKeepFdsFor("/proc/self/fd/")),
-                  _,
-                  _))
+  EXPECT_CALL(
+      *mock_exec_utils_,
+      DoExecAndReturnCode(
+          AllOf(WhenSplitBy(
+                    "--",
+                    AllOf(Contains(art_root_ + "/bin/art_exec"), Contains("--drop-capabilities")),
+                    AllOf(Contains("/apex/com.android.sdkext/bin/derive_classpath"),
+                          Contains(Flag("--override-device-sdk-version=", kDefaultBuildVersionSdk)),
+                          Contains(Flag("--override-device-codename=", "Baklava")),
+                          Contains(Flag("--override-device-known-codenames=",
+                                        "VanillaIceCream,Baklava")))),
+                HasKeepFdsFor("/proc/self/fd/")),
+          _,
+          _))
       .WillOnce(DoAll(WithArg<0>(WriteToFdFlag("/proc/self/fd/", "export BOOTCLASSPATH /foo:/bar")),
                       Return(0)));
 
@@ -3369,16 +3370,14 @@ TEST_F(ArtdPreRebootTest, dexopt) {
 
   dexopt_options_.generateAppImage = true;
 
-  EXPECT_CALL(
-      *mock_exec_utils_,
-      DoExecAndReturnCode(
-          WhenSplitBy(
-              "--",
-              _,
-              AllOf(Contains(Flag("--profile-file-fd=", FdOf(profile_file))),
-                    Contains(Flag("--assume-value=", assume_value_sdk_int)))),
-          _,
-          _))
+  EXPECT_CALL(*mock_exec_utils_,
+              DoExecAndReturnCode(
+                  WhenSplitBy("--",
+                              _,
+                              AllOf(Contains(Flag("--profile-file-fd=", FdOf(profile_file))),
+                                    Contains(Flag("--assume-value=", assume_value_sdk_int)))),
+                  _,
+                  _))
       .WillOnce(DoAll(WithArg<0>(WriteToFdFlag("--oat-fd=", "oat")),
                       WithArg<0>(WriteToFdFlag("--output-vdex-fd=", "vdex")),
                       WithArg<0>(WriteToFdFlag("--app-image-fd=", "art")),
