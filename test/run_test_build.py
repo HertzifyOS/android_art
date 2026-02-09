@@ -66,6 +66,11 @@ TRADEFED_VARIANTS = [
     ["--speed-profile"],
 ]
 
+TRADEFED_CTS_TESTS = {
+    "048-reflect-v8",
+    "018-stack-overflow",
+}
+
 # Debug option. Report commands that are taking a lot of user CPU time.
 REPORT_SLOW_COMMANDS = False
 
@@ -677,12 +682,15 @@ def create_ci_runner_scripts(out, mode, test_names, bitness, isa, root, tags) ->
     m = re.search("FULL_TEST_NAME=(.*)", runner.read_text())
     assert m, f"Can not find full test name of {test_name}"
     full_name = f"{prefix}.{test_name}#{m.group(1).replace(test_name, "")}"
+    extra_tags: List[str] = []
+    if test_name in TRADEFED_CTS_TESTS:
+      extra_tags += ["cts", "mcts"]
 
     test_hash = runner.stem
     target_dir = f"{DEVICE_DIR}/test/{test_hash}"
     tests.append({
       "name": full_name,
-      "tags": tags,
+      "tags": tags + extra_tags,
       "deps": [setup["name"]],
       "cmds": [
         {"kind": "push", "args": [f"../{mode}/{test_name}", f"{target_dir}"]},
