@@ -272,8 +272,7 @@ class HInliner : public HOptimization {
                                         HInvoke* invoke_instruction)
     REQUIRES_SHARED(Locks::mutator_lock_);
 
-  void FixUpReturnReferenceType(ArtMethod* resolved_method, HInstruction* return_replacement)
-    REQUIRES_SHARED(Locks::mutator_lock_);
+  void FixUpReturnReferenceType(HInstruction* return_replacement);
 
   bool ArgumentTypesMoreSpecific(HInvoke* invoke_instruction, ArtMethod* resolved_method)
     REQUIRES_SHARED(Locks::mutator_lock_);
