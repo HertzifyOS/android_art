@@ -47,6 +47,7 @@
 #include "class_linker.h"
 #include "class_loader_utils.h"
 #include "class_table-inl.h"
+#include "com_android_art_rw_flags.h"
 #include "dex/dex_file.h"
 #include "dex/dex_file_loader.h"
 #include "dex_reference_collection.h"
@@ -427,8 +428,10 @@ class ProfileSaver::GetClassesAndMethodsHelper {
   using DexFileRecordsMap = ScopedArenaHashMap<const DexFile*, DexFileRecords*>;
 
   ALWAYS_INLINE static bool ShouldCollectClasses(bool startup) {
-    // We only record classes for the startup case. This may change in the future.
-    return startup;
+    // We only record classes for the startup case, if the process was ever jank perceptible. This
+    // may change in the future.
+    return startup && (!com::android::art::rw::flags::skip_background_classes_in_profiles() ||
+                       Runtime::Current()->WasEverJankPerceptible());
   }
 
   // Collect classes and methods from one class loader.

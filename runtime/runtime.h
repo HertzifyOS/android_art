@@ -919,6 +919,11 @@ class Runtime {
     return process_state_ == kProcessStateJankPerceptible;
   }
 
+  // Returns true if the process has ever been jank perceptible.
+  bool WasEverJankPerceptible() const {
+    return was_ever_jank_perceptible_;
+  }
+
   void RegisterSensitiveThread() const;
 
   void SetZygoteNoThreadSection(bool val) {
@@ -1562,6 +1567,8 @@ class Runtime {
 
   // Whether to allow compiling the boot classpath in memory when the given boot image is unusable.
   bool allow_in_memory_compilation_ = false;
+
+  bool was_ever_jank_perceptible_ = false;
 
   // Saved environment.
   class EnvSnapshot {
