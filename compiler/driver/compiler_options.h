@@ -29,6 +29,7 @@
 #include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/utils.h"
+#include "handle.h"
 #include "image_class_map.h"
 #include "optimizing/register_allocator.h"
 
@@ -54,6 +55,10 @@ namespace linker {
 class Arm64RelativePatcherTest;
 class Thumb2RelativePatcherTest;
 }  // namespace linker
+
+namespace mirror {
+class Class;
+}  // namespace mirror
 
 class ArtMethod;
 class DexFile;
@@ -353,8 +358,12 @@ class CompilerOptions final {
   static constexpr size_t kInferArrayDim = static_cast<size_t>(-1);
   EXPORT bool IsImageClass(TypeReference type_ref, size_t array_dim = kInferArrayDim) const;
 
+  // Returns whether the given `klass` is listed in the "classes-no-preload" profile section.
+  EXPORT bool IsNoPreloadClass(Handle<mirror::Class> klass) const;
+
   // Returns whether the given `pretty_descriptor` is in the list of preloaded
   // classes. `pretty_descriptor` should be the result of calling `PrettyDescriptor`.
+  // TODO(b/383506474): deprecate this and migrate to profile-based detection (`IsNoPreloadClass`).
   EXPORT bool IsPreloadedClass(std::string_view pretty_descriptor) const;
 
   bool ParseCompilerOptions(const std::vector<std::string>& options,
