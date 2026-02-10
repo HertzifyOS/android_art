@@ -113,12 +113,22 @@ static constexpr uint64_t kUffdFeaturesForSigbus = UFFD_FEATURE_SIGBUS;
 // A region which is more than kBlackDenseRegionThreshold percent live doesn't
 // need to be compacted as it is too densely packed.
 static constexpr uint kBlackDenseRegionThreshold = 95U;
+
+// Flag to force stop-the-world compaction so that we don't use userfaultfd.
+#ifdef ART_FORCE_CMC_STW_COMPACTION
+static constexpr bool kForceSTWCompaction = true;
+#else
+static constexpr bool kForceSTWCompaction = false;
+#endif
+
 // We consider SIGBUS feature necessary to enable this GC as it's superior than
 // threading-based implementation for janks. We may want minor-fault in future
 // to be available for making jit-code-cache updation concurrent, which uses shmem.
 bool KernelSupportsUffd() {
 #ifdef __linux__
-  if (gHaveMremapDontunmap) {
+  if (kForceSTWCompaction) {
+    return true;
+  } else if (gHaveMremapDontunmap) {
     int fd = syscall(__NR_userfaultfd, O_CLOEXEC | UFFD_USER_MODE_ONLY);
     // On non-android devices we may not have the kernel patches that restrict
     // userfaultfd to user mode. But that is not a security concern as we are
@@ -386,7 +396,7 @@ bool MarkCompact::CreateUserfaultfd(bool post_fork) {
     // 'ART_USE_READ_BARRIER=false' is used. Additionally, this check ensures
     // that userfaultfd isn't used on old kernels, which cause random ioctl
     // failures.
-    if (gHaveMremapDontunmap) {
+    if (!kForceSTWCompaction && gHaveMremapDontunmap) {
       // Don't use O_NONBLOCK as we rely on read waiting on uffd_ if there isn't
       // any read event available. We don't use poll.
       uffd_ = syscall(__NR_userfaultfd, O_CLOEXEC | UFFD_USER_MODE_ONLY);
