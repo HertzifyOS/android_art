@@ -73,6 +73,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -117,6 +118,14 @@ public class DexUseManagerLocal {
      * @hide
      */
     @VisibleForTesting public static final long INTERVAL_MS = 15_000;
+
+    /**
+     * The decay rate constant for the package score.
+     *
+     * @hide
+     */
+    @VisibleForTesting
+    public static final long PACKAGE_SCORE_HALF_LIFE_MS = Duration.ofDays(7).toMillis();
 
     // Impose a limit on the input accepted by notifyDexContainersLoaded per owning package.
     /** @hide */
@@ -323,6 +332,38 @@ public class DexUseManagerLocal {
     }
 
     /**
+     * Calculates the time-decayed usage score for a package based on a reference timestamp.
+     *
+     * @hide
+     */
+    public double calculateDecayedPackageScore(@NonNull String packageName, long refTimeMs) {
+        synchronized (mLock) {
+            return Optional.ofNullable(mDexUse.mPackageDexUseByOwningPackageName.get(packageName))
+                    .map(packageDexUse
+                            -> calculateDecayedPackageScoreLocked(packageDexUse, refTimeMs))
+                    .orElse(0D);
+        }
+    }
+
+    /** Same as above, but for a given {@link PackageDexUse}. */
+    @GuardedBy("mLock")
+    private static double calculateDecayedPackageScoreLocked(
+            @NonNull PackageDexUse packageDexUse, long refTimeMs) {
+        if (packageDexUse.mPackageScoreUpdatedAtMs - refTimeMs > 3600_000) {
+            // If the last update is too far in the future, something weird happened (like a major
+            // clock jump). We can't calculate the score in the usual way because it would explode
+            // due to exponential growth. Since this is rare and we don't have a good way to recover
+            // the data, we just discard the score for simplicity. We allow a 1-hour buffer to
+            // account for minor system clock adjustments.
+            return 0;
+        }
+        return packageDexUse.mPackageScore
+                * Math.pow(0.5,
+                        (double) Math.max(refTimeMs - packageDexUse.mPackageScoreUpdatedAtMs, 0)
+                                / PACKAGE_SCORE_HALF_LIFE_MS);
+    }
+
+    /**
      * @param checkDexFile if true, check the existence and visibility of the dex files. Note that
      *         the value of the {@link CheckedSecondaryDexInfo#fileVisibility()} field is undefined
      *         if this argument is false
@@ -448,8 +489,8 @@ public class DexUseManagerLocal {
 
             switch (findResult.type()) {
                 case TYPE_PRIMARY:
-                    addPrimaryDexUse(findResult.owningPackageName(), dexPath, loadingPackageName,
-                            isolatedProcess, lastUsedAtMs);
+                    addPrimaryDexUse(
+                            findResult, dexPath, loadingPackageName, isolatedProcess, lastUsedAtMs);
                     break;
                 case TYPE_SECONDARY:
                     PackageState loadingPkgState =
@@ -569,8 +610,9 @@ public class DexUseManagerLocal {
     @Nullable
     private FindResult checkForPackage(@NonNull PackageState pkgState, @NonNull String dexPath,
             boolean checkForSharedLibraries) {
-        if (isOwningPackageForPrimaryDex(pkgState, dexPath)) {
-            return new FindResult(TYPE_PRIMARY, pkgState.getPackageName());
+        @DexSubtype Integer primarySubtype = getOwningPackagePrimaryDexSubtype(pkgState, dexPath);
+        if (primarySubtype != null) {
+            return new FindResult(TYPE_PRIMARY, primarySubtype, pkgState.getPackageName());
         }
         if (checkForSharedLibraries) {
             FindResult result =
@@ -581,30 +623,30 @@ public class DexUseManagerLocal {
         }
         synchronized (mLock) {
             if (isOwningPackageForSecondaryDexLocked(pkgState, dexPath)) {
-                return new FindResult(TYPE_SECONDARY, pkgState.getPackageName());
+                return new FindResult(
+                        TYPE_SECONDARY, SUBTYPE_UNSPECIFIED, pkgState.getPackageName());
             }
         }
         String packageCodeDir = getPackageCodeDir(pkgState);
         if (packageCodeDir != null && Utils.pathStartsWith(dexPath, packageCodeDir)) {
             // TODO(b/351761207): Support secondary dex files in package dir.
-            return new FindResult(TYPE_DONT_RECORD, null);
+            return new FindResult(TYPE_DONT_RECORD, SUBTYPE_UNSPECIFIED, null);
         }
         return null;
     }
 
-    private static boolean isOwningPackageForPrimaryDex(
+    private static @DexSubtype Integer getOwningPackagePrimaryDexSubtype(
             @NonNull PackageState pkgState, @NonNull String dexPath) {
         AndroidPackage pkg = pkgState.getAndroidPackage();
         if (pkg == null) {
-            return false;
+            return null;
         }
-        List<AndroidPackageSplit> splits = pkg.getSplits();
-        for (int i = 0; i < splits.size(); i++) {
-            if (splits.get(i).getPath().equals(dexPath)) {
-                return true;
+        for (AndroidPackageSplit split : pkg.getSplits()) {
+            if (split.getPath().equals(dexPath)) {
+                return split.getName() == null ? SUBTYPE_BASE : SUBTYPE_SPLIT;
             }
         }
-        return false;
+        return null;
     }
 
     @GuardedBy("mLock")
@@ -631,9 +673,9 @@ public class DexUseManagerLocal {
                 if (library.getType() == SharedLibraryInfo.TYPE_BUILTIN) {
                     // Shared libraries are considered used by other apps anyway. No need to record
                     // them.
-                    return new FindResult(TYPE_DONT_RECORD, null);
+                    return new FindResult(TYPE_DONT_RECORD, SUBTYPE_UNSPECIFIED, null);
                 }
-                return new FindResult(TYPE_PRIMARY, library.getPackageName());
+                return new FindResult(TYPE_PRIMARY, SUBTYPE_UNSPECIFIED, library.getPackageName());
             }
             FindResult result = checkForSharedLibraries(library.getDependencies(), dexPath);
             if (result != null) {
@@ -659,17 +701,29 @@ public class DexUseManagerLocal {
         return path.substring(0, pos + 1);
     }
 
-    private void addPrimaryDexUse(@NonNull String owningPackageName, @NonNull String dexPath,
+    private void addPrimaryDexUse(@NonNull FindResult findResult, @NonNull String dexPath,
             @NonNull String loadingPackageName, boolean isolatedProcess, long lastUsedAtMs) {
+        var loader = DexLoader.create(loadingPackageName, isolatedProcess);
+
         synchronized (mLock) {
-            PrimaryDexUseRecord record =
-                    mDexUse.mPackageDexUseByOwningPackageName
-                            .computeIfAbsent(owningPackageName, k -> new PackageDexUse())
-                            .mPrimaryDexUseByDexFile
-                            .computeIfAbsent(dexPath, k -> new PrimaryDexUse())
-                            .mRecordByLoader.computeIfAbsent(
-                                    DexLoader.create(loadingPackageName, isolatedProcess),
-                                    k -> new PrimaryDexUseRecord());
+            PackageDexUse packageDexUse = mDexUse.mPackageDexUseByOwningPackageName.computeIfAbsent(
+                    findResult.owningPackageName(), k -> new PackageDexUse());
+
+            // If the base APK is loaded by the owning package, we assume it's a cold app open and
+            // update the package score. We enforce a 5-second cooldown to prevent over-counting on
+            // multi-process apps where multiple loads may trigger simultaneously.
+            if (findResult.subtype() == SUBTYPE_BASE
+                    && !isLoaderOtherApp(loader, findResult.owningPackageName())
+                    && (lastUsedAtMs - packageDexUse.mPackageScoreUpdatedAtMs >= 5000)) {
+                packageDexUse.mPackageScore =
+                        calculateDecayedPackageScoreLocked(packageDexUse, lastUsedAtMs) + 1;
+                packageDexUse.mPackageScoreUpdatedAtMs = lastUsedAtMs;
+            }
+
+            PrimaryDexUseRecord record = packageDexUse.mPrimaryDexUseByDexFile
+                                                 .computeIfAbsent(dexPath, k -> new PrimaryDexUse())
+                                                 .mRecordByLoader.computeIfAbsent(
+                                                         loader, k -> new PrimaryDexUseRecord());
             record.mLastUsedAtMs = lastUsedAtMs;
             mRevision++;
         }
@@ -1142,7 +1196,25 @@ public class DexUseManagerLocal {
          */
         @NonNull Map<String, SecondaryDexUse> mSecondaryDexUseByDexFile = new HashMap<>();
 
+        /**
+         * A score representing the user's usage (frequency and recency) for this package.
+         *
+         * The value is calculated as a decaying sum of base APK loads:
+         * {@code sum(0.5 ^ ((ref_time_ms - open_time_ms) / half_life_ms))}
+         *
+         * Where:
+         * - {@code ref_time_ms} is the last update timestamp ({@link #mPackageScoreUpdatedAtMs}),
+         * - {@code open_time_ms} is the timestamp when a base APK was loaded,
+         * - {@code half_life_ms} is the decay rate constant ({@link #PACKAGE_SCORE_HALF_LIFE_MS}).
+         */
+        double mPackageScore = 0;
+
+        /** The timestamp of the last update to {@link #mPackageScore}. */
+        long mPackageScoreUpdatedAtMs = 0;
+
         void toProto(@NonNull PackageDexUseProto.Builder builder) {
+            builder.setPackageScore(mPackageScore);
+            builder.setPackageScoreUpdatedAtMs(mPackageScoreUpdatedAtMs);
             for (var entry : mPrimaryDexUseByDexFile.entrySet()) {
                 var primaryBuilder = PrimaryDexUseProto.newBuilder().setDexFile(entry.getKey());
                 entry.getValue().toProto(primaryBuilder);
@@ -1158,6 +1230,8 @@ public class DexUseManagerLocal {
         void fromProto(@NonNull PackageDexUseProto proto,
                 @NonNull Function<String, String> validateDexPath,
                 @NonNull BiFunction<String, String, String> validateClassLoaderContext) {
+            mPackageScore = proto.getPackageScore();
+            mPackageScoreUpdatedAtMs = proto.getPackageScoreUpdatedAtMs();
             for (PrimaryDexUseProto primaryProto : proto.getPrimaryDexUseList()) {
                 var primaryDexUse = new PrimaryDexUse();
                 primaryDexUse.fromProto(primaryProto);
@@ -1376,6 +1450,13 @@ public class DexUseManagerLocal {
     /** Secondary dex file. */
     private static final int TYPE_SECONDARY = 2;
 
+    /** Not any of the subtypes below. */
+    private static final int SUBTYPE_UNSPECIFIED = 0;
+    /** The base APK split. Only applies to {@link #TYPE_PRIMARY}. */
+    private static final int SUBTYPE_BASE = 1;
+    /** A non-base APK split. Only applies to {@link #TYPE_PRIMARY}. */
+    private static final int SUBTYPE_SPLIT = 2;
+
     /** @hide */
     // clang-format off
     @IntDef(prefix = "TYPE_", value = {
@@ -1387,7 +1468,19 @@ public class DexUseManagerLocal {
     @Retention(RetentionPolicy.SOURCE)
     private @interface DexType {}
 
-    private record FindResult(@DexType int type, @Nullable String owningPackageName) {}
+    /** @hide */
+    // clang-format off
+    @IntDef(prefix = "SUBTYPE_", value = {
+        SUBTYPE_UNSPECIFIED,
+        SUBTYPE_BASE,
+        SUBTYPE_SPLIT,
+    })
+    // clang-format on
+    @Retention(RetentionPolicy.SOURCE)
+    private @interface DexSubtype {}
+
+    private record FindResult(
+            @DexType int type, @DexSubtype int subtype, @Nullable String owningPackageName) {}
 
     /**
      * Injector pattern for testing purpose.

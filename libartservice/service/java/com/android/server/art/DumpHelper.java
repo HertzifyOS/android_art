@@ -24,9 +24,11 @@ import android.annotation.NonNull;
 import android.os.Build;
 import android.os.RemoteException;
 import android.os.ServiceSpecificException;
+import android.util.Pair;
 
 import androidx.annotation.RequiresApi;
 
+import com.android.art.rw.flags.Flags;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.LocalManagerRegistry;
 import com.android.server.pm.PackageManagerLocal;
@@ -72,7 +74,14 @@ public class DumpHelper {
                 .stream()
                 .sorted(Comparator.comparing(PackageState::getPackageName))
                 .forEach(pkgState -> dumpPackage(pw, snapshot, pkgState));
-        pw.printf("\nCurrent GC: %s\n", ArtJni.getGarbageCollector());
+        var ipw = new IndentingPrintWriter(pw);
+        if (Flags.hybridPreRebootDexopt()) {
+            ipw.printf("\nPackage Usage Scores:\n");
+            ipw.increaseIndent();
+            dumpPackageScores(ipw, snapshot);
+            ipw.decreaseIndent();
+        }
+        ipw.printf("\nCurrent GC: %s\n", ArtJni.getGarbageCollector());
     }
 
     /**
@@ -218,6 +227,24 @@ public class DumpHelper {
         }
     }
 
+    private void dumpPackageScores(@NonNull IndentingPrintWriter ipw,
+            @NonNull PackageManagerLocal.FilteredSnapshot snapshot) {
+        long now = mInjector.getCurrentTimeMillis();
+        ipw.printf("Current Time (ms): %d\n", now);
+        snapshot.getPackageStates()
+                .values()
+                .stream()
+                .filter(pkgState -> !pkgState.isApex() && pkgState.getAndroidPackage() != null)
+                .map(pkgState
+                        -> Pair.create(pkgState.getPackageName(),
+                                mInjector.getDexUseManager().calculateDecayedPackageScore(
+                                        pkgState.getPackageName(), now)))
+                .sorted(Comparator.<Pair<String, Double>>comparingDouble(pair -> pair.second)
+                                .reversed()
+                                .thenComparing(Comparator.comparing(pair -> pair.first)))
+                .forEach(pair -> ipw.printf("%s - %.4f\n", pair.first, pair.second));
+    }
+
     @NonNull
     private String getLoaderState(
             @NonNull PackageManagerLocal.FilteredSnapshot snapshot, @NonNull DexLoader loader) {
@@ -252,6 +279,10 @@ public class DumpHelper {
         @NonNull
         public DexUseManagerLocal getDexUseManager() {
             return GlobalInjector.getInstance().getDexUseManager();
+        }
+
+        public long getCurrentTimeMillis() {
+            return System.currentTimeMillis();
         }
     }
 }

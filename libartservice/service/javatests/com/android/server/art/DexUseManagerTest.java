@@ -18,6 +18,7 @@ package com.android.server.art;
 
 import static com.android.server.art.DexUseManagerLocal.CheckedSecondaryDexInfo;
 import static com.android.server.art.DexUseManagerLocal.DexLoader;
+import static com.android.server.art.DexUseManagerLocal.PACKAGE_SCORE_HALF_LIFE_MS;
 import static com.android.server.art.DexUseManagerLocal.SecondaryDexInfo;
 import static com.android.server.art.testing.TestDataHelper.newPackageState;
 import static com.android.server.art.testing.TestDataHelper.newSplit;
@@ -68,6 +69,7 @@ import org.mockito.Mock;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -182,7 +184,7 @@ public class DexUseManagerTest {
                 .thenReturn(mUnfilteredSnapshot);
 
         lenient().when(mInjector.getArtd()).thenReturn(mArtd);
-        lenient().when(mInjector.getCurrentTimeMillis()).thenReturn(0l);
+        lenient().when(mInjector.getCurrentTimeMillis()).thenReturn(0L);
         lenient().when(mInjector.getFilename()).thenReturn(mTempFile.getPath());
         lenient()
                 .when(mInjector.createScheduledExecutor())
@@ -343,7 +345,8 @@ public class DexUseManagerTest {
 
     private void verifyPrimaryDexMultipleEntries(
             boolean saveAndLoad, boolean shutdown, boolean cleanup) throws Exception {
-        when(mInjector.getCurrentTimeMillis()).thenReturn(1000l);
+        long now = System.currentTimeMillis();
+        when(mInjector.getCurrentTimeMillis()).thenReturn(now - 2000L);
 
         lenient()
                 .when(mArtd.getDexFileVisibility(BASE_APK))
@@ -372,7 +375,7 @@ public class DexUseManagerTest {
         when(mInjector.isIsolatedUid(anyInt())).thenReturn(true);
         mDexUseManager.notifyDexContainersLoaded(
                 mSnapshot, OWNING_PKG_NAME, Map.of(BASE_APK, "CLC"));
-        when(mInjector.getCurrentTimeMillis()).thenReturn(2000l);
+        when(mInjector.getCurrentTimeMillis()).thenReturn(now - 1000L);
         mDexUseManager.notifyDexContainersLoaded(
                 mSnapshot, OWNING_PKG_NAME, Map.of(BASE_APK, "CLC"));
 
@@ -399,7 +402,11 @@ public class DexUseManagerTest {
         assertThat(mDexUseManager.getPrimaryDexLoaders(OWNING_PKG_NAME, SPLIT_APK))
                 .containsExactly(DexLoader.create(OWNING_PKG_NAME, false /* isolatedProcess */));
 
-        assertThat(mDexUseManager.getPackageLastUsedAtMillis(OWNING_PKG_NAME)).isEqualTo(2000l);
+        assertThat(mDexUseManager.getPackageLastUsedAtMillis(OWNING_PKG_NAME))
+                .isEqualTo(now - 1000L);
+
+        assertThat(mDexUseManager.calculateDecayedPackageScore(OWNING_PKG_NAME, now))
+                .isGreaterThan(0D);
     }
 
     @Test
@@ -484,7 +491,7 @@ public class DexUseManagerTest {
 
     @Test
     public void testSecondaryDexNativeAbiSetChange() {
-        when(mInjector.getCurrentTimeMillis()).thenReturn(1000l);
+        when(mInjector.getCurrentTimeMillis()).thenReturn(1000L);
 
         mDexUseManager.notifyDexContainersLoaded(
                 mSnapshot, OWNING_PKG_NAME, Map.of(mCeDir + "/foo.apk", "CLC"));
@@ -544,7 +551,7 @@ public class DexUseManagerTest {
 
     private void verifySecondaryDexMultipleEntries(
             boolean saveAndLoad, boolean shutdown, boolean cleanup) throws Exception {
-        when(mInjector.getCurrentTimeMillis()).thenReturn(1000l);
+        when(mInjector.getCurrentTimeMillis()).thenReturn(1000L);
 
         lenient()
                 .when(mArtd.getDexFileVisibility(mCeDir + "/foo.apk"))
@@ -585,7 +592,7 @@ public class DexUseManagerTest {
         when(mInjector.isIsolatedUid(anyInt())).thenReturn(true);
         mDexUseManager.notifyDexContainersLoaded(
                 mSnapshot, OWNING_PKG_NAME, Map.of(mCeDir + "/foo.apk", "CLC"));
-        when(mInjector.getCurrentTimeMillis()).thenReturn(2000l);
+        when(mInjector.getCurrentTimeMillis()).thenReturn(2000L);
         mDexUseManager.notifyDexContainersLoaded(mSnapshot, OWNING_PKG_NAME,
                 Map.of(mCeDir + "/foo.apk", SecondaryDexInfo.UNSUPPORTED_CLASS_LOADER_CONTEXT));
 
@@ -639,7 +646,7 @@ public class DexUseManagerTest {
                         DexContainerFileUseInfo.create(
                                 mCeDir + "/baz.apk", mUserHandle, Set.of(OWNING_PKG_NAME)));
 
-        assertThat(mDexUseManager.getPackageLastUsedAtMillis(OWNING_PKG_NAME)).isEqualTo(2000l);
+        assertThat(mDexUseManager.getPackageLastUsedAtMillis(OWNING_PKG_NAME)).isEqualTo(2000L);
     }
 
     @Test
@@ -883,6 +890,7 @@ public class DexUseManagerTest {
         textproto = textproto.substring(textproto.indexOf('\n') + 1).trim();
         assertThat(textproto).isEqualTo("package_dex_use {\n"
                 + "  owning_package_name: \"com.example.owningpackage\"\n"
+                + "  package_score_updated_at_ms: 0\n"
                 + "  secondary_dex_use {\n"
                 + "    dex_file: \"/data/user/1/com.example.owningpackage/bar.apk\"\n"
                 + "    record {\n"
@@ -1076,6 +1084,57 @@ public class DexUseManagerTest {
         mDexUseManager.notifyDexContainersLoaded(mSnapshot, LOADING_PKG_NAME, clcByDexFile);
         assertThat(mDexUseManager.getSecondaryDexInfo(OWNING_PKG_NAME))
                 .hasSize(MAX_SECONDARY_DEX_FILES_PER_OWNER_FOR_TESTING);
+    }
+
+    @Test
+    public void testPackageScoreSingleOpen() throws Exception {
+        long now = System.currentTimeMillis();
+
+        // Only the base APK load should count into the package score.
+        when(mInjector.getCurrentTimeMillis()).thenReturn(now - 2000);
+        mDexUseManager.notifyDexContainersLoaded(mSnapshot, OWNING_PKG_NAME,
+                Map.of("/somewhere/app/" + OWNING_PKG_NAME + "/base.apk", "CLC"));
+        mDexUseManager.notifyDexContainersLoaded(mSnapshot, OWNING_PKG_NAME,
+                Map.of("/somewhere/app/" + OWNING_PKG_NAME + "/split_0.apk", "CLC"));
+        mDexUseManager.notifyDexContainersLoaded(
+                mSnapshot, OWNING_PKG_NAME, Map.of(mCeDir + "/foo.apk", "CLC"));
+
+        // Base APK loads within the 5-second cooldown period should not count.
+        when(mInjector.getCurrentTimeMillis()).thenReturn(now - 1000);
+        mDexUseManager.notifyDexContainersLoaded(mSnapshot, OWNING_PKG_NAME,
+                Map.of("/somewhere/app/" + OWNING_PKG_NAME + "/base.apk", "CLC"));
+
+        assertThat(
+                mDexUseManager.calculateDecayedPackageScore(OWNING_PKG_NAME, now /* refTimeMs */))
+                .isWithin(1.0e-10)
+                .of(1 * Math.pow(0.5, (double) 2000 / PACKAGE_SCORE_HALF_LIFE_MS)); // 0.9999977078
+    }
+
+    @Test
+    public void testPackageScoreMultipleOpens() throws Exception {
+        long now = System.currentTimeMillis();
+
+        // Simulate that the app was opened 28, 21, 14, 7 days ago.
+        when(mInjector.getCurrentTimeMillis()).thenReturn(now - PACKAGE_SCORE_HALF_LIFE_MS * 4);
+        mDexUseManager.notifyDexContainersLoaded(mSnapshot, OWNING_PKG_NAME,
+                Map.of("/somewhere/app/" + OWNING_PKG_NAME + "/base.apk", "CLC"));
+
+        when(mInjector.getCurrentTimeMillis()).thenReturn(now - PACKAGE_SCORE_HALF_LIFE_MS * 3);
+        mDexUseManager.notifyDexContainersLoaded(mSnapshot, OWNING_PKG_NAME,
+                Map.of("/somewhere/app/" + OWNING_PKG_NAME + "/base.apk", "CLC"));
+
+        when(mInjector.getCurrentTimeMillis()).thenReturn(now - PACKAGE_SCORE_HALF_LIFE_MS * 2);
+        mDexUseManager.notifyDexContainersLoaded(mSnapshot, OWNING_PKG_NAME,
+                Map.of("/somewhere/app/" + OWNING_PKG_NAME + "/base.apk", "CLC"));
+
+        when(mInjector.getCurrentTimeMillis()).thenReturn(now - PACKAGE_SCORE_HALF_LIFE_MS);
+        mDexUseManager.notifyDexContainersLoaded(mSnapshot, OWNING_PKG_NAME,
+                Map.of("/somewhere/app/" + OWNING_PKG_NAME + "/base.apk", "CLC"));
+
+        assertThat(
+                mDexUseManager.calculateDecayedPackageScore(OWNING_PKG_NAME, now /* refTimeMs */))
+                .isWithin(1.0e-10)
+                .of(0.5 + 0.25 + 0.125 + 0.0625);
     }
 
     private PackageStateBuilder newPackageStateWithDefaults(String packageName) {
