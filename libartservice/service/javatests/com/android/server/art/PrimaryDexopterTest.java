@@ -16,11 +16,8 @@
 
 package com.android.server.art;
 
-import static android.platform.test.flag.junit.DeviceFlagsValueProvider.createCheckFlagsRule;
-
 import static com.android.server.art.OutputArtifacts.PermissionSettings;
 import static com.android.server.art.model.DexoptResult.DexContainerFileDexoptResult;
-import static com.android.server.art.testing.TestingUtils.FLAGS_PREFIX;
 import static com.android.server.art.testing.TestingUtils.deepEq;
 
 import static com.google.common.truth.Truth.assertThat;

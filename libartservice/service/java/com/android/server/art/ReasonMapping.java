@@ -31,7 +31,6 @@ import android.text.TextUtils;
 
 import androidx.annotation.RequiresApi;
 
-import com.android.art.flags.Flags;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.art.model.ArtFlags;
 import com.android.server.pm.PackageManagerLocal;
@@ -307,7 +306,6 @@ public class ReasonMapping {
      *
      * @param compilerFilter The string obtained from {@link DexFile.OptimizationInfo#getStatus()}.
      */
-    @FlaggedApi(Flags.FLAG_UPDATABLE_FILTER_AND_REASON)
     public static int getCompilerFilterValueForFrameworkStatsReporting(
             @NonNull String compilerFilter) {
         return switch (compilerFilter) {
@@ -340,7 +338,6 @@ public class ReasonMapping {
      * @param compilationReason The string obtained from {@link
      *     DexFile.OptimizationInfo#getReason()}.
      */
-    @FlaggedApi(Flags.FLAG_UPDATABLE_FILTER_AND_REASON)
     public static int getCompilationReasonValueForFrameworkStatsReporting(
             @NonNull String compilationReason) {
         return switch (compilationReason) {

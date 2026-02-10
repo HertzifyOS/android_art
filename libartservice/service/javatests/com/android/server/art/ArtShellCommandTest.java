@@ -38,9 +38,6 @@ import android.os.CancellationSignal;
 import android.os.Process;
 import android.os.SystemProperties;
 import android.os.UpdateEngine;
-import android.platform.test.annotations.DisableFlags;
-import android.platform.test.annotations.EnableFlags;
-import android.platform.test.flag.junit.SetFlagsRule;
 
 import androidx.test.filters.SmallTest;
 
@@ -73,7 +70,6 @@ public class ArtShellCommandTest {
     @Rule
     public StaticMockitoRule mockitoRule = new StaticMockitoRule(
             SystemProperties.class, BackgroundDexoptJobService.class, ArtJni.class);
-    @Rule public final SetFlagsRule mSetFlagsRule = new SetFlagsRule();
 
     @Mock private BackgroundDexoptJobService mJobService;
     @Mock private PreRebootDriver mPreRebootDriver;
@@ -156,8 +152,8 @@ public class ArtShellCommandTest {
     }
 
     @Test
-    @DisableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testOnOtaStagedSync() throws Exception {
+        when(mPreRebootDexoptJobInjector.isAtLeastB()).thenReturn(false);
         when(mInjector.getCallingUid()).thenReturn(Process.ROOT_UID);
 
         when(mPreRebootDriver.run(eq("_b"), eq(false) /* mapSnapshotsForOta */, any()))
@@ -173,8 +169,8 @@ public class ArtShellCommandTest {
     }
 
     @Test
-    @DisableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testOnOtaStagedSyncFatalError() throws Exception {
+        when(mPreRebootDexoptJobInjector.isAtLeastB()).thenReturn(false);
         when(mInjector.getCallingUid()).thenReturn(Process.ROOT_UID);
 
         when(mPreRebootDriver.run(eq("_b"), eq(false) /* mapSnapshotsForOta */, any()))
@@ -190,8 +186,8 @@ public class ArtShellCommandTest {
     }
 
     @Test
-    @DisableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testOnOtaStagedSyncCancelledByCommand() throws Exception {
+        when(mPreRebootDexoptJobInjector.isAtLeastB()).thenReturn(false);
         when(mInjector.getCallingUid()).thenReturn(Process.ROOT_UID);
 
         when(mPreRebootDriver.run(eq("_b"), eq(false) /* mapSnapshotsForOta */, any()))
@@ -223,8 +219,8 @@ public class ArtShellCommandTest {
     }
 
     @Test
-    @DisableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testOnOtaStagedSyncCancelledByBrokenPipe() throws Exception {
+        when(mPreRebootDexoptJobInjector.isAtLeastB()).thenReturn(false);
         when(mInjector.getCallingUid()).thenReturn(Process.ROOT_UID);
 
         when(mPreRebootDriver.run(eq("_b"), eq(false) /* mapSnapshotsForOta */, any()))
@@ -250,8 +246,8 @@ public class ArtShellCommandTest {
     }
 
     @Test
-    @EnableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testOnOtaStagedAsync() throws Exception {
+        when(mPreRebootDexoptJobInjector.isAtLeastB()).thenReturn(true);
         when(mInjector.getCallingUid()).thenReturn(Process.ROOT_UID);
 
         try (var execution = new CommandExecution(
@@ -277,8 +273,8 @@ public class ArtShellCommandTest {
     }
 
     @Test
-    @EnableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testOnOtaStagedAsyncFatalError() throws Exception {
+        when(mPreRebootDexoptJobInjector.isAtLeastB()).thenReturn(true);
         when(mInjector.getCallingUid()).thenReturn(Process.ROOT_UID);
 
         try (var execution = new CommandExecution(
@@ -304,8 +300,8 @@ public class ArtShellCommandTest {
     }
 
     @Test
-    @EnableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testOnOtaStagedAsyncCancelledByCommand() throws Exception {
+        when(mPreRebootDexoptJobInjector.isAtLeastB()).thenReturn(true);
         when(mInjector.getCallingUid()).thenReturn(Process.ROOT_UID);
 
         try (var execution = new CommandExecution(
@@ -360,8 +356,8 @@ public class ArtShellCommandTest {
     }
 
     @Test
-    @EnableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testOnOtaStagedAsyncCancelledByBrokenPipe() throws Exception {
+        when(mPreRebootDexoptJobInjector.isAtLeastB()).thenReturn(true);
         when(mInjector.getCallingUid()).thenReturn(Process.ROOT_UID);
 
         try (var execution = new CommandExecution(
@@ -410,8 +406,8 @@ public class ArtShellCommandTest {
     }
 
     @Test
-    @EnableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testOnOtaStagedAsyncCancelledByJobScheduler() throws Exception {
+        when(mPreRebootDexoptJobInjector.isAtLeastB()).thenReturn(true);
         when(mInjector.getCallingUid()).thenReturn(Process.ROOT_UID);
 
         try (var execution = new CommandExecution(
@@ -431,8 +427,8 @@ public class ArtShellCommandTest {
     }
 
     @Test
-    @DisableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testOnOtaStagedAsyncLegacy() throws Exception {
+        when(mPreRebootDexoptJobInjector.isAtLeastB()).thenReturn(false);
         when(mInjector.getCallingUid()).thenReturn(Process.ROOT_UID);
 
         when(SystemProperties.getBoolean(eq("dalvik.vm.pr_dexopt_async_for_ota"), anyBoolean()))
@@ -497,8 +493,8 @@ public class ArtShellCommandTest {
     }
 
     @Test
-    @DisableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testPrDexoptJobRunOtaLegacy() throws Exception {
+        when(mPreRebootDexoptJobInjector.isAtLeastB()).thenReturn(false);
         when(mInjector.getCallingUid()).thenReturn(Process.ROOT_UID);
 
         when(mPreRebootDriver.run(eq("_b"), eq(true) /* mapSnapshotsForOta */, any()))
@@ -514,8 +510,8 @@ public class ArtShellCommandTest {
     }
 
     @Test
-    @EnableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testPrDexoptJobRunOta() throws Exception {
+        lenient().when(mPreRebootDexoptJobInjector.isAtLeastB()).thenReturn(true);
         when(mInjector.getCallingUid()).thenReturn(Process.ROOT_UID);
 
         when(mPreRebootDriver.run(eq("_b"), eq(false) /* mapSnapshotsForOta */, any()))
@@ -574,8 +570,8 @@ public class ArtShellCommandTest {
     }
 
     @Test
-    @DisableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testPrDexoptJobScheduleOtaLegacy() throws Exception {
+        when(mPreRebootDexoptJobInjector.isAtLeastB()).thenReturn(false);
         when(mInjector.getCallingUid()).thenReturn(Process.ROOT_UID);
 
         try (var execution = new CommandExecution(
@@ -594,8 +590,8 @@ public class ArtShellCommandTest {
     }
 
     @Test
-    @EnableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testPrDexoptJobScheduleOta() throws Exception {
+        when(mPreRebootDexoptJobInjector.isAtLeastB()).thenReturn(true);
         when(mInjector.getCallingUid()).thenReturn(Process.ROOT_UID);
 
         try (var execution = new CommandExecution(

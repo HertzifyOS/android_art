@@ -16,8 +16,6 @@
 
 package com.android.server.art;
 
-import static com.android.art.rw.flags.Flags.postUrJob;
-
 import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -1014,9 +1012,9 @@ public final class ArtManagerLocal {
                 }
 
                 synchronized (mShouldRunPostUnattendedRebootJobLock) {
-                    mShouldRunPostUnattendedRebootJob = postUrJob()
-                            && Arrays.stream(SystemProperties.get("sys.boot.reason").split(","))
-                                       .anyMatch(s -> s.equals("unattended"));
+                    mShouldRunPostUnattendedRebootJob =
+                            Arrays.stream(SystemProperties.get("sys.boot.reason").split(","))
+                                    .anyMatch(s -> s.equals("unattended"));
                 }
             }
             dexoptPackages(snapshot, bootReason, new CancellationSignal(), progressCallbackExecutor,

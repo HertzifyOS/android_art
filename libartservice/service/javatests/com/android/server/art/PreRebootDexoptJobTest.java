@@ -40,9 +40,6 @@ import android.os.CancellationSignal;
 import android.os.ServiceSpecificException;
 import android.os.SystemProperties;
 import android.os.UpdateEngine;
-import android.platform.test.annotations.DisableFlags;
-import android.platform.test.annotations.EnableFlags;
-import android.platform.test.flag.junit.SetFlagsRule;
 import android.provider.DeviceConfig;
 
 import androidx.test.filters.SmallTest;
@@ -81,7 +78,6 @@ public class PreRebootDexoptJobTest {
     @Rule
     public StaticMockitoRule mockitoRule =
             new StaticMockitoRule(SystemProperties.class, BackgroundDexoptJobService.class);
-    @Rule public final SetFlagsRule mSetFlagsRule = new SetFlagsRule();
 
     @Mock private PreRebootDexoptJob.Injector mInjector;
     @Mock private JobScheduler mJobScheduler;
@@ -302,15 +298,17 @@ public class PreRebootDexoptJobTest {
     }
 
     @Test
-    @EnableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testStartWithUpdateEngineApi() throws Exception {
+        when(mInjector.isAtLeastB()).thenReturn(true);
+
         checkStart("_b" /* otaSlot */, () -> eq(false) /* mapSnapshotsForOtaMatcher */);
         verify(mUpdateEngine).triggerPostinstall("system");
     }
 
     @Test
-    @DisableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testStartWithoutUpdateEngineApi() throws Exception {
+        when(mInjector.isAtLeastB()).thenReturn(false);
+
         checkStart("_b" /* otaSlot */, () -> eq(true) /* mapSnapshotsForOtaMatcher */);
         verify(mUpdateEngine, never()).triggerPostinstall(any());
     }
@@ -322,8 +320,9 @@ public class PreRebootDexoptJobTest {
     }
 
     @Test
-    @EnableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testStartWithUpdateEngineApiSkippedDueToUpdateGone() throws Exception {
+        when(mInjector.isAtLeastB()).thenReturn(true);
+
         final int POSTINTALL_RUNNER_ERROR = 5;
         doThrow(new ServiceSpecificException(POSTINTALL_RUNNER_ERROR,
                         "Postinstall action did not run. OTA update must first reach the "
@@ -344,8 +343,9 @@ public class PreRebootDexoptJobTest {
     }
 
     @Test
-    @EnableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testStartWithUpdateEngineApiFailedDueToUnknownError() throws Exception {
+        when(mInjector.isAtLeastB()).thenReturn(true);
+
         final int POSTINTALL_RUNNER_ERROR = 5;
         doThrow(new ServiceSpecificException(POSTINTALL_RUNNER_ERROR, "Some unknown error"))
                 .when(mUpdateEngine)
@@ -377,15 +377,17 @@ public class PreRebootDexoptJobTest {
     }
 
     @Test
-    @EnableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testSyncStartWithUpdateEngineApi() throws Exception {
+        when(mInjector.isAtLeastB()).thenReturn(true);
+
         checkSyncStart(false /* isUpdateEngineReady */, false /* expectedMapSnapshotsForOta */);
         verify(mUpdateEngine).triggerPostinstall("system");
     }
 
     @Test
-    @DisableFlags({android.os.Flags.FLAG_UPDATE_ENGINE_API})
     public void testSyncStartWithoutUpdateEngineApi() throws Exception {
+        when(mInjector.isAtLeastB()).thenReturn(false);
+
         checkSyncStart(false /* isUpdateEngineReady */, true /* expectedMapSnapshotsForOta */);
         verify(mUpdateEngine, never()).triggerPostinstall(any());
     }

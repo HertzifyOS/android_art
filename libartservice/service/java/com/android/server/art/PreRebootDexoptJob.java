@@ -36,10 +36,12 @@ import android.os.SystemProperties;
 import android.os.UpdateEngine;
 import android.provider.DeviceConfig;
 
+import androidx.annotation.ChecksSdkIntAtLeast;
 import androidx.annotation.RequiresApi;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.modules.utils.build.SdkLevel;
 import com.android.server.art.model.ArtFlags;
 import com.android.server.art.model.ArtFlags.ScheduleStatus;
 import com.android.server.art.model.ArtServiceJobInterface;
@@ -432,12 +434,8 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
         return mRunningJob;
     }
 
-    // The new API usage is safe because it's guarded by a flag. The "NewApi" lint is wrong because
-    // it's meaningless (b/380891026). We can't change the flag check to `isAtLeastB` because we use
-    // `SetFlagsRule` in tests to test the behavior with and without the API support.
-    @SuppressLint("NewApi")
     private void triggerUpdateEnginePostinstallAndWait() throws UpdateEngineException {
-        if (!android.os.Flags.updateEngineApi()) {
+        if (!mInjector.isAtLeastB()) {
             // Should never happen.
             throw new UnsupportedOperationException();
         }
@@ -603,7 +601,7 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
     }
 
     private boolean isAsyncForOta() {
-        if (android.os.Flags.updateEngineApi()) {
+        if (mInjector.isAtLeastB()) {
             return true;
         }
         // Legacy flag in Android V.
@@ -670,7 +668,7 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
         //    sets `dalvik.vm.pr_dexopt_async_for_ota`.
         // 2. The job is running synchronously, initiated by a `pm art pr-dexopt-job --run` command
         //    for local development purposes.
-        return android.os.Flags.updateEngineApi() ? SnapshotMode.UPDATE_ENGINE : SnapshotMode.SELF;
+        return mInjector.isAtLeastB() ? SnapshotMode.UPDATE_ENGINE : SnapshotMode.SELF;
     }
 
     private static class UpdateEngineException extends Exception {
@@ -769,6 +767,11 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
 
         public long getCurrentTimeMillis() {
             return System.currentTimeMillis();
+        }
+
+        @ChecksSdkIntAtLeast(api = 36)
+        public boolean isAtLeastB() {
+            return SdkLevel.isAtLeastB();
         }
     }
 }

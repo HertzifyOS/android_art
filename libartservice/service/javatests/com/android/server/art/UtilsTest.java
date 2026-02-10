@@ -17,10 +17,8 @@
 package com.android.server.art;
 
 import static android.app.ActivityManager.RunningAppProcessInfo;
-import static android.platform.test.flag.junit.DeviceFlagsValueProvider.createCheckFlagsRule;
 
 import static com.android.server.art.testing.TestDataHelper.newPackageState;
-import static com.android.server.art.testing.TestingUtils.FLAGS_PREFIX;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -35,7 +33,6 @@ import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.platform.test.annotations.RequiresFlagsDisabled;
 import android.platform.test.annotations.RequiresFlagsEnabled;
-import android.platform.test.flag.junit.CheckFlagsRule;
 import android.util.SparseArray;
 
 import androidx.test.filters.SmallTest;
@@ -62,8 +59,6 @@ import java.util.concurrent.ForkJoinPool;
 @SmallTest
 @RunWith(AndroidJUnit4.class)
 public class UtilsTest {
-    @Rule public final CheckFlagsRule mCheckFlagsRule = createCheckFlagsRule();
-
     @Rule
     public StaticMockitoRule mockitoRule =
             new StaticMockitoRule(SystemProperties.class, Constants.class);

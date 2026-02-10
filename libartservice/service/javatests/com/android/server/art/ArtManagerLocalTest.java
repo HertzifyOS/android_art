@@ -18,9 +18,7 @@ package com.android.server.art;
 
 import static android.app.ActivityManager.RunningAppProcessInfo;
 import static android.os.ParcelFileDescriptor.AutoCloseInputStream;
-import static android.platform.test.flag.junit.DeviceFlagsValueProvider.createCheckFlagsRule;
 
-import static com.android.art.rw.flags.Flags.FLAG_POST_UR_JOB;
 import static com.android.server.art.DexUseManagerLocal.CheckedSecondaryDexInfo;
 import static com.android.server.art.ProfilePath.PrimaryCurProfilePath;
 import static com.android.server.art.model.DexoptResult.DexContainerFileDexoptResult;
@@ -69,9 +67,6 @@ import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.storage.StorageManager;
-import android.platform.test.annotations.RequiresFlagsDisabled;
-import android.platform.test.annotations.RequiresFlagsEnabled;
-import android.platform.test.flag.junit.CheckFlagsRule;
 import android.system.OsConstants;
 
 import androidx.test.filters.SmallTest;
@@ -142,7 +137,6 @@ public class ArtManagerLocalTest {
     @Rule
     public StaticMockitoRule mockitoRule = new StaticMockitoRule(
             SystemProperties.class, Constants.class, PackageStateModulesUtils.class);
-    @Rule public final CheckFlagsRule mCheckFlagsRule = createCheckFlagsRule();
 
     @Mock private ArtManagerLocal.Injector mInjector;
     @Mock private ArtFileManager.Injector mArtFileManagerInjector;
@@ -1801,7 +1795,6 @@ public class ArtManagerLocalTest {
     }
 
     @Test
-    @RequiresFlagsEnabled(FLAG_POST_UR_JOB)
     public void testPostUrJob() throws Exception {
         when(SystemProperties.get(eq("sys.boot.reason"))).thenReturn("reboot,unattended,ota");
         mArtManagerLocal.onBoot(ReasonMapping.REASON_BOOT_AFTER_OTA,
@@ -1818,7 +1811,6 @@ public class ArtManagerLocalTest {
     }
 
     @Test
-    @RequiresFlagsEnabled(FLAG_POST_UR_JOB)
     public void testPostUrJobBroadcastOrderReversed() throws Exception {
         when(SystemProperties.get(eq("sys.boot.reason"))).thenReturn("reboot,unattended,ota");
         mArtManagerLocal.onBoot(ReasonMapping.REASON_BOOT_AFTER_OTA,
@@ -1836,7 +1828,6 @@ public class ArtManagerLocalTest {
     }
 
     @Test
-    @RequiresFlagsEnabled(FLAG_POST_UR_JOB)
     public void testPostUrJobNotUnattended() throws Exception {
         mArtManagerLocal.onBoot(ReasonMapping.REASON_BOOT_AFTER_OTA,
                 null /* progressCallbackExecutor */, null /* progressCallback */);
@@ -1849,27 +1840,10 @@ public class ArtManagerLocalTest {
     }
 
     @Test
-    @RequiresFlagsEnabled(FLAG_POST_UR_JOB)
     public void testPostUrJobNotBootAfterOtaOrMainline() throws Exception {
         lenient()
                 .when(SystemProperties.get(eq("sys.boot.reason")))
                 .thenReturn("reboot,unattended,ota");
-        mArtManagerLocal.systemReady();
-
-        simulateBroadcast(Intent.ACTION_BOOT_COMPLETED);
-
-        verify(mBackgroundDexoptJob, never())
-                .schedule(BackgroundDexoptJob.JobType.POST_UNATTENDED_REBOOT);
-    }
-
-    @Test
-    @RequiresFlagsDisabled(FLAG_POST_UR_JOB)
-    public void testPostUrJobFlagDisabled() throws Exception {
-        lenient()
-                .when(SystemProperties.get(eq("sys.boot.reason")))
-                .thenReturn("reboot,unattended,ota");
-        mArtManagerLocal.onBoot(ReasonMapping.REASON_BOOT_AFTER_OTA,
-                null /* progressCallbackExecutor */, null /* progressCallback */);
         mArtManagerLocal.systemReady();
 
         simulateBroadcast(Intent.ACTION_BOOT_COMPLETED);
