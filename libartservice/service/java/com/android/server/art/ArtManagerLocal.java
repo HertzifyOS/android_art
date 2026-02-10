@@ -100,7 +100,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -506,8 +505,8 @@ public final class ArtManagerLocal {
             @NonNull PackageManagerLocal.FilteredSnapshot snapshot,
             @NonNull @BatchDexoptReason String reason,
             @NonNull CancellationSignal cancellationSignal) {
-        List<String> defaultPackages =
-                Collections.unmodifiableList(getDefaultPackages(snapshot, reason));
+        List<String> defaultPackages = Collections.unmodifiableList(
+                mInjector.getReasonMapping().getDefaultPackagesForReason(snapshot, reason));
         DexoptParams defaultDexoptParams = new DexoptParams.Builder(reason).build();
         var builder = new BatchDexoptParams.Builder(defaultPackages, defaultDexoptParams);
         Callback<BatchDexoptStartCallback, Void> callback =
@@ -1443,10 +1442,12 @@ public final class ArtManagerLocal {
             @Nullable @CallbackExecutor Executor progressCallbackExecutor,
             @Nullable Consumer<OperationProgress> progressCallback) {
         if (shouldDowngrade()) {
-            List<String> packages = getDefaultPackages(snapshot, ReasonMapping.REASON_INACTIVE)
-                                            .stream()
-                                            .filter(pkg -> !excludedPackages.contains(pkg))
-                                            .toList();
+            List<String> packages =
+                    mInjector.getReasonMapping()
+                            .getDefaultPackagesForReason(snapshot, ReasonMapping.REASON_INACTIVE)
+                            .stream()
+                            .filter(pkg -> !excludedPackages.contains(pkg))
+                            .toList();
             if (!packages.isEmpty()) {
                 AsLog.i("Storage is low. Downgrading " + packages.size() + " inactive packages");
                 DexoptParams params =
@@ -1511,67 +1512,6 @@ public final class ArtManagerLocal {
                 + " packages with reason=" + dexoptParams.getReason() + " (supplementary pass)");
         return mInjector.getDexoptHelper().dexopt(snapshot, packageNames, dexoptParams,
                 cancellationSignal, dexoptExecutor, progressCallbackExecutor, progressCallback);
-    }
-
-    /** Returns the list of packages to process for the given reason. */
-    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-    @NonNull
-    private List<String> getDefaultPackages(@NonNull PackageManagerLocal.FilteredSnapshot snapshot,
-            @NonNull /* @BatchDexoptReason|REASON_INACTIVE */ String reason) {
-        var appHibernationManager = mInjector.getAppHibernationManager();
-
-        // Filter out hibernating packages even if the reason is REASON_INACTIVE. This is because
-        // artifacts for hibernating packages are already deleted.
-        Stream<PackageState> packages = snapshot.getPackageStates().values().stream().filter(
-                pkgState -> Utils.canDexoptPackage(pkgState, appHibernationManager));
-
-        switch (reason) {
-            case ReasonMapping.REASON_BOOT_AFTER_MAINLINE_UPDATE:
-                packages = packages.filter(pkgState
-                        -> mInjector.isSystemUiPackage(pkgState.getPackageName())
-                                || mInjector.isLauncherPackage(pkgState.getPackageName()));
-                break;
-            case ReasonMapping.REASON_INACTIVE:
-                packages = filterAndSortByLastActiveTime(
-                        packages, false /* keepRecent */, false /* descending */);
-                break;
-            case ReasonMapping.REASON_FIRST_BOOT:
-                // Don't filter the default package list and no need to sort
-                // as in some cases the system time can advance during bootup
-                // after package installation and cause filtering to exclude
-                // all packages when pm.dexopt.downgrade_after_inactive_days
-                // is set. See aosp/3237478 for more details.
-                break;
-            default:
-                // Actually, the sorting is only needed for background dexopt, but we do it for all
-                // cases for simplicity.
-                packages = filterAndSortByLastActiveTime(
-                        packages, true /* keepRecent */, true /* descending */);
-        }
-
-        return packages.map(PackageState::getPackageName).toList();
-    }
-
-    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-    @NonNull
-    private Stream<PackageState> filterAndSortByLastActiveTime(
-            @NonNull Stream<PackageState> packages, boolean keepRecent, boolean descending) {
-        // "pm.dexopt.downgrade_after_inactive_days" is repurposed to also determine whether to
-        // dexopt a package.
-        long inactiveMs = TimeUnit.DAYS.toMillis(SystemProperties.getInt(
-                "pm.dexopt.downgrade_after_inactive_days", Integer.MAX_VALUE /* def */));
-        long currentTimeMs = mInjector.getCurrentTimeMillis();
-        long thresholdTimeMs = currentTimeMs - inactiveMs;
-        return packages
-                .map(pkgState
-                        -> Pair.create(pkgState,
-                                Utils.getPackageLastActiveTime(pkgState,
-                                        mInjector.getDexUseManager(), mInjector.getUserManager())))
-                .filter(keepRecent ? (pair -> pair.second > thresholdTimeMs)
-                                   : (pair -> pair.second <= thresholdTimeMs))
-                .sorted(descending ? Comparator.comparingLong(pair -> - pair.second)
-                                   : Comparator.comparingLong(pair -> pair.second))
-                .map(pair -> pair.first);
     }
 
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
@@ -1802,6 +1742,7 @@ public final class ArtManagerLocal {
             getDexUseManager();
             getStorageManager();
             getActivityManager();
+            getReasonMapping();
             GlobalInjector.getInstance().checkArtModuleServiceManager();
 
             // `PreRebootDexoptJob` does not depend on external dependencies, so unlike the calls
@@ -1900,16 +1841,6 @@ public final class ArtManagerLocal {
         }
 
         @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-        public boolean isSystemUiPackage(@NonNull String packageName) {
-            return Utils.isSystemUiPackage(mContext, packageName);
-        }
-
-        @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-        public boolean isLauncherPackage(@NonNull String packageName) {
-            return Utils.isLauncherPackage(mContext, packageName);
-        }
-
-        @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
         public long getCurrentTimeMillis() {
             return System.currentTimeMillis();
         }
@@ -1954,6 +1885,11 @@ public final class ArtManagerLocal {
         @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
         public void kill(int pid, int signal) throws ErrnoException {
             Os.kill(pid, signal);
+        }
+
+        @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+        public ReasonMapping getReasonMapping() {
+            return new ReasonMapping(mContext);
         }
     }
 }
