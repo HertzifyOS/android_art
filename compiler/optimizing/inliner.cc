@@ -51,6 +51,21 @@
 
 namespace art HIDDEN {
 
+// Instruction limit to control memory.
+static constexpr size_t kMaximumNumberOfTotalInstructions = 1024;
+
+// Maximum number of instructions for considering a method small,
+// which we will always try to inline if the other non-instruction limits
+// are not reached.
+static constexpr size_t kMaximumNumberOfInstructionsForSmallMethod = 3;
+
+// Limit the number of dex registers that we accumulate while inlining
+// to avoid creating large amount of nested environments.
+static constexpr size_t kMaximumNumberOfCumulatedDexRegisters = 32;
+
+// Limit recursive call inlining, which do not benefit from too
+// much inlining compared to code locality.
+static constexpr size_t kMaximumNumberOfRecursiveCalls = 4;
 
 // Limit recursive polymorphic call inlining to prevent code bloat, since it can quickly get out of
 // hand in the presence of multiple Wrapper classes. We set this to 0 to disallow polymorphic
@@ -76,17 +91,6 @@ static constexpr bool kInlineTryCatches = true;
 #define LOG_FAIL(stats_ptr, stat) MaybeRecordStat(stats_ptr, stat); LOG_INTERNAL("Fail: ")
 #define LOG_FAIL_NO_STAT() LOG_INTERNAL("Fail: ")
 
-void HInliner::InitializeInlinerOptions() {
-  maximum_number_of_total_instructions_ =
-      codegen_->GetCompilerOptions().GetInlineMaximumNumberOfTotalInstructions();
-  maximum_number_of_instructions_for_small_method_ =
-      codegen_->GetCompilerOptions().GetInlineMaximumNumberOfInstructionsForSmallMethod();
-  maximum_number_of_cumulated_dex_registers_ =
-      codegen_->GetCompilerOptions().GetInlineMaximumNumberOfCumulatedDexRegisters();
-  maximum_number_of_recursive_calls_ =
-      codegen_->GetCompilerOptions().GetInlineMaximumNumberOfRecursiveCalls();
-}
-
 std::string HInliner::DepthString(int line) const {
   std::string value;
   // Indent according to the inlining depth.
@@ -110,13 +114,13 @@ std::string HInliner::DepthString(int line) const {
 }
 
 void HInliner::UpdateInliningBudget() {
-  if (total_number_of_instructions_ >= maximum_number_of_total_instructions_) {
+  if (total_number_of_instructions_ >= kMaximumNumberOfTotalInstructions) {
     // Always try to inline small methods.
-    inlining_budget_ = maximum_number_of_instructions_for_small_method_;
+    inlining_budget_ = kMaximumNumberOfInstructionsForSmallMethod;
   } else {
     inlining_budget_ = std::max(
-        maximum_number_of_instructions_for_small_method_,
-        maximum_number_of_total_instructions_ - total_number_of_instructions_);
+        kMaximumNumberOfInstructionsForSmallMethod,
+        kMaximumNumberOfTotalInstructions - total_number_of_instructions_);
   }
 }
 
@@ -407,7 +411,7 @@ static bool IsMethodVerified(ArtMethod* method)
   return false;
 }
 
-static bool AlwaysThrows(ArtMethod* method, const size_t maximum_number_of_total_instructions)
+static bool AlwaysThrows(ArtMethod* method)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   DCHECK(method != nullptr);
   // Skip non-compilable and unverified methods.
@@ -424,7 +428,7 @@ static bool AlwaysThrows(ArtMethod* method, const size_t maximum_number_of_total
   CodeItemDataAccessor accessor(method->DexInstructionData());
   if (!accessor.HasCodeItem() ||
       accessor.TriesSize() != 0 ||
-      accessor.InsnsSizeInCodeUnits() > maximum_number_of_total_instructions) {
+      accessor.InsnsSizeInCodeUnits() > kMaximumNumberOfTotalInstructions) {
     return false;
   }
   // Scan for exits.
@@ -534,8 +538,7 @@ bool HInliner::TryInline(HInvoke* invoke_instruction) {
         invoke_to_analyze = invoke_instruction;
       }
       // Set always throws property for non-inlined method call with single target.
-      if (invoke_instruction->AlwaysThrows() || AlwaysThrows(actual_method,
-          codegen_->GetCompilerOptions().GetInlineMaximumNumberOfTotalInstructions())) {
+      if (invoke_instruction->AlwaysThrows() || AlwaysThrows(actual_method)) {
         invoke_to_analyze->SetAlwaysThrows(/* always_throws= */ true);
         graph_->SetHasAlwaysThrowingInvokes(/* value= */ true);
       }
@@ -1549,7 +1552,7 @@ bool HInliner::IsInliningSupported(const HInvoke* invoke_instruction,
 bool HInliner::IsInliningEncouraged(const HInvoke* invoke_instruction,
                                     ArtMethod* method,
                                     const CodeItemDataAccessor& accessor) const {
-  if (CountRecursiveCallsOf(method) > maximum_number_of_recursive_calls_) {
+  if (CountRecursiveCallsOf(method) > kMaximumNumberOfRecursiveCalls) {
     LOG_FAIL(stats_, MethodCompilationStat::kNotInlinedRecursiveBudget)
         << "Method "
         << method->PrettyMethod()
@@ -1583,7 +1586,7 @@ bool HInliner::IsInliningEncouraged(const HInvoke* invoke_instruction,
     return false;
   }
 
-  if (total_number_of_dex_registers_ > maximum_number_of_cumulated_dex_registers_) {
+  if (total_number_of_dex_registers_ > kMaximumNumberOfCumulatedDexRegisters) {
     // Heuristic: Skip building the callee graph for large environments, as we will likely discard
     // it later.
     LOG_FAIL(stats_, MethodCompilationStat::kNotInlinedEnvironmentBudget)
