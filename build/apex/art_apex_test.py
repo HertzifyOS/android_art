@@ -608,6 +608,8 @@ class TestingChecker:
     self._checker.check_art_test_executable('art_runtime_tests')
     self._checker.check_art_test_executable('art_sigchain_tests')
 
+    self._checker.check_native_library('libstatspull')
+
     # Some libraries are in odd location (libarttest(d) and libtiagent(d)).
     # We intend to remove the whole testing apex, so just ignore those for now.
     self._checker.ignore_path('lib*/com.android.art')
