@@ -2956,15 +2956,11 @@ static bool MatchStringBuilderConstructor(HInvokeStaticOrDirect* invoke,
       return false;
     }
 
-    // Look through a potential null check to find the actual String source for args.
-    if (arg->IsNullCheck()) {
-      arg = arg->InputAt(0);
-    }
-
     // Check if the argument is a string.
     bool is_string = arg->IsLoadString();
     if (!is_string) {
       ReferenceTypeInfo rti = arg->GetReferenceTypeInfo();
+      // Ensure NullChecks are accepted if they return a String type
       is_string = rti.IsValid() && rti.IsStringClass();
     }
 

@@ -26,11 +26,7 @@ public class Main {
         try {
             retValue =
                     Class.forName("B440704096").getDeclaredMethod("appendSomething").invoke(null);
-            if (!"I am a string 12345".equals(retValue)) {
-              throw new Error(
-                  "Expected 'I am a string 12345' or InvocationTargetException, but got "
-                  + retValue);
-            }
+            throw new Error("InvocationTargetException expected");
         } catch (InvocationTargetException expected) {
         }
     }
