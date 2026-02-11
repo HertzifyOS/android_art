@@ -79,6 +79,18 @@ class CompilerOptions final {
   // We set a lower inlining threshold for baseline to reduce code size and compilation time. This
   // cannot be changed via flags.
   static constexpr size_t kBaselineInlineMaxCodeUnits = 14;
+  // Instruction limit to control memory.
+  static constexpr size_t kInlineMaximumNumberOfTotalInstructions = 1024;
+  // Maximum number of instructions for considering a method small,
+  // which we will always try to inline if the other non-instruction limits
+  // are not reached.
+  static constexpr size_t kInlineMaximumNumberOfInstructionsForSmallMethod = 3;
+  // Limit the number of dex registers that we accumulate while inlining
+  // to avoid creating large amount of nested environments.
+  static constexpr size_t kInlineMaximumNumberOfCumulatedDexRegisters = 32;
+  // Limit recursive call inlining, which do not benefit from too
+  // much inlining compared to code locality.
+  static constexpr size_t kInlineMaximumNumberOfRecursiveCalls = 4;
 
   enum class CompilerType : uint8_t {
     kAotCompiler,             // AOT compiler.
@@ -138,6 +150,9 @@ class CompilerOptions final {
   size_t GetHugeMethodThreshold() const {
     return huge_method_threshold_;
   }
+  void SetHugeMethodThreshold(size_t threshold) {
+    huge_method_threshold_ = threshold;
+  }
 
   bool IsHugeMethod(size_t num_dalvik_instructions) const {
     return num_dalvik_instructions > huge_method_threshold_;
@@ -148,6 +163,34 @@ class CompilerOptions final {
   }
   void SetInlineMaxCodeUnits(size_t units) {
     inline_max_code_units_ = units;
+  }
+
+  size_t GetInlineMaximumNumberOfTotalInstructions() const {
+    return inline_max_total_instructions_;
+  }
+  void SetInlineMaximumNumberOfTotalInstructions(size_t instructions) {
+    inline_max_total_instructions_ = instructions;
+  }
+
+  size_t GetInlineMaximumNumberOfInstructionsForSmallMethod() const {
+    return inline_max_instructions_for_small_method_;
+  }
+  void SetInlineMaximumNumberOfInstructionsForSmallMethod(size_t instructions) {
+    inline_max_instructions_for_small_method_ = instructions;
+  }
+
+  size_t GetInlineMaximumNumberOfCumulatedDexRegisters() const {
+    return inline_max_cumulated_dex_registers_;
+  }
+  void SetInlineMaximumNumberOfCumulatedDexRegisters(size_t registers) {
+    inline_max_cumulated_dex_registers_ = registers;
+  }
+
+  size_t GetInlineMaximumNumberOfRecursiveCalls() const {
+    return inline_max_recursive_calls_;
+  }
+  void SetInlineMaximumNumberOfRecursiveCalls(size_t calls) {
+    inline_max_recursive_calls_ = calls;
   }
 
   bool EmitReadBarrier() const {
@@ -408,6 +451,10 @@ class CompilerOptions final {
   CompilerFilter::Filter compiler_filter_;
   size_t huge_method_threshold_;
   size_t inline_max_code_units_;
+  size_t inline_max_total_instructions_;
+  size_t inline_max_instructions_for_small_method_;
+  size_t inline_max_cumulated_dex_registers_;
+  size_t inline_max_recursive_calls_;
 
   InstructionSet instruction_set_;
   std::unique_ptr<const InstructionSetFeatures> instruction_set_features_;
