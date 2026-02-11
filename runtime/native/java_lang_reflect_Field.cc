@@ -349,9 +349,10 @@ static bool IsUnmodifiable(ObjPtr<mirror::Field> field) REQUIRES_SHARED(Locks::m
 
 ALWAYS_INLINE inline static bool ThrowIAEIfFieldIsNotOverwritable(ObjPtr<mirror::Field> field)
     REQUIRES_SHARED(Locks::mutator_lock_) {
+  ArtField* art_field = field->GetArtField();
   // Write-protected fields can be modified via System.setIn/setOut/setErr methods only.
   // However, before Android C, reflection and JNI APIs were allowed to modify them.
-  if (field->GetArtField()->IsWriteProtected()) {
+  if (art_field->IsWriteProtected()) {
     // See `ArtField::IsUnmodifiable()`.
     uint32_t target_sdk_version = Runtime::Current()->GetTargetSdkVersion();
     if (IsSdkVersionSetAndAtMost(target_sdk_version, SdkVersion::kB)) {
@@ -367,8 +368,8 @@ ALWAYS_INLINE inline static bool ThrowIAEIfFieldIsNotOverwritable(ObjPtr<mirror:
   }
   ThrowIllegalAccessException(
       StringPrintf("Cannot set %s field %s of class %s",
-          PrettyJavaAccessFlags(field->GetAccessFlags()).c_str(),
-          ArtField::PrettyField(field->GetArtField()).c_str(),
+          PrettyJavaAccessFlags(art_field->GetAccessFlags()).c_str(),
+          ArtField::PrettyField(art_field).c_str(),
           field->GetDeclaringClass()->PrettyClass().c_str()).c_str());
   return true;
 }
