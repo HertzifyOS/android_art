@@ -19,11 +19,6 @@
 
 #include "class.h"
 
-#include <fcntl.h>
-#include <unistd.h>
-
-#include <mutex>  // For once_flag
-
 #include "art_field.h"
 #include "art_method.h"
 #include "base/array_slice.h"
@@ -620,47 +615,7 @@ inline uint32_t Class::GetReferenceInstanceOffsets() {
 }
 
 inline void Class::SetClinitThreadId(pid_t new_clinit_thread_id) {
-  if (kIsDebugBuild) {
-    static std::once_flag of;
-    auto check_unused_bits = []() {
-      // Check that no tid value can use the bits in kTidUnusedBitsMask.  "man proc_sys_kernel"
-      // promises this anyway. We're a bit paranoid, but not enough to check in user builds, or to
-      // check more than once. The DCHECK_EQ below arguably doesn't suffice, because it could only
-      // fail for long-running devices.
-      int fd = open("/proc/sys/kernel/pid_max", O_RDONLY);
-      if (fd == -1 && errno == EACCES) {
-        LOG(WARNING) << "Cannot read pid_max";
-        return;
-      }
-      CHECK_NE(fd, -1) << strerror(errno);
-      constexpr int64_t kPidMaxLen = 20;
-      char buf[kPidMaxLen + 1];
-      ssize_t res = read(fd, buf, kPidMaxLen);
-      CHECK_GT(res, 2);
-      buf[res] = '\0';
-      uint32_t pid_max = atoi(buf);
-      CHECK_GE(pid_max, 1024u);                          // Just another sanity check.
-      CHECK_EQ((pid_max - 1) & kTidUnusedBitsMask, 0u);  // The real check.
-    };
-    std::call_once(of, check_unused_bits);
-  }
-  DCHECK_EQ(uint32_t(new_clinit_thread_id) & kTidUnusedBitsMask, 0u);
-  // A relaxed store should be OK here, since we should be holding the class monitor.
-  // Concurrent accesses to the descriptor hash will either retrieve a valid value,
-  // or will fail without effect.
-  SetField32Transaction(ClinitThreadIdOffset(), new_clinit_thread_id);
-}
-
-inline pid_t Class::GetClinitThreadId() REQUIRES_SHARED(Locks::mutator_lock_) {
-  DCHECK(IsIdxLoaded() || IsErroneous()) << PrettyClass();
-  uint32_t raw = GetField32Volatile(ClinitThreadIdOffset());
-  if ((raw & kTidUnusedBitsMask) != 0) {
-    // Slot is used to store descriptor hash.
-    DCHECK_NE(GetStatus(), ClassStatus::kInitializing);
-    return 0;
-  }
-  // Class was not yet initialized when we read `raw`. Thus the thread id is valid.
-  return raw;
+  SetField32Transaction(OFFSET_OF_OBJECT_MEMBER(Class, clinit_thread_id_), new_clinit_thread_id);
 }
 
 template<VerifyObjectFlags kVerifyFlags,
@@ -924,42 +879,32 @@ inline bool Class::DescriptorEquals(std::string_view match) {
 }
 
 inline uint32_t Class::DescriptorHash() {
-  uint32_t raw_cached_hash = clinit_thread_id_or_hash_.load(std::memory_order_relaxed);
-
-  // An actual descriptor hash that has too many high 1-bits, will cause us to recompute each time.
-  if ((raw_cached_hash & kTidUnusedBitsMask) != 0) {
-    uint32_t cached_hash = ~raw_cached_hash;
-    DCHECK_EQ(cached_hash, ComputeDescriptorHash());
-    return cached_hash;
+  // No read barriers needed, we're reading a chain of constant references for comparison with null
+  // and retrieval of constant primitive data. See `ReadBarrierOption` and `Class::GetDescriptor()`.
+  ObjPtr<mirror::Class> klass = this;
+  uint32_t hash = StartModifiedUtf8Hash();
+  while (klass->IsArrayClass()) {
+    klass = klass->GetComponentType<kDefaultVerifyFlags, kWithoutReadBarrier>();
+    hash = UpdateModifiedUtf8Hash(hash, '[');
   }
-  uint32_t result = ComputeDescriptorHash();
-  if (raw_cached_hash == 0 /* field unused */
-      && (result & kTidUnusedBitsMask) != kTidUnusedBitsMask /* can safely be stored */) {
-    // Be careful never to overwrite a thread id.
-    uint32_t expected = 0;
-    clinit_thread_id_or_hash_.compare_exchange_weak(expected, ~result);
-  }
-  return result;
-}
-
-inline void Class::CacheDescriptorHash(uint32_t hash) {
-  if (hash == 0) {
-    // Allowed, but not required, when the hash value cannot be safely cached.
-    DCHECK_EQ(ComputeDescriptorHash() & kTidUnusedBitsMask, kTidUnusedBitsMask);
+  if (UNLIKELY(klass->IsProxyClass())) {
+    hash = UpdateHashForProxyClass(hash, klass);
+  } else if (klass->IsPrimitive()) {
+    hash = UpdateModifiedUtf8Hash(hash, Primitive::Descriptor(klass->GetPrimitiveType())[0]);
   } else {
-    DCHECK_EQ(hash, ComputeDescriptorHash());
+    const DexFile& dex_file = klass->GetDexFile();
+    const dex::TypeId& type_id = dex_file.GetTypeId(klass->GetDexTypeIndex());
+    std::string_view descriptor = dex_file.GetTypeDescriptorView(type_id);
+    hash = UpdateModifiedUtf8Hash(hash, descriptor);
   }
-  uint32_t stored_hash;
-  if ((hash & kTidUnusedBitsMask) != kTidUnusedBitsMask) {
-    stored_hash = ~hash;
-  } else {
-    // Unsafe to store, since it would look like a tid. Recompute every time.
-    stored_hash = 0;
-  }
-  SetField32Transaction(ClinitThreadIdOffset(), stored_hash);
-}
 
-inline void Class::CacheDescriptorHash() { CacheDescriptorHash(ComputeDescriptorHash()); }
+  if (kIsDebugBuild) {
+    std::string temp;
+    CHECK_EQ(hash, ComputeModifiedUtf8Hash(GetDescriptor(&temp)));
+  }
+
+  return hash;
+}
 
 inline void Class::AssertInitializedOrInitializingInThread(Thread* self) {
   if (kIsDebugBuild && !IsInitialized()) {
@@ -1467,37 +1412,6 @@ ALWAYS_INLINE FLATTEN inline ArtMethod* Class::FindDeclaredClassMethodFast(
     }
   }
   return nullptr;
-}
-
-inline void Class::FixThreadId(Class* class_for_descr) {
-  if (!IsInitialized()) {
-    if (kIsDebugBuild) {
-      ClassStatus s = GetStatus();
-      if (s != ClassStatus::kVerified && s != ClassStatus::kRetryVerificationAtRuntime &&
-          s != ClassStatus::kVerifiedNeedsAccessChecks) {
-        LOG(FATAL_WITHOUT_ABORT) << "Unexpected status " << s
-                                 << " when clearing tid: " << GetClinitThreadId();
-        std::string storage;
-        LOG(FATAL) << "\tfor class: " << class_for_descr->GetDescriptor(&storage);
-        return;
-      }
-    }
-    // This should not be called in the middle of initialization. And once the class is initialized,
-    // the field should contain a hash code. Thus we should not have to do anything here. However
-    // it may help to set the hash code, so we don't have to touch it later, even if the class is
-    // never initialized.
-    uint32_t raw_cached_hash = clinit_thread_id_or_hash_.load(std::memory_order_relaxed);
-    if (raw_cached_hash == 0) {
-      uint32_t hash = class_for_descr->ComputeDescriptorHash();
-      if ((hash & kTidUnusedBitsMask) != kTidUnusedBitsMask /* can safely be stored */) {
-        clinit_thread_id_or_hash_.store(~hash, std::memory_order_relaxed);
-      }
-    } else {
-      // Should be cached descriptor hash, NOT a thread id.
-      DCHECK_NE(raw_cached_hash & kTidUnusedBitsMask, 0u)
-          << " hash = " << raw_cached_hash << " status = " << GetStatus();
-    }
-  }  // O.w. clinit_thread_id_or_hash_ already contains descriptor hash code or, rarely, zero.
 }
 
 }  // namespace mirror

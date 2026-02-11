@@ -410,8 +410,7 @@ void ClassLinker::VisiblyInitializedCallbackDone(Thread* self,
 }
 
 void ClassLinker::ForceClassInitialized(Thread* self, Handle<mirror::Class> klass) {
-  ClassLinker::VisiblyInitializedCallback* cb =
-      MarkClassInitialized(self, klass, klass->DescriptorHash());
+  ClassLinker::VisiblyInitializedCallback* cb = MarkClassInitialized(self, klass);
   if (cb != nullptr) {
     cb->MakeVisible(self);
   }
@@ -436,33 +435,23 @@ const void* ClassLinker::FindBootJniStub(JniStubKey key) {
   }
 }
 
-// Set class to initialized state, and cache the descriptor hash while the class is presumably
-// paged in.
-static inline void SetInitialized(Handle<mirror::Class> klass,
-                                  ClassStatus initializedStatus,
-                                  uint32_t hash,
-                                  Thread* self) REQUIRES_SHARED(art::Locks::mutator_lock_) {
-  klass->CacheDescriptorHash(hash);
-  mirror::Class::SetStatus(klass, initializedStatus, self);
-}
-
 ClassLinker::VisiblyInitializedCallback* ClassLinker::MarkClassInitialized(
-    Thread* self, Handle<mirror::Class> klass, uint32_t hash) {
+    Thread* self, Handle<mirror::Class> klass) {
   if (kRuntimeISA == InstructionSet::kX86 || kRuntimeISA == InstructionSet::kX86_64) {
     // Thanks to the x86 memory model, we do not need any memory fences and
     // we can immediately mark the class as visibly initialized.
-    SetInitialized(klass, ClassStatus::kVisiblyInitialized, hash, self);
+    mirror::Class::SetStatus(klass, ClassStatus::kVisiblyInitialized, self);
     FixupStaticTrampolines(self, klass.Get());
     return nullptr;
   }
   if (Runtime::Current()->IsActiveTransaction()) {
     // Transactions are single-threaded, so we can mark the class as visibly intialized.
     // (Otherwise we'd need to track the callback's entry in the transaction for rollback.)
-    SetInitialized(klass, ClassStatus::kVisiblyInitialized, hash, self);
+    mirror::Class::SetStatus(klass, ClassStatus::kVisiblyInitialized, self);
     FixupStaticTrampolines(self, klass.Get());
     return nullptr;
   }
-  SetInitialized(klass, ClassStatus::kInitialized, hash, self);
+  mirror::Class::SetStatus(klass, ClassStatus::kInitialized, self);
   MutexLock lock(self, visibly_initialized_callback_lock_);
   if (visibly_initialized_callback_ == nullptr) {
     visibly_initialized_callback_.reset(new VisiblyInitializedCallback(this));
@@ -3608,8 +3597,9 @@ ObjPtr<mirror::Class> ClassLinker::DefineClass(Thread* self,
   }
 
   ObjectLock<mirror::Class> lock(self, klass);
+  klass->SetClinitThreadId(self->GetTid());
+  // Make sure we have a valid empty iftable even if there are errors.
   klass->SetIfTable(GetClassRoot<mirror::Object>(this)->GetIfTable());
-  klass->CacheDescriptorHash(hash);  // Temporarily; overwritten by ClInitThreadId below.
 
   // Add the newly loaded class to the loaded classes table.
   ObjPtr<mirror::Class> existing = InsertClass(sv_descriptor, klass.Get(), hash);
@@ -3636,17 +3626,13 @@ ObjPtr<mirror::Class> ClassLinker::DefineClass(Thread* self,
 
   // Finish loading (if necessary) by finding parents
   CHECK(!klass->IsLoaded());
-  // Temporarily use ClinitThreadId to find cycles in inheritance graph.
-  klass->SetClinitThreadId(self->GetTid());
   if (!LoadSuperAndInterfaces(klass, *new_dex_file)) {
     // Loading failed.
     if (!klass->IsErroneous()) {
       mirror::Class::SetStatus(klass, ClassStatus::kErrorUnresolved, self);
     }
-    klass->SetClinitThreadId(0);
     return sdc.Finish(nullptr);
   }
-  klass->CacheDescriptorHash(hash);  // Overwriting ClinitThreadId. Overwritten again during init.
   CHECK(klass->IsLoaded());
 
   // At this point the class is loaded. Publish a ClassLoad event.
@@ -5771,7 +5757,7 @@ ObjPtr<mirror::Class> ClassLinker::CreateProxyClass(ScopedObjectAccessAlreadyRun
     // Lock on klass is released. Lock new class object.
     ObjectLock<mirror::Class> initialization_lock(self, klass);
     // Conservatively go through the ClassStatus::kInitialized state.
-    callback = MarkClassInitialized(self, klass, hash);
+    callback = MarkClassInitialized(self, klass);
   }
   if (callback != nullptr) {
     callback->MakeVisible(self);
@@ -5953,7 +5939,6 @@ bool ClassLinker::InitializeClass(Thread* self,
   self->AllowThreadSuspension();
   Runtime* const runtime = Runtime::Current();
   const bool stats_enabled = runtime->HasStatsEnabled();
-  uint32_t hash;
   uint64_t t0;
   {
     ObjectLock<mirror::Class> lock(self, klass);
@@ -6053,7 +6038,6 @@ bool ClassLinker::InitializeClass(Thread* self,
     CHECK_EQ(klass->GetStatus(), ClassStatus::kVerified) << klass->PrettyClass()
         << " self.tid=" << self->GetTid() << " clinit.tid=" << klass->GetClinitThreadId();
 
-    hash = klass->DescriptorHash();  // Usually cached at this point.
     // From here out other threads may observe that we're initializing and so changes of state
     // require the a notification.
     klass->SetClinitThreadId(self->GetTid());
@@ -6230,7 +6214,7 @@ bool ClassLinker::InitializeClass(Thread* self,
         thread_stats->class_init_time_ns += (t1 - t0 - t_sub);
       }
       // Set the class as initialized except if failed to initialize static fields.
-      callback = MarkClassInitialized(self, klass, hash);
+      callback = MarkClassInitialized(self, klass);
       if (VLOG_IS_ON(class_linker)) {
         std::string temp;
         LOG(INFO) << "Initialized class " << klass->GetDescriptor(&temp) << " from " <<

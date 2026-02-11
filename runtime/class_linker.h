@@ -1018,9 +1018,7 @@ class ClassLinker {
   };
 
   void VisiblyInitializedCallbackDone(Thread* self, VisiblyInitializedCallback* callback);
-  VisiblyInitializedCallback* MarkClassInitialized(Thread* self,
-                                                   Handle<mirror::Class> klass,
-                                                   uint32_t hash)
+  VisiblyInitializedCallback* MarkClassInitialized(Thread* self, Handle<mirror::Class> klass)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   // Ensures that the supertype of 'klass' ('supertype') is verified. Returns false and throws

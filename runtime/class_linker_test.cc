@@ -577,7 +577,7 @@ struct ClassOffsets : public CheckOffsets<mirror::Class> {
     addOffset(OFFSETOF_MEMBER(mirror::Class, class_flags_), "classFlags");
     addOffset(OFFSETOF_MEMBER(mirror::Class, class_loader_), "classLoader");
     addOffset(OFFSETOF_MEMBER(mirror::Class, class_size_), "classSize");
-    addOffset(OFFSETOF_MEMBER(mirror::Class, clinit_thread_id_or_hash_), "clinitThreadIdOrHash");
+    addOffset(OFFSETOF_MEMBER(mirror::Class, clinit_thread_id_), "clinitThreadId");
     addOffset(OFFSETOF_MEMBER(mirror::Class, component_type_), "componentType");
     addOffset(OFFSETOF_MEMBER(mirror::Class, dex_cache_), "dexCache");
     addOffset(OFFSETOF_MEMBER(mirror::Class, dex_class_def_idx_), "dexClassDefIndex");
