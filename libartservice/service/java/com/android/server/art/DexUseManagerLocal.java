@@ -16,6 +16,8 @@
 
 package com.android.server.art;
 
+import static android.app.privatecompute.flags.Flags.enablePccFrameworkSupport;
+
 import android.annotation.CurrentTimeMillisLong;
 import android.annotation.FlaggedApi;
 import android.annotation.IntDef;
@@ -432,7 +434,8 @@ public class DexUseManagerLocal {
 
         // TODO(jiakaiz): Investigate whether it should also be considered as isolated process if
         // `Process.isSdkSandboxUid` returns true.
-        boolean isolatedProcess = mInjector.isIsolatedUid(mInjector.getCallingUid());
+        boolean isolatedProcess = mInjector.isIsolatedUid(mInjector.getCallingUid())
+                || mInjector.isPrivateComputeCoreUid(mInjector.getCallingUid());
         long lastUsedAtMs = mInjector.getCurrentTimeMillis();
 
         for (var entry : classLoaderContextByDexContainerFile.entrySet()) {
@@ -1461,6 +1464,12 @@ public class DexUseManagerLocal {
 
         public boolean isIsolatedUid(int uid) {
             return Process.isIsolatedUid(uid);
+        }
+
+        // TODO(b/380891026): Lint bug
+        @SuppressLint("NewApi")
+        public boolean isPrivateComputeCoreUid(int uid) {
+            return enablePccFrameworkSupport() && Process.isPrivateComputeCoreUid(uid);
         }
 
         public int getMaxSecondaryDexFilesPerOwner() {

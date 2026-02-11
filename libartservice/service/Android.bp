@@ -102,6 +102,7 @@ java_defaults {
         "sdk_module-lib_current_framework-connectivity",
     ],
     static_libs: [
+        "android.app.privatecompute.flags-aconfig-java-export",
         "android.content.pm.flags-aconfig-java-export",
         "android.os.flags-aconfig-java-export",
         "art-aconfig-rw-flags-java-lib",

@@ -282,8 +282,8 @@ art_gtest_eng_only_module_names = [
     "libnativeloader_e2e_tests",
 ]
 
-art_eng_only_module_names = [
-    "ArtTest",
+art_test_module_names = [
+    "art-test-target",
 ]
 
 # All supported ART gtests.
@@ -752,7 +752,7 @@ class Generator:
           # genrule from the test that the symlink is pointing to instead of the symlink itself.
           link_target = os.readlink(in_file)
           basename = os.path.basename(in_file)
-          match = re.fullmatch('\.\./([a-zA-Z0-9_-]+)/' + re.escape(basename), link_target)
+          match = re.fullmatch(r'\.\./([a-zA-Z0-9_-]+)/' + re.escape(basename), link_target)
           if not match:
             sys.exit(f"Error: expected symlink to be '../something/{basename}', got {link_target}")
           f.write(textwrap.dedent(f"""\
@@ -1008,6 +1008,7 @@ class Generator:
 
     # ART run-tests shard(s).
     art_run_test_module_names = [ART_RUN_TEST_MODULE_NAME_PREFIX + t for t in art_run_tests]
+    art_run_test_module_names += art_test_module_names
     art_run_test_shards = split_list(art_run_test_module_names, NUM_MTS_ART_RUN_TEST_SHARDS)
     for i in range(len(art_run_test_shards)):
       art_tests_shard_i_tests = art_run_test_shards[i]
@@ -1059,7 +1060,7 @@ class Generator:
     # well with `MtsTestShard` at the moment).
     eng_only_test_list_file = os.path.join(self.mts_config_dir, ENG_ONLY_TEST_LIST_NAME + ".xml")
     gen_mts_test_list_file(
-        art_gtest_eng_only_module_names + art_eng_only_module_names, eng_only_test_list_file,
+        art_gtest_eng_only_module_names + art_test_module_names, eng_only_test_list_file,
         copyright_year = 2020,
         configuration_description = "List of ART MTS tests that need root access.",
         tests_description = "ART gtests")

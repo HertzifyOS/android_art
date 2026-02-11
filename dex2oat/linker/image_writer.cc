@@ -3424,8 +3424,9 @@ void ImageWriter::FixupClass(mirror::Class* orig, mirror::Class* copy) {
     SubtypeCheck<mirror::Class*>::ForceUninitialize(copy);
   }
 
-  // Remove the clinitThreadId. This is required for image determinism.
-  copy->SetClinitThreadId(static_cast<pid_t>(0));
+  // A tid in clinit_thread_id_or_hash_ would violate image determinism.
+  copy->FixThreadId(orig);
+
   // We never emit kRetryVerificationAtRuntime, instead we mark the class as
   // resolved and the class will therefore be re-verified at runtime.
   if (orig->ShouldVerifyAtRuntime()) {

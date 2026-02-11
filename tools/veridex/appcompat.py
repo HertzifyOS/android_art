@@ -43,8 +43,17 @@ def get_resource_path(resource_name, mode=0o644):
         return local_path
 
     data = pkgutil.get_data(__name__, resource_name)
+    if data is None:
+        raise FileNotFoundError(f"Resource not found in package: {resource_name}")
+
     if not data:
-        raise FileNotFoundError(f"Resource not found: {resource_name}")
+        msg = f"Resource '{resource_name}' is empty."
+        if resource_name == "hiddenapi-flags.csv" or resource_name == "hiddenapi-flagged-apis.csv":
+            msg += (" This usually happens in 'eng' builds where hidden API checks "
+                    "are disabled by default. Please rebuild with "
+                    "'ENABLE_HIDDENAPI_FLAGS=true m appcompat'.")
+        raise RuntimeError(msg)
+
     with tempfile.NamedTemporaryFile(delete=False) as temp_file:
         temp_file.write(data)
         resource_path = temp_file.name

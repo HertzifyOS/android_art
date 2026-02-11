@@ -195,6 +195,7 @@ public class DexUseManagerTest {
         lenient().when(mInjector.getCallingUserHandle()).thenReturn(mUserHandle);
         lenient().when(mInjector.getCallingUid()).thenReturn(110001);
         lenient().when(mInjector.isIsolatedUid(anyInt())).thenReturn(false);
+        lenient().when(mInjector.isPrivateComputeCoreUid(anyInt())).thenReturn(false);
         lenient()
                 .when(mInjector.getMaxSecondaryDexFilesPerOwner())
                 .thenReturn(MAX_SECONDARY_DEX_FILES_PER_OWNER_FOR_TESTING);
@@ -230,6 +231,46 @@ public class DexUseManagerTest {
         assertThat(mDexUseManager.getPrimaryDexLoaders(OWNING_PKG_NAME, SPLIT_APK)).isEmpty();
         assertThat(mDexUseManager.isPrimaryDexUsedByOtherApps(OWNING_PKG_NAME, SPLIT_APK))
                 .isFalse();
+    }
+
+    @Test
+    public void testPrimaryDexPrivateCompute() {
+        // Simulate a standard UID (not isolated) but recognized as Private Compute Core
+        when(mInjector.isIsolatedUid(anyInt())).thenReturn(false);
+        when(mInjector.isPrivateComputeCoreUid(anyInt())).thenReturn(true);
+
+        mDexUseManager.notifyDexContainersLoaded(
+                mSnapshot, OWNING_PKG_NAME, Map.of(BASE_APK, "CLC"));
+
+        // Assert that the loader is recorded with isolatedProcess = true
+        assertThat(mDexUseManager.getPrimaryDexLoaders(OWNING_PKG_NAME, BASE_APK))
+                .containsExactly(DexLoader.create(OWNING_PKG_NAME, true /* isolatedProcess */));
+
+        // Assert that this counts as "Used by other apps" (which triggers specific compilation
+        // behaviors)
+        assertThat(mDexUseManager.isPrimaryDexUsedByOtherApps(OWNING_PKG_NAME, BASE_APK)).isTrue();
+    }
+
+    @Test
+    public void testSecondaryDexPrivateCompute() {
+        // Simulate a standard UID (not isolated) but recognized as Private Compute Core
+        when(mInjector.isIsolatedUid(anyInt())).thenReturn(false);
+        when(mInjector.isPrivateComputeCoreUid(anyInt())).thenReturn(true);
+
+        mDexUseManager.notifyDexContainersLoaded(
+                mSnapshot, OWNING_PKG_NAME, Map.of(mDeDir + "/foo.apk", "CLC"));
+
+        List<? extends SecondaryDexInfo> dexInfoList =
+                mDexUseManager.getSecondaryDexInfo(OWNING_PKG_NAME);
+
+        // Assert that the loader is recorded with isolatedProcess = true
+        assertThat(dexInfoList)
+                .containsExactly(CheckedSecondaryDexInfo.create(mDeDir + "/foo.apk", mUserHandle,
+                        "CLC", Set.of("arm64-v8a"),
+                        Set.of(DexLoader.create(OWNING_PKG_NAME, true /* isolatedProcess */)),
+                        true /* isUsedByOtherApps */, FileVisibility.OTHER_READABLE));
+
+        assertThat(dexInfoList.get(0).classLoaderContext()).isEqualTo("CLC");
     }
 
     @Test

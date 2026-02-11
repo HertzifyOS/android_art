@@ -42,7 +42,7 @@ TEST_F(InstructionSimplifierX86Test, AddToLea32WithDisp) {
     for (bool lhs_shift : {false, true}) {
       for (int32_t disp : kLea32TestDisplacements) {
         TestAddToLeaSimplification(
-            expect, LeaBaseOption::kNoBase, DataType::Type::kInt32, shift, lhs_shift, disp);
+            expect, LeaBaseOption::kDisp, DataType::Type::kInt32, shift, lhs_shift, disp);
       }
     }
   }
@@ -57,8 +57,35 @@ TEST_F(InstructionSimplifierX86Test, AddToLea64WithDisp) {
       for (int64_t disp : kLea64TestDisplacements) {
         LeaExpect expect = LeaExpect::kNoLea;  // No 64-bit LEA on 32-bit x86.
         TestAddToLeaSimplification(
-            expect, LeaBaseOption::kNoBase, DataType::Type::kInt64, shift, lhs_shift, disp);
+            expect, LeaBaseOption::kDisp, DataType::Type::kInt64, shift, lhs_shift, disp);
       }
+    }
+  }
+}
+
+TEST_F(InstructionSimplifierX86Test, AddToLea32WithBase) {
+  if (!com::android::art::flags::x86_lea_optimizations()) {
+    GTEST_SKIP() << "x86 LEA optimizations disabled.";
+  }
+  for (uint32_t shift : kLea32TestShifts) {
+    bool expect_lea = (0u < shift && shift < 4u);
+    LeaExpect expect = expect_lea ? LeaExpect::kLeaWithBase : LeaExpect::kNoLea;
+    for (bool lhs_shift : {false, true}) {
+      TestAddToLeaSimplification(
+          expect, LeaBaseOption::kBase, DataType::Type::kInt32, shift, lhs_shift, /*disp=*/ 0);
+    }
+  }
+}
+
+TEST_F(InstructionSimplifierX86Test, AddToLea64WithBase) {
+  if (!com::android::art::flags::x86_lea_optimizations()) {
+    GTEST_SKIP() << "x86 LEA optimizations disabled.";
+  }
+  for (uint32_t shift : kLea64TestShifts) {
+    for (bool lhs_shift : {false, true}) {
+        LeaExpect expect = LeaExpect::kNoLea;  // No 64-bit LEA on 32-bit x86.
+      TestAddToLeaSimplification(
+          expect, LeaBaseOption::kBase, DataType::Type::kInt64, shift, lhs_shift, /*disp=*/ 0);
     }
   }
 }
@@ -68,12 +95,13 @@ TEST_F(InstructionSimplifierX86Test, AddToLea32WithBaseAndDisp) {
     GTEST_SKIP() << "x86 LEA optimizations disabled.";
   }
   for (uint32_t shift : kLea32TestShifts) {
-    bool expect_lea = (0u < shift && shift < 4u);
-    for (LeaBaseOption base_opt : kLeaBaseOptionsWithBase) {
-      LeaExpect expect = expect_lea
-          ? (base_opt == LeaBaseOption::kDispMinusBase ? LeaExpect::kLeaWithBase
-                                                       : LeaExpect::kLeaWithBaseAndDisp)
-          : LeaExpect::kNoLea;
+    for (LeaBaseOption base_opt : kLeaBaseOptionsWithBaseAndDisp) {
+      // Except for `kDispMinusBase`, all expressions can be simplified with a split base and
+      // displacement. For `kDispMinusBase`, the simplification is done only for shifts by 1 to 3.
+      bool expect_lea_with_base_and_disp = (base_opt != LeaBaseOption::kDispMinusBase);
+      LeaExpect expect = expect_lea_with_base_and_disp
+          ? LeaExpect::kLeaWithBaseAndDisp
+          : ((0u < shift && shift < 4u) ? LeaExpect::kLeaWithBase : LeaExpect::kNoLea);
       for (bool lhs_shift : {false, true}) {
         for (int32_t disp : kLea32TestDisplacements) {
           TestAddToLeaSimplification(
@@ -89,7 +117,7 @@ TEST_F(InstructionSimplifierX86Test, AddToLea64WithBaseAndDisp) {
     GTEST_SKIP() << "x86 LEA optimizations disabled.";
   }
   for (uint32_t shift : kLea64TestShifts) {
-    for (LeaBaseOption base_opt : kLeaBaseOptionsWithBase) {
+    for (LeaBaseOption base_opt : kLeaBaseOptionsWithBaseAndDisp) {
       for (bool lhs_shift : {false, true}) {
         for (int64_t disp : kLea64TestDisplacements) {
           LeaExpect expect = LeaExpect::kNoLea;  // No 64-bit LEA on 32-bit x86.
@@ -111,7 +139,7 @@ TEST_F(InstructionSimplifierX86Test, SubToLea32WithDisp) {
       LeaExpect expect = expect_lea ? LeaExpect::kLeaWithDisp : LeaExpect::kNoLea;
       for (int32_t disp : kLea32TestDisplacements) {
         TestSubToLeaSimplification(
-            expect, LeaBaseOption::kNoBase, DataType::Type::kInt32, shift, lhs_shift, disp);
+            expect, LeaBaseOption::kDisp, DataType::Type::kInt32, shift, lhs_shift, disp);
       }
     }
   }
@@ -126,8 +154,34 @@ TEST_F(InstructionSimplifierX86Test, SubToLea64WithDisp) {
       for (int64_t disp : kLea64TestDisplacements) {
         LeaExpect expect = LeaExpect::kNoLea;  // No 64-bit LEA on 32-bit x86.
         TestSubToLeaSimplification(
-            expect, LeaBaseOption::kNoBase, DataType::Type::kInt64, shift, lhs_shift, disp);
+            expect, LeaBaseOption::kDisp, DataType::Type::kInt64, shift, lhs_shift, disp);
       }
+    }
+  }
+}
+
+TEST_F(InstructionSimplifierX86Test, SubToLea32WithBase) {
+  if (!com::android::art::flags::x86_lea_optimizations()) {
+    GTEST_SKIP() << "x86 LEA optimizations disabled.";
+  }
+  for (uint32_t shift : kLea32TestShifts) {
+    for (bool lhs_shift : {false, true}) {
+      LeaExpect expect = LeaExpect::kNoLea;  // No simplification for `(a << s) - b`.
+      TestSubToLeaSimplification(
+          expect, LeaBaseOption::kBase, DataType::Type::kInt32, shift, lhs_shift, /*disp=*/ 0);
+    }
+  }
+}
+
+TEST_F(InstructionSimplifierX86Test, SubToLea64WithBase) {
+  if (!com::android::art::flags::x86_lea_optimizations()) {
+    GTEST_SKIP() << "x86 LEA optimizations disabled.";
+  }
+  for (uint32_t shift : kLea64TestShifts) {
+    for (bool lhs_shift : {false, true}) {
+      LeaExpect expect = LeaExpect::kNoLea;  // No 64-bit LEA on 32-bit x86.
+      TestSubToLeaSimplification(
+          expect, LeaBaseOption::kBase, DataType::Type::kInt64, shift, lhs_shift, /*disp=*/ 0);
     }
   }
 }
@@ -137,7 +191,7 @@ TEST_F(InstructionSimplifierX86Test, SubToLea32WithBaseAndDisp) {
     GTEST_SKIP() << "x86 LEA optimizations disabled.";
   }
   for (uint32_t shift : kLea32TestShifts) {
-    for (LeaBaseOption base_opt : kLeaBaseOptionsWithBase) {
+    for (LeaBaseOption base_opt : kLeaBaseOptionsWithBaseAndDisp) {
       for (bool lhs_shift : {false, true}) {
         for (int32_t disp : kLea32TestDisplacements) {
           TestSubToLeaSimplification(
@@ -153,11 +207,47 @@ TEST_F(InstructionSimplifierX86Test, SubToLea64WithBaseAndDisp) {
     GTEST_SKIP() << "x86 LEA optimizations disabled.";
   }
   for (uint32_t shift : kLea64TestShifts) {
-    for (LeaBaseOption base_opt : kLeaBaseOptionsWithBase) {
+    for (LeaBaseOption base_opt : kLeaBaseOptionsWithBaseAndDisp) {
       for (bool lhs_shift : {false, true}) {
         for (int64_t disp : kLea64TestDisplacements) {
           TestSubToLeaSimplification(
               LeaExpect::kNoLea, base_opt, DataType::Type::kInt64, shift, lhs_shift, disp);
+        }
+      }
+    }
+  }
+}
+
+TEST_F(InstructionSimplifierX86Test, AddAdd_AddSub_SubAdd_ToLea32) {
+  if (!com::android::art::flags::x86_lea_optimizations()) {
+    GTEST_SKIP() << "x86 LEA optimizations disabled.";
+  }
+  for (int32_t disp : kLea32TestDisplacements) {
+    for (LeaSubPosition sub_pos : kLeaSubPositions) {
+      for (bool inbinop_is_left : {false, true}) {
+        for (LeaDispPosition disp_pos : kLeaDispPositions) {
+          // From `Sub` cases, only those with constant on the right in the `HSub` are simplified.
+          bool expression_ok = HasNoSubOrSubWithConstRhs(sub_pos, inbinop_is_left, disp_pos);
+          LeaExpect expect = expression_ok ? LeaExpect::kLeaWithBaseAndDisp : LeaExpect::kNoLea;
+          Test_AddAdd_AddSub_SubAdd_ToLeaSimplification(
+              expect, DataType::Type::kInt32, sub_pos, inbinop_is_left, disp_pos, disp);
+        }
+      }
+    }
+  }
+}
+
+TEST_F(InstructionSimplifierX86Test, AddAdd_AddSub_SubAdd_ToLea64) {
+  if (!com::android::art::flags::x86_lea_optimizations()) {
+    GTEST_SKIP() << "x86 LEA optimizations disabled.";
+  }
+  for (int64_t disp : kLea64TestDisplacements) {
+    for (LeaSubPosition sub_pos : kLeaSubPositions) {
+      for (bool inbinop_is_left : {false, true}) {
+        for (LeaDispPosition disp_pos : kLeaDispPositions) {
+          LeaExpect expect = LeaExpect::kNoLea;  // No 64-bit LEA on 32-bit x86.
+          Test_AddAdd_AddSub_SubAdd_ToLeaSimplification(
+              expect, DataType::Type::kInt64, sub_pos, inbinop_is_left, disp_pos, disp);
         }
       }
     }
