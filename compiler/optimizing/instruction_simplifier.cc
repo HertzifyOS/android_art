@@ -53,6 +53,9 @@ class InstructionSimplifierVisitor final : public CRTPGraphVisitor<InstructionSi
 
   bool Run();
 
+  bool CanUseKnownImageVarHandle(HInvoke* invoke);
+  static bool CanEnsureNotNullAt(HInstruction* input, HInstruction* at);
+
  private:
   void RecordSimplification() {
     simplification_occurred_ = true;
@@ -171,9 +174,6 @@ class InstructionSimplifierVisitor final : public CRTPGraphVisitor<InstructionSi
   void SimplifyVarHandleIntrinsic(HInvoke* invoke);
   void SimplifyArrayBaseOffset(HInvoke* invoke);
   void SimplifyClassIsAssignableFrom(HInvoke* invoke);
-
-  bool CanUseKnownImageVarHandle(HInvoke* invoke);
-  static bool CanEnsureNotNullAt(HInstruction* input, HInstruction* at);
 
   // Returns an instruction with the opposite Boolean value from 'cond'.
   // The instruction is inserted into the graph, either in the entry block
@@ -2933,6 +2933,58 @@ static bool NoEscapeForStringBufferReference(HInstruction* reference, HInstructi
   return false;
 }
 
+static bool MatchStringBuilderConstructor(HInvokeStaticOrDirect* invoke,
+                                          HInstruction* sb,
+                                          uint32_t* format,
+                                          uint32_t* num_args,
+                                          HInstruction** args) {
+  ScopedObjectAccess soa(Thread::Current());
+  if (invoke->GetResolvedMethod()->GetDeclaringClass() !=
+      sb->GetReferenceTypeInfo().GetTypeHandle().Get()) {
+    return false;
+  }
+
+  if (invoke->GetNumberOfArguments() == 1u) {
+    return true;
+  } else if (invoke->GetNumberOfArguments() == 2u) {
+    HInstruction* arg = invoke->InputAt(1);
+    if (arg->GetType() == DataType::Type::kInt32) {
+      return true;
+    }
+    if (arg->GetType() != DataType::Type::kReference ||
+        !InstructionSimplifierVisitor::CanEnsureNotNullAt(arg, invoke)) {
+      return false;
+    }
+
+    // Look through a potential null check to find the actual String source for args.
+    if (arg->IsNullCheck()) {
+      arg = arg->InputAt(0);
+    }
+
+    // Check if the argument is a string.
+    bool is_string = arg->IsLoadString();
+    if (!is_string) {
+      ReferenceTypeInfo rti = arg->GetReferenceTypeInfo();
+      is_string = rti.IsValid() && rti.IsStringClass();
+    }
+
+    if (is_string) {
+      // If we are already at the maximum number of arguments, adding the
+      // constructor argument would overflow.
+      if (*num_args == StringBuilderAppend::kMaxArgs) {
+        return false;
+      }
+
+      *format = (*format << StringBuilderAppend::kBitsPerArg) |
+               static_cast<uint32_t>(StringBuilderAppend::Argument::kString);
+      args[*num_args] = arg;
+      ++(*num_args);
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool TryReplaceStringBuilderAppend(CodeGenerator* codegen, HInvoke* invoke) {
   DCHECK_EQ(invoke->GetIntrinsic(), Intrinsics::kStringBuilderToString);
   if (invoke->CanThrowIntoCatchBlock()) {
@@ -2990,13 +3042,17 @@ static bool TryReplaceStringBuilderAppend(CodeGenerator* codegen, HInvoke* invok
     // Pattern match seeing arguments, then constructor, then constructor fence.
     if (user->IsInvokeStaticOrDirect() &&
         user->AsInvokeStaticOrDirect()->GetResolvedMethod() != nullptr &&
-        user->AsInvokeStaticOrDirect()->GetResolvedMethod()->IsConstructor() &&
-        user->AsInvokeStaticOrDirect()->GetNumberOfArguments() == 1u) {
+        user->AsInvokeStaticOrDirect()->GetResolvedMethod()->IsConstructor()) {
       // After arguments, we should see the constructor.
-      // We accept only the constructor with no extra arguments.
+      // We accept the constructor with no extra arguments or with a single String argument.
       DCHECK(!seen_constructor);
       DCHECK(!seen_constructor_fence);
-      seen_constructor = true;
+      if (MatchStringBuilderConstructor(
+              user->AsInvokeStaticOrDirect(), sb, &format, &num_args, args)) {
+        seen_constructor = true;
+      } else {
+        return false;
+      }
     } else if (user->IsInvoke()) {
       // The arguments.
       HInvoke* as_invoke = user->AsInvoke();
@@ -3124,6 +3180,7 @@ static bool TryReplaceStringBuilderAppend(CodeGenerator* codegen, HInvoke* invok
   DCHECK(!invoke->CanBeNull());
   DCHECK(!append->CanBeNull());
   invoke->ReplaceWith(append);
+
   // Copy environment, except for the StringBuilder uses.
   for (HEnvironment* env = invoke->GetEnvironment(); env != nullptr; env = env->GetParent()) {
     for (size_t i = 0, size = env->Size(); i != size; ++i) {
@@ -3133,6 +3190,7 @@ static bool TryReplaceStringBuilderAppend(CodeGenerator* codegen, HInvoke* invok
       }
     }
   }
+
   append->CopyEnvironmentFrom(invoke->GetEnvironment());
   // Remove the old instruction.
   block->RemoveInstruction(invoke);

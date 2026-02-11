@@ -1139,7 +1139,8 @@
           "2299-checker-reducible-and-irreducible-loop-opt",
           "2397-array-verification-edge-cases",
           "2398-checkexacttype-methodhandles",
-          "2400-setstaticfield-uninitialized"
+          "2400-setstaticfield-uninitialized",
+          "2404-checker-string-concat"
         ],
         "variant": "jvm",
         "bug": "b/73888836",
