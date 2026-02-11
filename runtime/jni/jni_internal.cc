@@ -36,6 +36,7 @@
 #include "class_linker-inl.h"
 #include "class_root-inl.h"
 #include "dex/dex_file-inl.h"
+#include "dex/modifiers.h"
 #include "dex/primitive.h"
 #include "dex/utf-inl.h"
 #include "fault_handler.h"
@@ -1610,19 +1611,38 @@ class JNI {
     f->SetObject<false>(o, v);
   }
 
-  static void SetStaticObjectField(JNIEnv* env, jclass, jfieldID fid, jobject java_value) {
-    CHECK_NON_NULL_ARGUMENT_RETURN_VOID(fid);
-    ScopedObjectAccess soa(env);
-    ArtField* f = jni::DecodeArtField<kEnableIndexIds>(fid);
+  static void EnsureModifiable(ArtField* f) REQUIRES_SHARED(Locks::mutator_lock_) {
     // Android Studio needs to be able to overwrite newly introduced fields in class redefinition
     // process.
     if (IsUnmodifiable(f)) {
       if (!Runtime::Current()->IsJavaDebuggableAtInit()) {
-        LOG(FATAL) << "Can't overwrite value of " << f->PrettyField();
-      } else if (!f->GetObject(f->GetDeclaringClass()).IsNull()) {
-        LOG(FATAL) << "Can't overwrite value of already initialized " << f->PrettyField();
+        LOG(FATAL) << "Cannot set "
+                   << PrettyJavaAccessFlags(f->GetAccessFlags())
+                   << " field "
+                   << ArtField::PrettyField(f)
+                   << " of class "
+                   << f->GetDeclaringClass()->PrettyClass();
+      } else {
+        bool is_prim = f->IsPrimitiveType();
+        bool is_ref = !is_prim;
+        if ((is_ref && !f->GetObject(f->GetDeclaringClass()).IsNull()) ||
+            (is_prim && !IsZero(f))) {
+          LOG(FATAL) << "Cannot set value of already initialized "
+                     << PrettyJavaAccessFlags(f->GetAccessFlags())
+                     << " field "
+                     << ArtField::PrettyField(f)
+                     << " of class "
+                     << f->GetDeclaringClass()->PrettyClass();
+        }
       }
     }
+  }
+
+  static void SetStaticObjectField(JNIEnv* env, jclass, jfieldID fid, jobject java_value) {
+    CHECK_NON_NULL_ARGUMENT_RETURN_VOID(fid);
+    ScopedObjectAccess soa(env);
+    ArtField* f = jni::DecodeArtField<kEnableIndexIds>(fid);
+    EnsureModifiable(f);
     NotifySetObjectField(f, nullptr, java_value);
     ObjPtr<mirror::Object> v = soa.Decode<mirror::Object>(java_value);
     f->SetObject<false>(f->GetDeclaringClass(), v);
@@ -1686,15 +1706,7 @@ class JNI {
   CHECK_NON_NULL_ARGUMENT_RETURN_VOID(fid); \
   ScopedObjectAccess soa(env); \
   ArtField* f = jni::DecodeArtField<kEnableIndexIds>(fid); \
-  /* Android Studio needs to be able to overwrite newly introduced fields in class redefinition */ \
-  /* process. */ \
-  if (IsUnmodifiable(f)) { \
-    if (!Runtime::Current()->IsJavaDebuggableAtInit()) { \
-      LOG(FATAL) << "Can't overwrite value of " << f->PrettyField(); \
-    } else if (!IsZero(f)) { \
-      LOG(FATAL) << "Can't overwrite value of already initialized " << f->PrettyField(); \
-    } \
-  } \
+  EnsureModifiable(f); \
   NotifySetPrimitiveField(f, nullptr, JValue::FromPrimitive<decltype(value)>(value)); \
   f->Set ##fn <false>(f->GetDeclaringClass(), value)
 
