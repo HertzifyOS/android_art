@@ -82,8 +82,8 @@ public class Main {
             throw new Error("testStringArgumentNullChecked should have thrown NPE");
         } catch (java.lang.reflect.InvocationTargetException e) {
             if (!(e.getCause() instanceof NullPointerException)) {
-              throw new Error(
-                  "testStringArgumentNullChecked threw wrong exception: " + e.getCause());
+                throw new Error(
+                        "testStringArgumentNullChecked threw wrong exception: " + e.getCause());
             }
         }
 
@@ -125,7 +125,7 @@ public class Main {
 
         // Case 9: StringBuilder(CharSequence) constructor
         Method mConstStringAsCharSequenceConstructor =
-            c.getMethod("testConstStringAsCharSequenceConstructor", String.class);
+                c.getMethod("testConstStringAsCharSequenceConstructor", String.class);
         String resultConstStringAsCharSequenceConstructor =
                 (String) mConstStringAsCharSequenceConstructor.invoke(null, "World");
         if (!"Hello World".equals(resultConstStringAsCharSequenceConstructor)) {
