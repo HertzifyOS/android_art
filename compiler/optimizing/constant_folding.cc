@@ -34,6 +34,7 @@
 #include "optimizing/data_type.h"
 #include "handle_cache-inl.h"
 #include "optimizing/nodes.h"
+#include "runtime.h"
 
 namespace art HIDDEN {
 
@@ -831,7 +832,10 @@ static bool IsUnmodifiableAndInitialized(ArtField* field, const CompilerOptions&
     return true;
   }
 
-  if (IsSdkVersionSetAndAtMost(Runtime::Current()->GetTargetSdkVersion(), SdkVersion::kB)) {
+  uint32_t target_sdk_version = Runtime::Current()->GetTargetSdkVersion();
+  // If target_sdk_verson is not yet set then no assumptions about static final fields can be made.
+  if (IsSdkVersionUnset(target_sdk_version) ||
+      IsSdkVersionSetAndAtMost(target_sdk_version, SdkVersion::kB)) {
     return false;
   }
 
@@ -861,7 +865,9 @@ static bool IsUnmodifiableAndInitialized(ArtField* field, const CompilerOptions&
   }
 
   // Can't use Runtime::GetSdkVersion in the compiler. See Runtime.sdk_version_ comment.
-  if (IsSdkVersionSetAndAtMost(compiler_options.GetAssumeValueOptions().SdkInt(), SdkVersion::kB)) {
+  uint32_t assumed_sdk_int = compiler_options.GetAssumeValueOptions().SdkInt();
+  if (IsSdkVersionUnset(assumed_sdk_int) ||
+      IsSdkVersionSetAndAtMost(assumed_sdk_int, SdkVersion::kB)) {
     return false;
   }
 
