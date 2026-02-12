@@ -107,6 +107,13 @@ inline bool ReadCompilerOptions(Base& map, CompilerOptions* options, std::string
   map.AssignIfExists(Base::CompileArtTest, &options->compile_art_test_);
   map.AssignIfExists(Base::HugeMethodMaxThreshold, &options->huge_method_threshold_);
   map.AssignIfExists(Base::InlineMaxCodeUnitsThreshold, &options->inline_max_code_units_);
+  map.AssignIfExists(Base::InlineMaximumNumberOfTotalInstructions,
+                     &options->inline_max_total_instructions_);
+  map.AssignIfExists(Base::InlineMaxInstructionsForSmallMethod,
+                     &options->inline_max_instructions_for_small_method_);
+  map.AssignIfExists(Base::InlineMaxCumulatedDexRegisters,
+                     &options->inline_max_cumulated_dex_registers_);
+  map.AssignIfExists(Base::InlineMaxRecursiveCalls, &options->inline_max_recursive_calls_);
   map.AssignIfExists(Base::GenerateDebugInfo, &options->generate_debug_info_);
   map.AssignIfExists(Base::GenerateMiniDebugInfo, &options->generate_mini_debug_info_);
   map.AssignIfExists(Base::GenerateBuildID, &options->generate_build_id_);
@@ -196,6 +203,24 @@ NO_INLINE void AddCompilerOptionsArgumentParserOptions(Builder& b) {
                     "A zero value will disable inlining. Honored only by Optimizing. Has priority\n"
                     "over the --compiler-filter option. Intended for development/experimental use.")
           .IntoKey(Map::InlineMaxCodeUnitsThreshold)
+      .Define("--inline-max-total-instructions=_")
+          .template WithType<unsigned int>()
+          .WithHelp("the maximum number of total instructions that a method can have to be\n"
+                    "considered for inlining.")
+          .IntoKey(Map::InlineMaximumNumberOfTotalInstructions)
+      .Define("--inline-max-instructions-for-small-method=_")
+          .template WithType<unsigned int>()
+          .WithHelp("the maximum number of instructions that a method can have to be considered\n"
+                    "a small method for inlining.")
+          .IntoKey(Map::InlineMaxInstructionsForSmallMethod)
+      .Define("--inline-max-cumulated-dex-registers=_")
+          .template WithType<unsigned int>()
+          .WithHelp("the maximum number of dex registers that a method can accumulate by inlining.")
+          .IntoKey(Map::InlineMaxCumulatedDexRegisters)
+      .Define("--inline-max-recursive-calls=_")
+          .template WithType<unsigned int>()
+          .WithHelp("the maximum number of recursive calls that can be inlined.")
+          .IntoKey(Map::InlineMaxRecursiveCalls)
 
       .Define({"--generate-debug-info", "-g", "--no-generate-debug-info"})
           .WithValues({true, true, false})
