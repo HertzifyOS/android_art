@@ -2270,6 +2270,12 @@ java.util.concurrent.atomic.Striped64$1
 java.util.concurrent.atomic.Striped64$Cell
 java.util.concurrent.atomic.Striped64
 java.util.concurrent.locks.AbstractOwnableSynchronizer
+java.util.concurrent.locks.AbstractQueuedLongSynchronizer$ConditionNode
+java.util.concurrent.locks.AbstractQueuedLongSynchronizer$ConditionObject
+java.util.concurrent.locks.AbstractQueuedLongSynchronizer$ExclusiveNode
+java.util.concurrent.locks.AbstractQueuedLongSynchronizer$Node
+java.util.concurrent.locks.AbstractQueuedLongSynchronizer$SharedNode
+java.util.concurrent.locks.AbstractQueuedLongSynchronizer
 java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionNode
 java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject
 java.util.concurrent.locks.AbstractQueuedSynchronizer$ExclusiveNode
