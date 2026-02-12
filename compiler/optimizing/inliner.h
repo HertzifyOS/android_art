@@ -70,7 +70,9 @@ class HInliner : public HOptimization {
         inlining_budget_(0),
         try_catch_inlining_allowed_(try_catch_inlining_allowed),
         run_extra_type_propagation_(false),
-        inline_stats_(nullptr) {}
+        inline_stats_(nullptr) {
+    InitializeInlinerOptions();
+  }
 
   bool Run() override;
 
@@ -91,6 +93,13 @@ class HInliner : public HOptimization {
     kInlineCacheMegamorphic = 4,
     kInlineCacheMissingTypes = 5
   };
+
+  size_t maximum_number_of_total_instructions_;
+  size_t maximum_number_of_instructions_for_small_method_;
+  size_t maximum_number_of_cumulated_dex_registers_;
+  size_t maximum_number_of_recursive_calls_;
+
+  void InitializeInlinerOptions();
 
   bool TryInline(HInvoke* invoke_instruction);
 

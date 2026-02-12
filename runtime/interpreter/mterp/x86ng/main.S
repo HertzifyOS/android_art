@@ -284,8 +284,25 @@ SYMBOL(\name):
   END_FUNCTION \name
 .endm
 
-.macro CLEAR_VOLATILE_MARKER reg
-  andl MACRO_LITERAL(-2), \reg
+.macro NTERP_TRAMPOLINE_RETURN_LONG name, helper
+  DEFINE_FUNCTION \name
+    movd %ebx, %xmm0
+    SETUP_SAVE_REFS_ONLY_FRAME ebx
+    movd %xmm0, %ebx
+    PUSH_ARG ebx
+    PUSH_ARG edx
+    PUSH_ARG ecx
+    PUSH_ARG eax
+    call \helper
+    movl %edx, %ecx
+    DECREASE_FRAME 16
+    RESTORE_IBASE_WITH_CFA
+    FETCH_INST_CLEAR_OPCODE
+    RESTORE_SAVE_REFS_ONLY_FRAME
+    cmpl LITERAL(0), %fs:THREAD_EXCEPTION_OFFSET
+    jne nterp_deliver_pending_exception
+    ret
+  END_FUNCTION \name
 .endm
 
 .macro EXPORT_PC
@@ -1469,10 +1486,23 @@ SYMBOL(\name):
    movl rSELF:THREAD_SELF_OFFSET, %eax
    movl rPC, %ecx
    andl MACRO_LITERAL(THREAD_INTERPRETER_CACHE_KEY_MASK), %ecx
-   sall MACRO_LITERAL(THREAD_INTERPRETER_CACHE_KEY_TO_ENTRY_SHIFT), %ecx
-   cmpl THREAD_INTERPRETER_CACHE_OFFSET(%eax, %ecx, 1), rPC
+   cmpl THREAD_INTERPRETER_CACHE_OFFSET(%eax, %ecx, 2), rPC
    jne  ${miss_label}
-   movl __SIZEOF_POINTER__+THREAD_INTERPRETER_CACHE_OFFSET(%eax, %ecx, 1), ${dest_reg}
+   movl __SIZEOF_POINTER__+THREAD_INTERPRETER_CACHE_OFFSET(%eax, %ecx, 2), ${dest_reg}
+
+%def fetch_uint64_from_thread_cache_eax_ecx(miss_label):
+   // Fetch some information from the thread cache.
+   // Uses eax, and ecx as temporaries.
+   movl rSELF:THREAD_SELF_OFFSET, %eax
+   movl rPC, %ecx
+   andl MACRO_LITERAL(THREAD_INTERPRETER_CACHE_KEY_MASK & (~1<<THREAD_INTERPRETER_CACHE_KEY_LOW_BIT)), %ecx
+   cmpl THREAD_INTERPRETER_CACHE_OFFSET(%eax, %ecx, 2), rPC
+   jne  ${miss_label}
+   cmpl 2*__SIZEOF_POINTER__+THREAD_INTERPRETER_CACHE_OFFSET(%eax, %ecx, 2), rPC
+   jne  ${miss_label}
+   leal THREAD_INTERPRETER_CACHE_OFFSET(%eax, %ecx, 2), %ecx
+   movl __SIZEOF_POINTER__(%ecx), %eax
+   movl 3*__SIZEOF_POINTER__(%ecx), %ecx
 
 %def fetch_field_from_fast_path(get_local, success_label, fail_label, is_static=False):
    movl 0(%esp), %eax
@@ -1485,6 +1515,8 @@ SYMBOL(\name):
    pushl rPC
    pushl %eax
    call ${get_local}
+%  if is_static:
+     mov %edx, %ecx
    addl MACRO_LITERAL(16), %esp
    RESTORE_IBASE
    FETCH_INST_CLEAR_OPCODE
@@ -1498,10 +1530,8 @@ SYMBOL(\name):
 // Helper for static field get.
 .macro OP_SGET load="movl", wide="0"
    // Fast-path which gets the field from thread-local cache.
-%  fetch_from_thread_cache("%eax", miss_label="2f")
+%  fetch_uint64_from_thread_cache_eax_ecx(miss_label="2f")
 1:
-   movl ART_FIELD_OFFSET_OFFSET(%eax), %ecx
-   movl ART_FIELD_DECLARING_CLASS_OFFSET(%eax), %eax
    cmpl $$0, rSELF:THREAD_READ_BARRIER_MARK_REG00_OFFSET
    jne 3f
 4:
@@ -1512,7 +1542,7 @@ SYMBOL(\name):
      \load 4(%eax), %ecx
      SET_VREG_HIGH %ecx, rINST
    .else
-     \load (%eax, %ecx, 1), %eax
+     \load (%ecx, %eax, 1), %eax
      SET_VREG %eax, rINST            # fp[A] <- value
    .endif
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
@@ -1525,37 +1555,32 @@ SYMBOL(\name):
    movl rPC, ARG2
    movl $$0, ARG3
    call nterp_get_static_field
+   testl %eax, %eax
+   jns 1b
+   negl %eax
    .if !\wide
-     CLEAR_VOLATILE_MARKER %eax
      jmp 1b
    .else
-     testl MACRO_LITERAL(1), %eax
-     je 1b
-     CLEAR_VOLATILE_MARKER %eax
-     movl ART_FIELD_OFFSET_OFFSET(%eax), %ecx
-     movl ART_FIELD_DECLARING_CLASS_OFFSET(%eax), %eax
      cmpl $$0, rSELF:THREAD_READ_BARRIER_MARK_REG00_OFFSET
      jne 5f
 6:
-     movsd (%eax, %ecx, 1), %xmm0
+     movsd (%ecx, %eax, 1), %xmm0
      SET_WIDE_FP_VREG %xmm0, rINST
      ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 5:
-     call art_quick_read_barrier_mark_reg00
+     call art_quick_read_barrier_mark_reg01
      jmp 6b
    .endif
 3:
-   call art_quick_read_barrier_mark_reg00
+   call art_quick_read_barrier_mark_reg01
    jmp 4b
 .endm
 
 // Helper for static field put.
 .macro OP_SPUT rINST_reg="rINST", store="movl", wide="0":
    // Fast-path which gets the field from thread-local cache.
-%  fetch_from_thread_cache("%eax", miss_label="2f")
+%  fetch_uint64_from_thread_cache_eax_ecx(miss_label="2f")
 1:
-   movl ART_FIELD_OFFSET_OFFSET(%eax), %ecx
-   movl ART_FIELD_DECLARING_CLASS_OFFSET(%eax), %eax
    cmpl $$0, rSELF:THREAD_READ_BARRIER_MARK_REG00_OFFSET
    jne 3f
 4:
@@ -1567,7 +1592,7 @@ SYMBOL(\name):
      movl %ecx, 4(%eax)
    .else
      GET_VREG rINST, rINST                  # rINST <- v[A]
-     \store    \rINST_reg, (%eax,%ecx,1)
+     \store    \rINST_reg, (%ecx,%eax,1)
    .endif
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
@@ -1579,12 +1604,9 @@ SYMBOL(\name):
    movl rPC, ARG2
    movl $$0, ARG3
    call nterp_get_static_field
-   testl MACRO_LITERAL(1), %eax
-   je 1b
-   // Clear the marker that we put for volatile fields.
-   CLEAR_VOLATILE_MARKER %eax
-   movl ART_FIELD_OFFSET_OFFSET(%eax), %ecx
-   movl ART_FIELD_DECLARING_CLASS_OFFSET(%eax), %eax
+   testl %eax, %eax
+   jns 1b
+   negl %eax
    cmpl $$0, rSELF:THREAD_READ_BARRIER_MARK_REG00_OFFSET
    jne 6f
 5:
@@ -1594,15 +1616,15 @@ SYMBOL(\name):
      movsd %xmm0, (%eax)
    .else
      GET_VREG rINST, rINST                  # rINST <- v[A]
-     \store    \rINST_reg, (%eax,%ecx,1)
+     \store    \rINST_reg, (%ecx,%eax,1)
    .endif
    lock addl $$0, (%esp)
    ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 3:
-   call art_quick_read_barrier_mark_reg00
+   call art_quick_read_barrier_mark_reg01
    jmp 4b
 6:
-   call art_quick_read_barrier_mark_reg00
+   call art_quick_read_barrier_mark_reg01
    jmp 5b
 .endm
 
@@ -2115,11 +2137,9 @@ NterpGetObjectInstanceField:
 
 NterpPutObjectStaticField:
     // Fast-path which gets the field from thread-local cache.
-%   fetch_from_thread_cache("%eax", miss_label="2f")
+%   fetch_uint64_from_thread_cache_eax_ecx(miss_label="2f")
 1:
     GET_VREG rINST, rINST
-    movl ART_FIELD_OFFSET_OFFSET(%eax), %ecx
-    movl ART_FIELD_DECLARING_CLASS_OFFSET(%eax), %eax
     cmpl $$0, rSELF:THREAD_READ_BARRIER_MARK_REG00_OFFSET
     jne 3f
 5:
@@ -2127,9 +2147,9 @@ NterpPutObjectStaticField:
     movl rINST, (%eax, %ecx, 1)
     testl rINST, rINST
     je 4f
-    movl rSELF:THREAD_CARD_TABLE_OFFSET, %ecx
-    shrl $$CARD_TABLE_CARD_SHIFT, %eax
-    movb %cl, (%ecx, %eax, 1)
+    movl rSELF:THREAD_CARD_TABLE_OFFSET, %eax
+    shrl $$CARD_TABLE_CARD_SHIFT, %ecx
+    movb %al, (%ecx, %eax, 1)
 4:
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 2:
@@ -2141,11 +2161,9 @@ NterpPutObjectStaticField:
     movl rPC, ARG2
     GET_VREG ARG3, rINST
     call nterp_get_static_field
-    testl MACRO_LITERAL(1), %eax
-    je 1b
-    CLEAR_VOLATILE_MARKER %eax
-    movl ART_FIELD_OFFSET_OFFSET(%eax), %ecx
-    movl ART_FIELD_DECLARING_CLASS_OFFSET(%eax), %eax
+    testl %eax, %eax
+    jns 1b
+    negl %eax
     cmpl $$0, rSELF:THREAD_READ_BARRIER_MARK_REG00_OFFSET
     jne 7f
 6:
@@ -2154,30 +2172,28 @@ NterpPutObjectStaticField:
     movl rINST, (%eax, %ecx, 1)
     testl rINST, rINST
     je 8f
-    movl rSELF:THREAD_CARD_TABLE_OFFSET, %ecx
-    shrl $$CARD_TABLE_CARD_SHIFT, %eax
-    movb %cl, (%ecx, %eax, 1)
+    movl rSELF:THREAD_CARD_TABLE_OFFSET, %eax
+    shrl $$CARD_TABLE_CARD_SHIFT, %ecx
+    movb %al, (%ecx, %eax, 1)
 8:
     lock addl $$0, (%esp)
     ADVANCE_PC_FETCH_AND_GOTO_NEXT 2
 3:
-    call art_quick_read_barrier_mark_reg00
+    call art_quick_read_barrier_mark_reg01
     jmp 5b
 7:
-    call art_quick_read_barrier_mark_reg00
+    call art_quick_read_barrier_mark_reg01
     jmp 6b
 
 NterpGetObjectStaticField:
     // Fast-path which gets the field from thread-local cache.
-%   fetch_from_thread_cache("%eax", miss_label="2f")
+%   fetch_uint64_from_thread_cache_eax_ecx(miss_label="2f")
 1:
-    movl ART_FIELD_OFFSET_OFFSET(%eax), %ecx
-    movl ART_FIELD_DECLARING_CLASS_OFFSET(%eax), %eax
     cmpl $$0, rSELF:THREAD_READ_BARRIER_MARK_REG00_OFFSET
     jne 5f
 6:
-    testb $$READ_BARRIER_TEST_VALUE, GRAY_BYTE_OFFSET(%eax)
-    movl (%eax, %ecx, 1), %eax
+    testb $$READ_BARRIER_TEST_VALUE, GRAY_BYTE_OFFSET(%ecx)
+    movl (%ecx, %eax, 1), %eax
     jnz 3f
     UNPOISON_HEAP_REF eax  // Affects flags, so we cannot unpoison before the jnz.
 4:
@@ -2192,14 +2208,16 @@ NterpGetObjectStaticField:
     movl rPC, ARG2
     movl $$0, ARG3
     call nterp_get_static_field
-    CLEAR_VOLATILE_MARKER %eax
+    testl %eax, %eax
+    jns 1b
+    negl %eax
     jmp 1b
 3:
     UNPOISON_HEAP_REF eax
     call art_quick_read_barrier_mark_reg00
     jmp 4b
 5:
-    call art_quick_read_barrier_mark_reg00
+    call art_quick_read_barrier_mark_reg01
     jmp 6b
 
 NterpGetBooleanStaticField:
@@ -2367,7 +2385,7 @@ NterpHandleInvokeInterfaceOnObjectMethod:
   SYMBOL(EndExecuteNterpImpl):
 
   // Entrypoints into runtime.
-  NTERP_TRAMPOLINE nterp_get_static_field, NterpGetStaticField
+  NTERP_TRAMPOLINE_RETURN_LONG nterp_get_static_field, NterpGetStaticField
   NTERP_TRAMPOLINE nterp_get_instance_field_offset, NterpGetInstanceFieldOffset
   NTERP_TRAMPOLINE nterp_filled_new_array, NterpFilledNewArray
   NTERP_TRAMPOLINE nterp_filled_new_array_range, NterpFilledNewArrayRange

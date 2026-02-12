@@ -308,11 +308,7 @@
   END \name
 .endm
 
-.macro CLEAR_STATIC_VOLATILE_MARKER reg
-  and \reg, \reg, #-2
-.endm
-
-.macro CLEAR_INSTANCE_VOLATILE_MARKER reg
+.macro CLEAR_VOLATILE_MARKER reg
   neg \reg, \reg
 .endm
 

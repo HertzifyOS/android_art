@@ -89,7 +89,10 @@ static bool IsInterestingInstruction(HInstruction* instruction) {
   }
 
   // Check allocations and strings first, as they can throw, but it is safe to move them.
-  if (instruction->IsNewInstance() || instruction->IsNewArray() || instruction->IsLoadString()) {
+  if (instruction->IsNewInstance() ||
+      instruction->IsNewArray() ||
+      instruction->IsLoadString() ||
+      instruction->IsStringBuilderAppend()) {
     return true;
   }
 
