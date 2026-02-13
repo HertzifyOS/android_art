@@ -78,6 +78,10 @@ class HControlFlowSimplifier : public HOptimization {
   static constexpr const char* kControlFlowSimplifierPassName = "control_flow_simplifier";
 
  private:
+  // Try simplifying `HPackedSwitch` using a load from constant table.
+  // Certain cases can be simplified even further.
+  bool TrySimplifyPackedSwitch(HBasicBlock* block, ScopedArenaAllocator* allocator);
+
   bool TryGenerateSelectSimpleDiamondPattern(HBasicBlock* block,
                                              ScopedArenaSafeMap<HInstruction*, HSelect*>* cache);
 

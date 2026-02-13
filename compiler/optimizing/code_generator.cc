@@ -1822,4 +1822,32 @@ ScaleFactor CodeGenerator::ScaleFactorForType(DataType::Type type) {
   }
 }
 
+void CodeGenerator::CopyConstantTableData(HLoadConstantTableEntry* load, /*out*/ uint8_t* buffer) {
+  ArrayRef<const int64_t> entries = load->GetEntries();
+  size_t entry_size = DataType::Size(load->GetType());
+  auto emit_data = [&]<typename T>([[maybe_unused]] T t) {
+    T* typed_buffer = reinterpret_cast<T*>(buffer);
+    for (size_t i : Range(entries.size())) {
+      typed_buffer[i] = static_cast<T>(entries[i]);
+    }
+  };
+  switch (entry_size) {
+    case 1:
+      emit_data(static_cast<uint8_t>(0));
+      break;
+    case 2:
+      emit_data(static_cast<uint16_t>(0));
+      break;
+    case 4:
+      emit_data(static_cast<uint32_t>(0));
+      break;
+    case 8:
+      emit_data(static_cast<uint64_t>(0));
+      break;
+    default:
+      LOG(FATAL) << "Unexpected entry size: " << entry_size;
+      UNREACHABLE();
+  }
+}
+
 }  // namespace art

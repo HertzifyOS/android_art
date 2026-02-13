@@ -16,6 +16,7 @@
 
 #include "control_flow_simplifier.h"
 
+#include "com_android_art_rw_flags.h"
 #include "optimizing/nodes.h"
 #include "reference_type_propagation.h"
 
@@ -27,6 +28,175 @@ HControlFlowSimplifier::HControlFlowSimplifier(HGraph* graph,
                                                OptimizingCompilerStats* stats,
                                                const char* name)
     : HOptimization(graph, name, stats) {
+}
+
+bool HControlFlowSimplifier::TrySimplifyPackedSwitch(HBasicBlock* block,
+                                                     ScopedArenaAllocator* allocator) {
+  DCHECK(!block->GetInstructions().IsEmpty());
+  DCHECK(block->GetLastInstruction()->IsPackedSwitch());
+  HPackedSwitch* packed_switch = block->GetLastInstruction()->AsPackedSwitch();
+
+  // Defensively check if we have at least 4 entries. This should be true as long as we build
+  // a decision tree for smaller switches, see `DexSwitchTable::ShouldBuildDecisionTree()`.
+  static constexpr size_t kMinEntries = 4u;
+  size_t num_entries = packed_switch->GetNumEntries();
+  if (num_entries < kMinEntries) {
+    return false;
+  }
+
+  // Check if all non-default successors are single-goto blocks merging at the same block.
+  ArrayRef<HBasicBlock* const> successors(block->GetSuccessors());
+  DCHECK_EQ(num_entries + 1u, successors.size());
+  if (!successors[0]->IsSingleGoto()) {
+    return false;
+  }
+  HBasicBlock* merge = successors[0]->GetSingleSuccessor();
+  for (size_t i : Range(1, num_entries)) {
+    if (!successors[i]->IsSingleGoto() || successors[i]->GetSingleSuccessor() != merge) {
+      return false;
+    }
+  }
+
+  // Check if the `merge` has at most one Phi.
+  HPhi* phi = nullptr;
+  if (merge->GetPhis().IsEmpty()) {
+    // We won't even need a constant table load to simplify this.
+  } else if (merge->HasSinglePhi()) {
+    phi = merge->GetFirstPhi()->AsPhi();
+    DCHECK(phi != nullptr);
+  } else {
+    return false;  // Do not simplify when there are two or more phis.
+  }
+
+  auto get_value = [](HInstruction* input, int64_t* value) {
+    if (input->IsIntConstant()) {
+      *value = input->AsIntConstant()->GetValue();
+    } else if (input->IsLongConstant()) {
+      *value = input->AsLongConstant()->GetValue();
+    } else if (input->IsFloatConstant()) {
+      *value = input->AsFloatConstant()->GetValueAsUint64();
+    } else if (input->IsDoubleConstant()) {
+      *value = input->AsDoubleConstant()->GetValueAsUint64();
+    } else {
+      return false;
+    }
+    return true;
+  };
+
+  // Check if the default case can be included in the simplified pattern.
+  HBasicBlock* default_block = successors[num_entries];
+  int64_t default_value = 0;
+  bool with_default =
+      default_block->IsSingleGoto() &&
+      default_block->GetSingleSuccessor() == merge &&
+      (phi == nullptr || get_value(phi->InputAt(merge->GetPredecessorIndexOf(default_block)),
+                                   &default_value));
+  bool with_default_index_0 = with_default && packed_switch->GetStartValue() == 1;
+
+  ArrayRef<int64_t> entries;
+  if (phi != nullptr) {
+    // Check if all the phi's non-default inputs are constants and collect the values.
+    size_t size = num_entries + (with_default ? 1u : 0u);
+    entries = ArrayRef<int64_t>(
+        allocator->AllocArray<int64_t>(size, kArenaAllocControlFlowSimplifier), size);
+    ArrayRef<int64_t> non_default_entries =
+        entries.SubArray(with_default_index_0 ? 1u : 0u, num_entries);
+    for (size_t i : Range(num_entries)) {
+      size_t predecessor_index = merge->GetPredecessorIndexOf(successors[i]);
+      if (!get_value(phi->InputAt(predecessor_index), &non_default_entries[i])) {
+        return false;
+      }
+    }
+    if (with_default) {
+      entries[with_default_index_0 ? 0u : num_entries] = default_value;
+    }
+  }
+
+  // Determine table type.
+  DataType::Type table_type = (phi != nullptr) ? phi->GetType() : DataType::Type::kVoid;
+  if (DataType::Kind(table_type) == DataType::Type::kInt32) {
+    // Try to narrow down the type to save space.
+    auto [min_it, max_it] = std::minmax_element(entries.begin(), entries.end());
+    DCHECK_GE(*min_it, std::numeric_limits<int32_t>::min());
+    DCHECK_LE(*max_it, std::numeric_limits<int32_t>::max());
+    bool has_negative = (*min_it < 0);
+    int max_value_to_encode = has_negative
+        ? dchecked_integral_cast<int32_t>(std::max(*max_it, -1 - *min_it))
+        : dchecked_integral_cast<int32_t>(*max_it);
+    if (!has_negative && max_value_to_encode <= 1) {
+      table_type = DataType::Type::kBool;
+    } else if (max_value_to_encode <= std::numeric_limits<int8_t>::max()) {
+      table_type = DataType::Type::kInt8;
+    } else if (!has_negative && max_value_to_encode <= std::numeric_limits<uint8_t>::max()) {
+      table_type = DataType::Type::kUint8;
+    } else if (max_value_to_encode <= std::numeric_limits<int16_t>::max()) {
+      table_type = DataType::Type::kInt16;
+    } else if (!has_negative && max_value_to_encode <= std::numeric_limits<uint16_t>::max()) {
+      table_type = DataType::Type::kUint16;
+    } else {
+      DCHECK_EQ(table_type, DataType::Type::kInt32);  // Keep the `kInt32`.
+    }
+  }
+
+  // Prepare the index calculation.
+  uint32_t dex_pc = packed_switch->GetDexPc();
+  HInstruction* index = packed_switch->InputAt(0);
+  if (packed_switch->GetStartValue() != 0 && !with_default_index_0) {
+    HInstruction* addend = graph_->GetIntConstant(-packed_switch->GetStartValue());
+    index = new (graph_->GetAllocator()) HAdd(DataType::Type::kInt32, index, addend, dex_pc);
+    block->InsertInstructionBefore(index, packed_switch);
+  }
+  // Prepare the comparison with the upper bound.
+  HInstruction* bound = graph_->GetIntConstant(num_entries + (with_default_index_0 ? 1 : 0));
+  HBelow* below = new (graph_->GetAllocator()) HBelow(index, bound, dex_pc);
+  block->InsertInstructionBefore(below, packed_switch);
+  if (with_default) {
+    // Insert `HSelect` to clamp the index.
+    HInstruction* false_value = graph_->GetIntConstant(with_default_index_0 ? 0 : num_entries);
+    index = new (graph_->GetAllocator()) HSelect(below, index, false_value, dex_pc);
+    block->InsertInstructionBefore(index, packed_switch);
+  }
+  if (phi != nullptr) {
+    // Insert constant table load and update the phi input we intend to keep.
+    HLoadConstantTableEntry* load = new (graph_->GetAllocator()) HLoadConstantTableEntry(
+        table_type, index, ArrayRef<const int64_t>(entries), graph_->GetAllocator(), dex_pc);
+    if (with_default) {
+      block->InsertInstructionBefore(load, packed_switch);
+    } else {
+      successors[0]->InsertInstructionBefore(load, successors[0]->GetFirstInstruction());
+    }
+    phi->ReplaceInput(load, merge->GetPredecessorIndexOf(successors[0]));
+  }
+  // Remove the default successor if `with_default` and all non-default successors,
+  // except the first. This also removes `phi` inputs and replaces the Phi with the
+  // `load` if it's the only remaining input.
+  // Note: Stop using `successors` as the underlying vector is being modified.
+  for (size_t i : Range(with_default ? 0u : 1u, num_entries)) {
+    block->GetSuccessors()[num_entries - i]->DisconnectAndDelete();
+  }
+  // If the merge block has only one predecessor now, update domination info and merge.
+  if (merge->GetPredecessors().size() == 1u) {
+    HBasicBlock* remaining_block = block->GetSuccessors()[0];
+    DCHECK(remaining_block == merge->GetSinglePredecessor());
+    DCHECK(merge->GetDominator() == block);
+    block->RemoveDominatedBlock(merge);
+    merge->SetDominator(remaining_block);
+    remaining_block->AddDominatedBlock(merge);
+    remaining_block->MergeWith(merge);
+  }
+  if (with_default) {
+    // Merge `block` with its remaining successor.
+    DCHECK(block->GetLastInstruction()->IsGoto());  // Updated by last `DisconnectAndDelete()`.
+    block->MergeWith(block->GetSingleSuccessor());
+  } else {
+    // Replace the switch with `HBelow` and `HIf`.
+    DCHECK_EQ(2u, block->GetSuccessors().size());
+    HIf* if_ = new (graph_->GetAllocator()) HIf(below, dex_pc);
+    block->ReplaceAndRemoveInstructionWith(packed_switch, if_);
+  }
+
+  MaybeRecordStat(stats_, MethodCompilationStat::kControlFlowSwitchSimplified);
+  return true;
 }
 
 // Returns true if `block` has only one predecessor, ends with a Goto
@@ -340,7 +510,7 @@ HBasicBlock* HControlFlowSimplifier::TryFixupDoubleDiamondPattern(HBasicBlock* b
 }
 
 bool HControlFlowSimplifier::Run() {
-  bool did_select = false;
+  bool simplified = false;
   // Select cache with local allocator.
   ScopedArenaAllocator allocator(graph_->GetArenaStack());
   ScopedArenaSafeMap<HInstruction*, HSelect*> cache(
@@ -349,12 +519,20 @@ bool HControlFlowSimplifier::Run() {
   // Iterate in post order in the unlikely case that removing one occurrence of
   // the selection pattern empties a branch block of another occurrence.
   for (HBasicBlock* block : graph_->GetPostOrder()) {
-    if (!block->EndsWithIf()) {
+    DCHECK(!block->GetInstructions().IsEmpty());
+    HInstruction* last_inst = block->GetLastInstruction();
+    if (com::android::art::rw::flags::packed_switch_simplification() &&
+        last_inst->IsPackedSwitch() &&
+        TrySimplifyPackedSwitch(block, &allocator)) {
+      simplified = true;
+      continue;
+    }
+    if (!last_inst->IsIf()) {
       continue;
     }
 
     if (TryGenerateSelectSimpleDiamondPattern(block, &cache)) {
-      did_select = true;
+      simplified = true;
     } else {
       // Try to fix up the odd version of the double diamond pattern. If we could do it, it means
       // that we can generate two selects.
@@ -365,12 +543,12 @@ bool HControlFlowSimplifier::Run() {
         DCHECK(result);
         result = TryGenerateSelectSimpleDiamondPattern(block, &cache);
         DCHECK(result);
-        did_select = true;
+        simplified = true;
       }
     }
   }
 
-  return did_select;
+  return simplified;
 }
 
 }  // namespace art

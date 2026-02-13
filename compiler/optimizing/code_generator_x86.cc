@@ -1010,6 +1010,41 @@ class CompileOptimizedSlowPathX86 : public SlowPathCode {
   DISALLOW_COPY_AND_ASSIGN(CompileOptimizedSlowPathX86);
 };
 
+class ConstantTableX86 : public SlowPathCode {
+ public:
+  explicit ConstantTableX86(HLoadConstantTableEntry* load)
+      : SlowPathCode(load) {}
+
+  void EmitNativeCode(CodeGenerator* codegen) override {
+    CodeGeneratorX86* x86_codegen = down_cast<CodeGeneratorX86*>(codegen);
+    HLoadConstantTableEntry* load = down_cast<HLoadConstantTableEntry*>(instruction_);
+    size_t entry_size = DataType::Size(load->GetType());
+    DCHECK(IsPowerOfTwo(entry_size));
+    AssemblerBuffer* buffer = x86_codegen->GetAssembler()->GetBuffer();
+
+    // Align data, bind the data start and emit the data.
+    buffer->Resize(RoundUp(buffer->Size(), entry_size));
+    __ Bind(GetEntryLabel());
+    buffer->Resize(buffer->Size() + entry_size * load->GetNumEntries());
+    CodeGenerator::CopyConstantTableData(load, buffer->contents() + GetEntryLabel()->Position());
+
+    // Update Load or LEA offset.
+    HX86ComputeBaseMethodAddress* method_base =
+        load->InputAt(1)->AsX86ComputeBaseMethodAddress();
+    int32_t offset = GetEntryLabel()->Position() - x86_codegen->GetMethodAddressOffset(method_base);
+    buffer->Store<int32_t>(load_or_lea_end_label_.Position() - 4u, offset);
+  }
+
+  Label* GetLoadOrLeaEndLabel() { return &load_or_lea_end_label_; }
+
+  const char* GetDescription() const override {
+    return "ConstantTableX86";
+  }
+
+ private:
+  Label load_or_lea_end_label_;
+};
+
 #undef __
 // NOLINT on __ macro to suppress wrong warning/fix (misc-macro-parentheses) from clang-tidy.
 #define __ down_cast<X86Assembler*>(GetAssembler())->  // NOLINT
@@ -9020,6 +9055,42 @@ void InstructionCodeGeneratorX86::VisitX86PackedSwitch(HX86PackedSwitch* switch_
 
   // And jump.
   __ jmp(temp_reg);
+}
+
+void LocationsBuilderX86::VisitLoadConstantTableEntry(HLoadConstantTableEntry* load) {
+  LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, load);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  locations->SetInAt(1, Location::RequiresCoreRegister());
+  if (DataType::IsFloatingPointType(load->GetType())) {
+    locations->SetOut(Location::RequiresFpuRegister(), Location::kNoOutputOverlap);
+  } else if (load->GetType() == DataType::Type::kInt64) {
+    locations->SetOut(Location::RequiresCoreRegister(), Location::kOutputOverlap);
+  } else {
+    locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
+  }
+}
+
+void InstructionCodeGeneratorX86::VisitLoadConstantTableEntry(HLoadConstantTableEntry* load) {
+  LocationSummary* locations = load->GetLocations();
+  Register index = locations->InAt(0).AsRegister<Register>();
+  Register method_base = locations->InAt(1).AsRegister<Register>();
+
+  ConstantTableX86* data = new (codegen_->GetScopedAllocator()) ConstantTableX86(load);
+  codegen_->AddSlowPath(data);
+
+  ScaleFactor scale = CodeGenerator::ScaleFactorForType(load->GetType());
+  if (load->GetType() == DataType::Type::kInt64) {
+    // For simplicity, use LEA with patched offset followed by the two loads.
+    Register out_reg_high = locations->Out().AsRegisterPairHigh<Register>();
+    __ leal(out_reg_high, Address(method_base, CodeGeneratorX86::kPlaceholder32BitOffset));
+    __ Bind(data->GetLoadOrLeaEndLabel());
+    Address src(out_reg_high, index, scale, 0);
+    codegen_->LoadFromMemoryNoBarrier(load->GetType(), locations->Out(), src);
+  } else {
+    Address src(method_base, index, scale, CodeGeneratorX86::kPlaceholder32BitOffset);
+    codegen_->LoadFromMemoryNoBarrier(load->GetType(), locations->Out(), src);
+    __ Bind(data->GetLoadOrLeaEndLabel());
+  }
 }
 
 void LocationsBuilderX86::VisitX86ComputeBaseMethodAddress(
