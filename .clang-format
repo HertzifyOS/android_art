@@ -28,6 +28,7 @@ TabWidth: 2
 
 Language: Java
 
+BasedOnStyle: Google
 ColumnLimit: 100
 CommentPragmas: (NOLINT|CHECK[^ ]*):.*
 ContinuationIndentWidth: 8
