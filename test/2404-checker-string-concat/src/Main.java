@@ -82,7 +82,8 @@ public class Main {
             throw new Error("testStringArgumentNullChecked should have thrown NPE");
         } catch (java.lang.reflect.InvocationTargetException e) {
             if (!(e.getCause() instanceof NullPointerException)) {
-                throw new Error("testStringArgumentNullChecked threw wrong exception: " + e.getCause());
+              throw new Error(
+                  "testStringArgumentNullChecked threw wrong exception: " + e.getCause());
             }
         }
 

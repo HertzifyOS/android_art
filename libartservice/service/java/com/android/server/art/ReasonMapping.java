@@ -22,21 +22,30 @@ import android.annotation.FlaggedApi;
 import android.annotation.NonNull;
 import android.annotation.StringDef;
 import android.annotation.SystemApi;
+import android.apphibernation.AppHibernationManager;
+import android.content.Context;
 import android.os.Build;
 import android.os.SystemProperties;
+import android.os.UserManager;
 import android.text.TextUtils;
 
 import androidx.annotation.RequiresApi;
 
-import com.android.art.flags.Flags;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.art.model.ArtFlags;
 import com.android.server.pm.PackageManagerLocal;
+import com.android.server.pm.pkg.PackageState;
 
 import dalvik.system.DexFile;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 /**
  * Maps a compilation reason to a compiler filter and a priority class.
@@ -46,7 +55,18 @@ import java.util.Set;
 @SystemApi(client = SystemApi.Client.SYSTEM_SERVER)
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 public class ReasonMapping {
-    private ReasonMapping() {}
+    private final Injector mInjector;
+
+    /** @hide */
+    public ReasonMapping(Context context) {
+        mInjector = new Injector(context);
+    }
+
+    /** @hide */
+    @VisibleForTesting
+    public ReasonMapping(Injector injector) {
+        mInjector = injector;
+    }
 
     // Keep this in sync with `ArtShellCommand.printHelp` except for 'inactive'.
 
@@ -221,6 +241,60 @@ public class ReasonMapping {
     }
 
     /**
+     * Returns the list of packages to process for the given reason.
+     *
+     * @hide
+     */
+    public List<String> getDefaultPackagesForReason(PackageManagerLocal.FilteredSnapshot snapshot,
+            /* @BatchDexoptReason|REASON_INACTIVE */ String reason) {
+        var appHibernationManager = mInjector.getAppHibernationManager();
+
+        // Filter out hibernating packages even if the reason is REASON_INACTIVE. This is because
+        // artifacts for hibernating packages are already deleted.
+        Stream<PackageInfo> packages =
+                snapshot.getPackageStates()
+                        .values()
+                        .stream()
+                        .filter(pkgState -> Utils.canDexoptPackage(pkgState, appHibernationManager))
+                        .map(pkgState
+                                -> new PackageInfo(pkgState,
+                                        Utils.getPackageLastActiveTime(pkgState,
+                                                mInjector.getDexUseManager(),
+                                                mInjector.getUserManager())));
+
+        // "pm.dexopt.downgrade_after_inactive_days" is repurposed to also determine whether to
+        // dexopt a package.
+        long inactiveMs = TimeUnit.DAYS.toMillis(SystemProperties.getInt(
+                "pm.dexopt.downgrade_after_inactive_days", Integer.MAX_VALUE /* def */));
+        long currentTimeMs = mInjector.getCurrentTimeMillis();
+        long thresholdTimeMs = currentTimeMs - inactiveMs;
+
+        packages = switch (reason) {
+            case ReasonMapping.REASON_BOOT_AFTER_MAINLINE_UPDATE ->
+                packages.filter(pkgInfo
+                        -> mInjector.isSystemUiPackage(pkgInfo.pkgState().getPackageName())
+                                || mInjector.isLauncherPackage(
+                                        pkgInfo.pkgState().getPackageName()));
+            case ReasonMapping.REASON_INACTIVE ->
+                packages.filter(pkgInfo -> pkgInfo.lastActiveTime() <= thresholdTimeMs)
+                        .sorted(Comparator.comparingLong(pkgInfo -> pkgInfo.lastActiveTime()));
+            // Don't filter the default package list and no need to sort as in some cases the system
+            // time can advance during bootup after package installation and cause filtering to
+            // exclude all packages when m.dexopt.downgrade_after_inactive_days is set. See
+            // aosp/3237478 for more details.
+            case ReasonMapping.REASON_FIRST_BOOT -> packages;
+            default ->
+                packages.filter(pkgInfo -> pkgInfo.lastActiveTime() > thresholdTimeMs)
+                        .sorted(Comparator
+                                        .<PackageInfo>comparingLong(
+                                                pkgInfo -> pkgInfo.lastActiveTime())
+                                        .reversed());
+        };
+
+        return packages.map(pkgInfo -> pkgInfo.pkgState().getPackageName()).toList();
+    }
+
+    /**
      * Maps the compiler filter string to an integer representation for reporting stats defined in
      * the "framework" module (specifically, the {@code package_optimization_compilation_filter}
      * field of the {@code AppStartOccurred} and {@code AppStartFullyDrawn} protos defined in {@code
@@ -232,7 +306,6 @@ public class ReasonMapping {
      *
      * @param compilerFilter The string obtained from {@link DexFile.OptimizationInfo#getStatus()}.
      */
-    @FlaggedApi(Flags.FLAG_UPDATABLE_FILTER_AND_REASON)
     public static int getCompilerFilterValueForFrameworkStatsReporting(
             @NonNull String compilerFilter) {
         return switch (compilerFilter) {
@@ -265,7 +338,6 @@ public class ReasonMapping {
      * @param compilationReason The string obtained from {@link
      *     DexFile.OptimizationInfo#getReason()}.
      */
-    @FlaggedApi(Flags.FLAG_UPDATABLE_FILTER_AND_REASON)
     public static int getCompilationReasonValueForFrameworkStatsReporting(
             @NonNull String compilationReason) {
         return switch (compilationReason) {
@@ -297,5 +369,50 @@ public class ReasonMapping {
             case "post-ur" -> 29;
             default -> 28;
         };
+    }
+
+    private record PackageInfo(PackageState pkgState, long lastActiveTime) {}
+
+    /**
+     * Injector pattern for testing purpose.
+     *
+     * @hide
+     */
+    @VisibleForTesting
+    public static class Injector {
+        private final Context mContext;
+
+        Injector(Context context) {
+            mContext = context;
+
+            // Call the getters for the dependencies that aren't optional, to ensure correct
+            // initialization order.
+            getUserManager();
+            getDexUseManager();
+        }
+
+        public AppHibernationManager getAppHibernationManager() {
+            return Objects.requireNonNull(mContext.getSystemService(AppHibernationManager.class));
+        }
+
+        public UserManager getUserManager() {
+            return Objects.requireNonNull(mContext.getSystemService(UserManager.class));
+        }
+
+        public DexUseManagerLocal getDexUseManager() {
+            return GlobalInjector.getInstance().getDexUseManager();
+        }
+
+        public boolean isSystemUiPackage(@NonNull String packageName) {
+            return Utils.isSystemUiPackage(mContext, packageName);
+        }
+
+        public boolean isLauncherPackage(@NonNull String packageName) {
+            return Utils.isLauncherPackage(mContext, packageName);
+        }
+
+        public long getCurrentTimeMillis() {
+            return System.currentTimeMillis();
+        }
     }
 }

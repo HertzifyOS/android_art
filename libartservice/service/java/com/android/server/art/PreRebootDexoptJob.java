@@ -36,10 +36,12 @@ import android.os.SystemProperties;
 import android.os.UpdateEngine;
 import android.provider.DeviceConfig;
 
+import androidx.annotation.ChecksSdkIntAtLeast;
 import androidx.annotation.RequiresApi;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.modules.utils.build.SdkLevel;
 import com.android.server.art.model.ArtFlags;
 import com.android.server.art.model.ArtFlags.ScheduleStatus;
 import com.android.server.art.model.ArtServiceJobInterface;
@@ -98,12 +100,6 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
 
     /** The slot that contains the OTA update, "_a" or "_b", or null for a Mainline update. */
     @GuardedBy("this") @Nullable private String mOtaSlot = null;
-
-    /**
-     * Whether to map/unmap snapshots ourselves rather than using update_engine. Only applicable to
-     * an OTA update. For legacy use only.
-     */
-    @GuardedBy("this") private boolean mMapSnapshotsForOta = false;
 
     /**
      * Offloads `onStartJob` and `onStopJob` calls from the main thread while keeping the execution
@@ -181,10 +177,11 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
             // Therefore, we can always pass `false` to the `wantsReschedule` parameter.
             jobService.jobFinished(params, false /* wantsReschedule */);
         };
-        startLocked(onJobFinishedLocked, false /* isUpdateEngineReady */).exceptionally(t -> {
-            AsLog.wtf("Fatal error", t);
-            return null;
-        });
+        startLocked(onJobFinishedLocked, getSnapshotMode(mOtaSlot, false /* isUpdateEngineReady */))
+                .exceptionally(t -> {
+                    AsLog.wtf("Fatal error", t);
+                    return null;
+                });
     }
 
     @Override
@@ -224,11 +221,6 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
         cancelAnyLocked();
         resetLocked();
         updateOtaSlotLocked(otaSlot);
-        // If update_engine hasn't mapped snapshot devices and we can't call update_engine to map
-        // snapshot devices, then we have to map snapshot devices ourselves. This only happens on
-        // the `pm art pr-dexopt-job --run` command for local development purposes and only on
-        // Android V.
-        mMapSnapshotsForOta = !isUpdateEngineReady && !android.os.Flags.updateEngineApi();
 
         if (synchronicity == JobSynchronicity.AUTO) {
             if (isOtaUpdate()) {
@@ -251,7 +243,8 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
         }
 
         mInjector.getStatsReporter().recordJobScheduled(false /* isAsync */, isOtaUpdate());
-        var synchronousJob = startLocked(null /* onJobFinishedLocked */, isUpdateEngineReady);
+        var synchronousJob = startLocked(
+                null /* onJobFinishedLocked */, getSnapshotMode(otaSlot, isUpdateEngineReady));
         return new OnUpdateReadyResponse(synchronousJob, null /* asynchronousJobScheduling */);
     }
 
@@ -387,18 +380,18 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
     @GuardedBy("this")
     @NonNull
     private CompletableFuture<Void> startLocked(
-            @Nullable Runnable onJobFinishedLocked, boolean isUpdateEngineReady) {
+            @Nullable Runnable onJobFinishedLocked, SnapshotMode snapshotMode) {
         Utils.check(mRunningJob == null);
 
         String otaSlot = mOtaSlot;
-        boolean mapSnapshotsForOta = mMapSnapshotsForOta;
         var cancellationSignal = mCancellationSignal = new CancellationSignal();
-        mIsUpdateEngineReady = isUpdateEngineReady;
+        mIsUpdateEngineReady = false;
         mRunningJob = new CompletableFuture().runAsync(() -> {
             PreRebootStatsReporter statsReporter = mInjector.getStatsReporter();
             try {
                 statsReporter.recordJobStarted();
-                if (otaSlot != null && !isUpdateEngineReady && !mapSnapshotsForOta) {
+                if (snapshotMode == SnapshotMode.UPDATE_ENGINE) {
+                    Utils.check(otaSlot != null);
                     triggerUpdateEnginePostinstallAndWait();
                     synchronized (this) {
                         // This check is not strictly necessary, but is an optimization to return
@@ -412,7 +405,7 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
                     }
                 }
                 PreRebootResult result = mInjector.getPreRebootDriver().run(
-                        otaSlot, mapSnapshotsForOta, cancellationSignal);
+                        otaSlot, snapshotMode == SnapshotMode.SELF, cancellationSignal);
                 statsReporter.recordJobEnded(result);
             } catch (UpdateEngineException e) {
                 AsLog.wtf("update_engine error", e);
@@ -441,12 +434,8 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
         return mRunningJob;
     }
 
-    // The new API usage is safe because it's guarded by a flag. The "NewApi" lint is wrong because
-    // it's meaningless (b/380891026). We can't change the flag check to `isAtLeastB` because we use
-    // `SetFlagsRule` in tests to test the behavior with and without the API support.
-    @SuppressLint("NewApi")
     private void triggerUpdateEnginePostinstallAndWait() throws UpdateEngineException {
-        if (!android.os.Flags.updateEngineApi()) {
+        if (!mInjector.isAtLeastB()) {
             // Should never happen.
             throw new UnsupportedOperationException();
         }
@@ -612,7 +601,7 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
     }
 
     private boolean isAsyncForOta() {
-        if (android.os.Flags.updateEngineApi()) {
+        if (mInjector.isAtLeastB()) {
             return true;
         }
         // Legacy flag in Android V.
@@ -669,6 +658,19 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
         return mOtaSlot != null;
     }
 
+    private SnapshotMode getSnapshotMode(@Nullable String otaSlot, boolean isUpdateEngineReady) {
+        if (otaSlot == null || isUpdateEngineReady) {
+            return SnapshotMode.NONE;
+        }
+        // The job is for OTA and snapshots are not mapped by update_engine yet. We hit here in two
+        // cases:
+        // 1. The job is running asynchronously. Either we are on B+, or we are on V and the OEM
+        //    sets `dalvik.vm.pr_dexopt_async_for_ota`.
+        // 2. The job is running synchronously, initiated by a `pm art pr-dexopt-job --run` command
+        //    for local development purposes.
+        return mInjector.isAtLeastB() ? SnapshotMode.UPDATE_ENGINE : SnapshotMode.SELF;
+    }
+
     private static class UpdateEngineException extends Exception {
         public UpdateEngineException(@NonNull String message) {
             super(message);
@@ -701,6 +703,19 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
      */
     public record OnUpdateReadyResponse(@Nullable CompletableFuture<Void> synchronousJob,
             @Nullable CompletableFuture<@ScheduleStatus Integer> asynchronousJobScheduling) {}
+
+    /** Whether to map/unmap snapshots for an OTA update and how. */
+    private enum SnapshotMode {
+        /**
+           Snapshots are not needed (i.e., it's a Mainline update) or are already mapped by
+           update_engine.
+         */
+        NONE,
+        /** Map/unmap snapshots using update_engine. */
+        UPDATE_ENGINE,
+        /** Map/unmap snapshots ourselves. For legacy use only. */
+        SELF,
+    }
 
     /**
      * Injector pattern for testing purpose.
@@ -752,6 +767,11 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
 
         public long getCurrentTimeMillis() {
             return System.currentTimeMillis();
+        }
+
+        @ChecksSdkIntAtLeast(api = 36)
+        public boolean isAtLeastB() {
+            return SdkLevel.isAtLeastB();
         }
     }
 }

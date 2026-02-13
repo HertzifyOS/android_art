@@ -160,6 +160,11 @@ class ArtdNotification : public aidl::com::android::server::art::BnArtdNotificat
   bool is_called_ GUARDED_BY(mu_) = false;
 };
 
+struct BootClasspathFds {
+  std::vector<std::unique_ptr<File>> files;
+  std::vector<int> fds;
+};
+
 class Artd : public aidl::com::android::server::art::BnArtd {
  public:
   explicit Artd(Options&& options,
@@ -341,6 +346,8 @@ class Artd : public aidl::com::android::server::art::BnArtd {
   android::base::Result<void> Start();
 
  private:
+  android::base::Result<BootClasspathFds> OpenBootClasspathFds(
+      const std::vector<std::string>& bcp_jars);
   android::base::Result<OatFileAssistantContext*> GetOatFileAssistantContext()
       EXCLUDES(ofa_context_mu_);
 

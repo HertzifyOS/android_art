@@ -112,7 +112,7 @@ void JitCompiler::ParseCompilerOptions() {
       if (instruction_set_features == nullptr) {
         LOG(WARNING) << "Error parsing " << option << " message=" << error_msg;
       }
-    } else if(option.starts_with("--huge-method-max=")) {
+    } else if (option.starts_with("--huge-method-max=")) {
       const char* str = option.c_str() + strlen("--huge-method-max=");
       VLOG(compiler) << "JIT huge method threshold " << str;
       int huge_method_threshold = static_cast<int>(strtol(str, NULL, 0));
@@ -121,7 +121,7 @@ void JitCompiler::ParseCompilerOptions() {
       } else {
         compiler_options_->SetHugeMethodThreshold(huge_method_threshold);
       }
-    } else if(option.starts_with("--inline-max-code-units=")) {
+    } else if (option.starts_with("--inline-max-code-units=")) {
       const char* str = option.c_str() + strlen("--inline-max-code-units=");
       VLOG(compiler) << "JIT inline max number of code units " << str;
       int inline_max_code_units = static_cast<int>(strtol(str, NULL, 0));
@@ -130,7 +130,7 @@ void JitCompiler::ParseCompilerOptions() {
       } else {
         compiler_options_->SetInlineMaxCodeUnits(inline_max_code_units);
       }
-    } else if(option.starts_with("--inline-max-total-instructions=")) {
+    } else if (option.starts_with("--inline-max-total-instructions=")) {
       const char* str = option.c_str() + strlen("--inline-max-total-instructions=");
       VLOG(compiler) << "JIT inline max number of total instructions " << str;
       int inline_max_total_instructions = static_cast<int>(strtol(str, NULL, 0));
@@ -140,7 +140,7 @@ void JitCompiler::ParseCompilerOptions() {
       } else {
         compiler_options_->SetInlineMaximumNumberOfTotalInstructions(inline_max_total_instructions);
       }
-    } else if(option.starts_with("--inline-max-instructions-for-small-method=")) {
+    } else if (option.starts_with("--inline-max-instructions-for-small-method=")) {
       const char* str = option.c_str() + strlen("--inline-max-instructions-for-small-method=");
       VLOG(compiler) << "JIT inline max number of instructions for small method " << str;
       int inline_max_instructions_for_small_method = static_cast<int>(strtol(str, NULL, 0));
@@ -151,7 +151,7 @@ void JitCompiler::ParseCompilerOptions() {
         compiler_options_->SetInlineMaximumNumberOfInstructionsForSmallMethod(
             inline_max_instructions_for_small_method);
       }
-    } else if(option.starts_with("--inline-max-cumulated-dex-registers=")) {
+    } else if (option.starts_with("--inline-max-cumulated-dex-registers=")) {
       const char* str = option.c_str() + strlen("--inline-max-cumulated-dex-registers=");
       VLOG(compiler) << "JIT inline max number of cumulated dex registers " << str;
       int inline_max_cumulated_dex_registers = static_cast<int>(strtol(str, NULL, 0));
@@ -162,7 +162,7 @@ void JitCompiler::ParseCompilerOptions() {
         compiler_options_->SetInlineMaximumNumberOfCumulatedDexRegisters(
             inline_max_cumulated_dex_registers);
       }
-    } else if(option.starts_with("--inline-max-recursive-calls=")) {
+    } else if (option.starts_with("--inline-max-recursive-calls=")) {
       const char* str = option.c_str() + strlen("--inline-max-recursive-calls=");
       VLOG(compiler) << "JIT inline max number of recursive calls " << str;
       int inline_max_recursive_calls = static_cast<int>(strtol(str, NULL, 0));
