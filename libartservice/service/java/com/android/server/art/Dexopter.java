@@ -222,7 +222,7 @@ public abstract class Dexopter<DexInfoType extends DetailedDexInfo> {
                         var options = GetDexoptNeededOptions.builder()
                                               .setProfileMerged(profileMerged)
                                               .setFlags(mParams.getFlags())
-                                              .setNeedsToBePublic(canBePublic)
+                                              .setCanBePublic(canBePublic)
                                               .build();
 
                         if (mInjector.isPreReboot()) {
@@ -568,14 +568,13 @@ public abstract class Dexopter<DexInfoType extends DetailedDexInfo> {
         ArtifactsPath existingArtifactsPath = AidlUtils.buildArtifactsPathAsInput(
                 target.dexInfo().dexPath(), target.isa(), target.isInDalvikCache());
 
-        if (options.needsToBePublic()
+        if (options.canBePublic()
                 && mInjector.getArtd().getArtifactsVisibility(existingArtifactsPath)
                         == FileVisibility.NOT_OTHER_READABLE) {
-            // Typically, this happens after an app starts being used by other apps.
-            // This case should be the same as force as we have no choice but to trigger a new
-            // dexopt.
-            dexoptTrigger |=
-                    DexoptTrigger.COMPILER_FILTER_IS_SAME | DexoptTrigger.COMPILER_FILTER_IS_WORSE;
+            // Typically, this happens after an app starts being used by other apps and we have a
+            // public profile that can be used. We can re-dexopt the app if it doesn't regress the
+            // compiler filter, as this will allow other apps to use the artifacts as well.
+            dexoptTrigger |= DexoptTrigger.COMPILER_FILTER_IS_SAME;
         }
 
         return dexoptTrigger;
@@ -797,7 +796,7 @@ public abstract class Dexopter<DexInfoType extends DetailedDexInfo> {
     abstract static class GetDexoptNeededOptions {
         abstract @DexoptFlags int flags();
         abstract boolean profileMerged();
-        abstract boolean needsToBePublic();
+        abstract boolean canBePublic();
 
         static Builder builder() {
             return new AutoValue_Dexopter_GetDexoptNeededOptions.Builder();
@@ -807,7 +806,7 @@ public abstract class Dexopter<DexInfoType extends DetailedDexInfo> {
         abstract static class Builder {
             abstract Builder setFlags(@DexoptFlags int value);
             abstract Builder setProfileMerged(boolean value);
-            abstract Builder setNeedsToBePublic(boolean value);
+            abstract Builder setCanBePublic(boolean value);
             abstract GetDexoptNeededOptions build();
         }
     }
