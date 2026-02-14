@@ -2626,9 +2626,9 @@ class InitializeClassVisitor : public CompilationVisitor {
       self->GetJniEnv()->AssertLocalsEmpty();
     }
 
-    if (!klass->IsInitialized() &&
-        (is_boot_image || is_boot_image_extension) &&
-        !compiler_options.IsPreloadedClass(PrettyDescriptor(descriptor))) {
+    if (!klass->IsInitialized() && (is_boot_image || is_boot_image_extension) &&
+        (compiler_options.IsNoPreloadClass(klass) ||
+         !compiler_options.IsPreloadedClass(PrettyDescriptor(descriptor)))) {
       klass->SetInBootImageAndNotInPreloadedClasses();
     }
 

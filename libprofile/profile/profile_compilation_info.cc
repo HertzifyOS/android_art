@@ -2307,6 +2307,16 @@ const ArenaSet<dex::TypeIndex>* ProfileCompilationInfo::GetClasses(
   return &dex_data->class_set;
 }
 
+const ArenaSet<dex::TypeIndex>* ProfileCompilationInfo::GetClassesNoPreload(
+    const DexFile& dex_file) const {
+  const DexFileData* dex_data =
+      FindDexDataUsingAnnotations(&dex_file, ProfileSampleAnnotation::kNone);
+  if (dex_data == nullptr) {
+    return nullptr;
+  }
+  return &dex_data->class_set_no_preload;
+}
+
 bool ProfileCompilationInfo::SameVersion(const ProfileCompilationInfo& other) const {
   return memcmp(version_, other.version_, kProfileVersionSize) == 0;
 }

@@ -117,6 +117,9 @@ static constexpr uint kBlackDenseRegionThreshold = 95U;
 // Flag to force stop-the-world compaction so that we don't use userfaultfd.
 #ifdef ART_FORCE_CMC_STW_COMPACTION
 static constexpr bool kForceSTWCompaction = true;
+#elif defined(ART_TARGET_ANDROID)
+static const bool kForceSTWCompaction =
+    GetBoolProperty("ro.dalvik.vm.force_cmc_stw_compaction", false);
 #else
 static constexpr bool kForceSTWCompaction = false;
 #endif
