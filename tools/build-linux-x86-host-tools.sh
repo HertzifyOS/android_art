@@ -25,7 +25,7 @@
 #   --stage=package        Package the host tools.
 #
 # If the user doesn't specify any flags, they will all be run in the order
-# (binaries -> art release -> packaging).
+# (art release -> binaries -> packaging).
 # If multiple flags are used, the script will run them in the correct order e.g.
 # build-linux-x86-host-tools.sh --stage=packaging --stage=art_release
 # will build the art_release and then the packaging stage. In this example,
@@ -104,6 +104,15 @@ SOURCE_FILES=(
   system/apex/proto/apex_manifest.proto
 )
 
+if [ "$BUILD_ART_RELEASE" = true ]; then
+  echo "Building ART Release"
+  # Build art_release.zip and copy only art jars in a temporary zip
+  build/soong/soong_ui.bash --make-mode dist "${DIST_DIR}/art_release.zip"
+  prebuilts/build-tools/linux-x86/bin/zip2zip -i "${DIST_DIR}/art_release.zip" \
+    -o "${DIST_DIR}/temp-art-jars.zip" "bootjars/*" "licenses/*/*"
+  rm -f "${DIST_DIR}/art_release.zip"
+fi
+
 if [ "$BUILD_HOST_BINARIES" = true ]; then
   echo "Building Host Binaries"
   # Build statically linked musl binaries for linux-x86 hosts without the
@@ -112,15 +121,6 @@ if [ "$BUILD_HOST_BINARIES" = true ]; then
   # Zip these binaries in a temporary file
   prebuilts/build-tools/linux-x86/bin/soong_zip -o "${DIST_DIR}/temp-host-tools.zip" \
     -j ${HOST_BINARIES[*]/#/-f } ${SOURCE_FILES[*]/#/-f }
-fi
-
-if [ "$BUILD_ART_RELEASE" = true ]; then
-  echo "Building ART Release"
-  # Build art_release.zip and copy only art jars in a temporary zip
-  build/soong/soong_ui.bash --make-mode dist "${DIST_DIR}/art_release.zip"
-  prebuilts/build-tools/linux-x86/bin/zip2zip -i "${DIST_DIR}/art_release.zip" \
-    -o "${DIST_DIR}/temp-art-jars.zip" "bootjars/*" "licenses/*/*"
-  rm -f "${DIST_DIR}/art_release.zip"
 fi
 
 if [ "$PACKAGE" = true ]; then
