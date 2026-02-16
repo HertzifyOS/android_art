@@ -288,12 +288,6 @@ void MemMap::SetDebugName(void* map_ptr, const char* name, size_t size) {
 
   std::string debug_friendly_name("dalvik-");
   debug_friendly_name += name;
-  // The maximum the kernel allows the string to be: 80 minus one for the null
-  // terminating character.
-  static constexpr size_t kMaximumLengthName = 79;
-  if (debug_friendly_name.size() > kMaximumLengthName) {
-    debug_friendly_name.resize(kMaximumLengthName);
-  }
   auto it = debugStrMap.find(debug_friendly_name);
 
   if (it == debugStrMap.end()) {
