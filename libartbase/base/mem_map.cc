@@ -1129,7 +1129,7 @@ void* MemMap::MapInternalArtLow4GBAllocator(size_t length,
       return actual;
     }
 
-    if (4U * GB - ptr < length) {
+    if (4U * GB - ptr <= length) {
       // Not enough memory until 4GB.
       if (first_run) {
         // Try another time from the bottom;
@@ -1155,11 +1155,10 @@ void* MemMap::MapInternalArtLow4GBAllocator(size_t length,
       }
     }
 
-    next_mem_pos_ = tail_ptr;  // update early, as we break out when we found and mapped a region
-
     if (safe == true) {
       actual = TryMemMapLow4GB(reinterpret_cast<void*>(ptr), length, prot, flags, fd, offset);
       if (actual != MAP_FAILED) {
+        next_mem_pos_ = tail_ptr;
         return actual;
       }
     } else {
@@ -1169,7 +1168,7 @@ void* MemMap::MapInternalArtLow4GBAllocator(size_t length,
   }
 
   if (actual == MAP_FAILED) {
-    LOG(ERROR) << "Could not find contiguous low-memory space.";
+    LOG(ERROR) << "Could not find contiguous " << PrettySize(length) << " low-memory space.";
     errno = ENOMEM;
   }
   return actual;
