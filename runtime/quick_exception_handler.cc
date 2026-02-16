@@ -28,8 +28,8 @@
 #include "base/pointer_size.h"
 #include "base/systrace.h"
 #include "dex/dex_file_types.h"
-#include "dex/dex_instruction.h"
 #include "dex/dex_instruction-inl.h"
+#include "dex/dex_instruction.h"
 #include "entrypoints/entrypoint_utils.h"
 #include "entrypoints/quick/quick_entrypoints_enum.h"
 #include "entrypoints/runtime_asm_entrypoints.h"
@@ -45,6 +45,7 @@
 #include "oat/oat_quick_method_header.h"
 #include "oat/stack_map.h"
 #include "stack.h"
+#include "trace_profile.h"
 
 namespace art HIDDEN {
 
@@ -103,16 +104,23 @@ class CatchBlockStackVisitor final : public StackVisitor {
       return true;
     }
     bool continue_stack_walk = HandleTryItems(method);
+    const OatQuickMethodHeader* header = GetCurrentOatQuickMethodHeader();
     // Collect methods for which MethodUnwind callback needs to be invoked. MethodUnwind callback
     // can potentially throw, so we want to call these after we find the catch block.
     // We stop the stack walk when we find the catch block. If we are ending the stack walk we don't
     // have to unwind this method so don't record it.
     if (continue_stack_walk && !skip_unwind_callback_) {
-      if (Runtime::Current()->GetInstrumentation()->MethodSupportsExitEvents(
-              GetMethod(), GetCurrentOatQuickMethodHeader())) {
+      if (Runtime::Current()->GetInstrumentation()->MethodSupportsExitEvents(GetMethod(), header)) {
         unwound_methods_for_callbacks_.push(method);
       }
     }
+
+    if (continue_stack_walk && header != nullptr && header->IsOptimized() && !IsInInlinedFrame()) {
+      // Record trace events only for non-inlined methods. Inlined methods don't see a method entry
+      // event, so we shouldn't report method exit events.
+      TraceProfiler::RecordTraceEventIfNeeded(method, GetThread(), /*is_entry=*/false);
+    }
+
     // Skip unwind callback is used when method exit callback has thrown an exception. Since we
     // already invoked method exit callback for the top frame we shouldn't call the unwind
     // callbacks. For others we should call the unwind callbacks.
@@ -506,10 +514,16 @@ class DeoptimizeStackVisitor final : public StackVisitor {
         updated_vregs = GetThread()->GetUpdatedVRegFlags(frame_id);
         DCHECK(updated_vregs != nullptr);
       }
-      if (GetCurrentOatQuickMethodHeader()->IsNterpMethodHeader()) {
+      const OatQuickMethodHeader* header = GetCurrentOatQuickMethodHeader();
+      if (header->IsNterpMethodHeader()) {
         HandleNterpDeoptimization(method, new_frame, updated_vregs);
       } else {
         HandleOptimizingDeoptimization(method, new_frame, updated_vregs);
+      }
+      if (header->IsOptimized() && IsInInlinedFrame()) {
+        // For inlined frames, low overhead tracing doesn't report entry events. So don't report
+        // exit events too.
+        new_frame->SetSkipLowOverheadTraceEvent(true);
       }
       if (!new_frame->GetSkipMethodExitEvents()) {
         // Don't reset if we already set the skip method exit events. When

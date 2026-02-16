@@ -35,6 +35,7 @@
 #include "stack.h"
 #include "thread-inl.h"
 #include "thread.h"
+#include "trace_profile.h"
 #include "unstarted_runtime.h"
 
 namespace art HIDDEN {
@@ -303,6 +304,7 @@ static inline JValue Execute(
       }
     }
 
+    TraceProfiler::RecordTraceEventIfNeeded(method, self, /*is_entry=*/true);
     instrumentation::Instrumentation* instrumentation = Runtime::Current()->GetInstrumentation();
     if (UNLIKELY(instrumentation->HasMethodEntryListeners() || shadow_frame.GetForcePopFrame())) {
       instrumentation->MethodEnterEvent(self, method);
