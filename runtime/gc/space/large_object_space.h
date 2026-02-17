@@ -199,7 +199,11 @@ class LargeObjectMapSpace : public LargeObjectSpace {
 class FreeListSpace final : public LargeObjectSpace {
  public:
   virtual ~FreeListSpace();
-  static FreeListSpace* Create(const std::string& name, size_t capacity);
+  // Creates this space by mapping 'capacity' sized region, preferably starting
+  // at 'hint_addr' and then calling the ctor.
+  static FreeListSpace* Create(const std::string& name,
+                               size_t capacity,
+                               uint8_t* hint_addr = nullptr);
   size_t AllocationSize(mirror::Object* obj, size_t* usable_size) override
       REQUIRES(lock_);
   mirror::Object* Alloc(Thread* self, size_t num_bytes, size_t* bytes_allocated,

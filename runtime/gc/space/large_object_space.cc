@@ -364,7 +364,7 @@ inline bool FreeListSpace::SortByPrevFree::operator()(const AllocationInfo* a,
   return reinterpret_cast<uintptr_t>(a) < reinterpret_cast<uintptr_t>(b);
 }
 
-FreeListSpace* FreeListSpace::Create(const std::string& name, size_t size) {
+FreeListSpace* FreeListSpace::Create(const std::string& name, size_t size, uint8_t* hint_addr) {
   CHECK_ALIGNED_PARAM(size, ObjectAlignment());
   DCHECK_LE(gPageSize, ObjectAlignment())
       << "MapAnonymousAligned() should be used if the large-object alignment is larger than the "
@@ -375,15 +375,21 @@ FreeListSpace* FreeListSpace::Create(const std::string& name, size_t size) {
     // We don't pass error_msg string to ensure that we retain errno originating out
     // of mmap(), if it fails.
     MemMap mem_map = MemMap::MapAnonymous(name.c_str(),
+                                          hint_addr,
                                           size,
                                           PROT_READ | PROT_WRITE,
                                           /*low_4gb=*/true,
+                                          /*reuse=*/false,
+                                          /*reservation=*/nullptr,
                                           /*error_msg=*/nullptr);
     if (mem_map.IsValid()) {
       return new FreeListSpace(name, std::move(mem_map), mem_map.Begin(), mem_map.End());
     }
-    CHECK_EQ(errno, ENOMEM) << "mmap failed for large object space";
-    size = RoundUp(size >> 1, gPageSize);
+    if (hint_addr == nullptr) {
+      CHECK_EQ(errno, ENOMEM) << "mmap failed for large object space: " << strerror(errno);
+      size = RoundUp(size >> 1, gPageSize);
+    }
+    hint_addr = nullptr;
   }
   LOG(WARNING) << "Failed to allocate large object space mem map: " << strerror(errno);
   return nullptr;

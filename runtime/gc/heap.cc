@@ -550,9 +550,11 @@ Heap::Heap(size_t initial_size,
       VerifyBootImagesContiguity(boot_image_spaces_);
     }
   } else {
-    if (foreground_collector_type_ == kCollectorTypeCC) {
-      // Need to use a low address so that we can allocate a contiguous 2 * Xmx space
-      // when there's no image (dex2oat for target).
+    if (foreground_collector_type_ == kCollectorTypeCC ||
+        foreground_collector_type_ == kCollectorTypeCMC) {
+      // When no image is mapped, it's possible that one gets mapped later (like
+      // in some gtests). Ensure that a non-overlapping address is picked to
+      // avoid failures.
       request_begin = kPreferredAllocSpaceBegin;
     }
     // Gross hack to make dex2oat deterministic.
@@ -658,6 +660,7 @@ Heap::Heap(size_t initial_size,
     AddSpace(non_moving_space_);
   }
   size_t main_space_reservation = capacity_;
+  uint8_t* los_hint_addr;
   // Create other spaces based on whether or not we have a moving GC.
   if (foreground_collector_type_ == kCollectorTypeCC) {
     CHECK(separate_non_moving_space);
@@ -666,11 +669,13 @@ Heap::Heap(size_t initial_size,
     MemMap region_space_mem_map =
         space::RegionSpace::CreateMemMap(kRegionSpaceName, main_space_reservation, request_begin);
     CHECK(region_space_mem_map.IsValid()) << "No region space mem map";
+    los_hint_addr = region_space_mem_map.End();
     region_space_ = space::RegionSpace::Create(
         kRegionSpaceName, std::move(region_space_mem_map), use_generational_gc_);
     AddSpace(region_space_);
   } else if (IsMovingGc(foreground_collector_type_)) {
     // Create bump pointer spaces.
+    los_hint_addr = main_mem_map_1.End();
     // We only need to create the bump pointer if the foreground collector is a compacting GC.
     // TODO: Place bump-pointer spaces somewhere to minimize size of card table.
     bump_pointer_space_ = space::BumpPointerSpace::CreateFromMemMap("Bump pointer space 1",
@@ -682,6 +687,7 @@ Heap::Heap(size_t initial_size,
     // contiguous. So its temp space will be created by the GC itself.
     if (foreground_collector_type_ != kCollectorTypeCMC) {
       main_space_reservation += capacity_;
+      los_hint_addr = main_mem_map_2.End();
       temp_space_ = space::BumpPointerSpace::CreateFromMemMap("Bump pointer space 2",
                                                               std::move(main_mem_map_2));
       CHECK(temp_space_ != nullptr) << "Failed to create bump pointer space";
@@ -691,6 +697,7 @@ Heap::Heap(size_t initial_size,
     }
     CHECK(separate_non_moving_space);
   } else {
+    los_hint_addr = main_mem_map_1.End();
     CreateMainMallocSpace(std::move(main_mem_map_1), initial_size, growth_limit_, capacity_);
     CHECK(main_space_ != nullptr);
     AddSpace(main_space_);
@@ -700,6 +707,7 @@ Heap::Heap(size_t initial_size,
     }
     if (main_mem_map_2.IsValid()) {
       const char* name = kUseRosAlloc ? kRosAllocSpaceName[1] : kDlMallocSpaceName[1];
+      los_hint_addr = main_mem_map_2.End();
       main_space_backup_.reset(CreateMallocSpaceFromMemMap(std::move(main_mem_map_2),
                                                            initial_size,
                                                            growth_limit_,
@@ -722,7 +730,7 @@ Heap::Heap(size_t initial_size,
     size_t los_capacity =
         std::min(capacity_, UnsignedDifference(kMaxHeapLow4GBReservation, main_space_reservation));
     large_object_space_ =
-        space::FreeListSpace::Create("free list large object space", los_capacity);
+        space::FreeListSpace::Create("free list large object space", los_capacity, los_hint_addr);
   } else if (large_object_space_type == space::LargeObjectSpaceType::kMap) {
     large_object_space_ = space::LargeObjectMapSpace::Create("mem map large object space");
     CHECK(large_object_space_ != nullptr) << "Failed to create large object space";
