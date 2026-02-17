@@ -241,7 +241,7 @@ public class DumpHelper {
                                         pkgState.getPackageName(), now)))
                 .sorted(Comparator.<Pair<String, Double>>comparingDouble(pair -> pair.second)
                                 .reversed()
-                                .thenComparing(Comparator.comparing(pair -> pair.first)))
+                                .thenComparing(pair -> pair.first))
                 .forEach(pair -> ipw.printf("%s - %.4f\n", pair.first, pair.second));
     }
 
