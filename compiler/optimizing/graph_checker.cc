@@ -903,8 +903,10 @@ void GraphChecker::HandleTypeCheckInstruction(HTypeCheckInstruction* check) {
         check, /* input_pos= */ 2, check_values, expected_path_to_root, "path_to_root");
     CheckTypeCheckBitstringInput(check, /* input_pos= */ 3, check_values, expected_mask, "mask");
   } else {
-    if (!input->IsLoadClass()) {
-      AddError(StringPrintf("%s:%d (classic) expects a HLoadClass as second input, not %s:%d.",
+    if (!input->IsLoadClass() &&
+        !(input->IsFieldAccess() && input->AsFieldAccess()->HasConstantValue())) {
+      AddError(StringPrintf("%s:%d (classic) expects a HLoadClass or a constant value FieldAccess"
+                                " as second input, not %s:%d.",
                             check->DebugName(),
                             check->GetId(),
                             input->DebugName(),

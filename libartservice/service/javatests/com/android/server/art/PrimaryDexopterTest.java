@@ -586,7 +586,7 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
     }
 
     @Test
-    public void testDexoptNeedsToBeShared() throws Exception {
+    public void testDexoptUsedByOtherApps() throws Exception {
         when(mDexUseManager.isPrimaryDexUsedByOtherApps(eq(PKG_NAME), eq(mDexPath)))
                 .thenReturn(true);
         when(mDexUseManager.isPrimaryDexUsedByOtherApps(eq(PKG_NAME), eq(mSplit0DexPath)))
@@ -594,9 +594,7 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
 
         // The ref profile is usable but shouldn't be used.
         makeProfileUsable(mRefProfile);
-        // The split profile is usable and should be used.
-        makeProfileUsable(mSplit0RefProfile);
-
+        // The DM profile is usable and should be used.
         makeProfileUsable(mDmProfile);
 
         // The existing artifacts are private.
@@ -610,36 +608,56 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
         verify(mArtd).copyAndRewriteProfile(
                 deepEq(mDmProfile), deepEq(mPublicOutputProfile), eq(mDexPath));
 
-        // It should re-compile anyway.
+        // We have a public profile that can be used, while the existing artifacts are private.
+        // Re-dexopt if it doesn't regress the compiler filter.
         verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm64"), any(), eq("speed-profile"),
-                eq(mForceDexoptTrigger), any());
+                eq(mBetterOrSameDexoptTrigger), any());
         checkDexoptWithProfile(verify(mArtd), mDexPath, "arm64",
                 ProfilePath.tmpProfilePath(mPublicOutputProfile.profilePath),
                 true /* isOtherReadable */);
 
         verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm"), any(), eq("speed-profile"),
-                eq(mForceDexoptTrigger), any());
+                eq(mBetterOrSameDexoptTrigger), any());
         checkDexoptWithProfile(verify(mArtd), mDexPath, "arm",
                 ProfilePath.tmpProfilePath(mPublicOutputProfile.profilePath),
                 true /* isOtherReadable */);
-
-        verify(mArtd).getDexoptNeeded(eq(mSplit0DexPath), eq("arm64"), any(), eq("speed-profile"),
-                eq(mDefaultDexoptTrigger), any());
-        checkDexoptWithProfile(verify(mArtd), mSplit0DexPath, "arm64", mSplit0RefProfile,
-                false /* isOtherReadable */);
-
-        verify(mArtd).getDexoptNeeded(eq(mSplit0DexPath), eq("arm"), any(), eq("speed-profile"),
-                eq(mDefaultDexoptTrigger), any());
-        checkDexoptWithProfile(verify(mArtd), mSplit0DexPath, "arm", mSplit0RefProfile,
-                false /* isOtherReadable */);
 
         verifyProfileNotUsed(mRefProfile);
         verifyProfileNotUsed(mPrebuiltProfile);
     }
 
     @Test
-    public void testDexoptNeedsToBeSharedArtifactsArePublic() throws Exception {
-        // Same setup as above, but the existing artifacts are public.
+    public void testDexoptUsedByOtherAppsNoPublicProfile() throws Exception {
+        // Same setup as `testDexoptUsedByOtherApps`, but the DM profile is not usable.
+        when(mDexUseManager.isPrimaryDexUsedByOtherApps(eq(PKG_NAME), eq(mDexPath)))
+                .thenReturn(true);
+        when(mDexUseManager.isPrimaryDexUsedByOtherApps(eq(PKG_NAME), eq(mSplit0DexPath)))
+                .thenReturn(true);
+
+        makeProfileUsable(mRefProfile);
+        lenient()
+                .when(mArtd.getArtifactsVisibility(
+                        argThat(artifactsPath -> artifactsPath.dexPath == mDexPath)))
+                .thenReturn(FileVisibility.NOT_OTHER_READABLE);
+
+        List<DexContainerFileDexoptResult> results = mPrimaryDexopter.dexopt();
+        verifyStatusAllOk(results);
+
+        // It should use the ref profile and make the artifacts private.
+        verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm64"), any(), eq("speed-profile"),
+                eq(mDefaultDexoptTrigger), any());
+        checkDexoptWithProfile(
+                verify(mArtd), mDexPath, "arm64", mRefProfile, false /* isOtherReadable */);
+
+        verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm"), any(), eq("speed-profile"),
+                eq(mDefaultDexoptTrigger), any());
+        checkDexoptWithProfile(
+                verify(mArtd), mDexPath, "arm", mRefProfile, false /* isOtherReadable */);
+    }
+
+    @Test
+    public void testDexoptUsedByOtherAppsArtifactsArePublic() throws Exception {
+        // Same setup as `testDexoptUsedByOtherApps`, but the existing artifacts are public.
         when(mDexUseManager.isPrimaryDexUsedByOtherApps(eq(PKG_NAME), eq(mDexPath)))
                 .thenReturn(true);
         when(mDexUseManager.isPrimaryDexUsedByOtherApps(eq(PKG_NAME), eq(mSplit0DexPath)))
@@ -659,6 +677,39 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
                 eq(mDefaultDexoptTrigger), any());
         verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm"), any(), eq("speed-profile"),
                 eq(mDefaultDexoptTrigger), any());
+    }
+
+    @Test
+    public void testDexoptUsedByOtherAppsNonProfileGuidedFilter() throws Exception {
+        // Same setup as `testDexoptUsedByOtherApps`, but the requested compiler filter is not
+        // profile-guided.
+        when(mDexUseManager.isPrimaryDexUsedByOtherApps(eq(PKG_NAME), eq(mDexPath)))
+                .thenReturn(true);
+        when(mDexUseManager.isPrimaryDexUsedByOtherApps(eq(PKG_NAME), eq(mSplit0DexPath)))
+                .thenReturn(true);
+
+        makeProfileUsable(mRefProfile);
+        makeProfileUsable(mDmProfile);
+        when(mArtd.getArtifactsVisibility(
+                     argThat(artifactsPath -> artifactsPath.dexPath == mDexPath)))
+                .thenReturn(FileVisibility.NOT_OTHER_READABLE);
+
+        mDexoptParams = mDexoptParams.toBuilder().setCompilerFilter("verify").build();
+        mPrimaryDexopter = new PrimaryDexopter(
+                mInjector, mSnapshot, mPkgState, mPkg, mDexoptParams, mCancellationSignal);
+
+        List<DexContainerFileDexoptResult> results = mPrimaryDexopter.dexopt();
+        verifyStatusAllOk(results);
+
+        // It should not re-dexopt unless it doesn't regress the compiler filter.
+        verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm64"), any(), eq("verify"),
+                eq(mBetterOrSameDexoptTrigger), any());
+        verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm"), any(), eq("verify"),
+                eq(mBetterOrSameDexoptTrigger), any());
+
+        verifyProfileNotUsed(mRefProfile);
+        verifyProfileNotUsed(mDmProfile);
+        verifyProfileNotUsed(mPrebuiltProfile);
     }
 
     @Test

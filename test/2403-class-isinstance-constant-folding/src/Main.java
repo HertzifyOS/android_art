@@ -31,16 +31,20 @@ public class Main {
                                                "voids");
 
     private static final Main MAIN = new Main();
+    private static final Class<?> STRING_CLASS = String.class;
     private static Class<?> NULL = null;
 
     public static void main(String[] args) {
         System.loadLibrary(args[0]);
 
         ensureJitCompiled(Main.class, "$noinline$fieldupdaters");
-        $noinline$fieldupdaters();
+        $noinline$fieldupdaters(new byte[0]);
 
         ensureJitCompiled(Main.class, "$noinline$fieldupdatersCCE");
         $noinline$fieldupdatersCCE();
+
+        ensureJitCompiled(Main.class, "$noinline$classInStaticField");
+        $noinline$classInStaticField(new Object());
 
         ensureJitCompiled(Main.class, "$noinline$npe");
         $noinline$npe();
@@ -52,11 +56,12 @@ public class Main {
         $noinline$primitives(new Object());
     }
 
-    private static void $noinline$fieldupdaters() {
+    private static void $noinline$fieldupdaters(Object obj) {
         byte[] newBytes = new byte[0];
         assertTrue(BYTES_UPDATER.compareAndSet(MAIN, null, newBytes));
         assertTrue(BYTES_UPDATER.compareAndSet(MAIN, newBytes, new byte[1]));
         assertFalse(BYTES_UPDATER.compareAndSet(MAIN, null, newBytes));
+        assertFalse(((AtomicReferenceFieldUpdater) BYTES_UPDATER).compareAndSet(MAIN, null, obj));
 
         Main[] newMains = new Main[0];
         assertTrue(MAINS_UPDATER.compareAndSet(MAIN, null, newMains));
@@ -85,6 +90,10 @@ public class Main {
             // `expect` parameter's type is not checked.
             assertFalse(rawUpdater.compareAndSet(MAIN, newMains, newBytes));
         }
+    }
+
+    private static void $noinline$classInStaticField(Object obj) {
+        assertFalse(STRING_CLASS.isInstance(obj));
     }
 
     private static void $noinline$npe() {
