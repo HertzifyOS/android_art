@@ -156,6 +156,15 @@ flag {
 }
 
 flag {
+  name: "packed_switch_simplification"
+  namespace: "art_performance"
+  description: "Simplify packed-switch to a load from constant table"
+  bug: "283699582"
+  is_fixed_read_only: false
+  is_exported: false
+}
+
+flag {
   name: "lse_quick_lock"
   namespace: "system_performance"
   description: "Use runtime LSE instructions when available to optimize quick lock entry points"
