@@ -999,7 +999,7 @@ TraceWriter::TraceWriter(File* trace_file,
   uint64_t start_time_monotonic =
       start_time_ + (NanoTime() - TimestampCounter::GetNanoTime(TimestampCounter::GetTimestamp()));
   uint16_t trace_version = GetTraceVersion(clock_source_, trace_format_version_);
-  if (output_mode == TraceOutputMode::kStreaming) {
+  if (output_mode == TraceOutputMode::kStreaming && trace_format_version_ == Trace::kFormatV1) {
     trace_version |= 0xF0U;
   }
 
@@ -1104,6 +1104,8 @@ std::string TraceWriter::CreateSummary(int flags) {
   os << StringPrintf("vm=art\n");
   os << StringPrintf("pid=%d\n", getpid());
 
+  os << "is_streaming=" << (trace_output_mode_ == TraceOutputMode::kStreaming ? "true" : "false")
+     << "\n";
   os << "is_precise_trace=" << (flags & Trace::TraceFlag::kTraceLowOverhead ? "false" : "true")
      << "\n";
   std::string compiler_filter;
