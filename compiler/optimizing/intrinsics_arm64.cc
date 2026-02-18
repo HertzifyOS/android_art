@@ -5745,8 +5745,13 @@ static void GenerateVarHandleCompareAndSetOrExchange(HInvoke* invoke,
   if (return_success) {
     if (strong) {
       __ Cset(out.W(), eq);
-    } else if (use_lse) {
+    } else if (use_lse && cmp_failure == nullptr) {
       // The result from `GenerateCompareAndSet()` is already final with LSE.
+      // However, if we have a `cmp_failure` label (e.g. for read barriers), the
+      // LSE `cas` result is only valid if the `cmp_failure` branch wasn't taken.
+      // If we returned from the slow path, the result register might hold the
+      // reloaded value (non-zero) instead of the failure status (0).
+      // In that case, we must fall through to the Csel logic.
       DCHECK(store_result.Is(out));
     } else {
       // On success, the Z flag is set and the store result is 1, see GenerateCompareAndSet().
