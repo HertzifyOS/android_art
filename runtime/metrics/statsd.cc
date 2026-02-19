@@ -16,9 +16,11 @@
 
 #include "statsd.h"
 
+#include "android-base/properties.h"
 #include "arch/instruction_set.h"
 #include "base/compiler_filter.h"
 #include "base/metrics/metrics.h"
+#include "cmdline_types.h"
 #include "gc/collector/mark_compact.h"
 #include "gc/heap.h"
 #include "gc/space/image_space.h"
@@ -419,6 +421,48 @@ class StatsdBackend : public MetricsBackend {
   int64_t current_timestamp_;
 };
 
+template <typename T>
+std::optional<T> ParseProperty(const std::string& key) {
+  std::string value = android::base::GetProperty(key, "");
+  if (value.empty()) {
+    return std::nullopt;
+  }
+  CmdlineType<T> parser;
+  auto result = parser.Parse(value);
+  if (result.IsSuccess()) {
+    return result.GetValue();
+  }
+  return std::nullopt;
+}
+
+// Returns the value of the given property in KiB.
+//
+// Note that `default_value_bytes` is taken in bytes to match the properties and is converted to KiB
+// too.
+int32_t GetMemoryKiBProperty(const std::string& key, size_t default_value_bytes) {
+  // All these properties use MemoryKiB (1024) in ParsedOptions, and are thus divisible by 1024, so
+  // we can safely divide them by 1024 and fit them into int32_t.
+  return static_cast<int32_t>(ParseProperty<MemoryKiB>(key).value_or(default_value_bytes) / 1024);
+}
+
+// Returns the value of the given property as a float.
+float GetFloatProperty(const std::string& key, double default_value) {
+  // All these properties use double in ParsedOptions, but we report them as floats.
+  return static_cast<float>(ParseProperty<double>(key).value_or(default_value));
+}
+
+#define GET_BOOL_PROPERTY(key, message_prefix, field_prefix)                \
+  []() {                                                                    \
+    std::optional<bool> __get_bool_property_tmp = ParseProperty<bool>(key); \
+    if (!__get_bool_property_tmp.has_value()) {                             \
+      return statsd::message_prefix##__##field_prefix##__STATE_UNSET;       \
+    } else if (__get_bool_property_tmp.value()) {                           \
+      return statsd::message_prefix##__##field_prefix##__STATE_TRUE;        \
+    } else {                                                                \
+      return statsd::message_prefix##__##field_prefix##__STATE_FALSE;       \
+    }                                                                       \
+  }()
+
 }  // namespace
 
 std::unique_ptr<MetricsBackend> CreateStatsdBackend() { return std::make_unique<StatsdBackend>(); }
@@ -430,14 +474,28 @@ AStatsManager_PullAtomCallbackReturn DeviceStatusCallback(int32_t atom_tag,
     Runtime* runtime = Runtime::Current();
     int32_t boot_image_status;
     if (runtime->GetHeap()->HasBootImageSpace() && !runtime->HasImageWithProfile()) {
-      boot_image_status = statsd::ART_DEVICE_DATUM_REPORTED__BOOT_IMAGE_STATUS__STATUS_FULL;
+      boot_image_status = statsd::ART_DEVICE_STATUS__BOOT_IMAGE_STATUS__STATUS_FULL;
     } else if (runtime->GetHeap()->HasBootImageSpace() &&
                runtime->GetHeap()->GetBootImageSpaces()[0]->GetProfileFiles().empty()) {
-      boot_image_status = statsd::ART_DEVICE_DATUM_REPORTED__BOOT_IMAGE_STATUS__STATUS_MINIMAL;
+      boot_image_status = statsd::ART_DEVICE_STATUS__BOOT_IMAGE_STATUS__STATUS_MINIMAL;
     } else {
-      boot_image_status = statsd::ART_DEVICE_DATUM_REPORTED__BOOT_IMAGE_STATUS__STATUS_NONE;
+      boot_image_status = statsd::ART_DEVICE_STATUS__BOOT_IMAGE_STATUS__STATUS_NONE;
     }
-    statsd::addAStatsEvent(data, atom_tag, boot_image_status);
+
+    statsd::addAStatsEvent(data,
+                           atom_tag,
+                           boot_image_status,
+                           GET_BOOL_PROPERTY("dalvik.vm.enable_time_based_gc_trigger",
+                                             ART_DEVICE_STATUS,
+                                             ENABLE_TIME_BASED_GC_TRIGGER),
+                           GetMemoryKiBProperty("dalvik.vm.heapgrowthlimit", 0),
+                           GetMemoryKiBProperty("dalvik.vm.heapmaxfree", 0),
+                           GetMemoryKiBProperty("dalvik.vm.heapminfree", 0),
+                           GetMemoryKiBProperty("dalvik.vm.heapsize", 0),
+                           GetMemoryKiBProperty("dalvik.vm.heapstartsize", 0),
+                           GetFloatProperty("dalvik.vm.heaptargetutilization", 0.0f),
+                           GetFloatProperty("dalvik.vm.heap-memory-gc-cost-factor", 0.0f),
+                           GetFloatProperty("dalvik.vm.foreground-heap-growth-multiplier", 0.0f));
     return AStatsManager_PULL_SUCCESS;
   }
 
