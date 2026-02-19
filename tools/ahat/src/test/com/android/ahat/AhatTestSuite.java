@@ -21,7 +21,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
 
 @RunWith(Suite.class)
-@Suite.SuiteClasses({DiffFieldsTest.class, DiffTest.class, DominatorsTest.class,
+@Suite.SuiteClasses({ActivityLeaksTest.class, DiffFieldsTest.class, DiffTest.class, DominatorsTest.class,
     HandlersTest.class, HtmlEscaperTest.class, InstanceTest.class, NativeAllocationTest.class,
     ObjectHandlerTest.class, ObjectsHandlerTest.class, PerformanceTest.class,
     ProguardMapTest.class, RootedHandlerTest.class, QueryTest.class, RiTest.class,

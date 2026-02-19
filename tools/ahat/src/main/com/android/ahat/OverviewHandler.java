@@ -17,6 +17,7 @@
 package com.android.ahat;
 
 import com.android.ahat.heapdump.AhatHeap;
+import com.android.ahat.heapdump.AhatInstance;
 import com.android.ahat.heapdump.AhatSnapshot;
 import com.android.ahat.heapdump.Reachability;
 import com.android.ahat.heapdump.Size;
@@ -57,6 +58,16 @@ class OverviewHandler implements AhatHandler {
 
     doc.section("Bytes Retained by Heap");
     printHeapSizes(doc);
+
+    List<AhatInstance> activityLeaks = mSnapshot.getActivityLeaks();
+    if (!activityLeaks.isEmpty()) {
+      doc.section("Activity Leaks");
+      doc.description(
+          DocString.text("⚠ Found "),
+          DocString.link(
+              DocString.uri("activity-leaks"),
+              DocString.format("%d leaked activities.", activityLeaks.size())));
+    }
   }
 
   private void printHeapSizes(Doc doc) {

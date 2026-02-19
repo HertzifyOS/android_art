@@ -124,6 +124,19 @@ public class DumpedStuff extends SuperDumpedStuff {
     message1.next = barrierMessage;
     barrierMessage.next = message2;
     message2.next = null;
+
+    MyActivity a1 = new MyActivity();
+    a1.mDestroyed = true;
+    activityLeaks.add(a1);
+
+    MyActivity a2 = new MyActivity();
+    a2.mDestroyed = true;
+    activityLeaks.add(a2);
+
+    MyActivity a3 = new MyActivity(); // Not destroyed, should not be a leak
+    activityLeaks.add(a3);
+
+    activityLeaks.add(new MyService()); // Not an Activity, should not be a leak
   }
 
   public static class ObjectTree {
@@ -153,6 +166,12 @@ public class DumpedStuff extends SuperDumpedStuff {
 
   public static class StackSmasher {
     public StackSmasher child;
+  }
+
+  public static class MyActivity extends android.app.Activity {
+  }
+
+  public static class MyService extends android.content.Context {
   }
 
   public static class Reference {
@@ -247,6 +266,7 @@ public class DumpedStuff extends SuperDumpedStuff {
   public WeakReference aWeakRefToGcRoot = new WeakReference(Main.class);
   public SoftReference aSoftChain = new SoftReference(new Reference(new Reference(new Object())));
   public Object[] basicStringRef;
+  public java.util.List<android.content.Context> activityLeaks = new java.util.ArrayList<>();
   public AddedObject addedObject;
   public UnchangedObject unchangedObject = new UnchangedObject();
   public RemovedObject removedObject;

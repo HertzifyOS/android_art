@@ -43,6 +43,7 @@ public class AhatSnapshot implements Diffable<AhatSnapshot> {
   private AhatBitmapInstance.BitmapDumpData mBitmapDumpData = null;
   private AhatMessageInstance.MessageDumpData mMessageDumpData = null;
   private List<List<AhatInstance>> mDuplicateStrings = null;
+  private List<AhatInstance> mActivityLeaks = null;
   private long mUptimeMillis = 0;
 
   AhatSnapshot(SuperRoot root,
@@ -63,6 +64,7 @@ public class AhatSnapshot implements Diffable<AhatSnapshot> {
     mBitmapDumpData = AhatBitmapInstance.findBitmapDumpData(mSuperRoot, mInstances);
     mMessageDumpData = AhatMessageInstance.findMessageDumpData(mInstances, progress, mInstances.size());
     mDuplicateStrings = findDuplicateStrings(mInstances, progress);
+    mActivityLeaks = findActivityLeaks(mInstances, progress);
 
     for (AhatInstance inst : mInstances) {
       // Add this instance to its site.
@@ -261,6 +263,18 @@ public class AhatSnapshot implements Diffable<AhatSnapshot> {
     return mDuplicateStrings;
   }
 
+  /**
+   * Returns activity leaks in this snapshot.
+   * <p>
+   * The returned list is never null. If there are no leaks, an empty list is
+   * returned.
+   *
+   * @return list of activity leaks
+   */
+  public List<AhatInstance> getActivityLeaks() {
+    return mActivityLeaks;
+  }
+
   private static List<List<AhatInstance>> findDuplicateStrings(
       Instances<AhatInstance> instances, Progress progress) {
     progress.start("Analyzing strings", instances.size());
@@ -288,5 +302,46 @@ public class AhatSnapshot implements Diffable<AhatSnapshot> {
       }
     }
     return duplicates;
+  }
+
+  /**
+   * Identifies likely activity leaks in the snapshot.
+   * <p>
+   * This method scans all strongly reachable instances in the heap dump. It looks for
+   * classes that are subclasses of `android.app.Activity`. If an instance is found
+   * to be strongly reachable and its `mDestroyed` field is true, it is added to the
+   * list of leaks.
+   *
+   * @param instances the list of all instances in the heap dump
+   * @param progress for reporting progress
+   * @return a list of leaked activity instances
+   */
+  private static List<AhatInstance> findActivityLeaks(
+      Instances<AhatInstance> instances, Progress progress) {
+    progress.start("Analyzing activity leaks", instances.size());
+    List<AhatInstance> leaks = new ArrayList<>();
+    for (AhatInstance inst : instances) {
+      progress.advance();
+
+      // An activity can't be leaked if it isn't strongly reachable.
+      if (!inst.isStronglyReachable()) {
+        continue;
+      }
+
+      // Only look at instances of activities.
+      if (inst.getClassObj() == null || !inst.getClassObj().isSubClassOf("android.app.Activity")) {
+        continue;
+      }
+
+      // A non-destroyed activity is not considered a leak.
+      Value value = inst.getField("mDestroyed");
+      if (value == null || !value.isBoolean() || !value.asBoolean()) {
+        continue;
+      }
+
+      leaks.add(inst);
+    }
+    progress.done();
+    return leaks;
   }
 }

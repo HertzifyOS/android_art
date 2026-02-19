@@ -152,6 +152,25 @@ public abstract class Value {
   }
 
   /**
+   * Returns true if the Value is a boolean.
+   *
+   * @return true if the value is a boolean.
+   */
+  public boolean isBoolean() {
+    return false;
+  }
+
+  /**
+   * Returns the Value as a boolean if it is one.
+   * Returns null if the Value does not represent a boolean.
+   *
+   * @return the boolean packed into this value
+   */
+  public Boolean asBoolean() {
+    return null;
+  }
+
+  /**
    * Returns true if the Value is an int.
    *
    * @return true if the value is an int.
@@ -244,6 +263,16 @@ public abstract class Value {
     @Override
     Type getType() {
       return Type.BOOLEAN;
+    }
+
+    @Override
+    public boolean isBoolean() {
+      return true;
+    }
+
+    @Override
+    public Boolean asBoolean() {
+      return mBool;
     }
 
     @Override
