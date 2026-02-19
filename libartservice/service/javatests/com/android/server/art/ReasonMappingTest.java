@@ -16,14 +16,18 @@
 
 package com.android.server.art;
 
+import static android.platform.test.flag.junit.DeviceFlagsValueProvider.createCheckFlagsRule;
+
 import static com.android.server.art.testing.TestDataHelper.newPackageState;
 import static com.android.server.art.testing.TestDataHelper.newUserState;
+import static com.android.server.art.testing.TestingUtils.FLAGS_PREFIX;
 
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.anyLong;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
@@ -32,10 +36,14 @@ import android.apphibernation.AppHibernationManager;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.platform.test.annotations.RequiresFlagsDisabled;
+import android.platform.test.annotations.RequiresFlagsEnabled;
+import android.platform.test.flag.junit.CheckFlagsRule;
 
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
+import com.android.art.rw.flags.Flags;
 import com.android.modules.utils.pm.PackageStateModulesUtils;
 import com.android.server.art.model.ArtFlags;
 import com.android.server.art.testing.StaticMockitoRule;
@@ -72,6 +80,8 @@ public class ReasonMappingTest {
     @Rule
     public StaticMockitoRule mockitoRule =
             new StaticMockitoRule(SystemProperties.class, PackageStateModulesUtils.class);
+
+    @Rule public final CheckFlagsRule checkFlagsRule = createCheckFlagsRule();
 
     @Mock private ReasonMapping.Injector mInjector;
     @Mock private AppHibernationManager mAppHibernationManager;
@@ -152,8 +162,23 @@ public class ReasonMappingTest {
     }
 
     @Test
-    public void testGetDefaultPackagesForReasonDefault() throws Exception {
+    @RequiresFlagsDisabled(FLAGS_PREFIX + Flags.FLAG_HYBRID_PRE_REBOOT_DEXOPT)
+    public void testGetDefaultPackagesForReasonDefaultScoreFlagDisabled() throws Exception {
         when(mInjector.getCurrentTimeMillis()).thenReturn(CURRENT_TIME_MS);
+
+        lenient()
+                .when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_1), anyLong()))
+                .thenReturn(1D);
+        lenient()
+                .when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_2), anyLong()))
+                .thenReturn(2D);
+        lenient()
+                .when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_3), anyLong()))
+                .thenReturn(0D);
+        lenient()
+                .when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_4), anyLong()))
+                .thenReturn(0.2);
+
         when(mDexUseManager.getPackageLastUsedAtMillis(PKG_NAME_1)).thenReturn(RECENT_TIME_MS);
         when(mDexUseManager.getPackageLastUsedAtMillis(PKG_NAME_2)).thenReturn(CURRENT_TIME_MS);
 
@@ -173,8 +198,51 @@ public class ReasonMappingTest {
     }
 
     @Test
-    public void testGetDefaultPackagesForReasonInactive() throws Exception {
+    @RequiresFlagsEnabled(FLAGS_PREFIX + Flags.FLAG_HYBRID_PRE_REBOOT_DEXOPT)
+    public void testGetDefaultPackagesForReasonDefault() throws Exception {
         when(mInjector.getCurrentTimeMillis()).thenReturn(CURRENT_TIME_MS);
+
+        when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_1), anyLong())).thenReturn(1D);
+        when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_2), anyLong())).thenReturn(2D);
+        when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_3), anyLong())).thenReturn(0D);
+        when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_4), anyLong()))
+                .thenReturn(0.2);
+
+        when(mDexUseManager.getPackageLastUsedAtMillis(PKG_NAME_1)).thenReturn(RECENT_TIME_MS);
+        when(mDexUseManager.getPackageLastUsedAtMillis(PKG_NAME_2)).thenReturn(CURRENT_TIME_MS);
+
+        // This package is recently installed but hasn't been used.
+        PackageUserState userState =
+                mSnapshot.getPackageState(PKG_NAME_3).getStateForUser(UserHandle.of(1));
+        when(userState.getFirstInstallTimeMillis()).thenReturn(RECENT_TIME_MS + 1);
+        when(mDexUseManager.getPackageLastUsedAtMillis(PKG_NAME_3)).thenReturn(0l);
+
+        // This package should not be dexopted because it's not recently used.
+        when(mDexUseManager.getPackageLastUsedAtMillis(PKG_NAME_4)).thenReturn(RECENT_TIME_MS - 1);
+
+        // The list is sorted by last active time in descending order.
+        assertThat(mReasonMapping.getDefaultPackagesForReason(mSnapshot, "bg-dexopt"))
+                .containsExactly(PKG_NAME_2, PKG_NAME_1, PKG_NAME_3)
+                .inOrder();
+    }
+
+    @Test
+    @RequiresFlagsDisabled(FLAGS_PREFIX + Flags.FLAG_HYBRID_PRE_REBOOT_DEXOPT)
+    public void testGetDefaultPackagesForReasonInactiveScoreFlagDisabled() throws Exception {
+        when(mInjector.getCurrentTimeMillis()).thenReturn(CURRENT_TIME_MS);
+
+        lenient()
+                .when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_1), anyLong()))
+                .thenReturn(2D);
+        lenient()
+                .when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_2), anyLong()))
+                .thenReturn(1D);
+        lenient()
+                .when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_3), anyLong()))
+                .thenReturn(0.1);
+        lenient()
+                .when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_4), anyLong()))
+                .thenReturn(0.2);
 
         // This package should not be downgraded because it's recently used.
         when(mDexUseManager.getPackageLastUsedAtMillis(PKG_NAME_1)).thenReturn(RECENT_TIME_MS);
@@ -197,10 +265,45 @@ public class ReasonMappingTest {
     }
 
     @Test
+    @RequiresFlagsEnabled(FLAGS_PREFIX + Flags.FLAG_HYBRID_PRE_REBOOT_DEXOPT)
+    public void testGetDefaultPackagesForReasonInactive() throws Exception {
+        when(mInjector.getCurrentTimeMillis()).thenReturn(CURRENT_TIME_MS);
+
+        when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_1), anyLong())).thenReturn(2D);
+        when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_2), anyLong())).thenReturn(1D);
+        when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_3), anyLong()))
+                .thenReturn(0.1);
+        when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_4), anyLong()))
+                .thenReturn(0.2);
+
+        // This package should not be downgraded because it's recently used.
+        when(mDexUseManager.getPackageLastUsedAtMillis(PKG_NAME_1)).thenReturn(RECENT_TIME_MS);
+
+        // This package should not be downgraded because it's recently installed, even though it
+        // hasn't been used yet.
+        PackageUserState userState =
+                mSnapshot.getPackageState(PKG_NAME_2).getStateForUser(UserHandle.of(1));
+        when(userState.getFirstInstallTimeMillis()).thenReturn(RECENT_TIME_MS + 1);
+        when(mDexUseManager.getPackageLastUsedAtMillis(PKG_NAME_2)).thenReturn(0l);
+
+        // These packages should be downgraded because they are not recently used.
+        when(mDexUseManager.getPackageLastUsedAtMillis(PKG_NAME_3)).thenReturn(RECENT_TIME_MS - 1);
+        when(mDexUseManager.getPackageLastUsedAtMillis(PKG_NAME_4)).thenReturn(RECENT_TIME_MS - 2);
+
+        // The list is sorted by score in ascending order.
+        assertThat(mReasonMapping.getDefaultPackagesForReason(mSnapshot, "inactive"))
+                .containsExactly(PKG_NAME_3, PKG_NAME_4)
+                .inOrder();
+    }
+
+    @Test
     public void testGetDefaultPackagesForReasonFirstBoot() throws Exception {
         // On first-boot all packages haven't been used and first install time is
         // 0 which simulates case of system time being advanced by AlarmManagerService after package
         // installation.
+        lenient()
+                .when(mDexUseManager.calculateDecayedPackageScore(any(), anyLong()))
+                .thenReturn(0D);
         lenient().when(mDexUseManager.getPackageLastUsedAtMillis(any())).thenReturn(0L);
 
         // All packages should be dexopted, in any order, because we don't have information to

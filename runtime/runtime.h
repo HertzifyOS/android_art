@@ -1112,11 +1112,15 @@ class Runtime {
   // Returns the actual number of bytes that were madvise'd. This is determined
   // not only by the provided limit, but also the map region.
   // This will always be `<= madvise_size_limit_bytes`.
+  //
+  // If provided and valid, the `optional_fd` may be used to optimize readahead behavior.
+  // TODO(b/309384435): Update callsites to provide the appropriate FD when available.
   static size_t MadviseFileForRange(size_t madvise_size_limit_bytes,
                                     size_t map_size_bytes,
                                     const uint8_t* map_begin,
                                     const uint8_t* map_end,
-                                    const std::string& file_name);
+                                    const std::string& file_name,
+                                    int optional_fd = -1);
 
   // Whether to madvise runtime artifacts for the given dex location to optimize startup.
   // We try to avoid madvise for 1) background process starts, and 2) secondary dex artifacts.

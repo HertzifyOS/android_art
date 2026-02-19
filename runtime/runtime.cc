@@ -73,6 +73,7 @@
 #include "base/utils.h"
 #include "class_linker-inl.h"
 #include "class_root-inl.h"
+#include "com_android_art_rw_flags.h"
 #include "compiler_callbacks.h"
 #include "debugger.h"
 #include "dex/art_dex_file_loader.h"
@@ -184,7 +185,11 @@
 #ifdef ART_TARGET_ANDROID
 #include <android/api-level.h>
 #include <android/set_abort_message.h>
+#include <linux/magic.h>
+#include <sys/vfs.h>
+
 #include "com_android_apex.h"
+
 namespace apex = com::android::apex;
 
 #endif
@@ -244,6 +249,47 @@ inline char** GetEnviron() { return environ; }
 
 void CheckConstants() {
   CHECK_EQ(mirror::Array::kFirstElementOffset, mirror::Array::FirstElementOffset());
+}
+
+// Helper method do determine if the given location can safely assume a larger readahead window.
+// For now, we only assume this if 1) the location is in /data, and 2) /data is f2fs. This query
+// is cheap enough to invoke before each madvise, avoiding extra syscalls and allocations
+bool LocationSupportsLargeReadahead([[maybe_unused]] std::string_view location) {
+#if defined(ART_TARGET_ANDROID)
+  static const char* kDataDir = [] {
+    const char* data_dir = getenv("ANDROID_DATA");
+    return (data_dir != nullptr) ? data_dir : "/data";
+  }();
+
+  static const bool kDataIsF2fs = [] {
+    struct statfs buf;
+    // Note that the stat call may fail in sandboxed processes. As this query is purely for
+    // potential optimizations, treat that failure as benign.
+    return statfs(kDataDir, &buf) == 0 && buf.f_type == F2FS_SUPER_MAGIC;
+  }();
+
+  if (!kDataIsF2fs) {
+    return false;
+  }
+
+  std::string_view data_dir(kDataDir);
+
+  // Normalize the ending to simplify root equivalence checks.
+  if (UNLIKELY(data_dir.ends_with('/'))) {
+    data_dir.remove_suffix(1);
+  }
+
+  // Perform a fast boundary-safe lexical check.
+  if (!location.starts_with(data_dir)) {
+    return false;
+  }
+
+  // Check if identical or if the next character is a separator, avoiding matches of
+  // `/datafoo/bar against `/data`.
+  return location.length() == data_dir.length() || location[data_dir.length()] == '/';
+#else
+  return false;
+#endif  // defined(ART_TARGET_ANDROID)
 }
 
 }  // namespace
@@ -3458,19 +3504,15 @@ size_t Runtime::MadviseFileForRange(size_t madvise_size_limit_bytes,
                                     size_t map_size_bytes,
                                     const uint8_t* map_begin,
                                     const uint8_t* map_end,
-                                    const std::string& file_name) {
+                                    const std::string& file_name,
+                                    int optional_fd) {
   // TODO(b/359932564): Fix map_size_bytes adjustment to account for map_begin alignment.
   map_begin = AlignDown(map_begin, gPageSize);
   map_size_bytes = RoundUp(map_size_bytes, gPageSize);
 
-  // Ideal blockTransferSize for madvising files (128KiB)
-  static constexpr size_t kIdealIoTransferSizeBytes = 128*1024;
-
   size_t madvised_bytes = 0;
   size_t target_size_bytes = std::min<size_t>(map_size_bytes, madvise_size_limit_bytes);
   if (target_size_bytes > 0) {
-    SCOPED_TRACE << "madvising " << file_name << " size=" << target_size_bytes;
-
     // Based on requested size (target_size_bytes)
     const uint8_t* target_pos = map_begin + target_size_bytes;
 
@@ -3479,18 +3521,45 @@ size_t Runtime::MadviseFileForRange(size_t madvise_size_limit_bytes,
       target_pos = map_end;
     }
 
-    // Madvise the whole file up to target_pos in chunks of
-    // kIdealIoTransferSizeBytes (to MADV_WILLNEED)
-    // Note:
-    // madvise(MADV_WILLNEED) will prefetch max(fd readahead size, optimal
-    // block size for device) per call, hence the need for chunks. (128KB is a
-    // good default.)
+    // Apply madvise(WILLNEED) to the mapped range up to target_pos, in ideal transfer sized chunks.
+    // Note: madvise(WILLNEED) will prefetch max(fd readahead size, optimal block size for device)
+    // per call, hence the need for chunks. 128KB is a sensible default.
+    static constexpr size_t kDefaultIoTransferSizeBytes = 128 * KB;
+    static constexpr size_t kFadviseSafeIoTransferSizeBytes = 256 * KB;
+    static constexpr size_t kFadviseLargeIoTransferSizeBytes = 16 * MB;
+    static constexpr size_t kFadviseThresholdBytes = kFadviseSafeIoTransferSizeBytes;
+
+    size_t io_transfer_size_bytes = kDefaultIoTransferSizeBytes;
+
+    // fadvise req 1: The target size is sufficiently large *and* we have a valid backing FD.
+    // This unlocks larger readahead and improves IO, but minimizes extra syscalls for small reads.
+    const bool should_fadvise =
+        com::android::art::rw::flags::madvise_optimized_readahead() &&
+        optional_fd >= 0 &&
+        target_size_bytes > kFadviseThresholdBytes;
+    if (should_fadvise) {
+      // fadvise req 2: File is in f2fs-backed /data partition for larger readahead support.
+      // Otherwise, fall back to a more conservative but universally supported window.
+      if (LocationSupportsLargeReadahead(file_name)) {
+        io_transfer_size_bytes = kFadviseLargeIoTransferSizeBytes;
+      } else {
+        io_transfer_size_bytes = kFadviseSafeIoTransferSizeBytes;
+      }
+      // Note: We temporarily hint the entire file, resetting after madvise completes.
+      posix_fadvise(optional_fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+    }
+
+    size_t chunks = (target_pos - map_begin + io_transfer_size_bytes - 1) / io_transfer_size_bytes;
+    SCOPED_TRACE << "madvising " << file_name
+                 << " size=" << target_size_bytes
+                 << " chunks=" << chunks;
+
     for (const uint8_t* madvise_start = map_begin;
          madvise_start < target_pos;
-         madvise_start += kIdealIoTransferSizeBytes) {
+         madvise_start += io_transfer_size_bytes) {
       void* madvise_addr = const_cast<void*>(reinterpret_cast<const void*>(madvise_start));
-      size_t madvise_length = std::min(kIdealIoTransferSizeBytes,
-                                       static_cast<size_t>(target_pos - madvise_start));
+      size_t madvise_length =
+          std::min(io_transfer_size_bytes, static_cast<size_t>(target_pos - madvise_start));
       int status = madvise(madvise_addr, madvise_length, MADV_WILLNEED);
       // In case of error we stop madvising rest of the file
       if (status < 0) {
@@ -3500,6 +3569,10 @@ size_t Runtime::MadviseFileForRange(size_t madvise_size_limit_bytes,
         break;
       }
       madvised_bytes += madvise_length;
+    }
+    if (should_fadvise) {
+      // Restore the default file-backed readahead behavior.
+      posix_fadvise(optional_fd, 0, 0, POSIX_FADV_NORMAL);
     }
   }
 

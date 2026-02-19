@@ -31,6 +31,7 @@ import android.text.TextUtils;
 
 import androidx.annotation.RequiresApi;
 
+import com.android.art.rw.flags.Flags;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.art.model.ArtFlags;
 import com.android.server.pm.PackageManagerLocal;
@@ -248,19 +249,25 @@ public class ReasonMapping {
     public List<String> getDefaultPackagesForReason(PackageManagerLocal.FilteredSnapshot snapshot,
             /* @BatchDexoptReason|REASON_INACTIVE */ String reason) {
         var appHibernationManager = mInjector.getAppHibernationManager();
+        long now = mInjector.getCurrentTimeMillis();
 
-        // Filter out hibernating packages even if the reason is REASON_INACTIVE. This is because
-        // artifacts for hibernating packages are already deleted.
         Stream<PackageInfo> packages =
                 snapshot.getPackageStates()
                         .values()
                         .stream()
+                        // Filter out hibernating packages even if the reason is REASON_INACTIVE.
+                        // This is because artifacts for hibernating packages are already deleted.
                         .filter(pkgState -> Utils.canDexoptPackage(pkgState, appHibernationManager))
                         .map(pkgState
                                 -> new PackageInfo(pkgState,
                                         Utils.getPackageLastActiveTime(pkgState,
                                                 mInjector.getDexUseManager(),
-                                                mInjector.getUserManager())));
+                                                mInjector.getUserManager()),
+                                        Flags.hybridPreRebootDexopt()
+                                                ? mInjector.getDexUseManager()
+                                                          .calculateDecayedPackageScore(
+                                                                  pkgState.getPackageName(), now)
+                                                : 0D));
 
         // "pm.dexopt.downgrade_after_inactive_days" is repurposed to also determine whether to
         // dexopt a package.
@@ -277,7 +284,8 @@ public class ReasonMapping {
                                         pkgInfo.pkgState().getPackageName()));
             case ReasonMapping.REASON_INACTIVE ->
                 packages.filter(pkgInfo -> pkgInfo.lastActiveTime() <= thresholdTimeMs)
-                        .sorted(Comparator.comparingLong(pkgInfo -> pkgInfo.lastActiveTime()));
+                        .sorted(Comparator.<PackageInfo>comparingDouble(pkgInfo -> pkgInfo.score())
+                                        .thenComparingLong(pkgInfo -> pkgInfo.lastActiveTime()));
             // Don't filter the default package list and no need to sort as in some cases the system
             // time can advance during bootup after package installation and cause filtering to
             // exclude all packages when m.dexopt.downgrade_after_inactive_days is set. See
@@ -285,9 +293,8 @@ public class ReasonMapping {
             case ReasonMapping.REASON_FIRST_BOOT -> packages;
             default ->
                 packages.filter(pkgInfo -> pkgInfo.lastActiveTime() > thresholdTimeMs)
-                        .sorted(Comparator
-                                        .<PackageInfo>comparingLong(
-                                                pkgInfo -> pkgInfo.lastActiveTime())
+                        .sorted(Comparator.<PackageInfo>comparingDouble(pkgInfo -> pkgInfo.score())
+                                        .thenComparingLong(pkgInfo -> pkgInfo.lastActiveTime())
                                         .reversed());
         };
 
@@ -371,7 +378,7 @@ public class ReasonMapping {
         };
     }
 
-    private record PackageInfo(PackageState pkgState, long lastActiveTime) {}
+    private record PackageInfo(PackageState pkgState, long lastActiveTime, double score) {}
 
     /**
      * Injector pattern for testing purpose.

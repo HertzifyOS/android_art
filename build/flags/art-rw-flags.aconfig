@@ -181,3 +181,12 @@ flag {
   is_fixed_read_only: false
   is_exported: false
 }
+
+flag {
+  name: "skip_background_classes_in_profiles"
+  namespace: "art_performance"
+  description: "Skips adding background classes to the app profiles"
+  bug: "485143995"
+  is_fixed_read_only: false
+  is_exported: false
+}

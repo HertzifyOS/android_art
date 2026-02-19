@@ -1430,7 +1430,7 @@ bool HInliner::TryInlineAndReplace(HInvoke* invoke_instruction,
   }
 
   MaybeReplaceAndRemove(return_replacement, invoke_instruction);
-  FixUpReturnReferenceType(method, return_replacement);
+  FixUpReturnReferenceType(return_replacement);
   if (do_rtp) {
     MaybeRunReferenceTypePropagation(return_replacement, invoke_instruction);
   }
@@ -2484,23 +2484,21 @@ bool HInliner::ReturnTypeMoreSpecific(HInstruction* return_replacement,
   return false;
 }
 
-void HInliner::FixUpReturnReferenceType(ArtMethod* resolved_method,
-                                        HInstruction* return_replacement) {
-  if (return_replacement != nullptr) {
-    if (return_replacement->GetType() == DataType::Type::kReference) {
-      if (!return_replacement->GetReferenceTypeInfo().IsValid()) {
-        // Make sure that we have a valid type for the return. We may get an invalid one when
-        // we inline invokes with multiple branches and create a Phi for the result.
-        // TODO: we could be more precise by merging the phi inputs but that requires
-        // some functionality from the reference type propagation.
-        DCHECK(return_replacement->IsPhi());
-        ObjPtr<mirror::Class> cls = resolved_method->LookupResolvedReturnType();
-        ReferenceTypeInfo rti = ReferenceTypePropagation::IsAdmissible(cls)
-            ? ReferenceTypeInfo::Create(graph_->GetHandleCache()->NewHandle(cls))
-            : graph_->GetInexactObjectRti();
-        return_replacement->SetReferenceTypeInfo(rti);
-      }
-    }
+void HInliner::FixUpReturnReferenceType(HInstruction* return_replacement) {
+  // For invalid or inexact Phis, we might have a more precise return type now.
+  if (return_replacement != nullptr &&
+      return_replacement->IsPhi() &&
+      return_replacement->GetType() == DataType::Type::kReference &&
+      (!return_replacement->GetReferenceTypeInfo().IsValid() ||
+        !return_replacement->GetReferenceTypeInfo().IsExact())) {
+    ReferenceTypePropagation rtp_fixup(graph_,
+                                       outer_compilation_unit_.GetDexCache(),
+                                       /* is_first_run= */ false);
+    // TODO(solanes): We should be able to do a full RTP run here and mark
+    // `run_extra_type_propagation_` as false. However, doing a full RTP run might produce worse
+    // results since ReferenceTypePropagation::MergeTypes does not work correctly when the Phi's
+    // inputs are all interfaces.
+    rtp_fixup.Visit(return_replacement);
   }
 }
 

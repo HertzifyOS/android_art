@@ -8588,7 +8588,7 @@ class RIPFixup : public AssemblerFixup, public ArenaObject<kArenaAllocCodeGenera
 };
 
 /**
- t * Class to handle late fixup of offsets to a jump table that will be created in the
+ * Class to handle late fixup of offsets to a jump table that will be created in the
  * constant area.
  */
 class JumpTableRIPFixup : public RIPFixup {
