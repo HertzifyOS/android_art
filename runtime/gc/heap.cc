@@ -4127,23 +4127,26 @@ bool Heap::RequestConcurrentGC(Thread* self,
                                bool force_full,
                                uint32_t observed_gc_num) {
   uint32_t max_gc_requested = max_gc_requested_.load(std::memory_order_relaxed);
-  if (!GCNumberLt(observed_gc_num, max_gc_requested)) {
-    // observed_gc_num >= max_gc_requested: Nobody beat us to requesting the next gc.
-    if (CanAddHeapTask(self)) {
-      // Since observed_gc_num >= max_gc_requested, this increases max_gc_requested_, if successful.
-      if (max_gc_requested_.CompareAndSetStrongRelaxed(max_gc_requested, observed_gc_num + 1)) {
-        task_processor_->AddTask(self, new ConcurrentGCTask(NanoTime(),  // Start straight away.
-                                                            cause,
-                                                            force_full,
-                                                            observed_gc_num + 1));
-      }
+  while (!GCNumberLt(observed_gc_num, max_gc_requested)) {
+    // observed_gc_num >= max_gc_requested: Nobody beat us to requesting the next gc,
+    // and we failed to set it so far.
+    if (!CanAddHeapTask(self)) {
+      return false;
+    }
+    // Since observed_gc_num >= max_gc_requested, this increases max_gc_requested_, if successful.
+    if (max_gc_requested_.compare_exchange_weak(
+            max_gc_requested, observed_gc_num + 1, std::memory_order_relaxed)) {
+      task_processor_->AddTask(self,
+                               new ConcurrentGCTask(NanoTime(),  // Start straight away.
+                                                    cause,
+                                                    force_full,
+                                                    observed_gc_num + 1));
       DCHECK(GCNumberLt(observed_gc_num, max_gc_requested_.load(std::memory_order_relaxed)));
-      // If we increased max_gc_requested_, then we added a task that will eventually cause
-      // gcs_completed_ to be incremented (to at least observed_gc_num + 1).
-      // If the CAS failed, somebody else did.
+      // We added a task that will eventually cause gcs_completed_ to be incremented
+      // (to at least observed_gc_num + 1).
       return true;
     }
-    return false;
+    // max_gc_requested was re-read by the failed compare_exchange_weak().
   }
   return true;  // Vacuously.
 }
