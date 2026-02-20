@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.android.server.art;
+package com.android.server.art.utils;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -26,6 +26,8 @@ import android.util.Log;
 import android.util.Slog;
 
 import androidx.annotation.RequiresApi;
+
+import com.android.server.art.GlobalInjector;
 
 import java.io.InterruptedIOException;
 import java.nio.ByteBuffer;

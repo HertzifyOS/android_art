@@ -55,6 +55,7 @@ import com.android.server.art.proto.PreRebootStats.Status;
 import com.android.server.art.testing.PreRebootStatsReporterHarness;
 import com.android.server.art.testing.StaticMockitoRule;
 import com.android.server.art.testing.TestingUtils;
+import com.android.server.art.utils.Utils;
 
 import org.junit.Before;
 import org.junit.Rule;

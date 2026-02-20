@@ -16,11 +16,6 @@
 
 package com.android.server.art;
 
-import static com.android.server.art.DexUseManagerLocal.SecondaryDexInfo;
-import static com.android.server.art.PrimaryDexUtils.DetailedPrimaryDexInfo;
-import static com.android.server.art.PrimaryDexUtils.PrimaryDexInfo;
-import static com.android.server.art.Utils.Abi;
-
 import android.annotation.NonNull;
 import android.content.Context;
 import android.os.Binder;
@@ -36,7 +31,15 @@ import androidx.annotation.RequiresApi;
 import com.android.internal.annotations.Immutable;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.LocalManagerRegistry;
+import com.android.server.art.DexUseManagerLocal.SecondaryDexInfo;
+import com.android.server.art.PrimaryDexUtils.DetailedPrimaryDexInfo;
+import com.android.server.art.PrimaryDexUtils.PrimaryDexInfo;
 import com.android.server.art.model.DetailedDexInfo;
+import com.android.server.art.utils.AidlUtils;
+import com.android.server.art.utils.ArtdRefCache;
+import com.android.server.art.utils.AsLog;
+import com.android.server.art.utils.Utils;
+import com.android.server.art.utils.Utils.Abi;
 import com.android.server.pm.PackageManagerLocal.FilteredSnapshot;
 import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageState;

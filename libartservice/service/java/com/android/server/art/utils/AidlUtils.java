@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.android.server.art;
+package com.android.server.art.utils;
 
 import static com.android.server.art.OutputArtifacts.PermissionSettings;
 import static com.android.server.art.OutputArtifacts.PermissionSettings.SeContext;
@@ -28,6 +28,16 @@ import static com.android.server.art.ProfilePath.WritableProfilePath;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+
+import com.android.server.art.ArtifactsPath;
+import com.android.server.art.DexMetadataPath;
+import com.android.server.art.FsPermission;
+import com.android.server.art.OutputArtifacts;
+import com.android.server.art.OutputProfile;
+import com.android.server.art.OutputSecureDexMetadataCompanion;
+import com.android.server.art.ProfilePath;
+import com.android.server.art.RuntimeArtifactsPath;
+import com.android.server.art.SecureDexMetadataWithCompanionPaths;
 
 /** @hide */
 public final class AidlUtils {

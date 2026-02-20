@@ -55,6 +55,10 @@ import com.android.server.art.proto.PrimaryDexUseProto;
 import com.android.server.art.proto.PrimaryDexUseRecordProto;
 import com.android.server.art.proto.SecondaryDexUseProto;
 import com.android.server.art.proto.SecondaryDexUseRecordProto;
+import com.android.server.art.utils.ArtdRefCache;
+import com.android.server.art.utils.AsLog;
+import com.android.server.art.utils.Debouncer;
+import com.android.server.art.utils.Utils;
 import com.android.server.pm.PackageManagerLocal;
 import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.AndroidPackageSplit;
@@ -1339,14 +1343,15 @@ public class DexUseManagerLocal {
     @Immutable
     @AutoValue
     public abstract static class DexLoader implements Comparable<DexLoader> {
-        static DexLoader create(@NonNull String loadingPackageName, boolean isolatedProcess) {
+        public static DexLoader create(
+                @NonNull String loadingPackageName, boolean isolatedProcess) {
             return new AutoValue_DexUseManagerLocal_DexLoader(loadingPackageName, isolatedProcess);
         }
 
-        abstract @NonNull String loadingPackageName();
+        public abstract @NonNull String loadingPackageName();
 
         /** @see Process#isIsolatedUid(int) */
-        abstract boolean isolatedProcess();
+        public abstract boolean isolatedProcess();
 
         @Override
         @NonNull

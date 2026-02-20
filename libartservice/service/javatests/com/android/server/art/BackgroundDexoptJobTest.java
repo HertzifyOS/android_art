@@ -52,6 +52,7 @@ import com.android.server.art.model.DexoptResult;
 import com.android.server.art.model.DexoptResult.DexoptResultStatus;
 import com.android.server.art.model.DexoptResult.PackageDexoptResult;
 import com.android.server.art.testing.StaticMockitoRule;
+import com.android.server.art.utils.Utils;
 import com.android.server.pm.PackageManagerLocal;
 
 import org.junit.Before;

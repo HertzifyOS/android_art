@@ -26,14 +26,14 @@ import android.os.RemoteException;
 
 import androidx.annotation.RequiresApi;
 
-import com.android.server.art.ArtdRefCache;
-import com.android.server.art.AsLog;
 import com.android.server.art.DexUseManagerLocal;
 import com.android.server.art.GlobalInjector;
 import com.android.server.art.IArtd;
 import com.android.server.art.IArtdCancellationSignal;
 import com.android.server.art.IDexoptChrootSetup;
-import com.android.server.art.Utils;
+import com.android.server.art.utils.ArtdRefCache;
+import com.android.server.art.utils.AsLog;
+import com.android.server.art.utils.Utils;
 
 import java.util.Objects;
 

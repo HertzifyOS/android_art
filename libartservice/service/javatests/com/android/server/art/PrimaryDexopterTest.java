@@ -16,8 +16,6 @@
 
 package com.android.server.art;
 
-import static com.android.server.art.OutputArtifacts.PermissionSettings;
-import static com.android.server.art.model.DexoptResult.DexContainerFileDexoptResult;
 import static com.android.server.art.testing.TestingUtils.deepEq;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -45,11 +43,14 @@ import android.os.UserHandle;
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
+import com.android.server.art.OutputArtifacts.PermissionSettings;
 import com.android.server.art.model.ArtFlags;
 import com.android.server.art.model.DexoptParams;
 import com.android.server.art.model.DexoptResult;
+import com.android.server.art.model.DexoptResult.DexContainerFileDexoptResult;
 import com.android.server.art.proto.DexMetadataConfig;
 import com.android.server.art.testing.TestingUtils;
+import com.android.server.art.utils.AidlUtils;
 
 import org.junit.Before;
 import org.junit.Test;

@@ -16,12 +16,10 @@
 
 package com.android.server.art;
 
-import static com.android.server.art.AidlUtils.buildFsPermission;
-import static com.android.server.art.AidlUtils.buildOutputArtifacts;
-import static com.android.server.art.AidlUtils.buildPermissionSettings;
-import static com.android.server.art.OutputArtifacts.PermissionSettings;
-import static com.android.server.art.model.DexoptResult.DexContainerFileDexoptResult;
 import static com.android.server.art.testing.TestingUtils.deepEq;
+import static com.android.server.art.utils.AidlUtils.buildFsPermission;
+import static com.android.server.art.utils.AidlUtils.buildOutputArtifacts;
+import static com.android.server.art.utils.AidlUtils.buildPermissionSettings;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -46,10 +44,13 @@ import android.os.SystemProperties;
 
 import androidx.test.filters.SmallTest;
 
+import com.android.server.art.OutputArtifacts.PermissionSettings;
 import com.android.server.art.model.ArtFlags;
 import com.android.server.art.model.DexoptParams;
 import com.android.server.art.model.DexoptResult;
+import com.android.server.art.model.DexoptResult.DexContainerFileDexoptResult;
 import com.android.server.art.testing.TestingUtils;
+import com.android.server.art.utils.AidlUtils;
 
 import org.junit.Before;
 import org.junit.Test;
