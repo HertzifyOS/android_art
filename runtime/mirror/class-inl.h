@@ -101,7 +101,7 @@ inline ObjPtr<ClassLoader> Class::GetClassLoader() {
 
 template<VerifyObjectFlags kVerifyFlags, ReadBarrierOption kReadBarrierOption>
 inline ObjPtr<ClassExt> Class::GetExtData() {
-  return GetFieldObject<ClassExt, kVerifyFlags, kReadBarrierOption>(
+  return GetFieldObject<ClassExt, kVerifyFlags, kReadBarrierOption, /*kIsVolatile=*/ true>(
       OFFSET_OF_OBJECT_MEMBER(Class, ext_data_));
 }
 
