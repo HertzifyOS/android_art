@@ -887,14 +887,20 @@ void Thread::InstallImplicitProtection() {
 #else
           1u;
 #endif
+      // Ensure that the array size is known at compile time: this is necessary to prevent Clang
+      // from generating a stack-probing loop with `-fstack-clash-protection`. Clang generates code
+      // that assumes that there's at least one more page available below the start of the array,
+      // which is not always true on the last recursive call in this function, and may result in
+      // stackoverflow (observed on riscv64, see b/480856545 for details).
+      constexpr size_t space_size = kMinPageSize - (kAsanMultiplier * 256);
       // Keep space uninitialized as it can overflow the stack otherwise (should Clang actually
       // auto-initialize this local variable).
-      volatile char space[gPageSize - (kAsanMultiplier * 256)] __attribute__((uninitialized));
+      volatile char space[space_size] __attribute__((uninitialized));
       [[maybe_unused]] char sink = space[zero];
       // Remove tag from the pointer. Nop in non-hwasan builds.
       uintptr_t addr = reinterpret_cast<uintptr_t>(
           __hwasan_tag_pointer != nullptr ? __hwasan_tag_pointer(space, 0) : space);
-      if (addr >= target + gPageSize) {
+      if (addr >= target + kMinPageSize) {
         Touch(target);
       }
       zero *= 2;  // Try to avoid tail recursion.

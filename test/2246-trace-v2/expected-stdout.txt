@@ -1,6 +1,6 @@
 JNI_OnLoad called
 ***** streaming test - dual clock *******
-version=f5
+version=5
 .>> TestThread2246 java.lang.Thread run ()V Thread.java
 ..>> TestThread2246 Main$$ExternalSyntheticLambda0 run ()V D8$$SyntheticClass
 ...>> TestThread2246 Main lambda$testTracing$0 (IZJLMain;Z)V Main.java
@@ -1223,7 +1223,7 @@ version=f5
 ....>> TestThread2246 Main$VMDebug $noinline$stopMethodTracing ()V Main.java
 .....>> TestThread2246 java.lang.reflect.Method invoke (Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object; Method.java
 ......>> TestThread2246 dalvik.system.VMDebug stopMethodTracing ()V VMDebug.java
-version=f5
+version=5
 .>> main Main main ([Ljava/lang/String;)V Main.java
 ..>> main Main testTracing (ZIZ)V Main.java
 ...>> main Main$VMDebug startMethodTracingV2 (Ljava/lang/String;Ljava/io/FileDescriptor;IIZIZ)V Main.java
@@ -1422,7 +1422,7 @@ version=f5
 ....>> main java.lang.reflect.Method invoke (Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object; Method.java
 .....>> main dalvik.system.VMDebug stopMethodTracing ()V VMDebug.java
 ***** streaming test - wall clock *******
-version=f4
+version=4
 .>> TestThread2246 java.lang.Thread run ()V Thread.java
 ..>> TestThread2246 Main$$ExternalSyntheticLambda0 run ()V D8$$SyntheticClass
 ...>> TestThread2246 Main lambda$testTracing$0 (IZJLMain;Z)V Main.java
@@ -1797,7 +1797,7 @@ version=f4
 ....>> TestThread2246 Main$VMDebug $noinline$stopMethodTracing ()V Main.java
 .....>> TestThread2246 java.lang.reflect.Method invoke (Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object; Method.java
 ......>> TestThread2246 dalvik.system.VMDebug stopMethodTracing ()V VMDebug.java
-version=f4
+version=4
 .>> main Main main ([Ljava/lang/String;)V Main.java
 ..>> main Main testTracing (ZIZ)V Main.java
 ...>> main Main$VMDebug startMethodTracingV2 (Ljava/lang/String;Ljava/io/FileDescriptor;IIZIZ)V Main.java
