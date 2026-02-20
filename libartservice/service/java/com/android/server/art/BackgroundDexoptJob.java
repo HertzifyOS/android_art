@@ -58,6 +58,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -93,9 +95,22 @@ public class BackgroundDexoptJob implements ArtServiceJobInterface {
      */
     @GuardedBy("this") private long mJobLastFinishedAtMillis = 0;
 
+    /**
+     * A separate thread for executing `mRunningJob`. We avoid using any known thread / thread pool
+     * such as {@link java.util.concurrent.ForkJoinPool} and {@link
+     * com.android.server.art.utils.AsyncExecutor} because we don't want to block other things that
+     * use known threads / thread pools by this long running job.
+     */
+    @NonNull
+    private final ThreadPoolExecutor mExecutor =
+            new ThreadPoolExecutor(1 /* corePoolSize */, 1 /* maximumPoolSize */,
+                    60 /* keepAliveTime */, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
+
     public BackgroundDexoptJob(@NonNull Context context, @NonNull ArtManagerLocal artManagerLocal,
             @NonNull Config config) {
         this(new Injector(context, artManagerLocal, config));
+        // Recycle the thread if it's not used for `keepAliveTime`.
+        mExecutor.allowsCoreThreadTimeOut();
     }
 
     @VisibleForTesting
@@ -238,7 +253,7 @@ public class BackgroundDexoptJob implements ArtServiceJobInterface {
                     mCancellationSignal = null;
                 }
             }
-        });
+        }, mExecutor);
         return mRunningJob;
     }
 

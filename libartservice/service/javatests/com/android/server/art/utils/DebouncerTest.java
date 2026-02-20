@@ -42,8 +42,7 @@ public class DebouncerTest {
     @Before
     public void setUp() throws Exception {
         mMockClock = new MockClock();
-        mDebouncer =
-                new Debouncer(100 /* intervalMs */, () -> mMockClock.createScheduledExecutor());
+        mDebouncer = new Debouncer(100 /* intervalMs */, mMockClock.getAsyncExecutor());
     }
 
     @Test
@@ -61,13 +60,5 @@ public class DebouncerTest {
         mMockClock.advanceTime(1000);
 
         assertThat(list).containsExactly(2, 5).inOrder();
-
-        // Verify that we don't create too many executors, and all the executors we create are
-        // eventually shut down.
-        List<MockClock.ScheduledExecutor> executors = mMockClock.getCreatedExecutors();
-        assertThat(executors).hasSize(2);
-        for (MockClock.ScheduledExecutor executor : executors) {
-            assertThat(executor.isShutdown()).isTrue();
-        }
     }
 }
