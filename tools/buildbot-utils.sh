@@ -92,7 +92,7 @@ if [[ -n "$ART_TEST_ON_VM" ]] || [[ -n "$ART_TEST_ON_SBC" ]]; then
   export RSYNC_RSH="ssh -q -F $SSH_CONFIG -p $ART_TEST_SSH_PORT" # don't prefix with "ART_", rsync expects this name
 
   if [[ "$TARGET_ARCH" =~ ^(arm64|riscv64)$ ]]; then
-    export ART_TEST_VM_IMG="ubuntu-24.10-server-cloudimg-$TARGET_ARCH.img"
+    export ART_TEST_VM_IMG="ubuntu-24.04-server-cloudimg-$TARGET_ARCH.img"
     export ART_TEST_VM_DIR="$ANDROID_BUILD_TOP/vm/$TARGET_ARCH"
     export ART_TEST_VM="$ART_TEST_VM_DIR/$ART_TEST_VM_IMG"
   else
