@@ -516,36 +516,43 @@ bool HControlFlowSimplifier::Run() {
   ScopedArenaSafeMap<HInstruction*, HSelect*> cache(
       std::less<HInstruction*>(), allocator.Adapter(kArenaAllocControlFlowSimplifier));
 
-  // Iterate in post order in the unlikely case that removing one occurrence of
-  // the selection pattern empties a branch block of another occurrence.
-  for (HBasicBlock* block : graph_->GetPostOrder()) {
+  // Iterate in post order in the case that simplifying a block exposes simplification
+  // opportunities for earier blocks. Do not process the entry block.
+  // We may remove blocks from the reverse post order array, so make the iteration very explicit.
+  HBasicBlock* const * reverse_post_order_data = graph_->GetReversePostOrder().data();
+  size_t reverse_post_order_index = graph_->GetReversePostOrder().size();
+  while (reverse_post_order_index != /* Do not process entry block with index 0. */ 1u) {
+    --reverse_post_order_index;
+    HBasicBlock* block = reverse_post_order_data[reverse_post_order_index];
+    DCHECK(block != nullptr);
     DCHECK(!block->GetInstructions().IsEmpty());
     HInstruction* last_inst = block->GetLastInstruction();
     if (com::android::art::rw::flags::packed_switch_simplification() &&
         last_inst->IsPackedSwitch() &&
         TrySimplifyPackedSwitch(block, &allocator)) {
       simplified = true;
-      continue;
-    }
-    if (!last_inst->IsIf()) {
-      continue;
-    }
-
-    if (TryGenerateSelectSimpleDiamondPattern(block, &cache)) {
-      simplified = true;
-    } else {
-      // Try to fix up the odd version of the double diamond pattern. If we could do it, it means
-      // that we can generate two selects.
-      HBasicBlock* inner_if_block = TryFixupDoubleDiamondPattern(block);
-      if (inner_if_block != nullptr) {
-        // Generate the selects now since `inner_if_block` should be after `block` in PostOrder.
-        bool result = TryGenerateSelectSimpleDiamondPattern(inner_if_block, &cache);
-        DCHECK(result);
-        result = TryGenerateSelectSimpleDiamondPattern(block, &cache);
-        DCHECK(result);
+    } else if (last_inst->IsIf()) {
+      if (TryGenerateSelectSimpleDiamondPattern(block, &cache)) {
         simplified = true;
+      } else {
+        // Try to fix up the odd version of the double diamond pattern. If we could do it, it means
+        // that we can generate two selects.
+        HBasicBlock* inner_if_block = TryFixupDoubleDiamondPattern(block);
+        if (inner_if_block != nullptr) {
+          // Generate the selects now since `inner_if_block` should be after `block` in PostOrder.
+          bool result = TryGenerateSelectSimpleDiamondPattern(inner_if_block, &cache);
+          DCHECK(result);
+          result = TryGenerateSelectSimpleDiamondPattern(block, &cache);
+          DCHECK(result);
+          simplified = true;
+        }
       }
     }
+    // Blocks with higher indexes may have been removed but the `block` remains at the same index.
+    // Removing from a `std::vector<>` does not change the data pointer.
+    DCHECK_EQ(reverse_post_order_data, graph_->GetReversePostOrder().data());
+    DCHECK_LT(reverse_post_order_index, graph_->GetReversePostOrder().size());
+    DCHECK_EQ(block, reverse_post_order_data[reverse_post_order_index]);
   }
 
   return simplified;
