@@ -35,6 +35,7 @@
 #include "jit/debugger_interface.h"
 #include "jit_options.h"
 #include "obj_ptr.h"
+#include "runtime.h"
 #include "thread_pool.h"
 
 namespace art HIDDEN {
@@ -409,7 +410,12 @@ class Jit {
   // Get a snapshot of the current info for a shared method. The argument must be a shared method.
   SharedMethodInfo GetSharedMethodInfo(ArtMethod* method);
 
-  bool UseFastCompiler() const { return use_fast_compiler_; }
+  bool UseFastCompiler() const {
+    // Check for java debuggable here, as we can change to java debuggable and back. For example,
+    // when a precise method trace is requested we move to java debuggable and transition back
+    // once tracing is stopped.
+    return use_fast_compiler_ && !Runtime::Current()->IsJavaDebuggable();
+  }
   static uint16_t GetInitialHotnessThreshold();
 
  private:

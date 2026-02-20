@@ -1261,7 +1261,7 @@ void Jit::RegisterDexFiles(const std::vector<std::unique_ptr<const DexFile>>& de
 
 static bool SupportsFastCompiler() {
   return kRuntimeISA == InstructionSet::kArm64 &&
-      !Runtime::Current()->IsJavaDebuggable() &&
+      !Runtime::Current()->IsJavaDebuggableAtInit() &&
       com::android::art::flags::fast_baseline_compiler();
 }
 
@@ -1466,6 +1466,12 @@ bool Jit::IgnoreSamplesForMethod(ArtMethod* method) REQUIRES_SHARED(Locks::mutat
       return true;
     }
   }
+
+  if (method->IsCriticalNative() && Runtime::Current()->IsJavaDebuggable()) {
+    // We don't support critical native methods in java debuggable runtime.
+    return true;
+  }
+
   return false;
 }
 
