@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.android.server.art;
+package com.android.server.art.utils;
 
 import static com.google.common.truth.Truth.assertThat;
 

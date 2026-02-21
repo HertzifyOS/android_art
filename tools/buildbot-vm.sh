@@ -45,19 +45,19 @@ if [[ $action = create ]]; then
 
     # sudo apt install qemu-system-<arch> qemu-efi cloud-image-utils
 
-    # Get the cloud image for Ubuntu
-    wget "http://cloud-images.ubuntu.com/releases/25.10/release/$ART_TEST_VM_IMG"
+    # Get the cloud image for Ubuntu 24.04 LTS (Noble Numbat)
+    wget "http://cloud-images.ubuntu.com/releases/24.04/release/$ART_TEST_VM_IMG"
 
     if [[ "$TARGET_ARCH" = "riscv64" ]]; then
         # Get U-Boot
         get_stable_binary \
-            u/u-boot/u-boot-qemu_2025.10-0ubuntu2_all.deb \
+            u/u-boot/u-boot-qemu_2024.01+dfsg-1ubuntu5_all.deb \
             usr/lib/u-boot/qemu-riscv64_smode/uboot.elf
 
     elif [[ "$TARGET_ARCH" = "arm64" ]]; then
         # Get EFI (ARM64)
         get_stable_binary \
-            e/edk2/qemu-efi-aarch64_2025.02-8ubuntu3_all.deb \
+            e/edk2/qemu-efi-aarch64_2024.02-2ubuntu0.7_all.deb \
             usr/share/qemu-efi-aarch64/QEMU_EFI.fd
 
         dd if=/dev/zero of=flash0.img bs=1M count=64
@@ -113,7 +113,7 @@ elif [[ $action = boot ]]; then
             -nographic \
             -m 16G \
             -smp 8 \
-            -cpu max \
+            -cpu rv64,v=true,elen=64,vlen=128,zba=true,zbb=true,zbs=true \
             -kernel uboot.elf \
             -drive file="$ART_TEST_VM_IMG",if=virtio \
             -drive file=user-data.img,format=raw,if=virtio \

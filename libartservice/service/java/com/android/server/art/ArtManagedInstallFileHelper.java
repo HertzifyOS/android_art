@@ -41,6 +41,8 @@ import androidx.annotation.RequiresApi;
 import com.android.art.flags.Flags;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.art.model.ValidationResult;
+import com.android.server.art.utils.AsLog;
+import com.android.server.art.utils.Utils;
 
 import java.io.File;
 import java.nio.file.Files;

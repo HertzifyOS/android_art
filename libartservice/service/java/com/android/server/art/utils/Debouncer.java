@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.android.server.art;
+package com.android.server.art.utils;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;

@@ -16,8 +16,6 @@
 
 package com.android.server.art;
 
-import static com.android.server.art.model.ArtFlags.BatchDexoptPass;
-
 import android.annotation.NonNull;
 import android.app.job.JobParameters;
 import android.os.Build;
@@ -25,6 +23,7 @@ import android.os.Build;
 import androidx.annotation.RequiresApi;
 
 import com.android.server.art.model.ArtFlags;
+import com.android.server.art.model.ArtFlags.BatchDexoptPass;
 import com.android.server.art.model.DexoptResult;
 
 import dalvik.system.DexFile;

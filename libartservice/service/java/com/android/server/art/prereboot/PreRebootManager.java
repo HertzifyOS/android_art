@@ -16,9 +16,6 @@
 
 package com.android.server.art.prereboot;
 
-import static com.android.server.art.model.DexoptResult.PackageDexoptResult;
-import static com.android.server.art.proto.PreRebootStats.Status;
-
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
@@ -30,15 +27,17 @@ import androidx.annotation.RequiresApi;
 
 import com.android.server.LocalManagerRegistry;
 import com.android.server.art.ArtManagerLocal;
-import com.android.server.art.ArtdRefCache;
-import com.android.server.art.AsLog;
 import com.android.server.art.ReasonMapping;
-import com.android.server.art.Utils;
 import com.android.server.art.model.ArtFlags;
 import com.android.server.art.model.BatchDexoptParams;
 import com.android.server.art.model.DexoptResult;
+import com.android.server.art.model.DexoptResult.PackageDexoptResult;
 import com.android.server.art.model.OperationProgress;
 import com.android.server.art.proto.BatchDexoptParamsProto;
+import com.android.server.art.proto.PreRebootStats.Status;
+import com.android.server.art.utils.ArtdRefCache;
+import com.android.server.art.utils.AsLog;
+import com.android.server.art.utils.Utils;
 import com.android.server.pm.PackageManagerLocal;
 
 import com.google.protobuf.InvalidProtocolBufferException;

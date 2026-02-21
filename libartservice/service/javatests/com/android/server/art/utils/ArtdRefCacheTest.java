@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-package com.android.server.art;
-
-import static android.os.IBinder.DeathRecipient;
+package com.android.server.art.utils;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -30,9 +28,11 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import android.os.IBinder;
+import android.os.IBinder.DeathRecipient;
 
 import androidx.test.filters.SmallTest;
 
+import com.android.server.art.IArtd;
 import com.android.server.art.testing.MockClock;
 
 import org.junit.Before;

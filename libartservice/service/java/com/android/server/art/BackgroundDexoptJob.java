@@ -16,11 +16,6 @@
 
 package com.android.server.art;
 
-import static com.android.server.art.ArtManagerLocal.ScheduleBackgroundDexoptJobCallback;
-import static com.android.server.art.model.ArtFlags.BatchDexoptPass;
-import static com.android.server.art.model.ArtFlags.ScheduleStatus;
-import static com.android.server.art.model.Config.Callback;
-
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.job.JobInfo;
@@ -39,11 +34,17 @@ import androidx.annotation.RequiresApi;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.LocalManagerRegistry;
+import com.android.server.art.ArtManagerLocal.ScheduleBackgroundDexoptJobCallback;
 import com.android.server.art.model.ArtFlags;
+import com.android.server.art.model.ArtFlags.BatchDexoptPass;
+import com.android.server.art.model.ArtFlags.ScheduleStatus;
 import com.android.server.art.model.ArtServiceJobInterface;
 import com.android.server.art.model.Config;
+import com.android.server.art.model.Config.Callback;
 import com.android.server.art.model.DexoptResult;
 import com.android.server.art.model.OperationProgress;
+import com.android.server.art.utils.AsLog;
+import com.android.server.art.utils.Utils;
 import com.android.server.pm.PackageManagerLocal;
 
 import com.google.auto.value.AutoValue;

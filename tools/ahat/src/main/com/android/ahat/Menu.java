@@ -31,7 +31,9 @@ class Menu {
       .append(" - ")
       .appendLink(DocString.uri("loopers"), DocString.text("loopers"))
       .append(" - ")
-      .appendLink(DocString.uri("strings"), DocString.text("strings"));
+      .appendLink(DocString.uri("strings"), DocString.text("strings"))
+      .append(" - ")
+      .appendLink(DocString.uri("activity-leaks"), DocString.text("Activity leaks"));
 
   /**
    * Returns the menu as a DocString.

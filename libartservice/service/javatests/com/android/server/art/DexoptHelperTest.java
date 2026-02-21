@@ -16,10 +16,6 @@
 
 package com.android.server.art;
 
-import static com.android.server.art.ArtManagerLocal.DexoptDoneCallback;
-import static com.android.server.art.model.DexoptResult.DexContainerFileDexoptResult;
-import static com.android.server.art.model.DexoptResult.DexoptResultStatus;
-import static com.android.server.art.model.DexoptResult.PackageDexoptResult;
 import static com.android.server.art.testing.TestDataHelper.newLibrary;
 import static com.android.server.art.testing.TestDataHelper.newPackageState;
 import static com.android.server.art.testing.TestDataHelper.newSplit;
@@ -45,13 +41,18 @@ import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.modules.utils.pm.PackageStateModulesUtils;
+import com.android.server.art.ArtManagerLocal.DexoptDoneCallback;
 import com.android.server.art.model.ArtFlags;
 import com.android.server.art.model.Config;
 import com.android.server.art.model.DexoptParams;
 import com.android.server.art.model.DexoptResult;
+import com.android.server.art.model.DexoptResult.DexContainerFileDexoptResult;
+import com.android.server.art.model.DexoptResult.DexoptResultStatus;
+import com.android.server.art.model.DexoptResult.PackageDexoptResult;
 import com.android.server.art.model.OperationProgress;
 import com.android.server.art.testing.StaticMockitoRule;
 import com.android.server.art.testing.TestDataHelper.PackageStateBuilder;
+import com.android.server.art.utils.Utils;
 import com.android.server.pm.PackageManagerLocal;
 import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.AndroidPackageSplit;

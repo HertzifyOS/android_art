@@ -16,8 +16,6 @@
 
 package com.android.server.art;
 
-import static com.android.server.art.model.ArtFlags.PriorityClassApi;
-
 import android.annotation.FlaggedApi;
 import android.annotation.NonNull;
 import android.annotation.StringDef;
@@ -34,6 +32,8 @@ import androidx.annotation.RequiresApi;
 import com.android.art.rw.flags.Flags;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.art.model.ArtFlags;
+import com.android.server.art.model.ArtFlags.PriorityClassApi;
+import com.android.server.art.utils.Utils;
 import com.android.server.pm.PackageManagerLocal;
 import com.android.server.pm.pkg.PackageState;
 

@@ -54,4 +54,11 @@ public class HandlersTest {
     AhatHandler handler = new StringsHandler(snapshot);
     TestHandler.testNoCrash(handler, "http://localhost:7100/strings");
   }
+
+  @Test
+  public void activityLeaksNoCrash() throws IOException {
+    AhatSnapshot snapshot = TestDump.getTestDump().getAhatSnapshot();
+    AhatHandler handler = new ActivityLeaksHandler(snapshot);
+    TestHandler.testNoCrash(handler, "http://localhost:7100/activity-leaks");
+  }
 }

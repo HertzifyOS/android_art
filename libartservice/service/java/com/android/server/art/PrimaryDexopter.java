@@ -16,11 +16,6 @@
 
 package com.android.server.art;
 
-import static com.android.server.art.OutputArtifacts.PermissionSettings;
-import static com.android.server.art.OutputArtifacts.PermissionSettings.SeContext;
-import static com.android.server.art.PrimaryDexUtils.DetailedPrimaryDexInfo;
-import static com.android.server.art.Utils.Abi;
-
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
@@ -36,10 +31,16 @@ import androidx.annotation.RequiresApi;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.modules.utils.build.SdkLevel;
 import com.android.modules.utils.pm.PackageStateModulesUtils;
+import com.android.server.art.OutputArtifacts.PermissionSettings;
+import com.android.server.art.OutputArtifacts.PermissionSettings.SeContext;
+import com.android.server.art.PrimaryDexUtils.DetailedPrimaryDexInfo;
 import com.android.server.art.model.ArtFlags;
 import com.android.server.art.model.Config;
 import com.android.server.art.model.DexoptParams;
 import com.android.server.art.model.DexoptResult;
+import com.android.server.art.utils.AidlUtils;
+import com.android.server.art.utils.Utils;
+import com.android.server.art.utils.Utils.Abi;
 import com.android.server.pm.PackageManagerLocal.FilteredSnapshot;
 import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageState;

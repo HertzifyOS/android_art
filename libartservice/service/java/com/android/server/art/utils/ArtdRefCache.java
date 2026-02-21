@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-package com.android.server.art;
-
-import static android.os.IBinder.DeathRecipient;
+package com.android.server.art.utils;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.IBinder.DeathRecipient;
 import android.os.RemoteException;
 import android.system.SystemCleaner;
 import android.util.CloseGuard;
@@ -30,6 +29,8 @@ import androidx.annotation.RequiresApi;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.server.art.GlobalInjector;
+import com.android.server.art.IArtd;
 
 import java.lang.ref.Cleaner;
 import java.lang.ref.Reference;

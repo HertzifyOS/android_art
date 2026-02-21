@@ -105,7 +105,6 @@ cc_defaults {
         users: "single_user",
         fuzzed_code_usage: "shipped",
     },
-    native_coverage: false,
 }
 
 // Release/debug defaults that fuzzers should use to abstract from the ones above.

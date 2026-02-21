@@ -196,6 +196,7 @@ public class Main {
     server.createContext("/bitmap", new AhatHttpHandler(new BitmapHandler(ahat)));
     server.createContext("/bitmaps", new AhatHttpHandler(new BitmapsHandler(ahat)));
     server.createContext("/strings", new AhatHttpHandler(new StringsHandler(ahat)));
+    server.createContext("/activity-leaks", new AhatHttpHandler(new ActivityLeaksHandler(ahat)));
     server.createContext("/array", new AhatHttpHandler(new ArrayHandler(ahat)));
     server.createContext(
         "/style.css", new AhatHttpHandler(new StaticHandler("etc/style.css", "text/css")));

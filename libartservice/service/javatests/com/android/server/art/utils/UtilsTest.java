@@ -14,9 +14,7 @@
  * limitations under the License
  */
 
-package com.android.server.art;
-
-import static android.app.ActivityManager.RunningAppProcessInfo;
+package com.android.server.art.utils;
 
 import static com.android.server.art.testing.TestDataHelper.newPackageState;
 
@@ -29,6 +27,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import android.app.ActivityManager;
+import android.app.ActivityManager.RunningAppProcessInfo;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.platform.test.annotations.RequiresFlagsDisabled;
@@ -38,8 +37,8 @@ import android.util.SparseArray;
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
+import com.android.server.art.Constants;
 import com.android.server.art.DexUseManagerLocal;
-import com.android.server.art.Utils;
 import com.android.server.art.testing.StaticMockitoRule;
 import com.android.server.pm.PackageManagerLocal.FilteredSnapshot;
 import com.android.server.pm.pkg.PackageState;
