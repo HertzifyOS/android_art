@@ -1396,6 +1396,31 @@ uint32_t Monitor::GetLockOwnerThreadId(ObjPtr<mirror::Object> obj) {
   }
 }
 
+bool Monitor::IsOwnedByMe(const Thread* self, ObjPtr<mirror::Object> obj) {
+  DCHECK_EQ(self, Thread::Current());
+  DCHECK(obj != nullptr);
+  Locks::mutator_lock_->AssertSharedHeld(Thread::Current());
+  LockWord lock_word = obj->GetLockWord(true);
+  switch (lock_word.GetState()) {
+    case LockWord::kHashCode:
+      // Fall-through.
+    case LockWord::kUnlocked:
+      return false;
+    case LockWord::kThinLocked:
+      return lock_word.ThinLockOwner() == self->GetThreadId();
+    case LockWord::kFatLocked: {
+      Monitor* mon = lock_word.FatLockMonitor();
+      // Since we hold a share of the mutator lock, the obj lock cannot be deflated here.
+      // Since our caller holds a reference to obj, mon cannot be reclaimed.
+      return mon->IsOwnedByMe(self);
+    }
+    default: {
+      LOG(FATAL) << "Unreachable";
+      UNREACHABLE();
+    }
+  }
+}
+
 ThreadState Monitor::FetchState(const Thread* thread,
                                 /* out */ ObjPtr<mirror::Object>* monitor_object,
                                 /* out */ uint32_t* lock_owner_tid) {
@@ -1434,7 +1459,7 @@ ThreadState Monitor::FetchState(const Thread* thread,
           lock_object = ReadBarrier::Mark(lock_object.Ptr());
         }
         *monitor_object = lock_object;
-        *lock_owner_tid = lock_object->GetLockOwnerThreadId();
+        *lock_owner_tid = GetLockOwnerThreadId(lock_object);
       }
     }
     break;
@@ -1620,6 +1645,11 @@ uint32_t Monitor::GetOwnerThreadId() {
   MutexLock mu(Thread::Current(), *Locks::thread_list_lock_);
   MonitorOwner owner = GetOwner();
   return owner.GetThreadId();
+}
+
+bool Monitor::IsOwnedByMe(const Thread* self) const {
+  MonitorOwner owner = GetOwner();
+  return owner.IsOwner(self);
 }
 
 MonitorList::MonitorList()

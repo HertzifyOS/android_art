@@ -642,6 +642,7 @@ class EXPORT Thread {
 
   size_t NumberOfHeldMutexes() const;
 
+  // Does the current thread hold the monitor for `object`? Assumes this == Thread::Current().
   bool HoldsLock(ObjPtr<mirror::Object> object) const REQUIRES_SHARED(Locks::mutator_lock_);
 
   /*
