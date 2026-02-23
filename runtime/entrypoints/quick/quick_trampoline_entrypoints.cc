@@ -2848,8 +2848,8 @@ extern "C" void artRecordLongRunningMethodTraceEvent(ArtMethod* method, Thread* 
 
 extern "C" void artRecordMethodTraceEvent(ArtMethod* method, Thread* self, bool is_entry)
     REQUIRES_SHARED(Locks::mutator_lock_) {
-  // This method is only called when the buffer is full.
-  TraceLowOverhead::HandleBufferOverflow(self, method, is_entry);
+  // RecordTraceEvent will flush the buffer if full and record the current trace event.
+  TraceLowOverhead::RecordTraceEvent(self, method, is_entry);
 }
 
 }  // namespace art

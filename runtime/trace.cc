@@ -916,8 +916,6 @@ void Trace::FlushThreadBuffer(Thread* self) {
 
 void Trace::AllocateThreadBuffer(Thread* self) {
   MutexLock mu(self, *Locks::trace_lock_);
-  // Check if we still need to flush inside the trace_lock_. If we are stopping tracing it is
-  // possible we already deleted the trace and flushed the buffer too.
   if (the_trace_ == nullptr) {
     if (ShouldEnableProfileCode()) {
       TraceProfiler::AllocateBuffer(self);
@@ -1594,6 +1592,7 @@ int TraceWriter::GetMethodTraceIndex(uintptr_t* current_buffer) {
 }
 
 void TraceWriter::FlushBuffer(Thread* thread, bool is_sync, bool release) {
+  ScopedTrace trace("FlushBuffer");
   uintptr_t* method_trace_entries = thread->GetMethodTraceBuffer();
   uintptr_t** current_entry_ptr = thread->GetTraceBufferCurrEntryPtr();
   size_t current_offset = *current_entry_ptr - method_trace_entries;
@@ -2016,9 +2015,23 @@ LowOverheadTraceType Trace::GetTraceType() {
   return LowOverheadTraceType::kNone;
 }
 
-void TraceLowOverhead::HandleBufferOverflow(Thread* self, ArtMethod* method, bool is_entry) {
-  ScopedTrace trace("HandleBufferOverflow");
-  // MethodEntered / MethodExited flush the buffer if full and record the current trace event.
+void TraceLowOverhead::RecordTraceEventIfNeeded(Thread* self, ArtMethod* method, bool is_entry) {
+  // Quick check to see if any profiling is in progress. If not return.
+  if (self->GetMethodTraceBuffer() == nullptr) {
+    return;
+  }
+
+  if (low_overhead_trace_ == nullptr) {
+    if (ShouldEnableProfileCode()) {
+      TraceProfiler::RecordTraceEventIfNeeded(method, self, is_entry);
+    }
+    return;
+  }
+
+  RecordTraceEvent(self, method, is_entry);
+}
+
+void TraceLowOverhead::RecordTraceEvent(Thread* self, ArtMethod* method, bool is_entry) {
   if (is_entry) {
     low_overhead_trace_->MethodEntered(self, method);
   } else {

@@ -666,7 +666,13 @@ class TraceLowOverhead {
 
   static void Stop() { low_overhead_trace_ = nullptr; }
 
-  static void HandleBufferOverflow(Thread* self, ArtMethod* method, bool is_entry)
+  // Used for low-overhead tracing to record trace events from switch interpreter and exceptions.
+  // We don't add method entry / exit listeners for implementing low-overhed tracing to minimize
+  // the tracing overheag.
+  static void RecordTraceEventIfNeeded(Thread* self, ArtMethod* method, bool is_entry)
+      REQUIRES_SHARED(Locks::mutator_lock_);
+
+  static void RecordTraceEvent(Thread* self, ArtMethod* method, bool is_entry)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
  private:

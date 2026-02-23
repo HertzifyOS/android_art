@@ -649,10 +649,6 @@ void TraceProfiler::RecordTraceEventIfNeeded(ArtMethod* method, Thread* thread, 
     return;
   }
 
-  // Quick check to see if any profiling is in progress. If not return.
-  if (thread->GetMethodTraceBuffer() == nullptr) {
-    return;
-  }
   {
     // Check if low-overhead tracing is in progress. We may have non-null buffer
     // if we are doing regular method tracing.

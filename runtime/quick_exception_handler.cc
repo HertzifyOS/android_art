@@ -45,7 +45,7 @@
 #include "oat/oat_quick_method_header.h"
 #include "oat/stack_map.h"
 #include "stack.h"
-#include "trace_profile.h"
+#include "trace.h"
 
 namespace art HIDDEN {
 
@@ -118,7 +118,7 @@ class CatchBlockStackVisitor final : public StackVisitor {
     if (continue_stack_walk && header != nullptr && header->IsOptimized() && !IsInInlinedFrame()) {
       // Record trace events only for non-inlined methods. Inlined methods don't see a method entry
       // event, so we shouldn't report method exit events.
-      TraceProfiler::RecordTraceEventIfNeeded(method, GetThread(), /*is_entry=*/false);
+      TraceLowOverhead::RecordTraceEventIfNeeded(GetThread(), method, /*is_entry=*/false);
     }
 
     // Skip unwind callback is used when method exit callback has thrown an exception. Since we
