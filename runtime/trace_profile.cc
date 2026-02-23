@@ -777,12 +777,17 @@ void TraceDumpCheckpoint::Run(Thread* thread) {
                                                                     method_trace_curr_ptr,
                                                                     buffer_ptr.get(),
                                                                     traced_methods);
-      MutexLock mu(Thread::Current(), trace_file_lock_);
-      if (trace_file_ != nullptr) {
-        if (!trace_file_->WriteFully(buffer_ptr.get(), num_bytes)) {
-          PLOG(WARNING) << "Failed streaming a tracing event.";
+      bool flush_to_file = false;
+      {
+        MutexLock mu(Thread::Current(), trace_file_lock_);
+        if (trace_file_ != nullptr) {
+          if (!trace_file_->WriteFully(buffer_ptr.get(), num_bytes)) {
+            PLOG(WARNING) << "Failed streaming a tracing event.";
+          }
+          flush_to_file = true;
         }
-      } else {
+      }
+      if (!flush_to_file) {
         trace_data_->AppendToLongRunningMethods(buffer_ptr.get(), num_bytes);
       }
     } else {
