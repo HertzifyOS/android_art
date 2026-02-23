@@ -219,7 +219,7 @@ public abstract class AhatInstance implements Diffable<AhatInstance> {
    * Returns an iterator over the references this AhatInstance has to other
    * AhatInstances.
    */
-  abstract Iterable<Reference> getReferences();
+  public abstract Iterable<Reference> getReferences();
 
   /**
    * Returns true if this instance is a GC root.

@@ -129,7 +129,7 @@ public class AhatClassInstance extends AhatInstance {
   }
 
   @Override
-  Iterable<Reference> getReferences() {
+  public Iterable<Reference> getReferences() {
     return new ReferenceIterator();
   }
 

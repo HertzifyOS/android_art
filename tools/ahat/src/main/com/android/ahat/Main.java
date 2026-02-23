@@ -187,7 +187,7 @@ public class Main {
     }
 
     server.createContext("/",
-        new AhatHttpHandler(new OverviewHandler(ahat, hprof, hprofbase, retained)));
+        new AhatHttpHandler(new OverviewHandler(ahat, hprof, hprofbase)));
     server.createContext("/rooted", new AhatHttpHandler(new RootedHandler(ahat)));
     server.createContext("/object", new AhatHttpHandler(new ObjectHandler(ahat)));
     server.createContext("/objects", new AhatHttpHandler(new ObjectsHandler(ahat)));

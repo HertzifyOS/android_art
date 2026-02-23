@@ -43,7 +43,7 @@ class SuperRoot extends AhatInstance {
   }
 
   @Override
-  Iterable<Reference> getReferences() {
+  public Iterable<Reference> getReferences() {
     return new AbstractList<Reference>() {
       @Override
       public int size() {

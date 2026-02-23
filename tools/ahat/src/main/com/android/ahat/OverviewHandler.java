@@ -29,13 +29,11 @@ class OverviewHandler implements AhatHandler {
   private AhatSnapshot mSnapshot;
   private File mHprof;
   private File mBaseHprof;
-  private Reachability mRetained;
 
-  public OverviewHandler(AhatSnapshot snapshot, File hprof, File basehprof, Reachability retained) {
+  public OverviewHandler(AhatSnapshot snapshot, File hprof, File basehprof) {
     mSnapshot = snapshot;
     mHprof = hprof;
     mBaseHprof = basehprof;
-    mRetained = retained;
   }
 
   @Override
@@ -49,7 +47,7 @@ class OverviewHandler implements AhatHandler {
         DocString.format("ahat-%s", OverviewHandler.class.getPackage().getImplementationVersion()));
     doc.description(
         DocString.text("--retained"),
-        DocString.text(mRetained.toString()));
+        DocString.text(mSnapshot.getRetainedReachability().toString()));
     doc.description(DocString.text("hprof file"), DocString.text(mHprof.toString()));
     if (mBaseHprof != null) {
       doc.description(DocString.text("baseline hprof file"), DocString.text(mBaseHprof.toString()));

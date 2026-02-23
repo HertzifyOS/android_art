@@ -135,7 +135,7 @@ public class AhatClassObj extends AhatInstance {
   }
 
   @Override
-  Iterable<Reference> getReferences() {
+  public Iterable<Reference> getReferences() {
     List<Reference> refs = new AbstractList<Reference>() {
       @Override
       public int size() {

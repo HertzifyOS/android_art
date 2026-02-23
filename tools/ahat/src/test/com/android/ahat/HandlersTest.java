@@ -29,8 +29,7 @@ public class HandlersTest {
     AhatSnapshot snapshot = TestDump.getTestDump().getAhatSnapshot();
     AhatHandler handler = new OverviewHandler(snapshot,
         new File("my.hprof.file"),
-        new File("my.base.hprof.file"),
-        Reachability.SOFT);
+        new File("my.base.hprof.file"));
     TestHandler.testNoCrash(handler, "http://localhost:7100");
   }
 
