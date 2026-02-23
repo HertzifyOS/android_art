@@ -49,6 +49,11 @@ Known Issues:
  * Line number decoding for allocations in proguarded classes.
 
 Release History:
+ 1.11 February, 2026
+   Add Activity leaks page
+   Strings page now correctly shows string object allocation sizes
+   Strings page now respects --retained
+
  1.10 January, 2026
    Move Bitmaps functionality to main menu (top bar).
    Add Strings page to main menu to help find duplicate strings.
