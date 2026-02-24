@@ -1969,7 +1969,7 @@ static void processDexFile(const char* fileName,
     fputs("Opened '", gOutFile);
     fputs(fileName, gOutFile);
     if (n > 1) {
-      fprintf(gOutFile, ":%s", DexFileLoader::GetMultiDexClassesDexName(i).c_str());
+      fprintf(gOutFile, ":%s", DexFileLoader::GetMultiDexZipEntryName(i).c_str());
     }
     fprintf(gOutFile, "', DEX version '%.3s'\n", pDexFile->GetHeader().magic_.data() + 4);
   }
