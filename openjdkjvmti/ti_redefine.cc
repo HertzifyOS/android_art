@@ -399,7 +399,7 @@ jvmtiError Redefiner::CanRedefineClass(art::Handle<art::mirror::Class> klass,
     // It's only a problem to try to retransform/redefine a unprepared class if it's happening on
     // the same thread as the class-linking process. If it's on another thread we will be able to
     // wait for the preparation to finish and continue from there.
-    if (klass->GetLockOwnerThreadId() == self->GetThreadId()) {
+    if (klass->IsLockOwnedByMe(self)) {
       *error_msg = "Modification of class " + klass->PrettyClass() +
           " from within the classes ClassLoad callback is not supported to prevent deadlocks." +
           " Please use ClassFileLoadHook directly instead.";

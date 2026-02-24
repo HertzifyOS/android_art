@@ -364,19 +364,35 @@ inline bool FreeListSpace::SortByPrevFree::operator()(const AllocationInfo* a,
   return reinterpret_cast<uintptr_t>(a) < reinterpret_cast<uintptr_t>(b);
 }
 
-FreeListSpace* FreeListSpace::Create(const std::string& name, size_t size) {
+FreeListSpace* FreeListSpace::Create(const std::string& name, size_t size, uint8_t* hint_addr) {
   CHECK_ALIGNED_PARAM(size, ObjectAlignment());
   DCHECK_LE(gPageSize, ObjectAlignment())
       << "MapAnonymousAligned() should be used if the large-object alignment is larger than the "
          "runtime page size";
-  std::string error_msg;
-  MemMap mem_map = MemMap::MapAnonymous(name.c_str(),
-                                        size,
-                                        PROT_READ | PROT_WRITE,
-                                        /*low_4gb=*/true,
-                                        &error_msg);
-  CHECK(mem_map.IsValid()) << "Failed to allocate large object space mem map: " << error_msg;
-  return new FreeListSpace(name, std::move(mem_map), mem_map.Begin(), mem_map.End());
+  constexpr size_t kMinHeapSize = 2 * MB;
+  // Keep trying to map smaller size, in case we don't succeed due to fragmentation.
+  while (size > kMinHeapSize) {
+    // We don't pass error_msg string to ensure that we retain errno originating out
+    // of mmap(), if it fails.
+    MemMap mem_map = MemMap::MapAnonymous(name.c_str(),
+                                          hint_addr,
+                                          size,
+                                          PROT_READ | PROT_WRITE,
+                                          /*low_4gb=*/true,
+                                          /*reuse=*/false,
+                                          /*reservation=*/nullptr,
+                                          /*error_msg=*/nullptr);
+    if (mem_map.IsValid()) {
+      return new FreeListSpace(name, std::move(mem_map), mem_map.Begin(), mem_map.End());
+    }
+    if (hint_addr == nullptr) {
+      CHECK_EQ(errno, ENOMEM) << "mmap failed for large object space: " << strerror(errno);
+      size = RoundUp(size >> 1, gPageSize);
+    }
+    hint_addr = nullptr;
+  }
+  LOG(WARNING) << "Failed to allocate large object space mem map: " << strerror(errno);
+  return nullptr;
 }
 
 FreeListSpace::FreeListSpace(const std::string& name,
@@ -403,7 +419,9 @@ FreeListSpace::FreeListSpace(const std::string& name,
 void FreeListSpace::ClampGrowthLimit(size_t new_capacity) {
   MutexLock mu(Thread::Current(), lock_);
   new_capacity = RoundUp(new_capacity, ObjectAlignment());
-  CHECK_LE(new_capacity, Size());
+  if (new_capacity >= Size()) {
+    return;
+  }
   size_t diff = Size() - new_capacity;
   // If we don't have enough free-bytes at the end to clamp, then do the best
   // that we can.

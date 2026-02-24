@@ -4138,7 +4138,7 @@ ArtMethod* Thread::GetCurrentMethod(uint32_t* dex_pc_out,
 }
 
 bool Thread::HoldsLock(ObjPtr<mirror::Object> object) const {
-  return object != nullptr && object->GetLockOwnerThreadId() == GetThreadId();
+  return object != nullptr && object->IsLockOwnedByMe(this);
 }
 
 extern std::vector<StackReference<mirror::Object>*> GetProxyReferenceArguments(ArtMethod** sp)

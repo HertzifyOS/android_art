@@ -309,6 +309,11 @@ class Heap {
                !process_state_update_lock_,
                !Roles::uninterruptible_);
 
+  bool IsZygoteLargeObject(mirror::Object* obj) const {
+    auto* los = GetLargeObjectsSpace();
+    return los != nullptr && los->Contains(obj) && los->IsZygoteLargeObject(Thread::Current(), obj);
+  }
+
   AllocatorType GetCurrentAllocator() const {
     return current_allocator_;
   }

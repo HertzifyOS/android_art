@@ -375,6 +375,7 @@ inline mirror::Object* Heap::TryToAllocate(Thread* self,
       break;
     }
     case kAllocatorTypeLOS: {
+      DCHECK(large_object_space_ != nullptr);
       ret = large_object_space_->Alloc(self,
                                        alloc_size,
                                        bytes_allocated,

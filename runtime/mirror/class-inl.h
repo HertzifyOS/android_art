@@ -1324,13 +1324,13 @@ inline void Class::SetClassLoader(ObjPtr<ClassLoader> new_class_loader) {
 }
 
 inline void Class::SetRecursivelyInitialized() {
-  DCHECK_EQ(GetLockOwnerThreadId(), Thread::Current()->GetThreadId());
+  DCHECK(this->IsLockOwnedByMe(Thread::Current()));
   uint32_t flags = GetField32(OFFSET_OF_OBJECT_MEMBER(Class, access_flags_));
   SetAccessFlags(flags | kAccRecursivelyInitialized);
 }
 
 inline void Class::SetHasDefaultMethods() {
-  DCHECK_EQ(GetLockOwnerThreadId(), Thread::Current()->GetThreadId());
+  DCHECK(this->IsLockOwnedByMe(Thread::Current()));
   uint32_t flags = GetField32(OFFSET_OF_OBJECT_MEMBER(Class, access_flags_));
   SetAccessFlagsDuringLinking(flags | kAccHasDefaultMethod);
 }

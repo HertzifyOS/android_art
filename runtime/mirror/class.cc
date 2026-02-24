@@ -173,7 +173,7 @@ static void CheckSetStatus(Thread* self, T thiz, ClassStatus new_status, ClassSt
              !Locks::mutator_lock_->IsExclusiveHeld(self)) {
     // When classes are being resolved the resolution code should hold the
     // lock or have everything else suspended
-    CHECK_EQ(thiz->GetLockOwnerThreadId(), self->GetThreadId())
+    CHECK(thiz->IsLockOwnedByMe(self))
         << "Attempt to change status of class while not holding its lock: " << thiz->PrettyClass()
         << " " << old_status << " -> " << new_status;
   }

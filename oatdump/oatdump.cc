@@ -1887,7 +1887,9 @@ class ImageDumper {
         indent_os << "\n";
       },  image_space_.Begin(), image_header_.GetPointerSize());
       // Dump the large objects separately.
-      heap->GetLargeObjectsSpace()->GetLiveBitmap()->Walk(dump_visitor);
+      if (heap->GetLargeObjectsSpace() != nullptr) {
+        heap->GetLargeObjectsSpace()->GetLiveBitmap()->Walk(dump_visitor);
+      }
       indent_os << "\n";
     }
     os << "STATS:\n" << std::flush;

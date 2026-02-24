@@ -164,7 +164,7 @@ class EXPORT MANAGED LOCKABLE Object {
   void SetLockWord(LockWord new_val, bool as_volatile) REQUIRES_SHARED(Locks::mutator_lock_);
   bool CasLockWord(LockWord old_val, LockWord new_val, CASMode mode, std::memory_order memory_order)
       REQUIRES_SHARED(Locks::mutator_lock_);
-  uint32_t GetLockOwnerThreadId() REQUIRES_SHARED(Locks::mutator_lock_);
+  bool IsLockOwnedByMe(const Thread* self) REQUIRES_SHARED(Locks::mutator_lock_);
 
   // Try to enter the monitor, returns non null if we succeeded.
   ObjPtr<mirror::Object> MonitorTryEnter(Thread* self)

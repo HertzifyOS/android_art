@@ -99,7 +99,11 @@ class Monitor {
   static void Init(uint32_t lock_profiling_threshold, uint32_t stack_dump_lock_profiling_threshold);
 
   // Return the thread id of the lock owner or 0 when there is no owner.
+  // IsOwnedByMe is greatly preferred. But we still need this for at least Monitor::FetchState.
   EXPORT static uint32_t GetLockOwnerThreadId(ObjPtr<mirror::Object> obj)
+      REQUIRES_SHARED(Locks::mutator_lock_);
+
+  EXPORT static bool IsOwnedByMe(const Thread* self, ObjPtr<mirror::Object> obj)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   // NO_THREAD_SAFETY_ANALYSIS for mon->Lock.
@@ -172,6 +176,9 @@ class Monitor {
 
   // Is the monitor currently locked? Debug only, provides no memory ordering guarantees.
   bool IsLocked() REQUIRES_SHARED(Locks::mutator_lock_) REQUIRES(!monitor_lock_);
+
+  // Does the current thread hold the lock?
+  bool IsOwnedByMe(const Thread* self) const REQUIRES_SHARED(Locks::mutator_lock_);
 
   bool HasHashCode() const {
     return hash_code_.load(std::memory_order_relaxed) != 0;

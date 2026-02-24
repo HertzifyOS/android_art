@@ -768,11 +768,8 @@ class HeapGraphDumper {
       } else if (space->IsImageSpace() && heap->ObjectIsInBootImageSpace(obj)) {
         heap_type = perfetto::protos::pbzero::HeapGraphObject::HEAP_TYPE_BOOT_IMAGE;
       }
-    } else {
-      const auto* los = heap->GetLargeObjectsSpace();
-      if (los->Contains(obj) && los->IsZygoteLargeObject(art::Thread::Current(), obj)) {
-        heap_type = perfetto::protos::pbzero::HeapGraphObject::HEAP_TYPE_ZYGOTE;
-      }
+    } else if (heap->IsZygoteLargeObject(obj)) {
+      heap_type = perfetto::protos::pbzero::HeapGraphObject::HEAP_TYPE_ZYGOTE;
     }
     if (heap_type != prev_heap_type_) {
       object_proto->set_heap_type_delta(heap_type);

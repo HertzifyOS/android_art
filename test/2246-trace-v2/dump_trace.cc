@@ -18,6 +18,7 @@
 
 #include <map>
 #include <memory>
+#include <stack>
 
 #include "base/leb128.h"
 #include "base/os.h"
