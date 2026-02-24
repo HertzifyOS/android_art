@@ -582,6 +582,15 @@ ArtField* FindFieldJNI(const ScopedObjectAccess& soa,
   return field;
 }
 
+
+jfieldID EncodeArtFieldInternal(ArtField* field) {
+  return reinterpret_cast<jfieldID>(field);
+}
+
+ArtField* DecodeArtFieldInternal(jfieldID fid) {
+  return reinterpret_cast<ArtField*>(fid);
+}
+
 int ThrowNewException(JNIEnv* env, jclass exception_class, const char* msg, jobject cause)
     REQUIRES(!Locks::mutator_lock_) {
   // Turn the const char* into a java.lang.String.

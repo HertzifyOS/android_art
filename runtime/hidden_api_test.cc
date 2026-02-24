@@ -172,6 +172,7 @@ class HiddenApiTest : public CommonRuntimeTest {
     JNIEnv* env = Thread::Current()->GetJniEnv();
     jclass klass = env->FindClass(class_name);
     jfieldID field_id = env->GetFieldID(klass, name, signature);
+    ScopedObjectAccess soa(Thread::Current());
     ArtField* art_field = jni::DecodeArtField(field_id);
     return art_field;
   }
