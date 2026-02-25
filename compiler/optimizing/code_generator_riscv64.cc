@@ -785,6 +785,56 @@ class LoadStringSlowPathRISCV64 : public SlowPathCodeRISCV64 {
   DISALLOW_COPY_AND_ASSIGN(LoadStringSlowPathRISCV64);
 };
 
+class ConstantTableRISCV64 : public SlowPathCodeRISCV64 {
+ public:
+  explicit ConstantTableRISCV64(HLoadConstantTableEntry* load)
+      : SlowPathCodeRISCV64(load) {}
+
+  void EmitNativeCode(CodeGenerator* codegen) override {
+    CodeGeneratorRISCV64* riscv64_codegen = down_cast<CodeGeneratorRISCV64*>(codegen);
+    HLoadConstantTableEntry* load = down_cast<HLoadConstantTableEntry*>(instruction_);
+    size_t entry_size = DataType::Size(load->GetType());
+    DCHECK(IsPowerOfTwo(entry_size));
+    AssemblerBuffer* buffer = riscv64_codegen->GetAssembler()->GetBuffer();
+
+    // Align data, bind the data start and emit the data.
+    buffer->Resize(RoundUp(buffer->Size(), entry_size));
+    __ Bind(GetEntryLabel());
+    size_t code_alignment = riscv64_codegen->GetInstructionSetFeatures().HasCompressed() ? 2u : 4u;
+    buffer->Resize(RoundUp(buffer->Size() + entry_size * load->GetNumEntries(), code_alignment));
+    uint32_t table_location = __ GetLabelLocation(GetEntryLabel());
+    CodeGenerator::CopyConstantTableData(load, buffer->contents() + table_location);
+
+    // Update AUIPC and load offset.
+    uint32_t auipc_location = __ GetLabelLocation(&auipc_label_);
+    uint32_t load_location = __ GetLabelLocation(&load_label_);
+    DCHECK_GT(table_location, auipc_location);
+    int32_t offset = dchecked_integral_cast<int32_t>(table_location - auipc_location);
+    // Adjust the AUIPC offset for the sign-extension of the load offset.
+    int32_t auipc_offset = offset - ((offset << 20) >> 20);
+    DCHECK_EQ(auipc_offset & 0xfff, 0);
+    uint32_t auipc_insn = buffer->Load<uint32_t>(auipc_location);
+    DCHECK_EQ(auipc_insn >> 12, kLinkTimeOffsetPlaceholderHigh);
+    auipc_insn = (auipc_insn & 0xfffu) | auipc_offset;
+    uint32_t load_insn = buffer->Load<uint32_t>(load_location);
+    DCHECK_EQ(load_insn >> 20, kLinkTimeOffsetPlaceholderLow);
+    load_insn = (load_insn & 0xfffffu) | (offset << 20);
+    buffer->Store<uint32_t>(auipc_location, auipc_insn);
+    buffer->Store<uint32_t>(load_location, load_insn);
+  }
+
+  Riscv64Label* GetAuipcLabel() { return &auipc_label_; }
+  Riscv64Label* GetLoadLabel() { return &load_label_; }
+
+  const char* GetDescription() const override {
+    return "ConstantTableRISCV64";
+  }
+
+ private:
+  Riscv64Label auipc_label_;
+  Riscv64Label load_label_;
+};
+
 #undef __
 #define __ down_cast<Riscv64Assembler*>(GetAssembler())->  // NOLINT
 
@@ -4904,6 +4954,33 @@ void InstructionCodeGeneratorRISCV64::VisitPackedSwitch(HPackedSwitch* instructi
   } else {
     GenPackedSwitchWithCompares(adjusted, temp, num_entries, switch_block);
   }
+}
+
+void LocationsBuilderRISCV64::VisitLoadConstantTableEntry(HLoadConstantTableEntry* load) {
+  LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, load);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  if (DataType::IsFloatingPointType(load->GetType())) {
+    locations->SetOut(Location::RequiresFpuRegister(), Location::kNoOutputOverlap);
+  } else {
+    locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
+  }
+}
+
+void InstructionCodeGeneratorRISCV64::VisitLoadConstantTableEntry(HLoadConstantTableEntry* load) {
+  LocationSummary* locations = load->GetLocations();
+  XRegister index = locations->InAt(0).AsRegister<XRegister>();
+
+  ConstantTableRISCV64* data = new (codegen_->GetScopedAllocator()) ConstantTableRISCV64(load);
+  codegen_->AddSlowPath(data);
+
+  ScratchRegisterScope srs(GetAssembler());
+  XRegister tmp = srs.AllocateXRegister();
+
+  __ Bind(data->GetAuipcLabel());
+  __ Auipc(tmp, /*imm20=*/ kLinkTimeOffsetPlaceholderHigh);
+  ShNAdd(tmp, index, tmp, load->GetType());
+  __ Bind(data->GetLoadLabel());
+  Load(locations->Out(), tmp, /*imm12=*/ kLinkTimeOffsetPlaceholderLow, load->GetType());
 }
 
 void LocationsBuilderRISCV64::VisitParallelMove([[maybe_unused]] HParallelMove* instruction) {
