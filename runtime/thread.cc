@@ -27,15 +27,12 @@
 #include <atomic>
 #include <bitset>
 #include <cerrno>
-#include <cstddef>
-#include <cstdint>
 #include <iostream>
 #include <list>
 #include <optional>
 #include <sstream>
 
 #include "android-base/file.h"
-#include "android-base/logging.h"
 #include "android-base/macros.h"
 #include "android-base/stringprintf.h"
 #include "android-base/strings.h"
@@ -72,7 +69,6 @@
 #include "gc/heap.h"
 #include "gc/space/space-inl.h"
 #include "gc_root.h"
-#include "handle.h"
 #include "handle_scope-inl.h"
 #include "handle_scope.h"
 #include "instrumentation.h"
@@ -715,19 +711,16 @@ void* Thread::CreateCallback(void* arg) {
     if (kIsVirtualThreadEnabled &&
         UNLIKELY(!runnable.IsNull() &&
                  runnable->InstanceOf(GetClassRoot<mirror::VirtualThreadContext>()))) {
-      StackHandleScope<1> hs(self);
-      Handle<mirror::VirtualThreadContext> v_context = hs.NewHandle(
-          ObjPtr<mirror::VirtualThreadContext>::DownCast(runnable));
-      uint8_t flags = v_context->GetParkedStates() != nullptr ? VirtualThreadFlag::kUnparking : 0;
-      uint32_t thin_lock_id = v_context->GetMonitorThreadId();
-      DCHECK_GT(thin_lock_id, 0u);
-      MountedVirtualThreadData mounted_data((uint32_t)thin_lock_id, self->GetThreadId(), flags);
-      bool mounted = self->TrySetMountedVirtualThreadData(&mounted_data);
-      DCHECK(mounted) << mounted_data;
+      self->SetVirtualThreadFlags(VirtualThreadFlag::kIsVirtual, true);
+      ObjPtr<mirror::VirtualThreadContext> v_context =
+          ObjPtr<mirror::VirtualThreadContext>::DownCast(runnable);
+      if (v_context->GetParkedStates() != nullptr) {
+        self->SetVirtualThreadFlags(VirtualThreadFlag::kUnparking, true);
+      }
 
       // Invoke the Runnable.run() method to avoid holding a reference of opeer in the managed
       // stack.
-      WellKnownClasses::java_lang_Runnable_run->InvokeInterface<'V'>(self, v_context.Get());
+      WellKnownClasses::java_lang_Runnable_run->InvokeInterface<'V'>(self, runnable);
 
       // When a virtual thread is parked, we expect and clear the VirtualThreadParkingError used to
       // unwind the native stack.
@@ -736,8 +729,6 @@ void* Thread::CreateCallback(void* arg) {
             "Ldalvik/system/VirtualThreadParkingError;"));
         self->ClearException();
       }
-      bool unmounted = self->TryClearMountedVirtualThreadData();
-      DCHECK(unmounted) << mounted_data;
     } else {
       // Invoke the 'run' method of our java.lang.Thread.
       WellKnownClasses::java_lang_Thread_run->InvokeVirtual<'V'>(self, receiver);
@@ -1555,72 +1546,6 @@ bool Thread::InitStack(uint8_t* read_stack_base, size_t read_stack_size, size_t 
   CHECK_GT(FindStackTop<stack_type>(), reinterpret_cast<void*>(GetStackEnd<stack_type>()));
 
   return true;
-}
-static constexpr useconds_t kVirtualThreadSuspendSleepUs = 100;
-
-bool Thread::TrySetMountedVirtualThreadData(MountedVirtualThreadData* e, bool spin) {
-  CHECK(kIsVirtualThreadEnabled);
-  DCHECK_EQ(tlsPtr_.mounted_virtual_thread_data.load(std::memory_order_relaxed), nullptr);
-  DCHECK_NE(e, nullptr);
-  DCHECK_EQ(e->carrier_thread_id_, GetThreadId()) << "The carrier thread must be self";
-  while (true) {
-    {
-      MutexLock mu(this, *Locks::thread_list_lock_);
-      // The virtual thread is suspended by lock inflation if the count isn't 0.
-      ThreadList* thread_list = Runtime::Current()->GetThreadList();
-      uint32_t suspension_count = thread_list->GetVirtualThreadSuspendCount(e->virtual_thread_id_);
-      if (suspension_count == 0) {
-        thread_list->AddMountedVirtualThread(e);
-        tlsPtr_.mounted_virtual_thread_data.store(e, std::memory_order_relaxed);
-        return true;
-      }
-    }
-
-    if (!spin) {
-      return false;
-    }
-
-    // Lock inflation for locks held by this unmounted virtual thread doesn't suspend the carrier
-    // thread. However, we may just do a suspend check on the carrier thread for the other purposes,
-    // e.g. GC, while spinning.
-    {
-      ScopedThreadSuspension(this, ThreadState::kWaitingForLockInflation);  // NOLINT
-      usleep(kVirtualThreadSuspendSleepUs);
-    }
-  }
-}
-
-bool Thread::TryClearMountedVirtualThreadData(bool spin) {
-  CHECK(kIsVirtualThreadEnabled);
-  MountedVirtualThreadData* e = tlsPtr_.mounted_virtual_thread_data.load(std::memory_order_relaxed);
-  if (e == nullptr) {
-    DCHECK_NE(e, nullptr);
-    return false;
-  }
-  DCHECK_EQ(e->carrier_thread_id_, GetThreadId());
-  while (true) {
-    {
-      MutexLock mu(this, *Locks::thread_list_lock_);
-      // The virtual thread is suspended by lock inflation if the count isn't 0.
-      ThreadList* thread_list = Runtime::Current()->GetThreadList();
-      e = tlsPtr_.mounted_virtual_thread_data.load(std::memory_order_relaxed);
-      uint32_t suspension_count = thread_list->GetVirtualThreadSuspendCount(e->virtual_thread_id_);
-      if (suspension_count == 0) {
-        thread_list->RemoveMountedVirtualThreadByThreadId(e->virtual_thread_id_);
-        tlsPtr_.mounted_virtual_thread_data.store(nullptr, std::memory_order_relaxed);
-        return true;
-      }
-    }
-
-    if (!spin) {
-      return false;
-    }
-
-    {
-      ScopedThreadSuspension(this, ThreadState::kWaitingForLockInflation);  // NOLINT
-      usleep(kVirtualThreadSuspendSleepUs);
-    }
-  }
 }
 
 void Thread::ShortDump(std::ostream& os) const {
@@ -4729,15 +4654,6 @@ void Thread::AdjustTlab(size_t slide_bytes) {
 
 std::ostream& operator<<(std::ostream& os, const Thread& thread) {
   thread.ShortDump(os);
-  return os;
-}
-
-std::ostream& operator<<(std::ostream& os, const MountedVirtualThreadData& data) {
-  os << "MountedVirtualThreadData["
-    << "carrier=" << data.carrier_thread_id_
-    << ",virtual=" << data.virtual_thread_id_
-    << ",flag=" << std::hex << data.flags_ << std::dec
-    << "]";
   return os;
 }
 

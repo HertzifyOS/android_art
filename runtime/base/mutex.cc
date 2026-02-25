@@ -449,8 +449,6 @@ Mutex::~Mutex() {
 #endif
 }
 
-pid_t Mutex::GetSelfId(const Thread* self) const { return SafeGetTid(self); }
-
 void Mutex::ExclusiveLock(Thread* self) {
   DCHECK(self == nullptr || self == Thread::Current());
   if (kDebugLocking && !recursive_) {
@@ -478,7 +476,7 @@ void Mutex::ExclusiveLock(Thread* self) {
             // Prefer the most recent nonzero value, if there is one.
             owner_tid = owner_tid2;
           }
-          ScopedContentionRecorder scr(this, GetSelfId(self), owner_tid);
+          ScopedContentionRecorder scr(this, SafeGetTid(self), owner_tid);
           // Increment contender count. We can't create enough threads for this to overflow.
           increment_contenders();
           // Make cur_state again reflect the expected value of state_and_contenders.
@@ -527,9 +525,9 @@ void Mutex::ExclusiveLock(Thread* self) {
 #else
     CHECK_MUTEX_CALL(pthread_mutex_lock, (&mutex_));
 #endif
-    DCHECK_EQ(GetExclusiveOwnerTid(), 0)
-        << " my tid = " << GetSelfId(self) << " recursive_ = " << recursive_;
-    exclusive_owner_.store(GetSelfId(self), std::memory_order_relaxed);
+    DCHECK_EQ(GetExclusiveOwnerTid(), 0) << " my tid = " << SafeGetTid(self)
+                                         << " recursive_ = " << recursive_;
+    exclusive_owner_.store(SafeGetTid(self), std::memory_order_relaxed);
     RegisterAsLocked(self);
   }
   recursion_count_++;
@@ -628,7 +626,7 @@ bool Mutex::ExclusiveTryLock(Thread* self) {
     }
 #endif
     DCHECK_EQ(GetExclusiveOwnerTid(), 0);
-    exclusive_owner_.store(GetSelfId(self), std::memory_order_relaxed);
+    exclusive_owner_.store(SafeGetTid(self), std::memory_order_relaxed);
     RegisterAsLocked(self, kCheck);
   }
   recursion_count_++;
@@ -664,7 +662,16 @@ bool Mutex::ExclusiveTryLockWithSpinning(Thread* self) {
 
 #if ART_USE_FUTEXES
 void Mutex::ExclusiveLockUncontendedFor(Thread* new_owner) {
-  ExclusiveLockUncontendedForSelfId(SafeGetTid(new_owner));
+  DCHECK_EQ(level_, kMonitorLock);
+  DCHECK(!recursive_);
+  state_and_contenders_.store(kHeldMask, std::memory_order_relaxed);
+  recursion_count_ = 1;
+  exclusive_owner_.store(SafeGetTid(new_owner), std::memory_order_relaxed);
+  // Don't call RegisterAsLocked(). It wouldn't register anything anyway.  And
+  // this happens as we're inflating a monitor, which doesn't logically affect
+  // held "locks"; it effectively just converts a thin lock to a mutex.  By doing
+  // this while the lock is already held, we're delaying the acquisition of a
+  // logically held mutex, which can introduce bogus lock order violations.
 }
 
 void Mutex::ExclusiveUnlockUncontended() {
@@ -764,20 +771,6 @@ void Mutex::WakeupToRespondToEmptyCheckpoint() {
 #else
   LOG(FATAL) << "Non futex case isn't supported.";
 #endif
-}
-
-pid_t MonitorMutex::GetSelfId(const Thread* self) const {
-  if (kIsVirtualThreadEnabled && UNLIKELY(self->IsVirtualThreadMounted())) {
-    return self->GetVirtualThreadId() | kVTFlag;
-  } else {
-    return self->GetTid();
-  }
-}
-
-void MonitorMutex::ExclusiveLockUncontendedForVirtualThreadId(uint32_t virtual_thread_id) {
-  DCHECK(kIsVirtualThreadEnabled);
-  uint32_t owner_id = virtual_thread_id | kVTFlag;
-  ExclusiveLockUncontendedForSelfId(owner_id);
 }
 
 ReaderWriterMutex::ReaderWriterMutex(const char* name, LockLevel level)

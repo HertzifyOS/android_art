@@ -256,7 +256,6 @@ static void Thread_yield0(JNIEnv*, jobject) { sched_yield(); }
 
 static void Thread_parkVirtualInternal(
     JNIEnv* env, jobject, jobject v_context, jobject parked_states, jobject vm_error) {
-  CHECK(kIsVirtualThreadEnabled);
   ScopedObjectAccess soa(env);
   PinningReason reason;
   VirtualThreadPark(soa.Decode<mirror::VirtualThreadContext>(v_context),
@@ -264,20 +263,6 @@ static void Thread_parkVirtualInternal(
                     soa.Decode<mirror::Throwable>(vm_error),
                     /* is_continuation_api= */ false,
                     reason);
-}
-
-static jint Thread_acquireThinLockId(JNIEnv*, jobject) {
-  ThreadList* thread_list = Runtime::Current()->GetThreadList();
-  uint32_t thread_id = thread_list->AllocThreadId(Thread::Current());
-  DCHECK_NE(thread_id, ThreadList::kInvalidThreadId);
-  thread_list->AllocVirtualThreadSuspendCount(thread_id);
-  return thread_id;
-}
-
-static void Thread_releaseThinLockId(JNIEnv*, jobject, jint thread_id) {
-  ThreadList* thread_list = Runtime::Current()->GetThreadList();
-  thread_list->ReleaseVirtualThreadSuspendCount(thread_id);
-  thread_list->ReleaseThreadId(Thread::Current(), thread_id);
 }
 
 static JNINativeMethod gMethods[] = {
@@ -301,8 +286,6 @@ static JNINativeMethod gMethods[] = {
                   parkVirtualInternal,
                   "(Ldalvik/system/VirtualThreadContext;Ldalvik/system/"
                   "VirtualThreadParkedStates;Ldalvik/system/VirtualThreadParkingError;)V"),
-    FAST_NATIVE_METHOD(Thread, acquireThinLockId, "()I"),
-    FAST_NATIVE_METHOD(Thread, releaseThinLockId, "(I)V"),
 };
 
 void register_java_lang_Thread(JNIEnv* env) {
