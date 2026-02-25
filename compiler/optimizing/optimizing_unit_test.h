@@ -350,32 +350,6 @@ class OptimizingUnitTestHelper {
     return {if_block, then_block, else_block};
   }
 
-  // Insert "switch_block", `num_entries` "case" blocks and a "default" block before a given
-  // `merge_block`. Return the switch block. Adds `HGoto` to "case" blocks and "default" block.
-  // Adds `HPackedSwitch` to the "switch_block" if the caller provides a `switch_input`.
-  HBasicBlock* CreateSwitchPattern(HBasicBlock* merge_block,
-                                   uint32_t num_entries,
-                                   HInstruction* switch_input = nullptr,
-                                   int32_t start_value = 0) {
-    HBasicBlock* switch_block = AddNewBlock();
-
-    HBasicBlock* predecessor = merge_block->GetSinglePredecessor();
-    predecessor->ReplaceSuccessor(merge_block, switch_block);
-
-    for ([[maybe_unused]] uint32_t i : Range(num_entries + /* default block */ 1u)) {
-      HBasicBlock* case_block = AddNewBlock();
-      switch_block->AddSuccessor(case_block);
-      case_block->AddSuccessor(merge_block);
-      MakeGoto(case_block);
-    }
-
-    if (switch_input != nullptr) {
-      MakePackedSwitch(switch_block, switch_input, start_value, num_entries);
-    }
-
-    return switch_block;
-  }
-
   // Insert "pre-header", "loop-header" and "loop-body" blocks before a given `loop_exit` block
   // and connect them in a `while (...) { ... }` loop pattern. Return the new blocks.
   // Adds `HGoto` to the "pre-header" and "loop-body" blocks but leaves the "loop-header" block
@@ -922,17 +896,6 @@ class OptimizingUnitTestHelper {
     return if_insn;
   }
 
-  HPackedSwitch* MakePackedSwitch(HBasicBlock* block,
-                                  HInstruction* input,
-                                  int32_t start_value,
-                                  uint32_t num_entries,
-                                  uint32_t dex_pc = kNoDexPc) {
-    HPackedSwitch* switch_insn =
-        new (GetAllocator()) HPackedSwitch(start_value, num_entries, input, dex_pc);
-    block->AddInstruction(switch_insn);
-    return switch_insn;
-  }
-
   HGoto* MakeGoto(HBasicBlock* block, uint32_t dex_pc = kNoDexPc) {
     HGoto* goto_insn = new (GetAllocator()) HGoto(dex_pc);
     block->AddInstruction(goto_insn);
@@ -966,20 +929,6 @@ class OptimizingUnitTestHelper {
     }
     block->AddPhi(phi);
     return phi;
-  }
-
-  template <typename T>
-  HInstruction* GetConstant(DataType::Type type, T value) {
-    if constexpr (std::is_same_v<T, float>) {
-      DCHECK_EQ(type, DataType::Type::kFloat32);
-      return graph_->GetFloatConstant(value);
-    } else if constexpr (std::is_same_v<T, double>) {
-      DCHECK_EQ(type, DataType::Type::kFloat64);
-      return graph_->GetDoubleConstant(value);
-    } else {
-      DCHECK(!DataType::IsFloatingPointType(type));
-      return graph_->GetConstant(type, value);
-    }
   }
 
   std::tuple<HPhi*, HAdd*> MakeLinearLoopVar(HBasicBlock* header,

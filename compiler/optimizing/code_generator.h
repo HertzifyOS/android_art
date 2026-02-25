@@ -775,8 +775,6 @@ class CodeGenerator : public DeletableArenaObject<kArenaAllocCodeGenerator> {
   static QuickEntrypointEnum GetArrayAllocationEntrypoint(size_t component_size_shift);
   static ScaleFactor ScaleFactorForType(DataType::Type type);
 
-  static void CopyConstantTableData(HLoadConstantTableEntry* load, /*out*/ uint8_t* buffer);
-
   ArrayRef<const uint8_t> GetCode() const {
     return ArrayRef<const uint8_t>(GetAssembler().CodeBufferBaseAddress(),
                                    GetAssembler().CodeSize());

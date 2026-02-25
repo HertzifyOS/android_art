@@ -993,67 +993,6 @@ class CompileOptimizedSlowPathARMVIXL : public SlowPathCodeARMVIXL {
   DISALLOW_COPY_AND_ASSIGN(CompileOptimizedSlowPathARMVIXL);
 };
 
-class ConstantTableARMVIXL : public SlowPathCodeARMVIXL {
- public:
-  explicit ConstantTableARMVIXL(HLoadConstantTableEntry* load)
-      : SlowPathCodeARMVIXL(load) {}
-
-  void EmitNativeCode(CodeGenerator* codegen) override {
-    CodeGeneratorARMVIXL* arm_codegen = down_cast<CodeGeneratorARMVIXL*>(codegen);
-    HLoadConstantTableEntry* load = down_cast<HLoadConstantTableEntry*>(instruction_);
-    size_t entry_size = DataType::Size(load->GetType());
-    DCHECK(IsPowerOfTwo(entry_size));
-
-    // Padding before the table can be up to 2B for 4B entries and up to 6B for 8B entries.
-    // The actual size is known only after we construct the `EmissionCheckScope`.
-    size_t max_padding = (entry_size >= 4u) ? entry_size - 2u : 0u;
-    size_t table_size = RoundUp(entry_size * load->GetEntries().size(), /* code alignment */ 2u);
-    EmissionCheckScope guard(arm_codegen->GetVIXLAssembler(), max_padding + table_size);
-
-    // Align data, bind the data start and emit the data.
-    vixl::CodeBuffer* buffer = arm_codegen->GetVIXLAssembler()->GetBuffer();
-    size_t padding = RoundUp(buffer->GetSizeInBytes(), entry_size) - buffer->GetSizeInBytes();
-    DCHECK_LE(padding, max_padding);
-    buffer->EmitZeroedBytes(padding);
-    __ Bind(GetEntryLabel());
-    buffer->EmitZeroedBytes(table_size);
-    CodeGenerator::CopyConstantTableData(
-        load, buffer->GetOffsetAddress<uint8_t*>(GetEntryLabel()->GetLocation()));
-
-    // Update constants in MOVW/MOVT.
-    uint32_t* p_movw = buffer->GetOffsetAddress<uint32_t*>(movw_label_.GetLocation());
-    DCHECK_EQ(*p_movw & 0x70ff040f, 0u);  // Immediate is zero.
-    uint32_t* p_movt = buffer->GetOffsetAddress<uint32_t*>(movt_label_.GetLocation());
-    DCHECK_EQ(*p_movt & 0x70ff040f, 0u);  // Immediate is zero.
-    int32_t offset =
-        GetEntryLabel()->GetLocation() - (add_pc_label_.GetLocation() + /* PC adjustment */ 4u);
-    DCHECK_GE(offset, 0);
-    auto encode_imm_for_movwt = [](int32_t imm) {
-      DCHECK_EQ(imm & 0xffff, imm);
-      uint32_t imm4 = (imm >> 12) & 0xfu;
-      uint32_t i = (imm >> 11) & 1u;
-      uint32_t imm3 = (imm >> 8) & 7u;
-      uint32_t imm8 = imm & 0xffu;
-      return imm4 | (i << 10) | (imm3 << 28) | (imm8 << 16);
-    };
-    *p_movw |= encode_imm_for_movwt(offset & 0xffff);
-    *p_movt |= encode_imm_for_movwt(offset >> 16);
-  }
-
-  vixl32::Label* GetMovwLabel() { return &movw_label_; }
-  vixl32::Label* GetMovtLabel() { return &movt_label_; }
-  vixl32::Label* GetAddPcLabel() { return &add_pc_label_; }
-
-  const char* GetDescription() const override {
-    return "ConstantTableARMVIXL";
-  }
-
- private:
-  vixl32::Label movw_label_;
-  vixl32::Label movt_label_;
-  vixl32::Label add_pc_label_;
-};
-
 inline vixl32::Condition ARMCondition(IfCondition cond) {
   switch (cond) {
     case kCondEQ: return eq;
@@ -10269,55 +10208,6 @@ void InstructionCodeGeneratorARMVIXL::VisitPackedSwitch(HPackedSwitch* switch_in
       __ bx(target_address);
 
       jump_table->EmitTable(codegen_);
-    }
-  }
-}
-
-void LocationsBuilderARMVIXL::VisitLoadConstantTableEntry(HLoadConstantTableEntry* load) {
-  LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, load);
-  locations->SetInAt(0, Location::RequiresCoreRegister());
-  if (DataType::IsFloatingPointType(load->GetType())) {
-    locations->SetOut(Location::RequiresFpuRegister(), Location::kNoOutputOverlap);
-  } else {
-    locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
-  }
-}
-
-void InstructionCodeGeneratorARMVIXL::VisitLoadConstantTableEntry(HLoadConstantTableEntry* load) {
-  vixl32::Register index = InputRegisterAt(load, 0);
-  Location out_loc = load->GetLocations()->Out();
-
-  ConstantTableARMVIXL* data = new (codegen_->GetScopedAllocator()) ConstantTableARMVIXL(load);
-  codegen_->AddSlowPath(data);
-
-  UseScratchRegisterScope temps(GetVIXLAssembler());
-  vixl32::Register temp = temps.Acquire();
-
-  {
-    ExactAssemblyScope guard(
-        codegen_->GetVIXLAssembler(),
-        vixl32::k16BitT32InstructionSizeInBytes + 2 * vixl32::k32BitT32InstructionSizeInBytes,
-        CodeBufferCheckScope::kExactSize);
-    __ bind(data->GetMovwLabel());
-    __ movw(temp, /* operand= */ 0u);
-    __ bind(data->GetMovtLabel());
-    __ movt(temp, /* operand= */ 0u);
-    __ bind(data->GetAddPcLabel());
-    __ add(temp, temp, pc);
-  }
-
-  if (out_loc.IsCoreRegister()) {
-    MemOperand source(temp, index, LSL, DataType::SizeShift(load->GetType()));
-    codegen_->Load(load->GetType(), RegisterFrom(out_loc), source);
-  } else {
-    __ Add(temp, temp, Operand(index, LSL, DataType::SizeShift(load->GetType())));
-    if (load->GetType() == DataType::Type::kInt64) {
-      __ Ldrd(LowRegisterFrom(out_loc), HighRegisterFrom(out_loc), MemOperand(temp));
-    } else if (load->GetType() == DataType::Type::kFloat32) {
-      __ Vldr(SRegisterFrom(out_loc), MemOperand(temp));
-    } else {
-      DCHECK_EQ(load->GetType(), DataType::Type::kFloat64);
-      __ Vldr(DRegisterFrom(out_loc), MemOperand(temp));
     }
   }
 }
