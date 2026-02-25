@@ -751,7 +751,11 @@ void Trace::Start(std::unique_ptr<File>&& trace_file_in,
         thread->SetMethodTraceBuffer(
             the_trace_->GetTraceWriter()->AcquireTraceBuffer(thread->GetTid()), kPerThreadBufSize);
         the_trace_->GetTraceWriter()->RecordThreadInfo(thread);
-        instrumentation::Instrumentation::ReportMethodEntryForOnStackMethods(the_trace_, thread);
+        TraceProfiler::ReportOnStackMethods(
+            thread,
+            [](ArtMethod* m, Thread* t, bool is_entry) REQUIRES_SHARED(Locks::mutator_lock_) {
+              TraceLowOverhead::RecordTraceEvent(t, m, is_entry);
+            });
       }
     } else {
       if (!runtime->IsJavaDebuggable()) {
@@ -1710,6 +1714,7 @@ size_t TraceWriter::FlushEntriesFormatV1(
     auto [method_id, is_new_method] = GetMethodEncoding(record.method);
     if (is_new_method) {
       if (trace_output_mode_ == TraceOutputMode::kStreaming) {
+        DCHECK(method_infos.find(record.method) != method_infos.end());
         RecordMethodInfoV1(method_infos.find(record.method)->second, method_id);
       } else {
         methods_list_.emplace(method_id, method_infos.find(record.method)->second);
@@ -1923,7 +1928,7 @@ void TraceWriter::EncodeEventEntry(uint8_t* ptr,
                                    uint64_t thread_clock_diff,
                                    uint64_t wall_clock_diff) {
   static constexpr size_t kPacketSize = 14U;  // The maximum size of data in a packet.
-  DCHECK(method_index < (1 << (32 - TraceActionBits)));
+  DCHECK_LT(method_index, (1u << (32 - TraceActionBits)));
   uint32_t method_value = (method_index << TraceActionBits) | action;
   Append2LE(ptr, thread_id);
   Append4LE(ptr + 2, method_value);
@@ -2032,6 +2037,7 @@ void TraceLowOverhead::RecordTraceEventIfNeeded(Thread* self, ArtMethod* method,
 }
 
 void TraceLowOverhead::RecordTraceEvent(Thread* self, ArtMethod* method, bool is_entry) {
+  DCHECK(low_overhead_trace_ != nullptr);
   if (is_entry) {
     low_overhead_trace_->MethodEntered(self, method);
   } else {
