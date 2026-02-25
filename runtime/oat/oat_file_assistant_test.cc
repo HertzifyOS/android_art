@@ -2594,7 +2594,7 @@ class CollectDexCacheVisitor : public DexCacheVisitor {
 // DexFile, OatDexFile, and DexCache are the same as the actual dex location.
 TEST_F(OatFileAssistantBaseTest, GetDexLocation) {
   std::string dex_location = GetScratchDir() + "/TestDex.jar";
-  std::string dex_location_multidex = dex_location + "!classes2.dex";
+  std::string dex_location_multidex = dex_location + "!1";
   std::string oat_location = GetOdexDir() + "/TestDex.odex";
   std::string art_location = GetOdexDir() + "/TestDex.art";
 

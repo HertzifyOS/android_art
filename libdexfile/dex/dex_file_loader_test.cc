@@ -547,10 +547,8 @@ TEST_F(DexFileLoaderTest, GetMultiDexLocation) {
   std::string dex_location_str = "/system/app/framework.jar";
   const char* dex_location = dex_location_str.c_str();
   ASSERT_EQ("/system/app/framework.jar", DexFileLoader::GetMultiDexLocation(dex_location, 0));
-  ASSERT_EQ("/system/app/framework.jar!classes2.dex",
-            DexFileLoader::GetMultiDexLocation(dex_location, 1));
-  ASSERT_EQ("/system/app/framework.jar!classes101.dex",
-            DexFileLoader::GetMultiDexLocation(dex_location, 100));
+  ASSERT_EQ("/system/app/framework.jar!1", DexFileLoader::GetMultiDexLocation(dex_location, 1));
+  ASSERT_EQ("/system/app/framework.jar!100", DexFileLoader::GetMultiDexLocation(dex_location, 100));
 }
 
 TEST(DexFileUtilsTest, GetBaseLocationAndMultiDexSuffix) {

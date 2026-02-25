@@ -175,7 +175,7 @@ std::string DexFileLoader::GetMultiDexLocation(const char* dex_location, size_t 
   if (index == 0) {
     return dex_location;
   }
-  return StringPrintf("%s%cclasses%zu.dex", dex_location, kMultiDexSeparator, index + 1);
+  return StringPrintf("%s%c%zu", dex_location, kMultiDexSeparator, index);
 }
 
 bool DexFileLoader::GetMultiDexChecksums(
