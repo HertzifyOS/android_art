@@ -659,7 +659,7 @@ std::vector<std::unique_ptr<const DexFile>> OatFileManager::OpenDexFilesFromOat_
   for (size_t i = 0; i < dex_mem_maps.size(); ++i) {
     static constexpr bool kVerifyChecksum = true;
     ArtDexFileLoader dex_file_loader(std::move(dex_mem_maps[i]),
-                                     DexFileLoader::GetMultiDexLocation(i, dex_location.c_str()));
+                                     DexFileLoader::GetMultiDexLocation(dex_location.c_str(), i));
     std::unique_ptr<const DexFile> dex_file(dex_file_loader.Open(
         dex_headers[i]->checksum_,
         /* verify= */ (vdex_file == nullptr) && Runtime::Current()->IsVerificationEnabled(),

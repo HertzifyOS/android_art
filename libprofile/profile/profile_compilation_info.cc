@@ -2186,8 +2186,8 @@ std::string ProfileCompilationInfo::DumpInfo(const std::vector<const DexFile*>& 
       os << dex_data->profile_key;
     } else {
       // Replace the (empty) multidex suffix of the first key with a substitute for easier reading.
-      std::string multidex_suffix = DexFileLoader::GetMultiDexSuffix(
-          GetBaseKeyFromAugmentedKey(dex_data->profile_key));
+      std::string base_key = GetBaseKeyFromAugmentedKey(dex_data->profile_key);
+      std::string_view multidex_suffix = DexFileLoader::SplitMultiDexLocation(base_key).second;
       os << (multidex_suffix.empty() ? kFirstDexFileKeySubstitute : multidex_suffix);
     }
     os << " [index=" << static_cast<uint32_t>(dex_data->profile_index) << "]";
@@ -2363,7 +2363,7 @@ bool ProfileCompilationInfo::GenerateTestProfile(int fd,
   const uint16_t kFavorSplit = 2;
 
   for (uint16_t i = 0; i < number_of_dex_files; i++) {
-    std::string dex_location = DexFileLoader::GetMultiDexLocation(i, base_dex_location.c_str());
+    std::string dex_location = DexFileLoader::GetMultiDexLocation(base_dex_location.c_str(), i);
     std::string profile_key = info.GetProfileDexFileBaseKey(dex_location);
 
     DexFileData* const data =

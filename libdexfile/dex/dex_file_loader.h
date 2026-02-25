@@ -71,7 +71,7 @@ class DexFileLoader {
 
   // Return the (possibly synthetic) dex location for a multidex entry. This is dex_location for
   // index == 0, and dex_location + multi-dex-separator + GetMultiDexZipEntryName(index) else.
-  static std::string GetMultiDexLocation(size_t index, const char* dex_location);
+  static std::string GetMultiDexLocation(const char* dex_location, size_t index);
 
   // Returns the multidex location and the checksum for each dex file in a zip or a dex container.
   //
@@ -150,24 +150,19 @@ class DexFileLoader {
   //     the dex_location where its file name part has been made canonical.
   static std::string GetDexCanonicalLocation(const char* dex_location);
 
+  // Split the dex location into the base location (filename) and the multidex suffix.
+  // The suffix includes the kMultiDexSeparator and it may be an empty string.
+  static std::pair<std::string_view, std::string_view> SplitMultiDexLocation(
+      std::string_view location) {
+    size_t pos = location.rfind(kMultiDexSeparator);
+    return {location.substr(0, pos), (pos == std::string_view::npos) ? "" : location.substr(pos)};
+  }
+
   // For normal dex files, location and base location coincide. If a dex file is part of a multidex
   // archive, the base location is the name of the originating jar/apk, stripped of any internal
   // classes*.dex path.
-  static std::string GetBaseLocation(const char* location) {
-    const char* pos = strrchr(location, kMultiDexSeparator);
-    return (pos == nullptr) ? location : std::string(location, pos - location);
-  }
-
-  static std::string GetBaseLocation(const std::string& location) {
-    return GetBaseLocation(location.c_str());
-  }
-
-  // Returns the '!classes*.dex' part of the dex location. Returns an empty
-  // string if there is no multidex suffix for the given location.
-  // The kMultiDexSeparator is included in the returned suffix.
-  static std::string GetMultiDexSuffix(const std::string& location) {
-    size_t pos = location.rfind(kMultiDexSeparator);
-    return (pos == std::string::npos) ? std::string() : location.substr(pos);
+  static std::string GetBaseLocation(std::string_view location) {
+    return std::string(SplitMultiDexLocation(location).first);
   }
 
   DexFileLoader(const char* filename, const File* file, const std::string& location)

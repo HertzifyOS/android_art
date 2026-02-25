@@ -835,9 +835,7 @@ bool OatFileBase::Setup(int zip_fd,
       }
     }
     // Check that the base location of a multidex location matches the last seen primary location.
-    if (is_multidex &&
-        (!dex_file_location.starts_with(primary_location) ||
-             dex_file_location[primary_location.size()] != DexFileLoader::kMultiDexSeparator)) {
+    if (is_multidex && DexFileLoader::GetBaseLocation(dex_file_location) != primary_location) {
       *error_msg = ErrorPrintf("unexpected multidex location '%s', unrelated to '%s'",
                                dex_file_location.c_str(),
                                std::string(primary_location).c_str());
@@ -1853,7 +1851,7 @@ class OatFileBackedByVdex final : public OatFileBase {
           return nullptr;
         }
         // Create the OatDexFile and add it to the owning container.
-        std::string location = DexFileLoader::GetMultiDexLocation(i, dex_location.c_str());
+        std::string location = DexFileLoader::GetMultiDexLocation(dex_location.c_str(), i);
         std::string canonical_location = DexFileLoader::GetDexCanonicalLocation(location.c_str());
         type_lookup_table_start = vdex_file->GetNextTypeLookupTableData(type_lookup_table_start, i);
         const uint8_t* type_lookup_table_data = nullptr;

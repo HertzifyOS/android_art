@@ -857,14 +857,14 @@ void OatTest::TestZipFileInput(bool verify, CopyOption copy) {
       ASSERT_EQ(0, memcmp(&dex_file1_data->GetHeader(),
                           &opened_dex_file1->GetHeader(),
                           dex_file1_data->GetHeader().file_size_));
-      ASSERT_EQ(DexFileLoader::GetMultiDexLocation(0, zip_file.GetFilename().c_str()),
+      ASSERT_EQ(DexFileLoader::GetMultiDexLocation(zip_file.GetFilename().c_str(), 0),
                 opened_dex_file1->GetLocation());
 
       ASSERT_EQ(dex_file2_data->GetHeader().file_size_, opened_dex_file2->GetHeader().file_size_);
       ASSERT_EQ(0, memcmp(&dex_file2_data->GetHeader(),
                           &opened_dex_file2->GetHeader(),
                           dex_file2_data->GetHeader().file_size_));
-      ASSERT_EQ(DexFileLoader::GetMultiDexLocation(1, zip_file.GetFilename().c_str()),
+      ASSERT_EQ(DexFileLoader::GetMultiDexLocation(zip_file.GetFilename().c_str(), 1),
                 opened_dex_file2->GetLocation());
     }
   }
@@ -906,14 +906,14 @@ void OatTest::TestZipFileInput(bool verify, CopyOption copy) {
       ASSERT_EQ(0, memcmp(&dex_file1_data->GetHeader(),
                           &opened_dex_file1->GetHeader(),
                           dex_file1_data->GetHeader().file_size_));
-      ASSERT_EQ(DexFileLoader::GetMultiDexLocation(0, zip_file.GetFilename().c_str()),
+      ASSERT_EQ(DexFileLoader::GetMultiDexLocation(zip_file.GetFilename().c_str(), 0),
                 opened_dex_file1->GetLocation());
 
       ASSERT_EQ(dex_file2_data->GetHeader().file_size_, opened_dex_file2->GetHeader().file_size_);
       ASSERT_EQ(0, memcmp(&dex_file2_data->GetHeader(),
                           &opened_dex_file2->GetHeader(),
                           dex_file2_data->GetHeader().file_size_));
-      ASSERT_EQ(DexFileLoader::GetMultiDexLocation(1, zip_file.GetFilename().c_str()),
+      ASSERT_EQ(DexFileLoader::GetMultiDexLocation(zip_file.GetFilename().c_str(), 1),
                 opened_dex_file2->GetLocation());
     }
   }
