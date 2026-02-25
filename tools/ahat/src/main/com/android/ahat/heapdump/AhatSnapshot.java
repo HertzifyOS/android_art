@@ -44,6 +44,7 @@ public class AhatSnapshot implements Diffable<AhatSnapshot> {
   private AhatMessageInstance.MessageDumpData mMessageDumpData = null;
   private List<List<AhatInstance>> mDuplicateStrings = null;
   private List<AhatInstance> mActivityLeaks = null;
+  private Reachability mRetained;
   private long mUptimeMillis = 0;
 
   AhatSnapshot(SuperRoot root,
@@ -57,13 +58,14 @@ public class AhatSnapshot implements Diffable<AhatSnapshot> {
     mInstances = instances;
     mHeaps = heaps;
     mRootSite = rootSite;
+    mRetained = retained;
     mUptimeMillis = uptimeMillis;
 
     AhatInstance.computeReachability(mSuperRoot, mInstances, progress, mInstances.size());
 
     mBitmapDumpData = AhatBitmapInstance.findBitmapDumpData(mSuperRoot, mInstances);
     mMessageDumpData = AhatMessageInstance.findMessageDumpData(mInstances, progress, mInstances.size());
-    mDuplicateStrings = findDuplicateStrings(mInstances, progress);
+    mDuplicateStrings = findDuplicateStrings(mInstances, progress, retained);
     mActivityLeaks = findActivityLeaks(mInstances, progress);
 
     for (AhatInstance inst : mInstances) {
@@ -255,7 +257,7 @@ public class AhatSnapshot implements Diffable<AhatSnapshot> {
   }
 
   /**
-   * Returns duplicate strings in this snapshot
+   * Returns the duplicate strings in this snapshot.
    *
    * @return list of duplicate strings
    */
@@ -275,12 +277,22 @@ public class AhatSnapshot implements Diffable<AhatSnapshot> {
     return mActivityLeaks;
   }
 
+  /**
+   * Returns the reachability level that instances must have to be considered
+   * retained in this snapshot.
+   *
+   * @return the reachability level for retained instances
+   */
+  public Reachability getRetainedReachability() {
+    return mRetained;
+  }
+
   private static List<List<AhatInstance>> findDuplicateStrings(
-      Instances<AhatInstance> instances, Progress progress) {
+      Instances<AhatInstance> instances, Progress progress, Reachability retained) {
     progress.start("Analyzing strings", instances.size());
     Map<String, List<AhatInstance>> strings = new HashMap<>();
     for (AhatInstance inst : instances) {
-      if (inst.isInstanceOfClass("java.lang.String")) {
+      if (inst.isInstanceOfClass("java.lang.String") && inst.getReachability().notWeakerThan(retained)) {
         String value = inst.asString();
         if (value != null) {
           List<AhatInstance> list = strings.get(value);

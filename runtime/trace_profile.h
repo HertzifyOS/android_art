@@ -202,7 +202,8 @@ class TraceProfiler {
   // that have already seen an exit and records them into a string. If we don't have sufficient free
   // entries after this processing (for example: if we have a really deep call stack) then we record
   // a placeholder method exit event and flush all events.
-  static void FlushBufferAndRecordTraceEvent(ArtMethod* method, Thread* thread, bool is_entry);
+  static void RecordTraceEvent(ArtMethod* method, Thread* thread, bool is_entry);
+  static void RecordTraceEventIfNeeded(ArtMethod* method, Thread* thread, bool is_entry);
 
   static LowOverheadTraceType GetTraceType();
 

@@ -1679,13 +1679,19 @@ class ReadBarrierCasSlowPathARM64 : public SlowPathCodeARM64 {
     // Recalculate the `tmp_ptr` from main path clobbered by the read barrier above.
     __ Add(tmp_ptr, base_.X(), Operand(offset_));
 
+    // Check if we need CSEL in the slow path (weak CAS, returns success, main path uses LSE).
+    bool emit_success_csel = !strong_ && !update_old_value_ && arm64_codegen->ShouldUseLSE();
     vixl::aarch64::Label mark_old_value;
+    vixl::aarch64::Label success_csel_label;
+    vixl::aarch64::Label* cmp_failure = emit_success_csel
+        ? &success_csel_label
+        : (update_old_value_ ? &mark_old_value : GetExitLabel());
     GenerateCompareAndSet(arm64_codegen,
                           DataType::Type::kReference,
                           order_,
                           strong_,
-                          /*use_lse=*/ false,
-                          /*cmp_failure=*/ update_old_value_ ? &mark_old_value : GetExitLabel(),
+                          /*use_lse=*/ false,  // Cannot use LSE - comparing with two values.
+                          cmp_failure,
                           tmp_ptr,
                           new_value_,
                           /*old_value=*/ old_value_temp_,
@@ -1699,8 +1705,13 @@ class ReadBarrierCasSlowPathARM64 : public SlowPathCodeARM64 {
     }
 
     // Z=true from the CMP+CCMP in GenerateCompareAndSet() above indicates comparison success.
-    // For strong CAS, that's the overall success. For weak CAS, the code also needs
-    // to check the `store_result` after returning from the slow path.
+    // For strong CAS, that's the overall success. For weak CAS, the code also needs to check
+    // the `store_result` to determine the success. With LSE enabled, we emit the CSEL here,
+    // otherwise we rely on the CSEL already emitted in the main path.
+    if (emit_success_csel) {
+      __ Bind(&success_csel_label);
+      __ Csel(store_result, store_result, wzr, eq);
+    }
     __ B(GetExitLabel());
 
     if (update_old_value_) {
@@ -5745,13 +5756,8 @@ static void GenerateVarHandleCompareAndSetOrExchange(HInvoke* invoke,
   if (return_success) {
     if (strong) {
       __ Cset(out.W(), eq);
-    } else if (use_lse && cmp_failure == nullptr) {
+    } else if (use_lse) {
       // The result from `GenerateCompareAndSet()` is already final with LSE.
-      // However, if we have a `cmp_failure` label (e.g. for read barriers), the
-      // LSE `cas` result is only valid if the `cmp_failure` branch wasn't taken.
-      // If we returned from the slow path, the result register might hold the
-      // reloaded value (non-zero) instead of the failure status (0).
-      // In that case, we must fall through to the Csel logic.
       DCHECK(store_result.Is(out));
     } else {
       // On success, the Z flag is set and the store result is 1, see GenerateCompareAndSet().

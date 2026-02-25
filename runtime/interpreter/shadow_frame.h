@@ -78,6 +78,10 @@ class ShadowFrame {
     // maintain a flag in the shadow frame to indicate if a method exit is already reported to the
     // trace listeners.
     kSkipTraceMethodExitEvent = 1 << 7,
+    // For low-overhead tracing, we don't report entry events for inlined methods. If there was a
+    // deoptimization and we execute the method in the interpreter we should skip exit events for
+    // those methods. The flag indicates if the frame was corresponding to an inlined frame.
+    kSkipLowOverheadTraceEvent = 1 << 8,
   };
 
  public:
@@ -365,6 +369,14 @@ class ShadowFrame {
 
   void SetSkipTraceMethodExitEvent(bool enable) {
     UpdateFrameFlag(enable, FrameFlags::kSkipTraceMethodExitEvent);
+  }
+
+  bool GetSkipLowOverheadTraceEvent() const {
+    return GetFrameFlag(FrameFlags::kSkipLowOverheadTraceEvent);
+  }
+
+  void SetSkipLowOverheadTraceEvent(bool enable) {
+    UpdateFrameFlag(enable, FrameFlags::kSkipLowOverheadTraceEvent);
   }
 
   void CheckConsistentVRegs() const {

@@ -22,7 +22,7 @@ package com.android.ahat.heapdump;
  * either "." followed by the field name or an array subscript such as "[4]".
  * reachability describes whether the reference is strong/soft/weak/etc.
  */
-class Reference {
+public class Reference {
   public final AhatInstance src;
   public final String field;
   public final AhatInstance ref;

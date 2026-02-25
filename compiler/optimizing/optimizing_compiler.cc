@@ -792,6 +792,7 @@ CodeGenerator* OptimizingCompiler::TryCompile(ArenaAllocator* allocator,
 
   // Do not attempt to compile on architectures we do not support.
   if (!IsInstructionSetSupported(instruction_set)) {
+    SCOPED_TRACE << "Not compiling: unsupported ISA";
     MaybeRecordStat(compilation_stats_.get(),
                     MethodCompilationStat::kNotCompiledUnsupportedIsa);
     return nullptr;
@@ -858,6 +859,7 @@ CodeGenerator* OptimizingCompiler::TryCompile(ArenaAllocator* allocator,
                             compiler_options,
                             compilation_stats_.get()));
   if (codegen.get() == nullptr) {
+    SCOPED_TRACE << "Not compiling: no codegen";
     MaybeRecordStat(compilation_stats_.get(), MethodCompilationStat::kNotCompiledNoCodegen);
     return nullptr;
   }
@@ -999,6 +1001,7 @@ CodeGenerator* OptimizingCompiler::TryCompileIntrinsic(
 
   // Do not attempt to compile on architectures we do not support.
   if (!IsInstructionSetSupported(instruction_set)) {
+    SCOPED_TRACE << "Not compiling: unsupported ISA";
     return nullptr;
   }
 
@@ -1023,6 +1026,7 @@ CodeGenerator* OptimizingCompiler::TryCompileIntrinsic(
                             compiler_options,
                             compilation_stats_.get()));
   if (codegen.get() == nullptr) {
+    SCOPED_TRACE << "Not compiling: no codegen";
     return nullptr;
   }
   codegen->GetAssembler()->cfi().SetEnabled(compiler_options.GenerateAnyDebugInfo());
@@ -1066,6 +1070,7 @@ CodeGenerator* OptimizingCompiler::TryCompileIntrinsic(
                     &pass_observer,
                     compilation_stats_.get());
   if (!codegen->IsLeafMethod()) {
+    SCOPED_TRACE << "Not compiling: intrinsic method is not leaf";
     VLOG(compiler) << "Intrinsic method is not leaf: " << method->GetIntrinsic()
         << " " << graph->PrettyMethod();
     return nullptr;
@@ -1152,6 +1157,8 @@ CompiledMethod* OptimizingCompiler::Compile(const dex::CodeItem* code_item,
         if (fast_compiler != nullptr) {
           return Emit(compiler_options.GetInstructionSet(), fast_compiler.get());
         } else {
+          SCOPED_TRACE
+            << "Fast compiler didn't compile the method, falling back to the optimizing compiler";
           return nullptr;
         }
       }
@@ -1341,6 +1348,7 @@ bool OptimizingCompiler::JitCompile(Thread* self,
     // TODO(mythria): Add support for calling method entry / exit hooks in JITed stubs for critical
     // native methods too.
     if (compiler_options.GetDebuggable() && method->IsCriticalNative()) {
+      SCOPED_TRACE << "Not compiling: critical native method in debuggable runtime";
       DCHECK(compiler_options.IsJitCompiler());
       return false;
     }
@@ -1373,6 +1381,7 @@ bool OptimizingCompiler::JitCompile(Thread* self,
                              method,
                              /*out*/ &reserved_code,
                              /*out*/ &reserved_data)) {
+      SCOPED_TRACE << "Not compiling: JIT code cache reserve failure";
       MaybeRecordStat(compilation_stats_.get(), MethodCompilationStat::kJitOutOfMemoryForCommit);
       return false;
     }
@@ -1403,6 +1412,7 @@ bool OptimizingCompiler::JitCompile(Thread* self,
                             /* is_full_debug_info= */ compiler_options.GetGenerateDebugInfo(),
                             compilation_kind,
                             cha_single_implementation_list)) {
+      SCOPED_TRACE << "Not compiling: JIT code cache commit failure";
       code_cache->Free(self, region, reserved_code.data(), reserved_data.data());
       return false;
     }
@@ -1448,9 +1458,11 @@ bool OptimizingCompiler::JitCompile(Thread* self,
                                             compiler_options,
                                             dex_compilation_unit);
       if (fast_compiler == nullptr) {
+        SCOPED_TRACE << "Not compiling: fast compiler unsuccessful";
         return false;
       }
     } else {
+      SCOPED_TRACE << "Not compiling: fast compiler is not supported for debuggable";
       return false;
     }
   }
@@ -1468,6 +1480,7 @@ bool OptimizingCompiler::JitCompile(Thread* self,
                              method,
                              /*out*/ &reserved_code,
                              /*out*/ &reserved_data)) {
+      SCOPED_TRACE << "Not compiling: JIT code cache reserve failure";
       MaybeRecordStat(compilation_stats_.get(), MethodCompilationStat::kJitOutOfMemoryForCommit);
       return false;
     }
@@ -1506,6 +1519,7 @@ bool OptimizingCompiler::JitCompile(Thread* self,
                             /* is_full_debug_info= */ compiler_options.GetGenerateDebugInfo(),
                             compilation_kind,
                             cha_single_implementation_list)) {
+      SCOPED_TRACE << "Not compiling: JIT code cache commit failure";
       code_cache->Free(self, region, reserved_code.data(), reserved_data.data());
       return false;
     }
@@ -1525,6 +1539,7 @@ bool OptimizingCompiler::JitCompile(Thread* self,
                                &handles,
                                dynamic_instrumentation));
       if (codegen.get() == nullptr) {
+        SCOPED_TRACE << "Not compiling: TryCompile failure";
         return false;
       }
     }
@@ -1540,6 +1555,7 @@ bool OptimizingCompiler::JitCompile(Thread* self,
                              method,
                              /*out*/ &reserved_code,
                              /*out*/ &reserved_data)) {
+      SCOPED_TRACE << "Not compiling: JIT code cache reserve failure";
       MaybeRecordStat(compilation_stats_.get(), MethodCompilationStat::kJitOutOfMemoryForCommit);
       return false;
     }
@@ -1589,6 +1605,7 @@ bool OptimizingCompiler::JitCompile(Thread* self,
                             /* is_full_debug_info= */ compiler_options.GetGenerateDebugInfo(),
                             compilation_kind,
                             codegen->GetGraph()->GetCHASingleImplementationList())) {
+      SCOPED_TRACE << "Not compiling: JIT code cache commit failure";
       CHECK_EQ(CodeInfo::HasShouldDeoptimizeFlag(stack_map.data()),
                codegen->GetGraph()->HasShouldDeoptimizeFlag());
       code_cache->Free(self, region, reserved_code.data(), reserved_data.data());

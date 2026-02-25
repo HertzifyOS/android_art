@@ -224,7 +224,7 @@ public class AhatArrayInstance extends AhatInstance {
   }
 
   @Override
-  Iterable<Reference> getReferences() {
+  public Iterable<Reference> getReferences() {
     // The list of references will be empty if this is a primitive array.
     List<Reference> refs = Collections.emptyList();
     if (!mValues.isEmpty()) {

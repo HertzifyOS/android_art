@@ -64,6 +64,7 @@
 #include "thread-inl.h"
 #include "thread.h"
 #include "thread_state.h"
+#include "trace.h"
 #include "var_handles.h"
 #include "well_known_classes-inl.h"
 #include "well_known_classes.h"
@@ -120,6 +121,11 @@ bool SendMethodExitEvents(Thread* self,
                           ShadowFrame& frame,
                           ArtMethod* method,
                           T& result) {
+  if (!frame.GetSkipLowOverheadTraceEvent()) {
+    // If the shadow frame was created due to a deopt and corresponds to an inlined frame, we skip
+    // the exit events. We don't record entry events for inlined methods.
+    TraceLowOverhead::RecordTraceEventIfNeeded(self, method, /*is_entry=*/false);
+  }
   bool had_event = false;
   // We can get additional ForcePopFrame requests during handling of these events. We should
   // respect these and send additional instrumentation events.
@@ -208,6 +214,12 @@ bool MoveToExceptionHandler(Thread* self,
       instrumentation->MethodUnwindEvent(self,
                                          shadow_frame.GetMethod(),
                                          shadow_frame.GetDexPC());
+      if (!shadow_frame.GetSkipLowOverheadTraceEvent()) {
+        // If the shadow frame was created due to a deopt and corresponds to an inlined frame, we
+        // skip the exit events. We don't record entry events for inlined methods.
+        TraceLowOverhead::RecordTraceEventIfNeeded(
+            self, shadow_frame.GetMethod(), /*is_entry=*/false);
+      }
       shadow_frame.SetSkipTraceMethodExitEvent(true);
     }
     return shadow_frame.GetForcePopFrame();
