@@ -218,7 +218,7 @@ class Location : public ValueObject {
   }
 
   template <typename T>
-  T AsRegister() const {
+  T AsCoreRegister() const {
     DCHECK(IsCoreRegister());
     return static_cast<T>(reg());
   }
@@ -242,13 +242,13 @@ class Location : public ValueObject {
   }
 
   template <typename T>
-  T AsRegisterPairLow() const {
+  T AsCoreRegisterPairLow() const {
     DCHECK(IsCoreRegisterPair());
     return static_cast<T>(low());
   }
 
   template <typename T>
-  T AsRegisterPairHigh() const {
+  T AsCoreRegisterPairHigh() const {
     DCHECK(IsCoreRegisterPair());
     return static_cast<T>(high());
   }

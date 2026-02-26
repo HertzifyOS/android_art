@@ -1732,7 +1732,7 @@ TEST_F(Dex2oatTest, DexFileFd) {
       ZipArchive::OpenFromFd(zip_file->Release(), zip_location.c_str(), &error_msg));
   ASSERT_TRUE(zip_archive != nullptr);
 
-  std::string entry_name = DexFileLoader::GetMultiDexClassesDexName(0);
+  std::string entry_name = DexFileLoader::GetMultiDexZipEntryName(0);
   std::unique_ptr<ZipEntry> entry(zip_archive->Find(entry_name.c_str(), &error_msg));
   ASSERT_TRUE(entry != nullptr);
 

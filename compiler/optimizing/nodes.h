@@ -392,6 +392,11 @@ class HBasicBlock final : public ArenaObject<kArenaAllocBasicBlock> {
   // predecessor of `other` and vice versa.
   void MergeWith(HBasicBlock* other);
 
+  // Take the single successor's other predecessors and merge `HPhis`. This block must
+  // contain only a single `HGoto` instruction and an arbitrary number of `HPhi`s.
+  // This function does not update dominance information.
+  void TakeGotoBlockSuccessorsOtherPredecessorsAndMergePhis();
+
   // Disconnects `this` from all its predecessors, successors and dominator,
   // removes it from all loops it is included in and eventually from the graph.
   // The block must not dominate any other block. Predecessors and successors
@@ -556,6 +561,7 @@ class HBasicBlock final : public ArenaObject<kArenaAllocBasicBlock> {
   M(ClearException, Instruction)                                        \
   M(ClinitCheck, Instruction)                                           \
   M(Compare, BinaryOperation)                                           \
+  M(LoadConstantTableEntry, Instruction)                                \
   M(ConstructorFence, Instruction)                                      \
   M(CurrentMethod, Instruction)                                         \
   M(ShouldDeoptimizeFlag, Instruction)                                  \
@@ -2347,6 +2353,9 @@ class HPhi final : public HVariableInputSizeInstruction {
     }
     return nullptr;
   }
+
+  void ReplaceInputPhiWithItsInputsAt(ArenaAllocator* allocator, size_t index);
+  void DuplicateInputAt(ArenaAllocator* allocator, size_t index, size_t new_copies);
 
   DECLARE_INSTRUCTION(Phi);
 
@@ -7682,6 +7691,73 @@ class HIntermediateAddress final : public HExpression<2> {
   DEFAULT_COPY_CONSTRUCTOR(IntermediateAddress);
 };
 
+// Load a value from a constant table. The value of `index` must be below `num_entries`.
+// Used for optimizing `switch` statements that just feed a Phi with constants.
+class HLoadConstantTableEntry : public HInstruction {
+ public:
+  HLoadConstantTableEntry(DataType::Type type,
+                          HInstruction* index,
+                          ArrayRef<const int64_t> entries,
+                          ArenaAllocator* allocator,
+                          uint32_t dex_pc = kNoDexPc)
+      : HInstruction(kLoadConstantTableEntry, type, SideEffects::None(), dex_pc),
+        entries_(allocator->AllocArray<int64_t>(entries.size(), kArenaAllocInstruction),
+                 entries.size()) {
+    SetRawInputAt(0, index);
+    std::copy(entries.begin(), entries.end(), entries_.begin());
+  }
+
+  HInstruction* GetIndex() const { return InputAt(0); }
+
+  size_t GetNumEntries() const {
+    return entries_.size();
+  }
+
+  int64_t GetEntry(size_t index) {
+    DCHECK_LT(index, GetNumEntries());
+    return entries_[index];
+  }
+
+  void SetEntry(size_t index, int64_t value) {
+    DCHECK_LT(index, GetNumEntries());
+    entries_[index] = value;
+  }
+
+  ArrayRef<const int64_t> GetEntries() const {
+    return ArrayRef<const int64_t>(entries_);
+  }
+
+  bool HasSpecialInput() const {
+    return inputs_[1].GetInstruction() != nullptr;
+  }
+
+  void AddSpecialInput(HInstruction* input) {
+    // We allow only one special input.
+    DCHECK(!HasSpecialInput());
+    // Store the `input` directly. `SetRawInputAt()` cannot be used here because
+    // `GetInputRecords()` does not include `inputs_[1]` while it contains null.
+    inputs_[1] = HUserRecord<HInstruction*>(input);
+    input->AddUseAt(GetBlock()->GetGraph()->GetAllocator(), this, 1u);
+  }
+
+  ArrayRef<HUserRecord<HInstruction*>> GetInputRecords() final {
+    return ArrayRef<HUserRecord<HInstruction*>>(inputs_.data(), HasSpecialInput() ? 2u : 1u);
+  }
+  DEFINE_GET_INPUT_RECORDS_HELPERS(HLoadConstantTableEntry);
+
+  // Prevent this instruction from being moved. In particular, this instruction must not
+  // move before the index range check created from the `HPackedSwitch`.
+  bool CanBeMoved() const override { return false; }
+
+  DECLARE_INSTRUCTION(LoadConstantTableEntry);
+
+ protected:
+  DEFAULT_COPY_CONSTRUCTOR(LoadConstantTableEntry);
+
+ private:
+  std::array<HUserRecord<HInstruction*>, 2> inputs_;
+  ArrayRef<int64_t> entries_;
+};
 
 }  // namespace art
 

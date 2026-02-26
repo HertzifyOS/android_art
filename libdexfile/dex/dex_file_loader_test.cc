@@ -536,11 +536,11 @@ TEST_F(DexFileLoaderTest, ZeroLengthDexRejected) {
       /* verify= */ true, kVerifyChecksum, &error_code, &error_msg, &dex_files));
 }
 
-TEST_F(DexFileLoaderTest, GetMultiDexClassesDexName) {
-  ASSERT_EQ("classes.dex", DexFileLoader::GetMultiDexClassesDexName(0));
-  ASSERT_EQ("classes2.dex", DexFileLoader::GetMultiDexClassesDexName(1));
-  ASSERT_EQ("classes3.dex", DexFileLoader::GetMultiDexClassesDexName(2));
-  ASSERT_EQ("classes100.dex", DexFileLoader::GetMultiDexClassesDexName(99));
+TEST_F(DexFileLoaderTest, GetMultiDexZipEntryName) {
+  ASSERT_EQ("classes.dex", DexFileLoader::GetMultiDexZipEntryName(0));
+  ASSERT_EQ("classes2.dex", DexFileLoader::GetMultiDexZipEntryName(1));
+  ASSERT_EQ("classes3.dex", DexFileLoader::GetMultiDexZipEntryName(2));
+  ASSERT_EQ("classes100.dex", DexFileLoader::GetMultiDexZipEntryName(99));
 }
 
 TEST_F(DexFileLoaderTest, GetMultiDexLocation) {

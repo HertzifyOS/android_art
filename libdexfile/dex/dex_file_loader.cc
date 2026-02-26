@@ -142,7 +142,7 @@ bool DexFileLoader::IsMultiDexLocation(std::string_view location) {
   return location.find(kMultiDexSeparator) != std::string_view::npos;
 }
 
-std::string DexFileLoader::GetMultiDexClassesDexName(size_t index) {
+std::string DexFileLoader::GetMultiDexZipEntryName(size_t index) {
   return (index == 0) ? "classes.dex" : StringPrintf("classes%zu.dex", index + 1);
 }
 
@@ -177,7 +177,7 @@ bool DexFileLoader::GetMultiDexChecksums(
       *only_contains_uncompressed_dex = true;
     }
     for (size_t i = 0;; ++i) {
-      std::string name = GetMultiDexClassesDexName(i);
+      std::string name = GetMultiDexZipEntryName(i);
       std::unique_ptr<ZipEntry> zip_entry(zip_archive->Find(name.c_str(), error_msg));
       if (zip_entry == nullptr) {
         break;
@@ -381,7 +381,7 @@ bool DexFileLoader::Open(bool verify,
     }
     size_t multidex_count = 0;
     for (size_t i = 0;; ++i) {
-      std::string name = GetMultiDexClassesDexName(i);
+      std::string name = GetMultiDexZipEntryName(i);
       bool ok = OpenFromZipEntry(*zip_archive,
                                  name.c_str(),
                                  location_,

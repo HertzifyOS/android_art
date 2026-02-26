@@ -269,8 +269,7 @@ static inline JValue Execute(
     if (kIsDebugBuild) {
       // TODO(b/346542404): Check this precondition prorperly, and shouldn't emit method enter event
       // when unparking a virtual thread.
-      bool is_virtual = kIsVirtualThreadEnabled &&
-                        self->AreVirtualThreadFlagsEnabled(VirtualThreadFlag::kIsVirtual);
+      bool is_virtual = kIsVirtualThreadEnabled && self->IsVirtualThreadMounted();
       if (!is_virtual) {
         CHECK_EQ(shadow_frame.GetDexPC(), 0u);
       }

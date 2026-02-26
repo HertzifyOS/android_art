@@ -94,6 +94,11 @@ class PCRelativeHandlerVisitor final : public HGraphVisitor {
     }
   }
 
+  void VisitLoadConstantTableEntry(HLoadConstantTableEntry* load) override {
+    HX86ComputeBaseMethodAddress* method_address = GetPCRelativeBasePointer(load);
+    load->AddSpecialInput(method_address);
+  }
+
   void BinaryFP(HBinaryOperation* bin) {
     HConstant* rhs = bin->InputAt(1)->AsConstantOrNull();
     if (rhs != nullptr && DataType::IsFloatingPointType(rhs->GetType())) {

@@ -41,7 +41,7 @@ static_assert(vixl::aarch32::kSpCode == SP, "vixl::aarch32::kSpCode must equal A
 
 inline vixl::aarch32::Register HighRegisterFrom(Location location) {
   DCHECK(location.IsCoreRegisterPair()) << location;
-  return vixl::aarch32::Register(location.AsRegisterPairHigh<vixl::aarch32::Register>());
+  return vixl::aarch32::Register(location.AsCoreRegisterPairHigh<vixl::aarch32::Register>());
 }
 
 inline vixl::aarch32::DRegister HighDRegisterFrom(Location location) {
@@ -51,7 +51,7 @@ inline vixl::aarch32::DRegister HighDRegisterFrom(Location location) {
 
 inline vixl::aarch32::Register LowRegisterFrom(Location location) {
   DCHECK(location.IsCoreRegisterPair()) << location;
-  return vixl::aarch32::Register(location.AsRegisterPairLow<vixl::aarch32::Register>());
+  return vixl::aarch32::Register(location.AsCoreRegisterPairLow<vixl::aarch32::Register>());
 }
 
 inline vixl::aarch32::SRegister LowSRegisterFrom(Location location) {

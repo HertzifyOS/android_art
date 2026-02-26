@@ -87,7 +87,7 @@ XRegister InputXRegisterOrZero(Location location) {
     DCHECK(location.GetConstant()->IsZeroBitPattern());
     return Zero;
   } else {
-    return location.AsRegister<XRegister>();
+    return location.AsCoreRegister<XRegister>();
   }
 }
 
@@ -136,7 +136,7 @@ static RegisterSet OneRegInReferenceOutSaveEverythingCallerSaves() {
   caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(0));
   DCHECK_EQ(
       calling_convention.GetRegisterAt(0),
-      calling_convention.GetReturnLocation(DataType::Type::kReference).AsRegister<XRegister>());
+      calling_convention.GetReturnLocation(DataType::Type::kReference).AsCoreRegister<XRegister>());
   return caller_saves;
 }
 
@@ -509,7 +509,7 @@ class ReadBarrierForRootSlowPathRISCV64 : public SlowPathCodeRISCV64 {
     DCHECK(codegen->EmitReadBarrier());
     LocationSummary* locations = instruction_->GetLocations();
     DataType::Type type = DataType::Type::kReference;
-    XRegister reg_out = out_.AsRegister<XRegister>();
+    XRegister reg_out = out_.AsCoreRegister<XRegister>();
     DCHECK(locations->CanCall());
     DCHECK(!locations->GetLiveRegisters()->ContainsCoreRegister(reg_out));
     DCHECK(instruction_->IsLoadClass() ||
@@ -698,7 +698,7 @@ class ReadBarrierMarkSlowPathRISCV64 : public SlowPathCodeRISCV64 {
   void EmitNativeCode(CodeGenerator* codegen) override {
     DCHECK(codegen->EmitReadBarrier());
     LocationSummary* locations = instruction_->GetLocations();
-    XRegister ref_reg = ref_.AsRegister<XRegister>();
+    XRegister ref_reg = ref_.AsCoreRegister<XRegister>();
     DCHECK(locations->CanCall());
     DCHECK(!locations->GetLiveRegisters()->ContainsCoreRegister(ref_reg)) << ref_reg;
     DCHECK(instruction_->IsInstanceFieldGet() ||
@@ -735,8 +735,8 @@ class ReadBarrierMarkSlowPathRISCV64 : public SlowPathCodeRISCV64 {
     //   rX <- ReadBarrierMarkRegX(rX)
     //
     riscv64_codegen->ValidateInvokeRuntimeWithoutRecordingPcInfo(instruction_, this);
-    DCHECK_NE(entrypoint_.AsRegister<XRegister>(), TMP);  // A taken branch can clobber `TMP`.
-    __ Jalr(entrypoint_.AsRegister<XRegister>());  // Clobbers `RA` (used as the `entrypoint_`).
+    DCHECK_NE(entrypoint_.AsCoreRegister<XRegister>(), TMP);  // A taken branch can clobber `TMP`.
+    __ Jalr(entrypoint_.AsCoreRegister<XRegister>());  // Clobbers `RA` (used as the `entrypoint_`).
     __ J(GetExitLabel());
   }
 
@@ -783,6 +783,56 @@ class LoadStringSlowPathRISCV64 : public SlowPathCodeRISCV64 {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(LoadStringSlowPathRISCV64);
+};
+
+class ConstantTableRISCV64 : public SlowPathCodeRISCV64 {
+ public:
+  explicit ConstantTableRISCV64(HLoadConstantTableEntry* load)
+      : SlowPathCodeRISCV64(load) {}
+
+  void EmitNativeCode(CodeGenerator* codegen) override {
+    CodeGeneratorRISCV64* riscv64_codegen = down_cast<CodeGeneratorRISCV64*>(codegen);
+    HLoadConstantTableEntry* load = down_cast<HLoadConstantTableEntry*>(instruction_);
+    size_t entry_size = DataType::Size(load->GetType());
+    DCHECK(IsPowerOfTwo(entry_size));
+    AssemblerBuffer* buffer = riscv64_codegen->GetAssembler()->GetBuffer();
+
+    // Align data, bind the data start and emit the data.
+    buffer->Resize(RoundUp(buffer->Size(), entry_size));
+    __ Bind(GetEntryLabel());
+    size_t code_alignment = riscv64_codegen->GetInstructionSetFeatures().HasCompressed() ? 2u : 4u;
+    buffer->Resize(RoundUp(buffer->Size() + entry_size * load->GetNumEntries(), code_alignment));
+    uint32_t table_location = __ GetLabelLocation(GetEntryLabel());
+    CodeGenerator::CopyConstantTableData(load, buffer->contents() + table_location);
+
+    // Update AUIPC and load offset.
+    uint32_t auipc_location = __ GetLabelLocation(&auipc_label_);
+    uint32_t load_location = __ GetLabelLocation(&load_label_);
+    DCHECK_GT(table_location, auipc_location);
+    int32_t offset = dchecked_integral_cast<int32_t>(table_location - auipc_location);
+    // Adjust the AUIPC offset for the sign-extension of the load offset.
+    int32_t auipc_offset = offset - ((offset << 20) >> 20);
+    DCHECK_EQ(auipc_offset & 0xfff, 0);
+    uint32_t auipc_insn = buffer->Load<uint32_t>(auipc_location);
+    DCHECK_EQ(auipc_insn >> 12, kLinkTimeOffsetPlaceholderHigh);
+    auipc_insn = (auipc_insn & 0xfffu) | auipc_offset;
+    uint32_t load_insn = buffer->Load<uint32_t>(load_location);
+    DCHECK_EQ(load_insn >> 20, kLinkTimeOffsetPlaceholderLow);
+    load_insn = (load_insn & 0xfffffu) | (offset << 20);
+    buffer->Store<uint32_t>(auipc_location, auipc_insn);
+    buffer->Store<uint32_t>(load_location, load_insn);
+  }
+
+  Riscv64Label* GetAuipcLabel() { return &auipc_label_; }
+  Riscv64Label* GetLoadLabel() { return &load_label_; }
+
+  const char* GetDescription() const override {
+    return "ConstantTableRISCV64";
+  }
+
+ private:
+  Riscv64Label auipc_label_;
+  Riscv64Label load_label_;
 };
 
 #undef __
@@ -891,25 +941,25 @@ void InstructionCodeGeneratorRISCV64::Load(
   switch (type) {
     case DataType::Type::kBool:
     case DataType::Type::kUint8:
-      __ Loadbu(out.AsRegister<XRegister>(), rs1, offset);
+      __ Loadbu(out.AsCoreRegister<XRegister>(), rs1, offset);
       break;
     case DataType::Type::kInt8:
-      __ Loadb(out.AsRegister<XRegister>(), rs1, offset);
+      __ Loadb(out.AsCoreRegister<XRegister>(), rs1, offset);
       break;
     case DataType::Type::kUint16:
-      __ Loadhu(out.AsRegister<XRegister>(), rs1, offset);
+      __ Loadhu(out.AsCoreRegister<XRegister>(), rs1, offset);
       break;
     case DataType::Type::kInt16:
-      __ Loadh(out.AsRegister<XRegister>(), rs1, offset);
+      __ Loadh(out.AsCoreRegister<XRegister>(), rs1, offset);
       break;
     case DataType::Type::kInt32:
-      __ Loadw(out.AsRegister<XRegister>(), rs1, offset);
+      __ Loadw(out.AsCoreRegister<XRegister>(), rs1, offset);
       break;
     case DataType::Type::kInt64:
-      __ Loadd(out.AsRegister<XRegister>(), rs1, offset);
+      __ Loadd(out.AsCoreRegister<XRegister>(), rs1, offset);
       break;
     case DataType::Type::kReference:
-      __ Loadwu(out.AsRegister<XRegister>(), rs1, offset);
+      __ Loadwu(out.AsCoreRegister<XRegister>(), rs1, offset);
       break;
     case DataType::Type::kFloat32:
       __ FLoadw(out.AsFpuRegister<FRegister>(), rs1, offset);
@@ -931,7 +981,7 @@ void InstructionCodeGeneratorRISCV64::Store(
   if (kPoisonHeapReferences && type == DataType::Type::kReference && !value.IsConstant()) {
     riscv64::ScratchRegisterScope srs(GetAssembler());
     XRegister tmp = srs.AllocateXRegister();
-    __ Mv(tmp, value.AsRegister<XRegister>());
+    __ Mv(tmp, value.AsCoreRegister<XRegister>());
     codegen_->PoisonHeapReference(tmp);
     __ Storew(tmp, rs1, offset);
     return;
@@ -984,7 +1034,7 @@ void InstructionCodeGeneratorRISCV64::StoreSeqCst(Location value,
     XRegister swap_src = kNoXRegister;
     if (kPoisonHeapReferences && type == DataType::Type::kReference && !value.IsConstant()) {
       swap_src = srs.AllocateXRegister();
-      __ Mv(swap_src, value.AsRegister<XRegister>());
+      __ Mv(swap_src, value.AsCoreRegister<XRegister>());
       codegen_->PoisonHeapReference(swap_src);
     } else if (DataType::IsFloatingPointType(type) && !value.IsConstant()) {
       swap_src = srs.AllocateXRegister();
@@ -1108,11 +1158,11 @@ void ParallelMoveResolverRISCV64::Exchange(int index1, int index2, bool double_s
     // no more scratch registers available. Use `Sd()` or `Sw()` explicitly.
     DCHECK(IsInt<12>(index2));
     if (double_slot) {
-      __ Sd(tmp.AsRegister<XRegister>(), SP, index2);
+      __ Sd(tmp.AsCoreRegister<XRegister>(), SP, index2);
     } else {
-      __ Sw(tmp.AsRegister<XRegister>(), SP, index2);
+      __ Sw(tmp.AsCoreRegister<XRegister>(), SP, index2);
     }
-    srs.FreeXRegister(tmp.AsRegister<XRegister>());  // Free a temporary for `MoveLocation()`.
+    srs.FreeXRegister(tmp.AsCoreRegister<XRegister>());  // Free a temporary for `MoveLocation()`.
   }
   codegen_->MoveLocation(loc1, tmp2, tmp2_type);
 }
@@ -1197,7 +1247,7 @@ void InstructionCodeGeneratorRISCV64::GenerateReferenceLoadOneRegister(
     uint32_t offset,
     Location maybe_temp,
     ReadBarrierOption read_barrier_option) {
-  XRegister out_reg = out.AsRegister<XRegister>();
+  XRegister out_reg = out.AsCoreRegister<XRegister>();
   if (read_barrier_option == kWithReadBarrier) {
     DCHECK(codegen_->EmitReadBarrier());
     if (kUseBakerReadBarrier) {
@@ -1214,7 +1264,7 @@ void InstructionCodeGeneratorRISCV64::GenerateReferenceLoadOneRegister(
       // Save the value of `out` into `maybe_temp` before overwriting it
       // in the following move operation, as we will need it for the
       // read barrier below.
-      __ Mv(maybe_temp.AsRegister<XRegister>(), out_reg);
+      __ Mv(maybe_temp.AsCoreRegister<XRegister>(), out_reg);
       // /* HeapReference<Object> */ out = *(out + offset)
       __ Loadwu(out_reg, out_reg, offset);
       codegen_->GenerateReadBarrierSlow(instruction, out, out, maybe_temp, offset);
@@ -1234,8 +1284,8 @@ void InstructionCodeGeneratorRISCV64::GenerateReferenceLoadTwoRegisters(
     uint32_t offset,
     Location maybe_temp,
     ReadBarrierOption read_barrier_option) {
-  XRegister out_reg = out.AsRegister<XRegister>();
-  XRegister obj_reg = obj.AsRegister<XRegister>();
+  XRegister out_reg = out.AsCoreRegister<XRegister>();
+  XRegister obj_reg = obj.AsCoreRegister<XRegister>();
   if (read_barrier_option == kWithReadBarrier) {
     DCHECK(codegen_->EmitReadBarrier());
     if (kUseBakerReadBarrier) {
@@ -1274,8 +1324,8 @@ void CodeGeneratorRISCV64::EmitBakerReadBarierMarkingCheck(
   const int32_t entry_point_offset = ReadBarrierMarkEntrypointOffset(root);
   // Loading the entrypoint does not require a load acquire since it is only changed when
   // threads are suspended or running a checkpoint.
-  __ Loadd(temp.AsRegister<XRegister>(), TR, entry_point_offset);
-  __ Bnez(temp.AsRegister<XRegister>(), slow_path->GetEntryLabel());
+  __ Loadd(temp.AsCoreRegister<XRegister>(), TR, entry_point_offset);
+  __ Bnez(temp.AsCoreRegister<XRegister>(), slow_path->GetEntryLabel());
   __ Bind(slow_path->GetExitLabel());
 }
 
@@ -1286,7 +1336,7 @@ void CodeGeneratorRISCV64::GenerateGcRootFieldLoad(HInstruction* instruction,
                                                    ReadBarrierOption read_barrier_option,
                                                    Riscv64Label* label_low) {
   DCHECK_IMPLIES(label_low != nullptr, offset == kLinkTimeOffsetPlaceholderLow) << offset;
-  XRegister root_reg = root.AsRegister<XRegister>();
+  XRegister root_reg = root.AsCoreRegister<XRegister>();
   if (read_barrier_option == kWithReadBarrier) {
     DCHECK(EmitReadBarrier());
     if (kUseBakerReadBarrier) {
@@ -1385,9 +1435,9 @@ void InstructionCodeGeneratorRISCV64::GenerateTestAndBranch(HInstruction* instru
     Location cond_val = instruction->GetLocations()->InAt(condition_input_index);
     DCHECK(cond_val.IsCoreRegister());
     if (true_target == nullptr) {
-      __ Beqz(cond_val.AsRegister<XRegister>(), false_target);
+      __ Beqz(cond_val.AsCoreRegister<XRegister>(), false_target);
     } else {
-      __ Bnez(cond_val.AsRegister<XRegister>(), true_target);
+      __ Bnez(cond_val.AsCoreRegister<XRegister>(), true_target);
     }
   } else {
     // The condition instruction has not been materialized, use its inputs as
@@ -1430,8 +1480,8 @@ void InstructionCodeGeneratorRISCV64::DivRemOneOrMinusOne(HBinaryOperation* inst
   Location second = locations->InAt(1);
   DCHECK(second.IsConstant());
 
-  XRegister out = locations->Out().AsRegister<XRegister>();
-  XRegister dividend = locations->InAt(0).AsRegister<XRegister>();
+  XRegister out = locations->Out().AsCoreRegister<XRegister>();
+  XRegister dividend = locations->InAt(0).AsCoreRegister<XRegister>();
   int64_t imm = Int64FromConstant(second.GetConstant());
   DCHECK(imm == 1 || imm == -1);
 
@@ -1460,8 +1510,8 @@ void InstructionCodeGeneratorRISCV64::DivRemByPowerOfTwo(HBinaryOperation* instr
   Location second = locations->InAt(1);
   DCHECK(second.IsConstant());
 
-  XRegister out = locations->Out().AsRegister<XRegister>();
-  XRegister dividend = locations->InAt(0).AsRegister<XRegister>();
+  XRegister out = locations->Out().AsCoreRegister<XRegister>();
+  XRegister dividend = locations->InAt(0).AsCoreRegister<XRegister>();
   int64_t imm = Int64FromConstant(second.GetConstant());
   int64_t abs_imm = static_cast<uint64_t>(AbsOrMin(imm));
   int ctz_imm = CTZ(abs_imm);
@@ -1504,8 +1554,8 @@ void InstructionCodeGeneratorRISCV64::DivRemByPowerOfTwo(HBinaryOperation* instr
 void InstructionCodeGeneratorRISCV64::GenerateDivRemWithAnyConstant(HBinaryOperation* instruction) {
   DCHECK(instruction->IsDiv() || instruction->IsRem());
   LocationSummary* locations = instruction->GetLocations();
-  XRegister dividend = locations->InAt(0).AsRegister<XRegister>();
-  XRegister out = locations->Out().AsRegister<XRegister>();
+  XRegister dividend = locations->InAt(0).AsCoreRegister<XRegister>();
+  XRegister out = locations->Out().AsCoreRegister<XRegister>();
   Location second = locations->InAt(1);
   int64_t imm = Int64FromConstant(second.GetConstant());
   DataType::Type type = instruction->GetResultType();
@@ -1535,7 +1585,7 @@ void InstructionCodeGeneratorRISCV64::GenerateDivRemIntegral(HBinaryOperation* i
   DCHECK(type == DataType::Type::kInt32 || type == DataType::Type::kInt64) << type;
 
   LocationSummary* locations = instruction->GetLocations();
-  XRegister out = locations->Out().AsRegister<XRegister>();
+  XRegister out = locations->Out().AsCoreRegister<XRegister>();
   Location second = locations->InAt(1);
 
   if (second.IsConstant()) {
@@ -1551,8 +1601,8 @@ void InstructionCodeGeneratorRISCV64::GenerateDivRemIntegral(HBinaryOperation* i
       GenerateDivRemWithAnyConstant(instruction);
     }
   } else {
-    XRegister dividend = locations->InAt(0).AsRegister<XRegister>();
-    XRegister divisor = second.AsRegister<XRegister>();
+    XRegister dividend = locations->InAt(0).AsCoreRegister<XRegister>();
+    XRegister divisor = second.AsCoreRegister<XRegister>();
     if (instruction->IsDiv()) {
       if (type == DataType::Type::kInt32) {
         __ Divw(out, dividend, divisor);
@@ -1571,7 +1621,7 @@ void InstructionCodeGeneratorRISCV64::GenerateDivRemIntegral(HBinaryOperation* i
 
 void InstructionCodeGeneratorRISCV64::GenerateIntLongCondition(IfCondition cond,
                                                                LocationSummary* locations) {
-  XRegister rd = locations->Out().AsRegister<XRegister>();
+  XRegister rd = locations->Out().AsCoreRegister<XRegister>();
   GenerateIntLongCondition(cond, locations, rd, /*to_all_bits=*/ false);
 }
 
@@ -1579,11 +1629,11 @@ void InstructionCodeGeneratorRISCV64::GenerateIntLongCondition(IfCondition cond,
                                                                LocationSummary* locations,
                                                                XRegister rd,
                                                                bool to_all_bits) {
-  XRegister rs1 = locations->InAt(0).AsRegister<XRegister>();
+  XRegister rs1 = locations->InAt(0).AsCoreRegister<XRegister>();
   Location rs2_location = locations->InAt(1);
   bool use_imm = rs2_location.IsConstant();
   int64_t imm = use_imm ? CodeGenerator::GetInt64ValueOf(rs2_location.GetConstant()) : 0;
-  XRegister rs2 = use_imm ? kNoXRegister : rs2_location.AsRegister<XRegister>();
+  XRegister rs2 = use_imm ? kNoXRegister : rs2_location.AsCoreRegister<XRegister>();
   bool reverse_condition = false;
   switch (cond) {
     case kCondEQ:
@@ -1676,7 +1726,7 @@ void InstructionCodeGeneratorRISCV64::GenerateIntLongCondition(IfCondition cond,
 void InstructionCodeGeneratorRISCV64::GenerateIntLongCompareAndBranch(IfCondition cond,
                                                                       LocationSummary* locations,
                                                                       Riscv64Label* label) {
-  XRegister left = locations->InAt(0).AsRegister<XRegister>();
+  XRegister left = locations->InAt(0).AsCoreRegister<XRegister>();
   Location right_location = locations->InAt(1);
   if (right_location.IsConstant()) {
     DCHECK_EQ(CodeGenerator::GetInt64ValueOf(right_location.GetConstant()), 0);
@@ -1708,7 +1758,7 @@ void InstructionCodeGeneratorRISCV64::GenerateIntLongCompareAndBranch(IfConditio
         break;
     }
   } else {
-    XRegister right_reg = right_location.AsRegister<XRegister>();
+    XRegister right_reg = right_location.AsCoreRegister<XRegister>();
     switch (cond) {
       case kCondEQ:
         __ Beq(left, right_reg, label);
@@ -1752,7 +1802,7 @@ void InstructionCodeGeneratorRISCV64::GenerateFpCondition(IfCondition cond,
   DCHECK_EQ(label != nullptr, locations->Out().IsInvalid());
   ScratchRegisterScope srs(GetAssembler());
   XRegister rd =
-      (label != nullptr) ? srs.AllocateXRegister() : locations->Out().AsRegister<XRegister>();
+      (label != nullptr) ? srs.AllocateXRegister() : locations->Out().AsCoreRegister<XRegister>();
   GenerateFpCondition(cond, gt_bias, type, locations, label, rd, /*to_all_bits=*/ false);
 }
 
@@ -1897,7 +1947,7 @@ void CodeGeneratorRISCV64::GenerateReferenceLoadWithBakerReadBarrier(HInstructio
   UNUSED(temp);
 
   DCHECK(EmitBakerReadBarrier());
-  XRegister reg = ref.AsRegister<XRegister>();
+  XRegister reg = ref.AsCoreRegister<XRegister>();
   if (index.IsValid()) {
     DCHECK(!needs_null_check);
     DCHECK(index.IsCoreRegister());
@@ -1905,12 +1955,12 @@ void CodeGeneratorRISCV64::GenerateReferenceLoadWithBakerReadBarrier(HInstructio
     DCHECK_EQ(type, instruction->GetType());
     if (instruction->IsArrayGet()) {
       // /* HeapReference<Object> */ ref = *(obj + index * element_size + offset)
-      instruction_visitor_.ShNAdd(reg, index.AsRegister<XRegister>(), obj, type);
+      instruction_visitor_.ShNAdd(reg, index.AsCoreRegister<XRegister>(), obj, type);
     } else {
       // /* HeapReference<Object> */ ref = *(obj + index + offset)
       DCHECK(instruction->IsInvoke());
       DCHECK(instruction->GetLocations()->Intrinsified());
-      __ Add(reg, index.AsRegister<XRegister>(), obj);
+      __ Add(reg, index.AsCoreRegister<XRegister>(), obj);
     }
     __ Loadwu(reg, reg, offset);
   } else {
@@ -1981,7 +2031,7 @@ void CodeGeneratorRISCV64::MaybeGenerateReadBarrierSlow(HInstruction* instructio
     // by the runtime within the slow path.
     GenerateReadBarrierSlow(instruction, out, ref, obj, offset, index);
   } else if (kPoisonHeapReferences) {
-    UnpoisonHeapReference(out.AsRegister<XRegister>());
+    UnpoisonHeapReference(out.AsCoreRegister<XRegister>());
   }
 }
 
@@ -2151,12 +2201,12 @@ void InstructionCodeGeneratorRISCV64::HandleBinaryOp(HBinaryOperation* instructi
   switch (type) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64: {
-      XRegister rd = locations->Out().AsRegister<XRegister>();
-      XRegister rs1 = locations->InAt(0).AsRegister<XRegister>();
+      XRegister rd = locations->Out().AsCoreRegister<XRegister>();
+      XRegister rs1 = locations->InAt(0).AsCoreRegister<XRegister>();
       Location rs2_location = locations->InAt(1);
 
       bool use_imm = rs2_location.IsConstant();
-      XRegister rs2 = use_imm ? kNoXRegister : rs2_location.AsRegister<XRegister>();
+      XRegister rs2 = use_imm ? kNoXRegister : rs2_location.AsCoreRegister<XRegister>();
       int64_t imm = use_imm ? CodeGenerator::GetInt64ValueOf(rs2_location.GetConstant()) : 0;
 
       if (instruction->IsAnd()) {
@@ -2361,8 +2411,8 @@ void InstructionCodeGeneratorRISCV64::HandleShift(HBinaryOperation* instruction)
   switch (type) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64: {
-      XRegister rd = locations->Out().AsRegister<XRegister>();
-      XRegister rs1 = locations->InAt(0).AsRegister<XRegister>();
+      XRegister rd = locations->Out().AsCoreRegister<XRegister>();
+      XRegister rs1 = locations->InAt(0).AsCoreRegister<XRegister>();
       Location rs2_location = locations->InAt(1);
 
       if (rs2_location.IsConstant()) {
@@ -2405,7 +2455,7 @@ void InstructionCodeGeneratorRISCV64::HandleShift(HBinaryOperation* instruction)
           }
         }
       } else {
-        XRegister rs2 = rs2_location.AsRegister<XRegister>();
+        XRegister rs2 = rs2_location.AsCoreRegister<XRegister>();
         if (type == DataType::Type::kInt32) {
           if (instruction->IsShl()) {
             __ Sllw(rd, rs1, rs2);
@@ -2511,7 +2561,7 @@ void InstructionCodeGeneratorRISCV64::HandleFieldSet(HInstruction* instruction,
                                                      WriteBarrierKind write_barrier_kind) {
   DataType::Type type = field_info.GetFieldType();
   LocationSummary* locations = instruction->GetLocations();
-  XRegister obj = locations->InAt(0).AsRegister<XRegister>();
+  XRegister obj = locations->InAt(0).AsCoreRegister<XRegister>();
   Location value = locations->InAt(1);
   DCHECK_IMPLIES(value.IsConstant(), IsZeroBitPattern(value.GetConstant()));
   bool is_volatile = field_info.IsVolatile();
@@ -2533,7 +2583,7 @@ void InstructionCodeGeneratorRISCV64::HandleFieldSet(HInstruction* instruction,
     } else {
       codegen_->MaybeMarkGCCard(
           obj,
-          value.AsRegister<XRegister>(),
+          value.AsCoreRegister<XRegister>(),
           value_can_be_null && write_barrier_kind == WriteBarrierKind::kEmitNotBeingReliedOn);
     }
   } else if (codegen_->ShouldCheckGCCard(type, instruction->InputAt(1), write_barrier_kind)) {
@@ -2581,7 +2631,7 @@ void InstructionCodeGeneratorRISCV64::HandleFieldGet(HInstruction* instruction,
   DataType::Type type = instruction->GetType();
   LocationSummary* locations = instruction->GetLocations();
   Location obj_loc = locations->InAt(0);
-  XRegister obj = obj_loc.AsRegister<XRegister>();
+  XRegister obj = obj_loc.AsCoreRegister<XRegister>();
   Location dst_loc = locations->Out();
   bool is_volatile = field_info.IsVolatile();
   uint32_t offset = field_info.GetFieldOffset().Uint32Value();
@@ -2737,8 +2787,8 @@ void InstructionCodeGeneratorRISCV64::VisitAbs(HAbs* abs) {
   LocationSummary* locations = abs->GetLocations();
   switch (abs->GetResultType()) {
     case DataType::Type::kInt32: {
-      XRegister in = locations->InAt(0).AsRegister<XRegister>();
-      XRegister out = locations->Out().AsRegister<XRegister>();
+      XRegister in = locations->InAt(0).AsCoreRegister<XRegister>();
+      XRegister out = locations->Out().AsCoreRegister<XRegister>();
       ScratchRegisterScope srs(GetAssembler());
       XRegister tmp = srs.AllocateXRegister();
       __ Sraiw(tmp, in, 31);
@@ -2747,8 +2797,8 @@ void InstructionCodeGeneratorRISCV64::VisitAbs(HAbs* abs) {
       break;
     }
     case DataType::Type::kInt64: {
-      XRegister in = locations->InAt(0).AsRegister<XRegister>();
-      XRegister out = locations->Out().AsRegister<XRegister>();
+      XRegister in = locations->InAt(0).AsCoreRegister<XRegister>();
+      XRegister out = locations->Out().AsCoreRegister<XRegister>();
       ScratchRegisterScope srs(GetAssembler());
       XRegister tmp = srs.AllocateXRegister();
       __ Srai(tmp, in, 63);
@@ -2815,7 +2865,7 @@ void LocationsBuilderRISCV64::VisitArrayGet(HArrayGet* instruction) {
 void InstructionCodeGeneratorRISCV64::VisitArrayGet(HArrayGet* instruction) {
   LocationSummary* locations = instruction->GetLocations();
   Location obj_loc = locations->InAt(0);
-  XRegister obj = obj_loc.AsRegister<XRegister>();
+  XRegister obj = obj_loc.AsCoreRegister<XRegister>();
   Location out_loc = locations->Out();
   Location index = locations->InAt(1);
   uint32_t data_offset = CodeGenerator::GetArrayDataOffset(instruction);
@@ -2838,12 +2888,12 @@ void InstructionCodeGeneratorRISCV64::VisitArrayGet(HArrayGet* instruction) {
                     "Expecting 0=compressed, 1=uncompressed");
       __ Bnez(tmp, &uncompressed_load);
     }
-    XRegister out = out_loc.AsRegister<XRegister>();
+    XRegister out = out_loc.AsCoreRegister<XRegister>();
     if (index.IsConstant()) {
         int32_t const_index = index.GetConstant()->AsIntConstant()->GetValue();
       __ Loadbu(out, obj, data_offset + const_index);
     } else {
-      __ Add(out, obj, index.AsRegister<XRegister>());
+      __ Add(out, obj, index.AsCoreRegister<XRegister>());
       __ Loadbu(out, out, data_offset);
     }
     __ J(&string_char_at_done);
@@ -2896,7 +2946,7 @@ void InstructionCodeGeneratorRISCV64::VisitArrayGet(HArrayGet* instruction) {
   } else {
     ScratchRegisterScope srs(GetAssembler());
     XRegister tmp = srs.AllocateXRegister();
-    ShNAdd(tmp, index.AsRegister<XRegister>(), obj, type);
+    ShNAdd(tmp, index.AsCoreRegister<XRegister>(), obj, type);
     Load(out_loc, tmp, data_offset, type);
     if (!maybe_compressed_char_at) {
       codegen_->MaybeRecordImplicitNullCheck(instruction);
@@ -2924,8 +2974,8 @@ void LocationsBuilderRISCV64::VisitArrayLength(HArrayLength* instruction) {
 void InstructionCodeGeneratorRISCV64::VisitArrayLength(HArrayLength* instruction) {
   LocationSummary* locations = instruction->GetLocations();
   uint32_t offset = CodeGenerator::GetArrayLengthOffset(instruction);
-  XRegister obj = locations->InAt(0).AsRegister<XRegister>();
-  XRegister out = locations->Out().AsRegister<XRegister>();
+  XRegister obj = locations->InAt(0).AsCoreRegister<XRegister>();
+  XRegister out = locations->Out().AsCoreRegister<XRegister>();
   __ Loadwu(out, obj, offset);  // Unsigned for string length; does not matter for other arrays.
   codegen_->MaybeRecordImplicitNullCheck(instruction);
   // Mask out compression flag from String's array length.
@@ -2953,7 +3003,7 @@ void LocationsBuilderRISCV64::VisitArraySet(HArraySet* instruction) {
 
 void InstructionCodeGeneratorRISCV64::VisitArraySet(HArraySet* instruction) {
   LocationSummary* locations = instruction->GetLocations();
-  XRegister array = locations->InAt(0).AsRegister<XRegister>();
+  XRegister array = locations->InAt(0).AsCoreRegister<XRegister>();
   Location index = locations->InAt(1);
   Location value = locations->InAt(2);
   DataType::Type value_type = instruction->GetComponentType();
@@ -2981,9 +3031,9 @@ void InstructionCodeGeneratorRISCV64::VisitArraySet(HArraySet* instruction) {
           can_value_be_null && write_barrier_kind == WriteBarrierKind::kEmitNotBeingReliedOn;
       if (can_value_be_null) {
         if (skip_marking_gc_card) {
-          __ Beqz(value.AsRegister<XRegister>(), &skip_writing_card);
+          __ Beqz(value.AsCoreRegister<XRegister>(), &skip_writing_card);
         } else {
-          __ Beqz(value.AsRegister<XRegister>(), &do_store);
+          __ Beqz(value.AsCoreRegister<XRegister>(), &do_store);
         }
       }
 
@@ -3013,7 +3063,7 @@ void InstructionCodeGeneratorRISCV64::VisitArraySet(HArraySet* instruction) {
         // /* HeapReference<Class> */ temp2 = temp1->component_type_
         __ Loadwu(temp2, temp1, component_offset);
         // /* HeapReference<Class> */ temp1 = value->klass_
-        __ Loadwu(temp1, value.AsRegister<XRegister>(), class_offset);
+        __ Loadwu(temp1, value.AsCoreRegister<XRegister>(), class_offset);
         // If heap poisoning is enabled, no need to unpoison `temp1`
         // nor `temp2`, as we are comparing two poisoned references.
         if (instruction->StaticTypeOfArrayIsObjectArray()) {
@@ -3063,9 +3113,9 @@ void InstructionCodeGeneratorRISCV64::VisitArraySet(HArraySet* instruction) {
     // Heap poisoning needs two scratch registers in `Store()`, except for null constants.
     XRegister tmp =
         (kPoisonHeapReferences && value_type == DataType::Type::kReference && !value.IsConstant())
-            ? locations->GetTemp(0).AsRegister<XRegister>()
+            ? locations->GetTemp(0).AsCoreRegister<XRegister>()
             : srs.AllocateXRegister();
-    ShNAdd(tmp, index.AsRegister<XRegister>(), array, value_type);
+    ShNAdd(tmp, index.AsCoreRegister<XRegister>(), array, value_type);
     Store(value, tmp, data_offset, value_type);
   }
   // There must be no instructions between the `Store()` and the `MaybeRecordImplicitNullCheck()`.
@@ -3104,7 +3154,8 @@ void LocationsBuilderRISCV64::VisitBooleanNot(HBooleanNot* instruction) {
 
 void InstructionCodeGeneratorRISCV64::VisitBooleanNot(HBooleanNot* instruction) {
   LocationSummary* locations = instruction->GetLocations();
-  __ Xori(locations->Out().AsRegister<XRegister>(), locations->InAt(0).AsRegister<XRegister>(), 1);
+  __ Xori(locations->Out().AsCoreRegister<XRegister>(),
+          locations->InAt(0).AsCoreRegister<XRegister>(), 1);
 }
 
 void LocationsBuilderRISCV64::VisitBoundsCheck(HBoundsCheck* instruction) {
@@ -3168,7 +3219,7 @@ void InstructionCodeGeneratorRISCV64::VisitBoundsCheck(HBoundsCheck* instruction
     BoundsCheckSlowPathRISCV64* slow_path =
         new (codegen_->GetScopedAllocator()) BoundsCheckSlowPathRISCV64(instruction);
     codegen_->AddSlowPath(slow_path);
-    XRegister index = index_loc.AsRegister<XRegister>();
+    XRegister index = index_loc.AsCoreRegister<XRegister>();
     if (length == 0) {
       __ J(slow_path->GetEntryLabel());
     } else {
@@ -3176,7 +3227,7 @@ void InstructionCodeGeneratorRISCV64::VisitBoundsCheck(HBoundsCheck* instruction
       __ Bnez(index, slow_path->GetEntryLabel());
     }
   } else {
-    XRegister length = length_loc.AsRegister<XRegister>();
+    XRegister length = length_loc.AsCoreRegister<XRegister>();
     BoundsCheckSlowPathRISCV64* slow_path =
         new (codegen_->GetScopedAllocator()) BoundsCheckSlowPathRISCV64(instruction);
     codegen_->AddSlowPath(slow_path);
@@ -3189,7 +3240,7 @@ void InstructionCodeGeneratorRISCV64::VisitBoundsCheck(HBoundsCheck* instruction
         __ Blez(length, slow_path->GetEntryLabel());
       }
     } else {
-      XRegister index = index_loc.AsRegister<XRegister>();
+      XRegister index = index_loc.AsCoreRegister<XRegister>();
       __ Bgeu(index, length, slow_path->GetEntryLabel());
     }
   }
@@ -3246,12 +3297,12 @@ void InstructionCodeGeneratorRISCV64::VisitCheckCast(HCheckCast* instruction) {
 TypeCheckKind type_check_kind = instruction->GetTypeCheckKind();
   LocationSummary* locations = instruction->GetLocations();
   Location obj_loc = locations->InAt(0);
-  XRegister obj = obj_loc.AsRegister<XRegister>();
+  XRegister obj = obj_loc.AsCoreRegister<XRegister>();
   Location cls = (type_check_kind == TypeCheckKind::kBitstringCheck)
       ? Location::NoLocation()
       : locations->InAt(1);
   Location temp_loc = locations->GetTemp(0);
-  XRegister temp = temp_loc.AsRegister<XRegister>();
+  XRegister temp = temp_loc.AsCoreRegister<XRegister>();
   const size_t num_temps = NumberOfCheckCastTemps(codegen_->EmitReadBarrier(), type_check_kind);
   DCHECK_GE(num_temps, 1u);
   DCHECK_LE(num_temps, 3u);
@@ -3290,7 +3341,7 @@ TypeCheckKind type_check_kind = instruction->GetTypeCheckKind();
                                         kWithoutReadBarrier);
       // Jump to slow path for throwing the exception or doing a
       // more involved array check.
-      __ Bne(temp, cls.AsRegister<XRegister>(), slow_path->GetEntryLabel());
+      __ Bne(temp, cls.AsCoreRegister<XRegister>(), slow_path->GetEntryLabel());
       break;
     }
 
@@ -3316,7 +3367,7 @@ TypeCheckKind type_check_kind = instruction->GetTypeCheckKind();
       // exception.
       __ Beqz(temp, slow_path->GetEntryLabel());
       // Otherwise, compare the classes.
-      __ Bne(temp, cls.AsRegister<XRegister>(), &loop);
+      __ Bne(temp, cls.AsCoreRegister<XRegister>(), &loop);
       break;
     }
 
@@ -3331,7 +3382,7 @@ TypeCheckKind type_check_kind = instruction->GetTypeCheckKind();
       // Walk over the class hierarchy to find a match.
       Riscv64Label loop;
       __ Bind(&loop);
-      __ Beq(temp, cls.AsRegister<XRegister>(), &done);
+      __ Beq(temp, cls.AsCoreRegister<XRegister>(), &done);
       // /* HeapReference<Class> */ temp = temp->super_class_
       GenerateReferenceLoadOneRegister(instruction,
                                        temp_loc,
@@ -3354,7 +3405,7 @@ TypeCheckKind type_check_kind = instruction->GetTypeCheckKind();
                                         maybe_temp2_loc,
                                         kWithoutReadBarrier);
       // Do an exact check.
-      __ Beq(temp, cls.AsRegister<XRegister>(), &done);
+      __ Beq(temp, cls.AsCoreRegister<XRegister>(), &done);
       // Otherwise, we need to check that the object's class is a non-primitive array.
       // /* HeapReference<Class> */ temp = temp->component_type_
       GenerateReferenceLoadOneRegister(instruction,
@@ -3400,8 +3451,8 @@ TypeCheckKind type_check_kind = instruction->GetTypeCheckKind();
                                        iftable_offset,
                                        maybe_temp2_loc,
                                        kWithoutReadBarrier);
-      XRegister temp2 = maybe_temp2_loc.AsRegister<XRegister>();
-      XRegister temp3 = maybe_temp3_loc.AsRegister<XRegister>();
+      XRegister temp2 = maybe_temp2_loc.AsCoreRegister<XRegister>();
+      XRegister temp3 = maybe_temp3_loc.AsCoreRegister<XRegister>();
       // Load the size of the `IfTable`. The `Class::iftable_` is never null.
       __ Loadw(temp2, temp, array_length_offset);
       // Loop through the iftable and check if any class matches.
@@ -3414,7 +3465,7 @@ TypeCheckKind type_check_kind = instruction->GetTypeCheckKind();
       __ Addi(temp, temp, 2 * kHeapReferenceSize);
       __ Addi(temp2, temp2, -2);
       // Compare the classes and continue the loop if they do not match.
-      __ Bne(temp3, cls.AsRegister<XRegister>(), &loop);
+      __ Bne(temp3, cls.AsCoreRegister<XRegister>(), &loop);
       break;
     }
 
@@ -3445,8 +3496,8 @@ void LocationsBuilderRISCV64::VisitClassTableGet(HClassTableGet* instruction) {
 
 void InstructionCodeGeneratorRISCV64::VisitClassTableGet(HClassTableGet* instruction) {
   LocationSummary* locations = instruction->GetLocations();
-  XRegister in = locations->InAt(0).AsRegister<XRegister>();
-  XRegister out = locations->Out().AsRegister<XRegister>();
+  XRegister in = locations->InAt(0).AsCoreRegister<XRegister>();
+  XRegister out = locations->Out().AsCoreRegister<XRegister>();
   if (instruction->GetTableKind() == HClassTableGet::TableKind::kVTable) {
     MemberOffset method_offset =
         mirror::Class::EmbeddedVTableEntryOffset(instruction->GetIndex(), kRiscv64PointerSize);
@@ -3488,8 +3539,9 @@ void InstructionCodeGeneratorRISCV64::VisitClinitCheck(HClinitCheck* instruction
   SlowPathCodeRISCV64* slow_path = new (codegen_->GetScopedAllocator()) LoadClassSlowPathRISCV64(
       instruction->GetLoadClass(), instruction);
   codegen_->AddSlowPath(slow_path);
-  GenerateClassInitializationCheck(slow_path,
-                                   instruction->GetLocations()->InAt(0).AsRegister<XRegister>());
+  GenerateClassInitializationCheck(
+      slow_path,
+      instruction->GetLocations()->InAt(0).AsCoreRegister<XRegister>());
 }
 
 void LocationsBuilderRISCV64::VisitCompare(HCompare* instruction) {
@@ -3527,7 +3579,7 @@ void LocationsBuilderRISCV64::VisitCompare(HCompare* instruction) {
 
 void InstructionCodeGeneratorRISCV64::VisitCompare(HCompare* instruction) {
   LocationSummary* locations = instruction->GetLocations();
-  XRegister result = locations->Out().AsRegister<XRegister>();
+  XRegister result = locations->Out().AsCoreRegister<XRegister>();
   DataType::Type in_type = instruction->InputAt(0)->GetType();
   DataType::Type compare_type = instruction->GetComparisonType();
 
@@ -3542,7 +3594,7 @@ void InstructionCodeGeneratorRISCV64::VisitCompare(HCompare* instruction) {
     case DataType::Type::kInt16:
     case DataType::Type::kInt32:
     case DataType::Type::kInt64: {
-      XRegister left = locations->InAt(0).AsRegister<XRegister>();
+      XRegister left = locations->InAt(0).AsCoreRegister<XRegister>();
       XRegister right = InputXRegisterOrZero(locations->InAt(1));
       ScratchRegisterScope srs(GetAssembler());
       XRegister tmp = srs.AllocateXRegister();
@@ -3554,7 +3606,7 @@ void InstructionCodeGeneratorRISCV64::VisitCompare(HCompare* instruction) {
 
     case DataType::Type::kUint32:
     case DataType::Type::kUint64: {
-      XRegister left = locations->InAt(0).AsRegister<XRegister>();
+      XRegister left = locations->InAt(0).AsCoreRegister<XRegister>();
       XRegister right = InputXRegisterOrZero(locations->InAt(1));
       ScratchRegisterScope srs(GetAssembler());
       XRegister tmp = srs.AllocateXRegister();
@@ -3617,7 +3669,7 @@ void LocationsBuilderRISCV64::VisitShouldDeoptimizeFlag(HShouldDeoptimizeFlag* i
 
 void InstructionCodeGeneratorRISCV64::VisitShouldDeoptimizeFlag(
     HShouldDeoptimizeFlag* instruction) {
-  __ Loadw(instruction->GetLocations()->Out().AsRegister<XRegister>(),
+  __ Loadw(instruction->GetLocations()->Out().AsCoreRegister<XRegister>(),
            SP,
            codegen_->GetStackOffsetOfShouldDeoptimizeFlag());
 }
@@ -3716,7 +3768,7 @@ void InstructionCodeGeneratorRISCV64::VisitDivZeroCheck(HDivZeroCheck* instructi
       // any check, so simply fall through.
     }
   } else {
-    __ Beqz(value.AsRegister<XRegister>(), slow_path->GetEntryLabel());
+    __ Beqz(value.AsCoreRegister<XRegister>(), slow_path->GetEntryLabel());
   }
 }
 
@@ -3821,8 +3873,8 @@ void InstructionCodeGeneratorRISCV64::VisitIf(HIf* instruction) {
             BranchCache::TrueOffset().Int32Value() - BranchCache::FalseOffset().Int32Value() == 2,
             "Unexpected offsets for BranchCache");
         Riscv64Label done;
-        XRegister condition = instruction->GetLocations()->InAt(0).AsRegister<XRegister>();
-        XRegister temp = instruction->GetLocations()->GetTemp(0).AsRegister<XRegister>();
+        XRegister condition = instruction->GetLocations()->InAt(0).AsCoreRegister<XRegister>();
+        XRegister temp = instruction->GetLocations()->GetTemp(0).AsCoreRegister<XRegister>();
         __ LoadConst64(temp, address);
         __ Sh1Add(temp, condition, temp);
         ScratchRegisterScope srs(GetAssembler());
@@ -3909,12 +3961,12 @@ void InstructionCodeGeneratorRISCV64::VisitInstanceOf(HInstanceOf* instruction) 
   TypeCheckKind type_check_kind = instruction->GetTypeCheckKind();
   LocationSummary* locations = instruction->GetLocations();
   Location obj_loc = locations->InAt(0);
-  XRegister obj = obj_loc.AsRegister<XRegister>();
+  XRegister obj = obj_loc.AsCoreRegister<XRegister>();
   Location cls = (type_check_kind == TypeCheckKind::kBitstringCheck)
       ? Location::NoLocation()
       : locations->InAt(1);
   Location out_loc = locations->Out();
-  XRegister out = out_loc.AsRegister<XRegister>();
+  XRegister out = out_loc.AsCoreRegister<XRegister>();
   const size_t num_temps = NumberOfInstanceOfTemps(codegen_->EmitReadBarrier(), type_check_kind);
   DCHECK_LE(num_temps, 1u);
   Location maybe_temp_loc = (num_temps >= 1) ? locations->GetTemp(0) : Location::NoLocation();
@@ -3944,7 +3996,7 @@ void InstructionCodeGeneratorRISCV64::VisitInstanceOf(HInstanceOf* instruction) 
       GenerateReferenceLoadTwoRegisters(
           instruction, out_loc, obj_loc, class_offset, maybe_temp_loc, read_barrier_option);
       // Classes must be equal for the instanceof to succeed.
-      __ Xor(out, out, cls.AsRegister<XRegister>());
+      __ Xor(out, out, cls.AsCoreRegister<XRegister>());
       __ Seqz(out, out);
       break;
     }
@@ -3964,7 +4016,7 @@ void InstructionCodeGeneratorRISCV64::VisitInstanceOf(HInstanceOf* instruction) 
           instruction, out_loc, super_offset, maybe_temp_loc, read_barrier_option);
       // If `out` is null, we use it for the result, and jump to `done`.
       __ Beqz(out, &done);
-      __ Bne(out, cls.AsRegister<XRegister>(), &loop);
+      __ Bne(out, cls.AsCoreRegister<XRegister>(), &loop);
       __ LoadConst32(out, 1);
       break;
     }
@@ -3978,7 +4030,7 @@ void InstructionCodeGeneratorRISCV64::VisitInstanceOf(HInstanceOf* instruction) 
       // Walk over the class hierarchy to find a match.
       Riscv64Label loop, success;
       __ Bind(&loop);
-      __ Beq(out, cls.AsRegister<XRegister>(), &success);
+      __ Beq(out, cls.AsCoreRegister<XRegister>(), &success);
       // /* HeapReference<Class> */ out = out->super_class_
       GenerateReferenceLoadOneRegister(
           instruction, out_loc, super_offset, maybe_temp_loc, read_barrier_option);
@@ -4005,7 +4057,7 @@ void InstructionCodeGeneratorRISCV64::VisitInstanceOf(HInstanceOf* instruction) 
           instruction, tmp, obj_loc, class_offset, maybe_temp_loc, read_barrier_option);
       // Do an exact check.
       __ LoadConst32(out, 1);
-      __ Beq(tmp.AsRegister<XRegister>(), cls.AsRegister<XRegister>(), &done);
+      __ Beq(tmp.AsCoreRegister<XRegister>(), cls.AsCoreRegister<XRegister>(), &done);
       // Otherwise, we need to check that the object's class is a non-primitive array.
       // /* HeapReference<Class> */ out = out->component_type_
       GenerateReferenceLoadTwoRegisters(
@@ -4027,7 +4079,7 @@ void InstructionCodeGeneratorRISCV64::VisitInstanceOf(HInstanceOf* instruction) 
       slow_path = new (codegen_->GetScopedAllocator())
           TypeCheckSlowPathRISCV64(instruction, /* is_fatal= */ false);
       codegen_->AddSlowPath(slow_path);
-      __ Bne(out, cls.AsRegister<XRegister>(), slow_path->GetEntryLabel());
+      __ Bne(out, cls.AsCoreRegister<XRegister>(), slow_path->GetEntryLabel());
       __ LoadConst32(out, 1);
       break;
     }
@@ -4069,7 +4121,7 @@ void InstructionCodeGeneratorRISCV64::VisitInstanceOf(HInstanceOf* instruction) 
       __ Addi(temp, temp, 2 * kHeapReferenceSize);
       __ Addi(out, out, -2);
       // Compare the classes and continue the loop if they do not match.
-      __ Bne(cls.AsRegister<XRegister>(), temp2, &loop);
+      __ Bne(cls.AsCoreRegister<XRegister>(), temp2, &loop);
       __ LoadConst32(out, 1);
       break;
     }
@@ -4160,8 +4212,8 @@ void LocationsBuilderRISCV64::VisitInvokeInterface(HInvokeInterface* instruction
 
 void InstructionCodeGeneratorRISCV64::VisitInvokeInterface(HInvokeInterface* instruction) {
   LocationSummary* locations = instruction->GetLocations();
-  XRegister temp = locations->GetTemp(0).AsRegister<XRegister>();
-  XRegister receiver = locations->InAt(0).AsRegister<XRegister>();
+  XRegister temp = locations->GetTemp(0).AsCoreRegister<XRegister>();
+  XRegister receiver = locations->InAt(0).AsCoreRegister<XRegister>();
   int32_t class_offset = mirror::Object::ClassOffset().Int32Value();
   Offset entry_point = ArtMethod::EntryPointFromQuickCompiledCodeOffset(kRiscv64PointerSize);
 
@@ -4186,7 +4238,7 @@ void InstructionCodeGeneratorRISCV64::VisitInvokeInterface(HInvokeInterface* ins
       instruction->GetHiddenArgumentLoadKind() != MethodLoadKind::kRuntimeCall) {
     Location hidden_reg = instruction->GetLocations()->GetTemp(1);
     // Load the resolved interface method in the hidden argument register T0.
-    DCHECK_EQ(T0, hidden_reg.AsRegister<XRegister>());
+    DCHECK_EQ(T0, hidden_reg.AsCoreRegister<XRegister>());
     codegen_->LoadMethod(instruction->GetHiddenArgumentLoadKind(), hidden_reg, instruction);
   }
 
@@ -4199,8 +4251,8 @@ void InstructionCodeGeneratorRISCV64::VisitInvokeInterface(HInvokeInterface* ins
     // We pass the method from the IMT in case of a conflict. This will ensure
     // we go into the runtime to resolve the actual method.
     Location hidden_reg = instruction->GetLocations()->GetTemp(1);
-    DCHECK_EQ(T0, hidden_reg.AsRegister<XRegister>());
-    __ Mv(hidden_reg.AsRegister<XRegister>(), temp);
+    DCHECK_EQ(T0, hidden_reg.AsCoreRegister<XRegister>());
+    __ Mv(hidden_reg.AsCoreRegister<XRegister>(), temp);
   }
   // RA = temp->GetEntryPoint();
   __ Loadd(RA, temp, entry_point.Int32Value());
@@ -4372,7 +4424,7 @@ void InstructionCodeGeneratorRISCV64::VisitLoadClass(HLoadClass* instruction)
 
   LocationSummary* locations = instruction->GetLocations();
   Location out_loc = locations->Out();
-  XRegister out = out_loc.AsRegister<XRegister>();
+  XRegister out = out_loc.AsCoreRegister<XRegister>();
   const ReadBarrierOption read_barrier_option =
       instruction->IsInImage() ? kWithoutReadBarrier : codegen_->GetCompilerReadBarrierOption();
   bool generate_null_check = false;
@@ -4381,7 +4433,7 @@ void InstructionCodeGeneratorRISCV64::VisitLoadClass(HLoadClass* instruction)
       DCHECK(!instruction->CanCallRuntime());
       DCHECK(!instruction->MustGenerateClinitCheck());
       // /* GcRoot<mirror::Class> */ out = current_method->declaring_class_
-      XRegister current_method = locations->InAt(0).AsRegister<XRegister>();
+      XRegister current_method = locations->InAt(0).AsCoreRegister<XRegister>();
       codegen_->GenerateGcRootFieldLoad(instruction,
                                         out_loc,
                                         current_method,
@@ -4478,7 +4530,7 @@ void LocationsBuilderRISCV64::VisitLoadException(HLoadException* instruction) {
 }
 
 void InstructionCodeGeneratorRISCV64::VisitLoadException(HLoadException* instruction) {
-  XRegister out = instruction->GetLocations()->Out().AsRegister<XRegister>();
+  XRegister out = instruction->GetLocations()->Out().AsCoreRegister<XRegister>();
   __ Loadwu(out, TR, GetExceptionTlsOffset());
 }
 
@@ -4530,7 +4582,7 @@ void InstructionCodeGeneratorRISCV64::VisitLoadString(HLoadString* instruction)
   HLoadString::LoadKind load_kind = instruction->GetLoadKind();
   LocationSummary* locations = instruction->GetLocations();
   Location out_loc = locations->Out();
-  XRegister out = out_loc.AsRegister<XRegister>();
+  XRegister out = out_loc.AsCoreRegister<XRegister>();
 
   switch (load_kind) {
     case HLoadString::LoadKind::kBootImageLinkTimePcRelative: {
@@ -4705,15 +4757,15 @@ void InstructionCodeGeneratorRISCV64::VisitMul(HMul* instruction) {
   LocationSummary* locations = instruction->GetLocations();
   switch (instruction->GetResultType()) {
     case DataType::Type::kInt32:
-      __ Mulw(locations->Out().AsRegister<XRegister>(),
-              locations->InAt(0).AsRegister<XRegister>(),
-              locations->InAt(1).AsRegister<XRegister>());
+      __ Mulw(locations->Out().AsCoreRegister<XRegister>(),
+              locations->InAt(0).AsCoreRegister<XRegister>(),
+              locations->InAt(1).AsCoreRegister<XRegister>());
       break;
 
     case DataType::Type::kInt64:
-      __ Mul(locations->Out().AsRegister<XRegister>(),
-             locations->InAt(0).AsRegister<XRegister>(),
-             locations->InAt(1).AsRegister<XRegister>());
+      __ Mul(locations->Out().AsCoreRegister<XRegister>(),
+             locations->InAt(0).AsCoreRegister<XRegister>(),
+             locations->InAt(1).AsCoreRegister<XRegister>());
       break;
 
     case DataType::Type::kFloat32:
@@ -4754,11 +4806,13 @@ void InstructionCodeGeneratorRISCV64::VisitNeg(HNeg* instruction) {
   LocationSummary* locations = instruction->GetLocations();
   switch (instruction->GetResultType()) {
     case DataType::Type::kInt32:
-      __ NegW(locations->Out().AsRegister<XRegister>(), locations->InAt(0).AsRegister<XRegister>());
+      __ NegW(locations->Out().AsCoreRegister<XRegister>(),
+              locations->InAt(0).AsCoreRegister<XRegister>());
       break;
 
     case DataType::Type::kInt64:
-      __ Neg(locations->Out().AsRegister<XRegister>(), locations->InAt(0).AsRegister<XRegister>());
+      __ Neg(locations->Out().AsCoreRegister<XRegister>(),
+             locations->InAt(0).AsCoreRegister<XRegister>());
       break;
 
     case DataType::Type::kFloat32:
@@ -4822,7 +4876,8 @@ void InstructionCodeGeneratorRISCV64::VisitNot(HNot* instruction) {
   switch (instruction->GetResultType()) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64:
-      __ Not(locations->Out().AsRegister<XRegister>(), locations->InAt(0).AsRegister<XRegister>());
+      __ Not(locations->Out().AsCoreRegister<XRegister>(),
+             locations->InAt(0).AsCoreRegister<XRegister>());
       break;
 
     default:
@@ -4875,7 +4930,7 @@ void InstructionCodeGeneratorRISCV64::VisitPackedSwitch(HPackedSwitch* instructi
   int32_t lower_bound = instruction->GetStartValue();
   uint32_t num_entries = instruction->GetNumEntries();
   LocationSummary* locations = instruction->GetLocations();
-  XRegister value = locations->InAt(0).AsRegister<XRegister>();
+  XRegister value = locations->InAt(0).AsCoreRegister<XRegister>();
   HBasicBlock* switch_block = instruction->GetBlock();
   HBasicBlock* default_block = instruction->GetDefaultBlock();
 
@@ -4904,6 +4959,33 @@ void InstructionCodeGeneratorRISCV64::VisitPackedSwitch(HPackedSwitch* instructi
   } else {
     GenPackedSwitchWithCompares(adjusted, temp, num_entries, switch_block);
   }
+}
+
+void LocationsBuilderRISCV64::VisitLoadConstantTableEntry(HLoadConstantTableEntry* load) {
+  LocationSummary* locations = LocationSummary::CreateNoCall(allocator_, load);
+  locations->SetInAt(0, Location::RequiresCoreRegister());
+  if (DataType::IsFloatingPointType(load->GetType())) {
+    locations->SetOut(Location::RequiresFpuRegister(), Location::kNoOutputOverlap);
+  } else {
+    locations->SetOut(Location::RequiresCoreRegister(), Location::kNoOutputOverlap);
+  }
+}
+
+void InstructionCodeGeneratorRISCV64::VisitLoadConstantTableEntry(HLoadConstantTableEntry* load) {
+  LocationSummary* locations = load->GetLocations();
+  XRegister index = locations->InAt(0).AsCoreRegister<XRegister>();
+
+  ConstantTableRISCV64* data = new (codegen_->GetScopedAllocator()) ConstantTableRISCV64(load);
+  codegen_->AddSlowPath(data);
+
+  ScratchRegisterScope srs(GetAssembler());
+  XRegister tmp = srs.AllocateXRegister();
+
+  __ Bind(data->GetAuipcLabel());
+  __ Auipc(tmp, /*imm20=*/ kLinkTimeOffsetPlaceholderHigh);
+  ShNAdd(tmp, index, tmp, load->GetType());
+  __ Bind(data->GetLoadLabel());
+  Load(locations->Out(), tmp, /*imm12=*/ kLinkTimeOffsetPlaceholderLow, load->GetType());
 }
 
 void LocationsBuilderRISCV64::VisitParallelMove([[maybe_unused]] HParallelMove* instruction) {
@@ -5199,7 +5281,7 @@ void InstructionCodeGeneratorRISCV64::VisitSelect(HSelect* instruction) {
   } else {
     // TODO(riscv64): Remove the normalizing SNEZ when we can ensure that booleans
     // have only values 0 and 1. b/279302742
-    __ Snez(tmp, locations->InAt(2).AsRegister<XRegister>());
+    __ Snez(tmp, locations->InAt(2).AsCoreRegister<XRegister>());
     __ Neg(tmp, tmp);
   }
 
@@ -5218,7 +5300,7 @@ void InstructionCodeGeneratorRISCV64::VisitSelect(HSelect* instruction) {
       true_reg = Zero;
     } else {
       true_reg = (false_reg == Zero) ? srs.AllocateXRegister()
-                                     : locations->GetTemp(0).AsRegister<XRegister>();
+                                     : locations->GetTemp(0).AsCoreRegister<XRegister>();
       FMvX(true_reg, locations->InAt(1).AsFpuRegister<FRegister>(), type);
     }
     // We can clobber the "true value" with the XOR result.
@@ -5229,7 +5311,7 @@ void InstructionCodeGeneratorRISCV64::VisitSelect(HSelect* instruction) {
     false_reg = InputXRegisterOrZero(locations->InAt(0));
     true_reg = InputXRegisterOrZero(locations->InAt(1));
     xor_reg = srs.AllocateXRegister();
-    out_reg = locations->Out().AsRegister<XRegister>();
+    out_reg = locations->Out().AsCoreRegister<XRegister>();
   }
 
   // We use a branch-free implementation of `HSelect`.
@@ -5342,8 +5424,8 @@ void InstructionCodeGeneratorRISCV64::VisitTypeConversion(HTypeConversion* instr
       << input_type << " -> " << result_type;
 
   if (DataType::IsIntegralType(result_type) && DataType::IsIntegralType(input_type)) {
-    XRegister dst = locations->Out().AsRegister<XRegister>();
-    XRegister src = locations->InAt(0).AsRegister<XRegister>();
+    XRegister dst = locations->Out().AsCoreRegister<XRegister>();
+    XRegister src = locations->InAt(0).AsCoreRegister<XRegister>();
     switch (result_type) {
       case DataType::Type::kUint8:
         __ ZextB(dst, src);
@@ -5374,7 +5456,7 @@ void InstructionCodeGeneratorRISCV64::VisitTypeConversion(HTypeConversion* instr
     }
   } else if (DataType::IsFloatingPointType(result_type) && DataType::IsIntegralType(input_type)) {
     FRegister dst = locations->Out().AsFpuRegister<FRegister>();
-    XRegister src = locations->InAt(0).AsRegister<XRegister>();
+    XRegister src = locations->InAt(0).AsCoreRegister<XRegister>();
     if (input_type == DataType::Type::kInt64) {
       if (result_type == DataType::Type::kFloat32) {
         __ FCvtSL(dst, src, FPRoundingMode::kRNE);
@@ -5390,7 +5472,7 @@ void InstructionCodeGeneratorRISCV64::VisitTypeConversion(HTypeConversion* instr
     }
   } else if (DataType::IsIntegralType(result_type) && DataType::IsFloatingPointType(input_type)) {
     CHECK(result_type == DataType::Type::kInt32 || result_type == DataType::Type::kInt64);
-    XRegister dst = locations->Out().AsRegister<XRegister>();
+    XRegister dst = locations->Out().AsCoreRegister<XRegister>();
     FRegister src = locations->InAt(0).AsFpuRegister<FRegister>();
     if (result_type == DataType::Type::kInt64) {
       if (input_type == DataType::Type::kFloat32) {
@@ -5459,9 +5541,9 @@ void InstructionCodeGeneratorRISCV64::VisitRiscv64ShiftAdd(HRiscv64ShiftAdd* ins
   DCHECK_EQ(instruction->GetType(), DataType::Type::kInt64)
       << "Unexpected ShiftAdd type: " << instruction->GetType();
   LocationSummary* locations = instruction->GetLocations();
-  XRegister first = locations->InAt(0).AsRegister<XRegister>();
-  XRegister second = locations->InAt(1).AsRegister<XRegister>();
-  XRegister dest = locations->Out().AsRegister<XRegister>();
+  XRegister first = locations->InAt(0).AsCoreRegister<XRegister>();
+  XRegister second = locations->InAt(1).AsCoreRegister<XRegister>();
+  XRegister dest = locations->Out().AsCoreRegister<XRegister>();
 
   switch (instruction->GetDistance()) {
     case 1:
@@ -5496,8 +5578,8 @@ void InstructionCodeGeneratorRISCV64::HandleBitManipulations(HBinaryOperation* i
   DCHECK(instruction->GetResultType() == DataType::Type::kInt64);
 
   LocationSummary* locations = instruction->GetLocations();
-  XRegister rd = locations->Out().AsRegister<XRegister>();
-  XRegister rs1 = locations->InAt(0).AsRegister<XRegister>();
+  XRegister rd = locations->Out().AsCoreRegister<XRegister>();
+  XRegister rs1 = locations->InAt(0).AsCoreRegister<XRegister>();
   Location rs2_location = locations->InAt(1);
 
   if (rs2_location.IsConstant()) {
@@ -5513,7 +5595,7 @@ void InstructionCodeGeneratorRISCV64::HandleBitManipulations(HBinaryOperation* i
       __ Binvi(rd, rs1, shamt);
     }
   } else {
-    XRegister rs2 = rs2_location.AsRegister<XRegister>();
+    XRegister rs2 = rs2_location.AsCoreRegister<XRegister>();
     if (instruction->IsRiscv64BitSet()) {
       __ Bset(rd, rs1, rs2);
     } else if (instruction->IsRiscv64BitExtract()) {
@@ -5570,9 +5652,9 @@ void LocationsBuilderRISCV64::VisitBitwiseNegatedRight(HBitwiseNegatedRight* ins
 
 void InstructionCodeGeneratorRISCV64::VisitBitwiseNegatedRight(HBitwiseNegatedRight* instruction) {
   LocationSummary* locations = instruction->GetLocations();
-  XRegister lhs = locations->InAt(0).AsRegister<XRegister>();
-  XRegister rhs = locations->InAt(1).AsRegister<XRegister>();
-  XRegister dst = locations->Out().AsRegister<XRegister>();
+  XRegister lhs = locations->InAt(0).AsCoreRegister<XRegister>();
+  XRegister rhs = locations->InAt(1).AsCoreRegister<XRegister>();
+  XRegister dst = locations->Out().AsCoreRegister<XRegister>();
 
   switch (instruction->GetOpKind()) {
     case HInstruction::kAnd:
@@ -6311,7 +6393,7 @@ void CodeGeneratorRISCV64::Bind(HBasicBlock* block) { __ Bind(GetLabelOf(block))
 
 void CodeGeneratorRISCV64::MoveConstant(Location destination, int32_t value) {
   DCHECK(destination.IsCoreRegister());
-  __ LoadConst32(destination.AsRegister<XRegister>(), value);
+  __ LoadConst32(destination.AsCoreRegister<XRegister>(), value);
 }
 
 void CodeGeneratorRISCV64::MoveLocation(Location destination,
@@ -6357,11 +6439,11 @@ void CodeGeneratorRISCV64::MoveLocation(Location destination,
         }
       } else {
         if (DataType::Is64BitType(dst_type)) {
-          __ Loadd(destination.AsRegister<XRegister>(), SP, source.GetStackIndex());
+          __ Loadd(destination.AsCoreRegister<XRegister>(), SP, source.GetStackIndex());
         } else if (dst_type == DataType::Type::kReference) {
-          __ Loadwu(destination.AsRegister<XRegister>(), SP, source.GetStackIndex());
+          __ Loadwu(destination.AsCoreRegister<XRegister>(), SP, source.GetStackIndex());
         } else {
-          __ Loadw(destination.AsRegister<XRegister>(), SP, source.GetStackIndex());
+          __ Loadw(destination.AsCoreRegister<XRegister>(), SP, source.GetStackIndex());
         }
       }
     } else if (source.IsConstant()) {
@@ -6371,7 +6453,7 @@ void CodeGeneratorRISCV64::MoveLocation(Location destination,
       ScratchRegisterScope srs(GetAssembler());
       XRegister gpr = DataType::IsFloatingPointType(dst_type)
           ? srs.AllocateXRegister()
-          : destination.AsRegister<XRegister>();
+          : destination.AsCoreRegister<XRegister>();
       if (DataType::IsFloatingPointType(dst_type) && value == 0) {
         gpr = Zero;  // Note: The scratch register allocated above shall not be used.
       } else {
@@ -6388,13 +6470,13 @@ void CodeGeneratorRISCV64::MoveLocation(Location destination,
     } else if (source.IsCoreRegister()) {
       if (destination.IsCoreRegister()) {
         // Move to GPR from GPR
-        __ Mv(destination.AsRegister<XRegister>(), source.AsRegister<XRegister>());
+        __ Mv(destination.AsCoreRegister<XRegister>(), source.AsCoreRegister<XRegister>());
       } else {
         DCHECK(destination.IsFpuRegister());
         if (DataType::Is64BitType(dst_type)) {
-          __ FMvDX(destination.AsFpuRegister<FRegister>(), source.AsRegister<XRegister>());
+          __ FMvDX(destination.AsFpuRegister<FRegister>(), source.AsCoreRegister<XRegister>());
         } else {
-          __ FMvWX(destination.AsFpuRegister<FRegister>(), source.AsRegister<XRegister>());
+          __ FMvWX(destination.AsFpuRegister<FRegister>(), source.AsCoreRegister<XRegister>());
         }
       }
     } else if (source.IsFpuRegister()) {
@@ -6414,9 +6496,9 @@ void CodeGeneratorRISCV64::MoveLocation(Location destination,
       } else {
         DCHECK(destination.IsCoreRegister());
         if (DataType::Is64BitType(dst_type)) {
-          __ FMvXD(destination.AsRegister<XRegister>(), source.AsFpuRegister<FRegister>());
+          __ FMvXD(destination.AsCoreRegister<XRegister>(), source.AsFpuRegister<FRegister>());
         } else {
-          __ FMvXW(destination.AsRegister<XRegister>(), source.AsFpuRegister<FRegister>());
+          __ FMvXW(destination.AsCoreRegister<XRegister>(), source.AsFpuRegister<FRegister>());
         }
       }
     }
@@ -6442,13 +6524,13 @@ void CodeGeneratorRISCV64::MoveLocation(Location destination,
       // Move to stack from GPR/FPR
       if (destination.IsDoubleStackSlot()) {
         if (source.IsCoreRegister()) {
-          __ Stored(source.AsRegister<XRegister>(), SP, destination.GetStackIndex());
+          __ Stored(source.AsCoreRegister<XRegister>(), SP, destination.GetStackIndex());
         } else {
           __ FStored(source.AsFpuRegister<FRegister>(), SP, destination.GetStackIndex());
         }
       } else {
         if (source.IsCoreRegister()) {
-          __ Storew(source.AsRegister<XRegister>(), SP, destination.GetStackIndex());
+          __ Storew(source.AsCoreRegister<XRegister>(), SP, destination.GetStackIndex());
         } else {
           __ FStorew(source.AsFpuRegister<FRegister>(), SP, destination.GetStackIndex());
         }
@@ -6649,7 +6731,7 @@ void CodeGeneratorRISCV64::GenerateImplicitNullCheck(HNullCheck* instruction) {
   }
   Location obj = instruction->GetLocations()->InAt(0);
 
-  __ Lw(Zero, obj.AsRegister<XRegister>(), 0);
+  __ Lw(Zero, obj.AsCoreRegister<XRegister>(), 0);
   RecordPcInfo(instruction);
 }
 
@@ -6659,7 +6741,7 @@ void CodeGeneratorRISCV64::GenerateExplicitNullCheck(HNullCheck* instruction) {
 
   Location obj = instruction->GetLocations()->InAt(0);
 
-  __ Beqz(obj.AsRegister<XRegister>(), slow_path->GetEntryLabel());
+  __ Beqz(obj.AsCoreRegister<XRegister>(), slow_path->GetEntryLabel());
 }
 
 HLoadString::LoadKind CodeGeneratorRISCV64::GetSupportedLoadStringKind(
@@ -7047,40 +7129,40 @@ void CodeGeneratorRISCV64::LoadMethod(MethodLoadKind load_kind, Location temp, H
       DCHECK(GetCompilerOptions().IsBootImage() || GetCompilerOptions().IsBootImageExtension());
       CodeGeneratorRISCV64::PcRelativePatchInfo* info_high =
           NewBootImageMethodPatch(invoke->GetResolvedMethodReference());
-      EmitPcRelativeAuipcPlaceholder(info_high, temp.AsRegister<XRegister>());
+      EmitPcRelativeAuipcPlaceholder(info_high, temp.AsCoreRegister<XRegister>());
       CodeGeneratorRISCV64::PcRelativePatchInfo* info_low =
           NewBootImageMethodPatch(invoke->GetResolvedMethodReference(), info_high);
       EmitPcRelativeAddiPlaceholder(
-          info_low, temp.AsRegister<XRegister>(), temp.AsRegister<XRegister>());
+          info_low, temp.AsCoreRegister<XRegister>(), temp.AsCoreRegister<XRegister>());
       break;
     }
     case MethodLoadKind::kBootImageRelRo: {
       uint32_t boot_image_offset = GetBootImageOffset(invoke);
-      LoadBootImageRelRoEntry(temp.AsRegister<XRegister>(), boot_image_offset);
+      LoadBootImageRelRoEntry(temp.AsCoreRegister<XRegister>(), boot_image_offset);
       break;
     }
     case MethodLoadKind::kAppImageRelRo: {
       DCHECK(GetCompilerOptions().IsAppImage());
       PcRelativePatchInfo* info_high =
           NewAppImageMethodPatch(invoke->GetResolvedMethodReference());
-      EmitPcRelativeAuipcPlaceholder(info_high, temp.AsRegister<XRegister>());
+      EmitPcRelativeAuipcPlaceholder(info_high, temp.AsCoreRegister<XRegister>());
       PcRelativePatchInfo* info_low =
           NewAppImageMethodPatch(invoke->GetResolvedMethodReference(), info_high);
       EmitPcRelativeLwuPlaceholder(
-          info_low, temp.AsRegister<XRegister>(), temp.AsRegister<XRegister>());
+          info_low, temp.AsCoreRegister<XRegister>(), temp.AsCoreRegister<XRegister>());
       break;
     }
     case MethodLoadKind::kBssEntry: {
       PcRelativePatchInfo* info_high = NewMethodBssEntryPatch(invoke->GetMethodReference());
-      EmitPcRelativeAuipcPlaceholder(info_high, temp.AsRegister<XRegister>());
+      EmitPcRelativeAuipcPlaceholder(info_high, temp.AsCoreRegister<XRegister>());
       PcRelativePatchInfo* info_low =
           NewMethodBssEntryPatch(invoke->GetMethodReference(), info_high);
       EmitPcRelativeLdPlaceholder(
-          info_low, temp.AsRegister<XRegister>(), temp.AsRegister<XRegister>());
+          info_low, temp.AsCoreRegister<XRegister>(), temp.AsCoreRegister<XRegister>());
       break;
     }
     case MethodLoadKind::kJitDirectAddress: {
-      __ LoadConst64(temp.AsRegister<XRegister>(),
+      __ LoadConst64(temp.AsCoreRegister<XRegister>(),
                      reinterpret_cast<uint64_t>(invoke->GetResolvedMethod()));
       break;
     }
@@ -7106,7 +7188,7 @@ void CodeGeneratorRISCV64::GenerateStaticOrDirectCall(HInvokeStaticOrDirect* inv
       // temp = thread->string_init_entrypoint
       uint32_t offset =
           GetThreadOffset<kRiscv64PointerSize>(invoke->GetStringInitEntryPoint()).Int32Value();
-      __ Loadd(temp.AsRegister<XRegister>(), TR, offset);
+      __ Loadd(temp.AsCoreRegister<XRegister>(), TR, offset);
       break;
     }
     case MethodLoadKind::kRecursive:
@@ -7149,7 +7231,7 @@ void CodeGeneratorRISCV64::GenerateStaticOrDirectCall(HInvokeStaticOrDirect* inv
     case CodePtrLocation::kCallArtMethod:
       // RA = callee_method->entry_point_from_quick_compiled_code_;
       __ Loadd(RA,
-               callee_method.AsRegister<XRegister>(),
+               callee_method.AsCoreRegister<XRegister>(),
                ArtMethod::EntryPointFromQuickCompiledCodeOffset(kRiscv64PointerSize).Int32Value());
       // RA()
       __ Jalr(RA);
@@ -7165,7 +7247,7 @@ void CodeGeneratorRISCV64::GenerateStaticOrDirectCall(HInvokeStaticOrDirect* inv
       } else {
         // RA = callee_method->ptr_sized_fields_.data_;  // EntryPointFromJni
         MemberOffset offset = ArtMethod::EntryPointFromJniOffset(kRiscv64PointerSize);
-        __ Loadd(RA, callee_method.AsRegister<XRegister>(), offset.Int32Value());
+        __ Loadd(RA, callee_method.AsCoreRegister<XRegister>(), offset.Int32Value());
       }
       __ Jalr(RA);
       RecordPcInfo(invoke, slow_path);
@@ -7225,7 +7307,7 @@ void CodeGeneratorRISCV64::GenerateVirtualCall(HInvokeVirtual* invoke,
   // guaranteed that the receiver is the first register of the calling convention.
   InvokeDexCallingConvention calling_convention;
   XRegister receiver = calling_convention.GetRegisterAt(0);
-  XRegister temp = temp_location.AsRegister<XRegister>();
+  XRegister temp = temp_location.AsCoreRegister<XRegister>();
   MemberOffset method_offset =
       mirror::Class::EmbeddedVTableEntryOffset(invoke->GetVTableIndex(), kRiscv64PointerSize);
   MemberOffset class_offset = mirror::Object::ClassOffset();
@@ -7264,8 +7346,8 @@ void CodeGeneratorRISCV64::MoveFromReturnRegister(Location trg, DataType::Type t
   DCHECK_NE(type, DataType::Type::kVoid);
 
   if (DataType::IsIntegralType(type) || type == DataType::Type::kReference) {
-    XRegister trg_reg = trg.AsRegister<XRegister>();
-    XRegister res_reg = Riscv64ReturnLocation(type).AsRegister<XRegister>();
+    XRegister trg_reg = trg.AsCoreRegister<XRegister>();
+    XRegister res_reg = Riscv64ReturnLocation(type).AsCoreRegister<XRegister>();
     if (trg_reg != res_reg) {
       __ Mv(trg_reg, res_reg);
     }

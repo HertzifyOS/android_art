@@ -35,6 +35,10 @@ inline void VirtualThreadContext::SetId(int64_t id) {
   SetField64<kTransactionActive>(IdOffset(), id);
 }
 
+inline uint32_t VirtualThreadContext::GetMonitorThreadId() {
+  return GetField32(MonitorThreadIdOffset());
+}
+
 inline ObjPtr<String> VirtualThreadContext::GetCarrierName() {
   return GetFieldObject<String>(CarrierNameOffset());
 }

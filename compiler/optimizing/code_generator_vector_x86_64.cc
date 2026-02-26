@@ -84,7 +84,7 @@ void InstructionCodeGeneratorX86_64::VisitVecReplicateScalar(HVecReplicateScalar
     case DataType::Type::kBool:
     case DataType::Type::kUint8:
     case DataType::Type::kInt8:
-      __ movd(dst, locations->InAt(0).AsRegister<CpuRegister>());
+      __ movd(dst, locations->InAt(0).AsCoreRegister<CpuRegister>());
       if (uses_avx2) {
         __ vpbroadcastb(dst, dst);
       } else {
@@ -95,7 +95,7 @@ void InstructionCodeGeneratorX86_64::VisitVecReplicateScalar(HVecReplicateScalar
       break;
     case DataType::Type::kUint16:
     case DataType::Type::kInt16:
-      __ movd(dst, locations->InAt(0).AsRegister<CpuRegister>());
+      __ movd(dst, locations->InAt(0).AsCoreRegister<CpuRegister>());
       if (uses_avx2) {
         __ vpbroadcastw(dst, dst);
       } else {
@@ -104,7 +104,7 @@ void InstructionCodeGeneratorX86_64::VisitVecReplicateScalar(HVecReplicateScalar
       }
       break;
     case DataType::Type::kInt32:
-      __ movd(dst, locations->InAt(0).AsRegister<CpuRegister>());
+      __ movd(dst, locations->InAt(0).AsCoreRegister<CpuRegister>());
       if (uses_avx2) {
         __ vpbroadcastd(dst, dst);
       } else {
@@ -112,7 +112,7 @@ void InstructionCodeGeneratorX86_64::VisitVecReplicateScalar(HVecReplicateScalar
       }
       break;
     case DataType::Type::kInt64:
-      __ movq(dst, locations->InAt(0).AsRegister<CpuRegister>());
+      __ movq(dst, locations->InAt(0).AsCoreRegister<CpuRegister>());
       if (uses_avx2) {
         __ vpbroadcastq(dst, dst);
       } else {
@@ -186,10 +186,10 @@ void InstructionCodeGeneratorX86_64::VisitVecExtractScalar(HVecExtractScalar* in
       LOG(FATAL) << "Unsupported SIMD type: " << instruction->GetPackedType();
       UNREACHABLE();
     case DataType::Type::kInt32:
-      __ movd(locations->Out().AsRegister<CpuRegister>(), src);
+      __ movd(locations->Out().AsCoreRegister<CpuRegister>(), src);
       break;
     case DataType::Type::kInt64:
-      __ movq(locations->Out().AsRegister<CpuRegister>(), src);
+      __ movq(locations->Out().AsCoreRegister<CpuRegister>(), src);
       break;
     case DataType::Type::kFloat32:
     case DataType::Type::kFloat64: {
@@ -1105,10 +1105,10 @@ void InstructionCodeGeneratorX86_64::VisitVecSetScalars(HVecSetScalars* instruct
       LOG(FATAL) << "Unsupported SIMD type: " << instruction->GetPackedType();
       UNREACHABLE();
     case DataType::Type::kInt32:
-      __ movd(dst, locations->InAt(0).AsRegister<CpuRegister>());
+      __ movd(dst, locations->InAt(0).AsCoreRegister<CpuRegister>());
       break;
     case DataType::Type::kInt64:
-      __ movq(dst, locations->InAt(0).AsRegister<CpuRegister>());
+      __ movq(dst, locations->InAt(0).AsCoreRegister<CpuRegister>());
       break;
     case DataType::Type::kFloat32:
       __ movss(dst, locations->InAt(0).AsFpuVecRegister<XmmRegister>());
@@ -1242,7 +1242,8 @@ static Address VecAddress(LocationSummary* locations, size_t size, bool is_strin
   uint32_t offset = is_string_char_at
       ? mirror::String::ValueOffset().Uint32Value()
       : mirror::Array::DataOffset(size).Uint32Value();
-  return CodeGeneratorX86_64::ArrayAddress(base.AsRegister<CpuRegister>(), index, scale, offset);
+  return CodeGeneratorX86_64::ArrayAddress(
+      base.AsCoreRegister<CpuRegister>(), index, scale, offset);
 }
 
 void LocationsBuilderX86_64::VisitVecLoad(HVecLoad* instruction) {
@@ -1274,7 +1275,8 @@ void InstructionCodeGeneratorX86_64::VisitVecLoad(HVecLoad* instruction) {
         static_assert(static_cast<uint32_t>(mirror::StringCompressionFlag::kCompressed) == 0u,
                       "Expecting 0=compressed, 1=uncompressed");
         uint32_t count_offset = mirror::String::CountOffset().Uint32Value();
-        __ testb(Address(locations->InAt(0).AsRegister<CpuRegister>(), count_offset), Immediate(1));
+        __ testb(Address(locations->InAt(0).AsCoreRegister<CpuRegister>(), count_offset),
+                 Immediate(1));
         __ j(kNotZero, &not_compressed);
         // Zero extend 8/16 compressed bytes into 8/16 chars.
         if (uses_avx2) {

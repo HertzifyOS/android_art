@@ -986,7 +986,18 @@ art_cc_library_static {
 // Release version of the ART runtime library, bundled with `libart-compiler` for JIT support.
 art_cc_library {
     name: "libart",
-    defaults: ["libart_defaults"],
+    defaults: [
+        "libart_defaults",
+    ],
+
+    arch: {
+        arm64: {
+            // Our hand-written assembler doesn't have the BTI ELF note,
+            // so ignore the fact that the resulting libart has no BTI.
+            ldflags: ["-Wl,-z,bti-report=none"],
+        },
+    },
+
     whole_static_libs: [
         "libart-compiler",
         "libart-runtime",
