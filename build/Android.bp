@@ -142,6 +142,11 @@ art_global_defaults {
     ],
 
     arch: {
+        arm64: {
+            // Our hand-written assembler doesn't have BTI support,
+            // so ignore the fact that basically everything we build has no BTI.
+            ldflags: ["-Wl,-z,bti-report=none"],
+        },
         x86: {
             avx2: {
                 cflags: [
