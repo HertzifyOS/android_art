@@ -161,3 +161,10 @@ flag {
   description: "Skips adding background classes to the app profiles"
   bug: "485143995"
 }
+
+flag {
+  name: "jfield_id_change"
+  namespace: "art_performance"
+  description: "Flag for changing the representation of jfieldID"
+  bug: "481456995"
+}
