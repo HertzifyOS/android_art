@@ -97,18 +97,6 @@ struct VirtualThreadParkingVisitor final : public StackVisitor {
       return false;
     }
 
-    if (!shadow_frame->GetLockCountData().IsEmpty()) {
-      reason_ = kMonitor;
-      return false;
-    }
-
-    // If the verifier was able to verify the locks are balanced, the interpreter won't update the
-    // lock cound data. We need to walk the stack to find the locks here. Or should we just have an
-    // increment/decrement counter?
-    Monitor::VisitLocks(this, LockVisitingCallback, this);
-    if (reason_ == kMonitor) {
-      return false;
-    }
     DCHECK(reason_ == kNoReason);
 
     shadow_frame_count_++;
@@ -134,6 +122,7 @@ bool VirtualThreadPark(ObjPtr<mirror::VirtualThreadContext> v_context,
                        ObjPtr<mirror::Throwable> vm_error,
                        bool is_continuation_api,
                        PinningReason& reason_) {
+  CHECK(kIsVirtualThreadEnabled);
   Thread* self = Thread::Current();
   if (self->AreVirtualThreadFlagsEnabled(kContinuation) != is_continuation_api) {
     self->ThrowNewExceptionF("Ljava/lang/IllegalStateException;",

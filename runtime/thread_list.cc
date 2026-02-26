@@ -23,6 +23,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <map>
@@ -75,7 +76,8 @@ static constexpr uint64_t kLongThreadSuspendThreshold = MsToNs(5);
 static constexpr bool kDumpUnattachedThreadNativeStackForSigQuit = true;
 
 ThreadList::ThreadList(uint64_t thread_suspend_timeout_ns)
-    : suspend_all_count_(0),
+    : virtual_and_carrier_map_(nullptr),
+      suspend_all_count_(0),
       unregistering_count_(0),
       suspend_all_histogram_("suspend all histogram", 16, 64),
       long_suspend_(false),
@@ -1323,6 +1325,90 @@ bool ThreadList::SuspendThread(Thread* self,
   return true;
 }
 
+ThreadSuspensionResult ThreadList::SuspendPlatformOrVirtualThread(uint32_t thread_id,
+                                                                  SuspendReason reason,
+                                                                  Thread** carrier,
+                                                                  int attempt_of_4) {
+  CHECK_NE(thread_id, kInvalidThreadId);
+  Thread* const self = Thread::Current();
+  *carrier = nullptr;
+
+  ThreadState old_self_state = self->GetState();
+  VLOG(threads) << "SuspendPlatformOrVirtualThread starting";
+  self->TransitionFromSuspendedToRunnable();
+  Locks::thread_list_lock_->ExclusiveLock(self);
+  bool is_virtual = IsVirtualThreadSuspendCountAllocated(thread_id);
+  Thread* thread;
+  ThreadSuspensionResult result;
+  if (is_virtual) {
+    uint32_t platform_thread_id = GetCarrierThreadIdByVirtualThreadId(thread_id);
+    if (platform_thread_id == kInvalidThreadId) {  // unmounted virtual thread
+      VLOG(threads) << "SuspendPlatformOrVirtualThread found unmounted virtual thread: "
+          << thread_id;
+      IncrementVirtualThreadSuspendCount(thread_id);
+      Locks::thread_list_lock_->ExclusiveUnlock(self);
+      self->TransitionFromRunnableToSuspended(old_self_state);
+      return ThreadSuspensionResult::kResultSuccessVirtual;
+    } else {  // mounted virtual thread
+      thread = FindThreadByThreadId(platform_thread_id);
+      result = ThreadSuspensionResult::kResultSuccessVirtual;
+    }
+  } else {
+    thread = FindThreadByThreadId(thread_id);
+    result = ThreadSuspensionResult::kResultSuccessPlatform;
+  }
+
+  if (thread == nullptr) {
+    // There's a race in inflating a lock and the owner giving up ownership and then dying.
+    LOG(WARNING) << StringPrintf("No such thread id %d for suspend", thread_id);
+    Locks::thread_list_lock_->ExclusiveUnlock(self);
+    self->TransitionFromRunnableToSuspended(old_self_state);
+    return ThreadSuspensionResult::kResultFailure;
+  }
+  DCHECK(Contains(thread));
+  VLOG(threads) << "SuspendPlatformOrVirtualThread found thread: " << *thread;
+  if (is_virtual) {
+    IncrementVirtualThreadSuspendCount(thread_id);
+  }
+  // Releases thread_list_lock_ and mutator lock.
+  bool success = SuspendThread(self, thread, reason, old_self_state, __func__, attempt_of_4);
+  Locks::thread_list_lock_->AssertNotHeld(self);
+  if (success) {
+    *carrier = thread;
+    return result;
+  } else {
+    VLOG(threads) << "SuspendPlatformOrVirtualThread failed to suspend thread: " << *thread;
+    if (is_virtual) {
+      MutexLock mu(self, *Locks::thread_list_lock_);
+      DecrementVirtualThreadSuspendCount(thread_id);
+    }
+    return ThreadSuspensionResult::kResultFailure;
+  }
+}
+
+bool ThreadList::ResumePlatformOrVirtualThread(uint32_t thread_id,
+                                               Thread* carrier,
+                                               bool is_virtual,
+                                               SuspendReason reason) {
+  DCHECK(kIsVirtualThreadEnabled || !is_virtual)
+    << "Expect resuming virtual thread only when kIsVirtualThreadEnabled is enabled.";
+  if (!kIsVirtualThreadEnabled || !is_virtual) {
+    DCHECK_NE(carrier, nullptr);
+    return Resume(carrier, reason);
+  }
+
+  bool result;
+  if (carrier != nullptr) {  // Virtual thread is mounted.
+    result = Resume(carrier, reason);
+  } else {
+    result = true;
+  }
+  Thread* const self = Thread::Current();
+  MutexLock mu(self, *Locks::thread_list_lock_);
+  DecrementVirtualThreadSuspendCount(thread_id);
+  return result;
+}
+
 Thread* ThreadList::SuspendThreadByPeer(jobject peer, SuspendReason reason) {
   Thread* const self = Thread::Current();
   ThreadState old_self_state = self->GetState();
@@ -1590,7 +1676,7 @@ void ThreadList::Unregister(Thread* self, bool should_run_callbacks) {
   // list.
   self->Destroy(should_run_callbacks);
 
-  uint32_t thin_lock_id = self->GetThreadId();
+  uint32_t thread_id = self->GetThreadId();
   while (true) {
     // Remove and delete the Thread* while holding the thread_list_lock_ and
     // thread_suspend_count_lock_ so that the unregistering thread cannot be suspended.
@@ -1639,7 +1725,7 @@ void ThreadList::Unregister(Thread* self, bool should_run_callbacks) {
   // Release the thread ID after the thread is finished and deleted to avoid cases where we can
   // temporarily have multiple threads with the same thread id. When this occurs, it causes
   // problems in FindThreadByThreadId / SuspendThreadByThreadId.
-  ReleaseThreadId(nullptr, thin_lock_id);
+  ReleaseThreadId(nullptr, thread_id);
 
   // Clear the TLS data, so that the underlying native thread is recognizably detached.
   // (It may wish to reattach later.)
@@ -1743,6 +1829,88 @@ void ThreadList::ReleaseThreadId(Thread* self, uint32_t id) {
   DCHECK(id != kInvalidThreadId && id <= kMaxThreadId) << id;
   DCHECK(allocated_ids_.IsBitSet(id)) << id;
   allocated_ids_.ClearBit(id);
+}
+
+void ThreadList::AllocVirtualThreadSuspendCount(uint32_t id) {
+  MutexLock mu(Thread::Current(), *Locks::thread_list_lock_);
+  int32_t space_needed = id + 1 - virtual_thread_suspend_count_.size();
+  if (space_needed > 0) {
+    virtual_thread_suspend_count_.insert(virtual_thread_suspend_count_.end(), space_needed, 0u);
+  }
+  DCHECK_LT(id, virtual_thread_suspend_count_.size());
+  DCHECK_EQ(virtual_thread_suspend_count_[id], 0u);
+  virtual_thread_suspend_count_[id] = 1u;
+}
+
+void ThreadList::ReleaseVirtualThreadSuspendCount(uint32_t id) {
+  MutexLock mu(Thread::Current(), *Locks::thread_list_lock_);
+  DCHECK_LT(id, virtual_thread_suspend_count_.size());
+  DCHECK_NE(virtual_thread_suspend_count_[id], 0u);
+  virtual_thread_suspend_count_[id] = 0u;
+  // TODO(http://b/477012795): Shrink the vector if possible.
+}
+
+uint32_t ThreadList::GetVirtualThreadSuspendCount(uint32_t id) {
+  DCHECK_LT(id, virtual_thread_suspend_count_.size());
+  DCHECK_NE(virtual_thread_suspend_count_[id], 0u);
+  return virtual_thread_suspend_count_[id] - 1u;
+}
+
+bool ThreadList::IsVirtualThreadSuspended(Thread* self, uint32_t id) {
+  MutexLock mu(self, *Locks::thread_list_lock_);
+  return GetVirtualThreadSuspendCount(id) > 0u;
+}
+
+void ThreadList::IncrementVirtualThreadSuspendCount(uint32_t id) {
+  DCHECK_LT(id, virtual_thread_suspend_count_.size());
+  DCHECK_NE(virtual_thread_suspend_count_[id], 0u);
+  virtual_thread_suspend_count_[id] += 1;
+}
+
+void ThreadList::DecrementVirtualThreadSuspendCount(uint32_t id) {
+  DCHECK_LT(id, virtual_thread_suspend_count_.size());
+  DCHECK_GT(virtual_thread_suspend_count_[id], 1u);
+  virtual_thread_suspend_count_[id] -= 1;
+}
+
+bool ThreadList::IsVirtualThreadSuspendCountAllocated(uint32_t id) {
+  return id < virtual_thread_suspend_count_.size() && virtual_thread_suspend_count_[id] > 0u;
+}
+
+void ThreadList::AddMountedVirtualThread(MountedVirtualThreadData* entry) {
+  DCHECK(entry != nullptr);
+  DCHECK(entry->next_ == nullptr);
+  MountedVirtualThreadData* cur = virtual_and_carrier_map_;
+  entry->next_ = cur;
+  virtual_and_carrier_map_ = entry;
+}
+
+void ThreadList::RemoveMountedVirtualThreadByThreadId(uint32_t virtual_thread_id) {
+  DCHECK_NE(virtual_thread_id, kInvalidThreadId);
+  MountedVirtualThreadData** cur = &virtual_and_carrier_map_;
+  while (*cur != nullptr) {
+    MountedVirtualThreadData* entry = *cur;
+    if (entry->virtual_thread_id_ == virtual_thread_id) {
+      *cur = entry->next_;
+      entry->next_ = nullptr;
+      return;
+    }
+    cur = &entry->next_;
+  }
+  LOG(FATAL) << "Virtual thread id isn't found.";
+  UNREACHABLE();
+}
+
+uint32_t ThreadList::GetCarrierThreadIdByVirtualThreadId(uint32_t virtual_thread_id) {
+  DCHECK_NE(virtual_thread_id, kInvalidThreadId);
+  MountedVirtualThreadData* cur = virtual_and_carrier_map_;
+  while (cur != nullptr) {
+    if (cur->virtual_thread_id_ == virtual_thread_id) {
+      return cur->carrier_thread_id_;
+    }
+    cur = cur->next_;
+  }
+  return kInvalidThreadId;
 }
 
 ThreadList::ThreadIdBitVector::ThreadIdBitVector()
