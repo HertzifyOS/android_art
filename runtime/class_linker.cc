@@ -2438,7 +2438,7 @@ void ClassLinker::PruneDexCacheAndBssStringEntries(Thread* self) {
   ReaderMutexLock mu(self, *Locks::dex_lock_);
   InlinedVector<const OatFile*, 32u> pruned_oat_files;
   for (const auto& entry : dex_caches_) {
-    const DexFile* dex_file = entry.first;
+    const DexFile* dex_file = entry.second.dex_file;
     ObjPtr<mirror::DexCache> dex_cache =
         ObjPtr<mirror::DexCache>::DownCast(self->DecodeJObject(entry.second.weak_root));
     if (dex_cache != nullptr) {
@@ -4580,8 +4580,8 @@ void ClassLinker::RegisterDexFileLocked(const DexFile& dex_file,
   if (initialize_oat_file_data) {
     for (const auto& entry : dex_caches_) {
       if (!self->IsJWeakCleared(entry.second.weak_root) &&
-          entry.first->GetOatDexFile() != nullptr &&
-          entry.first->GetOatDexFile()->GetOatFile() == oat_file) {
+          entry.second.dex_file->GetOatDexFile() != nullptr &&
+          entry.second.dex_file->GetOatDexFile()->GetOatFile() == oat_file) {
         initialize_oat_file_data = false;  // Already initialized.
         break;
       }
@@ -4611,6 +4611,7 @@ void ClassLinker::RegisterDexFileLocked(const DexFile& dex_file,
   DexCacheData data;
   data.weak_root = dex_cache_jweak;
   data.class_table = ClassTableForClassLoader(class_loader);
+  data.dex_file = &dex_file;
   AddNativeDebugInfoForDex(self, &dex_file);
   DCHECK(data.class_table != nullptr);
   // Make sure to hold the dex cache live in the class table. This case happens for the boot class
@@ -4623,8 +4624,8 @@ void ClassLinker::RegisterDexFileLocked(const DexFile& dex_file,
     // remembered sets and generational GCs.
     WriteBarrier::ForEveryFieldWrite(class_loader);
   }
-  bool inserted = dex_caches_.emplace(&dex_file, std::move(data)).second;
-  CHECK(inserted);
+  bool inserted = dex_caches_.emplace(dex_file.Begin(), std::move(data)).second;
+  CHECK(inserted) << dex_file.GetLocation();
 }
 
 ObjPtr<mirror::DexCache> ClassLinker::DecodeDexCacheLocked(Thread* self, const DexCacheData* data) {
@@ -4803,7 +4804,7 @@ ObjPtr<mirror::DexCache> ClassLinker::FindDexCache(Thread* self, const DexFile& 
   for (const auto& entry : dex_caches_) {
     const DexCacheData& data = entry.second;
     if (DecodeDexCacheLocked(self, &data) != nullptr) {
-      LOG(FATAL_WITHOUT_ABORT) << "Registered dex file " << entry.first->GetLocation();
+      LOG(FATAL_WITHOUT_ABORT) << "Registered dex file " << data.dex_file->GetLocation();
     }
   }
   LOG(FATAL) << "Failed to find DexCache for DexFile " << dex_file.GetLocation()
@@ -4830,11 +4831,11 @@ ObjPtr<mirror::DexCache> ClassLinker::FindDexCache(Thread* self, const OatDexFil
   for (const auto& entry : dex_caches_) {
     const DexCacheData& data = entry.second;
     if (DecodeDexCacheLocked(self, &data) != nullptr) {
-      const OatDexFile* other_oat_dex_file = entry.first->GetOatDexFile();
+      const OatDexFile* other_oat_dex_file = data.dex_file->GetOatDexFile();
       const OatFile* oat_file =
           (other_oat_dex_file == nullptr) ? nullptr : other_oat_dex_file->GetOatFile();
       LOG(FATAL_WITHOUT_ABORT)
-          << "Registered dex file " << entry.first->GetLocation()
+          << "Registered dex file " << data.dex_file->GetLocation()
           << " oat_dex_file=" << other_oat_dex_file
           << " oat_file=" << oat_file
           << " oat_location=" << (oat_file == nullptr ? "null" : oat_file->GetLocation())
@@ -4856,7 +4857,7 @@ ClassTable* ClassLinker::FindClassTable(Thread* self, ObjPtr<mirror::DexCache> d
   const DexFile* dex_file = dex_cache->GetDexFile();
   DCHECK(dex_file != nullptr);
   ReaderMutexLock mu(self, *Locks::dex_lock_);
-  auto it = dex_caches_.find(dex_file);
+  auto it = dex_caches_.find(dex_file->Begin());
   if (it != dex_caches_.end()) {
     const DexCacheData& data = it->second;
     ObjPtr<mirror::DexCache> registered_dex_cache = DecodeDexCacheLocked(self, &data);
@@ -4871,13 +4872,13 @@ ClassTable* ClassLinker::FindClassTable(Thread* self, ObjPtr<mirror::DexCache> d
 const ClassLinker::DexCacheData* ClassLinker::FindDexCacheDataLocked(
     const OatDexFile& oat_dex_file) {
   auto it = std::find_if(dex_caches_.begin(), dex_caches_.end(), [&](const auto& entry) {
-    return entry.first->GetOatDexFile() == &oat_dex_file;
+    return entry.second.dex_file->GetOatDexFile() == &oat_dex_file;
   });
   return it != dex_caches_.end() ? &it->second : nullptr;
 }
 
 const ClassLinker::DexCacheData* ClassLinker::FindDexCacheDataLocked(const DexFile& dex_file) {
-  auto it = dex_caches_.find(&dex_file);
+  auto it = dex_caches_.find(dex_file.Begin());
   return it != dex_caches_.end() ? &it->second : nullptr;
 }
 
@@ -11062,7 +11063,7 @@ void ClassLinker::DumpForSigQuit(std::ostream& os) {
             os << ":";
           }
           saw_one_dex_file = true;
-          os << entry.first->GetLocation();
+          os << dex_cache.dex_file->GetLocation();
         }
       }
       os << "]";
@@ -11377,8 +11378,8 @@ void ClassLinker::CleanupClassLoaders() {
   {
     WriterMutexLock mu(self, *Locks::dex_lock_);
     for (auto it = dex_caches_.begin(), end = dex_caches_.end(); it != end; ) {
-      const DexFile* dex_file = it->first;
       const DexCacheData& data = it->second;
+      const DexFile* dex_file = data.dex_file;
       if (self->DecodeJObject(data.weak_root) == nullptr) {
         DCHECK(to_delete.end() != std::find_if(
             to_delete.begin(),
@@ -11718,9 +11719,9 @@ const void* ClassLinker::GetTransactionalInterpreter() {
 void ClassLinker::RemoveDexFromCaches(const DexFile& dex_file) {
   ReaderMutexLock mu(Thread::Current(), *Locks::dex_lock_);
 
-  auto it = dex_caches_.find(&dex_file);
+  auto it = dex_caches_.find(dex_file.Begin());
   if (it != dex_caches_.end()) {
-      dex_caches_.erase(it);
+    dex_caches_.erase(it);
   }
 }
 
@@ -11755,5 +11756,17 @@ template ObjPtr<mirror::Class> ClassLinker::AllocClass</* kMovable= */ false>(
     Thread* self,
     ObjPtr<mirror::Class> java_lang_Class,
     uint32_t class_size);
+
+ObjPtr<mirror::DexCache> ClassLinker::LookupDexCache(const dex::FieldId& field_id) {
+  Thread* self = Thread::Current();
+  ReaderMutexLock mu(self, *Locks::dex_lock_);
+  auto it = dex_caches_.upper_bound(reinterpret_cast<const uint8_t*>(&field_id));
+  if (it == dex_caches_.begin()) {
+    return nullptr;
+  }
+  it--;
+  const DexCacheData& data = it->second;
+  return DecodeDexCacheLocked(self, &data);
+}
 
 }  // namespace art

@@ -1453,7 +1453,9 @@ class OatDumper {
           soa.Self(),
           vios,
           dex_method_idx,
-          dex_file,
+          // Note this may be different than `dex_file` in case the file was
+          // already registered.
+          dex_cache->GetDexFile(),
           dex_cache,
           *options_.class_loader_,
           class_def,

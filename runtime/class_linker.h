@@ -22,7 +22,6 @@
 #include <set>
 #include <string>
 #include <type_traits>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -253,6 +252,9 @@ class ClassLinker {
                                            std::string_view descriptor,
                                            ObjPtr<mirror::ClassLoader> class_loader)
       REQUIRES(!Locks::classlinker_classes_lock_)
+      REQUIRES_SHARED(Locks::mutator_lock_);
+
+  ObjPtr<mirror::DexCache> LookupDexCache(const dex::FieldId& field_id)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   ObjPtr<mirror::Class> LookupPrimitiveClass(char type) REQUIRES_SHARED(Locks::mutator_lock_);
@@ -860,7 +862,7 @@ class ClassLinker {
 
   struct DexCacheData {
     // Construct an invalid data object.
-    DexCacheData() : weak_root(nullptr), class_table(nullptr) {
+    DexCacheData() : weak_root(nullptr), class_table(nullptr), dex_file(nullptr) {
       static std::atomic_uint64_t s_registration_count(0);
       registration_index = s_registration_count.fetch_add(1, std::memory_order_seq_cst);
     }
@@ -877,6 +879,8 @@ class ClassLinker {
     // Monotonically increasing integer which records the order in which DexFiles were registered.
     // Used only to preserve determinism when creating compiled image.
     uint64_t registration_index;
+    // The dex file associated with the dex cache.
+    const DexFile* dex_file;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(DexCacheData);
@@ -1247,7 +1251,7 @@ class ClassLinker {
                              ObjPtr<mirror::ClassLoader> class_loader)
       REQUIRES(Locks::dex_lock_)
       REQUIRES_SHARED(Locks::mutator_lock_);
-  const DexCacheData* FindDexCacheDataLocked(const DexFile& dex_file)
+  EXPORT const DexCacheData* FindDexCacheDataLocked(const DexFile& dex_file)
       REQUIRES_SHARED(Locks::dex_lock_);
   const DexCacheData* FindDexCacheDataLocked(const OatDexFile& oat_dex_file)
       REQUIRES_SHARED(Locks::dex_lock_);
@@ -1319,7 +1323,7 @@ class ClassLinker {
   size_t GetDexCacheCount() REQUIRES_SHARED(Locks::mutator_lock_, Locks::dex_lock_) {
     return dex_caches_.size();
   }
-  const std::unordered_map<const DexFile*, DexCacheData>& GetDexCachesData()
+  const SafeMap<const uint8_t*, DexCacheData>& GetDexCachesData()
       REQUIRES_SHARED(Locks::mutator_lock_, Locks::dex_lock_) {
     return dex_caches_;
   }
@@ -1405,7 +1409,8 @@ class ClassLinker {
 
   // JNI weak globals and side data to allow dex caches to get unloaded. We lazily delete weak
   // globals when we register new dex files.
-  std::unordered_map<const DexFile*, DexCacheData> dex_caches_ GUARDED_BY(Locks::dex_lock_);
+  // The key is the dex file header pointer (dex_file->Begin()).
+  SafeMap<const uint8_t*, DexCacheData> dex_caches_ GUARDED_BY(Locks::dex_lock_);
 
   // This contains the class loaders which have class tables. It is populated by
   // InsertClassTableForClassLoader.

@@ -585,11 +585,32 @@ ArtField* FindFieldJNI(const ScopedObjectAccess& soa,
 
 
 jfieldID EncodeArtFieldInternal(ArtField* field) {
-  return reinterpret_cast<jfieldID>(field);
+  if (!com::android::art::rw::flags::jfield_id_change()) {
+    return reinterpret_cast<jfieldID>(field);
+  }
+  if (field == nullptr) {
+    return nullptr;
+  }
+  return reinterpret_cast<jfieldID>(const_cast<dex::FieldId*>(
+      &field->GetDexFile()->GetFieldId(field->GetDexFieldIndex())));
 }
 
 ArtField* DecodeArtFieldInternal(jfieldID fid) {
-  return reinterpret_cast<ArtField*>(fid);
+  if (!com::android::art::rw::flags::jfield_id_change()) {
+    return reinterpret_cast<ArtField*>(fid);
+  }
+  ScopedAssertNoThreadSuspension sants("DecodeArtField");
+  dex::FieldId* field_id = reinterpret_cast<dex::FieldId*>(fid);
+  if (field_id == nullptr) {
+    return nullptr;
+  }
+  ClassLinker* class_linker = Runtime::Current()->GetClassLinker();
+  ObjPtr<mirror::DexCache> dex_cache = class_linker->LookupDexCache(*field_id);
+  const DexFile& dex_file = *dex_cache->GetDexFile();
+  ObjPtr<mirror::Class> klass = class_linker->LookupResolvedType(
+      field_id->class_idx_, dex_cache, dex_cache->GetClassLoader());
+  return klass->FindDeclaredField(dex_file.GetFieldNameView(*field_id),
+                                  dex_file.GetFieldTypeDescriptorView(*field_id));
 }
 
 int ThrowNewException(JNIEnv* env, jclass exception_class, const char* msg, jobject cause)
