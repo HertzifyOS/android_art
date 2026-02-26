@@ -15,6 +15,7 @@
  */
 
 #include "statsd.h"
+#include <optional>
 
 #include "android-base/properties.h"
 #include "arch/instruction_set.h"
@@ -207,6 +208,12 @@ constexpr std::optional<int32_t> EncodeDatumId(DatumId datum_id) {
       return std::make_optional(
           statsd::
               ART_DATUM_DELTA_REPORTED__KIND__ART_DATUM_DELTA_GC_APP_SLOW_PATH_DURING_FULL_HEAP_COLLECTION_DURATION_MILLIS);
+    case DatumId::kBcpStaticFinalFieldOverwrite:
+      return std::make_optional(
+          statsd::ART_DATUM_DELTA_REPORTED__KIND__ART_DATUM_DELTA_BCP_STATIC_FINAL_FIELD_OVERWRITE_COUNT);
+    case DatumId::kAppStaticFinalFieldOverwrite:
+      return std::make_optional(
+          statsd::ART_DATUM_DELTA_REPORTED__KIND__ART_DATUM_DELTA_APP_STATIC_FINAL_FIELD_OVERWRITE_COUNT);
   }
 }
 
