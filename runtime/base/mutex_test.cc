@@ -14,14 +14,10 @@
  * limitations under the License.
  */
 
-#include "base/mutex.h"
-#include "base/locks.h"
 #include "mutex-inl.h"
 
 #include "common_runtime_test.h"
 #include "thread-current-inl.h"
-#include "thread.h"
-#include "thread_list.h"
 
 // The standard ASSERT macros don't play correctly with thread-safety analysis, in that they
 // apparently do not always execute the rest of the function, and can thus result in function
@@ -235,78 +231,6 @@ static void SharedTryLockUnlockTest() {
 
 TEST_F(MutexTest, SharedTryLockUnlock) {
   SharedTryLockUnlockTest();
-}
-
-class ScopedVirtualThreadId {
- public:
-  ScopedVirtualThreadId(): id_(AllocThreadId()) {}
-  ~ScopedVirtualThreadId() {
-    ThreadList* thread_list = Runtime::Current()->GetThreadList();
-    thread_list->ReleaseVirtualThreadSuspendCount(id_);
-    thread_list->ReleaseThreadId(Thread::Current(), id_);
-  }
-  uint32_t GetId() const {
-    return id_;
-  }
- private:
-  static uint32_t AllocThreadId() {
-    ThreadList* thread_list = Runtime::Current()->GetThreadList();
-    Thread* self = Thread::Current();
-    uint32_t id = thread_list->AllocThreadId(self);
-    thread_list->AllocVirtualThreadSuspendCount(id);
-    return id;
-  }
- private:
-  const uint32_t id_;
-};
-
-class VirtualThreadMounter {
- public:
-  VirtualThreadMounter(MountedVirtualThreadData* mounted_data) REQUIRES_SHARED(Locks::mutator_lock_) {
-    Thread* self = Thread::Current();
-    self->TrySetMountedVirtualThreadData(mounted_data);
-  }
-  ~VirtualThreadMounter() {
-    Thread* self = Thread::Current();
-    self->TryClearMountedVirtualThreadData();
-  }
-};
-
-TEST_F(MutexTest, MonitorLockUnlock) {
-  ASSERT_TRUE(Runtime::Current() != nullptr);
-  Thread* self = Thread::Current();
-  pid_t tid = self->GetTid();
-  uint32_t carrier_id = self->GetThreadId();
-  MonitorMutex mu;
-
-  ASSERT_EQ(tid, mu.GetSelfId(self));
-
-  MutexTester::AssertDepth(mu, 0U);
-  mu.Lock(self);
-  MutexTester::AssertDepth(mu, 1U);
-  mu.Unlock(self);
-  MutexTester::AssertDepth(mu, 0U);
-
-  if (!kIsVirtualThreadEnabled) {
-    return;
-  }
-
-  ScopedVirtualThreadId virtual_thread_id_holder;
-  uint32_t virtual_thread_id = virtual_thread_id_holder.GetId();
-  ASSERT_NE(virtual_thread_id, carrier_id);
-
-  MountedVirtualThreadData mounted_data(virtual_thread_id, carrier_id, 0);
-  ScopedObjectAccess soa(self);
-  VirtualThreadMounter mounter(&mounted_data);
-  ASSERT_EQ(virtual_thread_id, self->GetVirtualThreadId());
-  ASSERT_EQ(virtual_thread_id, self->GetMonitorThreadId());
-  ASSERT_EQ(virtual_thread_id | MonitorMutex::kVTFlag, mu.GetSelfId(self));
-
-  MutexTester::AssertDepth(mu, 0U);
-  mu.Lock(self);
-  MutexTester::AssertDepth(mu, 1U);
-  mu.Unlock(self);
-  MutexTester::AssertDepth(mu, 0U);
 }
 
 }  // namespace art

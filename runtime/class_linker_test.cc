@@ -866,14 +866,11 @@ struct VirtualThreadContextOffsets : public CheckOffsets<mirror::VirtualThreadCo
   VirtualThreadContextOffsets()
       : CheckOffsets<mirror::VirtualThreadContext>(false, "Ldalvik/system/VirtualThreadContext;") {
     addOffset(OFFSETOF_MEMBER(mirror::VirtualThreadContext, carrier_name_), "carrierName");
-    addOffset(OFFSETOF_MEMBER(mirror::VirtualThreadContext, id_), "id");
-    addOffset(OFFSETOF_MEMBER(mirror::VirtualThreadContext, monitor_thread_id_), "monitorThreadId");
-    addOffset(OFFSETOF_MEMBER(mirror::VirtualThreadContext, monitor_thread_id_cleanable_),
-              "monitorThreadIdCleanable");
     addOffset(OFFSETOF_MEMBER(mirror::VirtualThreadContext, parked_states_), "parkedStates");
     addOffset(OFFSETOF_MEMBER(mirror::VirtualThreadContext, pinned_carrier_thread_),
               "pinnedCarrierThread");
     addOffset(OFFSETOF_MEMBER(mirror::VirtualThreadContext, target_), "target");
+    addOffset(OFFSETOF_MEMBER(mirror::VirtualThreadContext, id_), "id");
   }
 };
 
@@ -918,8 +915,6 @@ TEST_F(ClassLinkerTest, ValidateFieldOrderOfJavaCppUnionClasses) {
   EXPECT_TRUE(ByteBufferViewVarHandleOffsets().Check());
   EXPECT_TRUE(StackFrameInfoOffsets().Check());
   EXPECT_TRUE(MemorySegmentVarHandleOffsets().Check());
-  EXPECT_TRUE(VirtualThreadContextOffsets().Check());
-  EXPECT_TRUE(VirtualThreadFrameOffsets().Check());
 }
 
 TEST_F(ClassLinkerTest, FindClassNonexistent) {

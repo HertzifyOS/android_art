@@ -38,8 +38,6 @@ class MANAGED VirtualThreadContext final : public Object {
   template <bool kTransactionActive = false>
   void SetId(int64_t id) REQUIRES_SHARED(Locks::mutator_lock_);
 
-  uint32_t GetMonitorThreadId() REQUIRES_SHARED(Locks::mutator_lock_);
-
   ObjPtr<String> GetCarrierName() REQUIRES_SHARED(Locks::mutator_lock_);
   template <bool kTransactionActive = false>
   void SetCarrierName(ObjPtr<String> name) REQUIRES_SHARED(Locks::mutator_lock_);
@@ -63,18 +61,13 @@ class MANAGED VirtualThreadContext final : public Object {
 
  private:
   HeapReference<String> carrier_name_;
-  HeapReference<Object> monitor_thread_id_cleanable_;
   HeapReference<Object> parked_states_;
   HeapReference<Object> pinned_carrier_thread_;
   HeapReference<Object> target_;
-  uint32_t monitor_thread_id_;
   int64_t id_;
 
   static constexpr MemberOffset IdOffset() {
     return MemberOffset(OFFSETOF_MEMBER(VirtualThreadContext, id_));
-  }
-  static constexpr MemberOffset MonitorThreadIdOffset() {
-    return MemberOffset(OFFSETOF_MEMBER(VirtualThreadContext, monitor_thread_id_));
   }
   static constexpr MemberOffset CarrierNameOffset() {
     return MemberOffset(OFFSETOF_MEMBER(VirtualThreadContext, carrier_name_));

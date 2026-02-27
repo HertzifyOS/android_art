@@ -29,7 +29,6 @@
 #include "jni.h"
 #include "reflective_handle_scope.h"
 #include "suspend_reason.h"
-#include "thread.h"
 #include "thread_state.h"
 
 namespace art HIDDEN {
@@ -45,12 +44,6 @@ class RootVisitor;
 class Thread;
 class TimingLogger;
 enum VisitRootFlags : uint8_t;
-
-enum class ThreadSuspensionResult {
-  kResultFailure,
-  kResultSuccessPlatform,
-  kResultSuccessVirtual,
-};
 
 class ThreadList {
  public:
@@ -114,21 +107,6 @@ class ThreadList {
       REQUIRES(!Locks::mutator_lock_,
                !Locks::thread_list_lock_,
                !Locks::thread_suspend_count_lock_);
-
-  ThreadSuspensionResult SuspendPlatformOrVirtualThread(uint32_t thread_id,
-                                                        SuspendReason reason,
-                                                        /*out*/ Thread** carrier,
-                                                        int attempt_of_4 = 0)
-      REQUIRES(!Locks::mutator_lock_,
-               !Locks::thread_list_lock_,
-               !Locks::thread_suspend_count_lock_);
-
-  // Return true if the thread is resumed successfully. Otherwise, it returns false.
-  bool ResumePlatformOrVirtualThread(uint32_t thread_id,
-                                     Thread* carrier,
-                                     bool is_virtual,
-                                     SuspendReason reason)
-      REQUIRES(!Locks::thread_list_lock_, !Locks::thread_suspend_count_lock_);
 
   // Find an existing thread (or self) by its thread id (not tid).
   EXPORT Thread* FindThreadByThreadId(uint32_t thread_id) REQUIRES(Locks::thread_list_lock_);
@@ -285,24 +263,9 @@ class ThreadList {
                                                    int attempt_of_4 = 0)
       REQUIRES(!Locks::thread_list_lock_, !Locks::thread_suspend_count_lock_);
 
+ private:
   uint32_t AllocThreadId(Thread* self);
   void ReleaseThreadId(Thread* self, uint32_t id) REQUIRES(!Locks::allocated_thread_ids_lock_);
-
-  void AllocVirtualThreadSuspendCount(uint32_t id) REQUIRES(!Locks::thread_list_lock_);
-  void ReleaseVirtualThreadSuspendCount(uint32_t id) REQUIRES(!Locks::thread_list_lock_);
-  uint32_t GetVirtualThreadSuspendCount(uint32_t id) REQUIRES(Locks::thread_list_lock_);
-  bool IsVirtualThreadSuspended(Thread* self, uint32_t id) REQUIRES(!Locks::thread_list_lock_);
-
-  void AddMountedVirtualThread(MountedVirtualThreadData* entry) REQUIRES(Locks::thread_list_lock_);
-  void RemoveMountedVirtualThreadByThreadId(uint32_t virtual_thread_id)
-      REQUIRES(Locks::thread_list_lock_);
-  uint32_t GetCarrierThreadIdByVirtualThreadId(uint32_t virtual_thread_id)
-      REQUIRES(Locks::thread_list_lock_);
-  bool IsVirtualThreadSuspendCountAllocated(uint32_t id) REQUIRES(Locks::thread_list_lock_);
-
- private:
-  void IncrementVirtualThreadSuspendCount(uint32_t id) REQUIRES(Locks::thread_list_lock_);
-  void DecrementVirtualThreadSuspendCount(uint32_t id) REQUIRES(Locks::thread_list_lock_);
 
   void DumpUnattachedThreads(std::ostream& os, bool dump_native_stack)
       REQUIRES(!Locks::thread_list_lock_);
@@ -354,14 +317,6 @@ class ThreadList {
 
   // The actual list of all threads.
   std::list<Thread*> list_ GUARDED_BY(Locks::thread_list_lock_);
-
-  // It stores the suspend counts of each created virtual threads;
-  // TODO(http://b/477012795): Consider a more efficient data structure.
-  std::vector<uint32_t> virtual_thread_suspend_count_ GUARDED_BY(Locks::thread_list_lock_);
-
-  // A linked list of key-value pairs of a mounted virtual thread and carrier thread id. At most
-  // one entry per carrier thread. MountedVirtualThreadData objects are not owned by this list.
-  MountedVirtualThreadData* virtual_and_carrier_map_ GUARDED_BY(Locks::thread_list_lock_);
 
   // Ongoing suspend all requests, used to ensure threads added to list_ respect SuspendAll, and
   // to ensure that only one SuspendAll ot FlipThreadRoots call is active at a time.  The value is

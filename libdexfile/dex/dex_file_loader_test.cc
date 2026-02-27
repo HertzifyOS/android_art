@@ -546,20 +546,22 @@ TEST_F(DexFileLoaderTest, GetMultiDexZipEntryName) {
 TEST_F(DexFileLoaderTest, GetMultiDexLocation) {
   std::string dex_location_str = "/system/app/framework.jar";
   const char* dex_location = dex_location_str.c_str();
-  ASSERT_EQ("/system/app/framework.jar", DexFileLoader::GetMultiDexLocation(0, dex_location));
+  ASSERT_EQ("/system/app/framework.jar", DexFileLoader::GetMultiDexLocation(dex_location, 0));
   ASSERT_EQ("/system/app/framework.jar!classes2.dex",
-            DexFileLoader::GetMultiDexLocation(1, dex_location));
+            DexFileLoader::GetMultiDexLocation(dex_location, 1));
   ASSERT_EQ("/system/app/framework.jar!classes101.dex",
-            DexFileLoader::GetMultiDexLocation(100, dex_location));
+            DexFileLoader::GetMultiDexLocation(dex_location, 100));
 }
 
 TEST(DexFileUtilsTest, GetBaseLocationAndMultiDexSuffix) {
   EXPECT_EQ("/foo/bar/baz.jar", DexFileLoader::GetBaseLocation("/foo/bar/baz.jar"));
   EXPECT_EQ("/foo/bar/baz.jar", DexFileLoader::GetBaseLocation("/foo/bar/baz.jar!classes2.dex"));
   EXPECT_EQ("/foo/bar/baz.jar", DexFileLoader::GetBaseLocation("/foo/bar/baz.jar!classes8.dex"));
-  EXPECT_EQ("", DexFileLoader::GetMultiDexSuffix("/foo/bar/baz.jar"));
-  EXPECT_EQ("!classes2.dex", DexFileLoader::GetMultiDexSuffix("/foo/bar/baz.jar!classes2.dex"));
-  EXPECT_EQ("!classes8.dex", DexFileLoader::GetMultiDexSuffix("/foo/bar/baz.jar!classes8.dex"));
+  EXPECT_EQ("", DexFileLoader::SplitMultiDexLocation("/foo/bar/baz.jar").second);
+  EXPECT_EQ("!classes2.dex",
+            DexFileLoader::SplitMultiDexLocation("/foo/bar/baz.jar!classes2.dex").second);
+  EXPECT_EQ("!classes8.dex",
+            DexFileLoader::SplitMultiDexLocation("/foo/bar/baz.jar!classes8.dex").second);
 }
 
 TEST_F(DexFileLoaderTest, ZipOpenClassesPresent) {

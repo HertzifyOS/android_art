@@ -17,7 +17,6 @@
 #include "monitor_pool.h"
 
 #include "common_runtime_test.h"
-#include "monitor-inl.h"
 #include "monitor.h"
 #include "scoped_thread_state_change-inl.h"
 #include "thread-current-inl.h"

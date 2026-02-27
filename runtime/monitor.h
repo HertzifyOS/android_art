@@ -59,46 +59,22 @@ enum class LockReason {
 
 // Storage of a monitor owner id.
 // For a java platform thread, it stores the art::Thread pointer.
-// For a virtual thread, it stores the thread id.
 struct MonitorOwner {
   uintptr_t storage_;
 
-  // MonitorOwner::FromThread should only be called from the current thread.
-  static MonitorOwner FromThread(const Thread* self);
-  static MonitorOwner FromVirtualThreadId(int32_t id);
-
-  ALWAYS_INLINE static MonitorOwner FromPlatformThread(Thread* ptr) {
+  ALWAYS_INLINE static MonitorOwner FromThread(const Thread* ptr) {
     return MonitorOwner(reinterpret_cast<uintptr_t>(ptr));
   }
 
-  MonitorOwner() : storage_(reinterpret_cast<uintptr_t>(nullptr)) {}
-
-  ALWAYS_INLINE Thread* GetThreadPtr() const {
-    DCHECK(!IsVirtual()) << "virtual thread id: " << GetVirtualId();
-    return reinterpret_cast<Thread*>(storage_);
-  }
+  ALWAYS_INLINE Thread* GetThreadPtr() const { return reinterpret_cast<Thread*>(storage_); }
 
   ALWAYS_INLINE bool IsNull() const { return storage_ == 0; }
 
-  ALWAYS_INLINE uintptr_t getStorageValue() const { return storage_; }
-
-  bool IsVirtual() const;
-  uint32_t GetVirtualId() const;
-
-  // Return the thread id of the owner threads allocated by art::ThreadList.
-  // It isn't the tid of an OS thread, nor the id of java.lang.Thread.
   uint32_t GetThreadId() const;
-  // Return the owner id used by art::MonitorMutex. If the owner is an OS thread, it's effectively
-  // the tid of the OS thread. See art::MonitorMutex::GetSelfId() for the details.
-  pid_t GetMutexOwnerId() const;
-  bool operator==(const Thread* selfOrNull) const;
-  bool operator==(const MonitorOwner other) const { return storage_ == other.storage_; }
+  bool operator==(const Thread* t) const;
   // Check if the Thread is the owner stored in MonitorOwner.
   // This function always returns false if `t` is nullptr.
   bool IsOwner(const Thread* t) const;
-
- private:
-  explicit MonitorOwner(uintptr_t storage) : storage_(storage) {}
 };
 static_assert(sizeof(MonitorOwner) == sizeof(Thread*), "Expect the size of a pointer");
 static_assert(sizeof(std::atomic<MonitorOwner>) == sizeof(uintptr_t),
@@ -178,7 +154,7 @@ class Monitor {
   // Calls 'callback' once for each lock held in the single stack frame represented by
   // the current state of 'stack_visitor'.
   // The abort_on_failure flag allows to not die when the state of the runtime is unorderly. This
-  // is necessary when we have already abofted but want to dump the stack as much as we can.
+  // is necessary when we have already aborted but want to dump the stack as much as we can.
   EXPORT static void VisitLocks(StackVisitor* stack_visitor,
                                 void (*callback)(ObjPtr<mirror::Object>, void*),
                                 void* callback_context,
@@ -275,6 +251,12 @@ class Monitor {
   // calling thread must own the lock or the owner must be suspended. There's a race with other
   // threads inflating the lock, installing hash codes and spurious failures. The caller should
   // re-read the lock word following the call.
+  static void Inflate(Thread* self, Thread* owner, ObjPtr<mirror::Object> obj, int32_t hash_code)
+      REQUIRES_SHARED(Locks::mutator_lock_)  // For m->Install(self)
+  {
+    Inflate(self, MonitorOwner::FromThread(owner), std::move(obj), hash_code);
+  }
+
   static void Inflate(Thread* self,
                       MonitorOwner owner,
                       ObjPtr<mirror::Object> obj,
@@ -289,7 +271,7 @@ class Monitor {
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   static void FailedUnlock(ObjPtr<mirror::Object> obj,
-                           Thread* self,
+                           Thread* expected_owner_thread,
                            uint32_t found_owner_thread_id,
                            Monitor* mon) REQUIRES(!Locks::thread_list_lock_)
       REQUIRES_SHARED(Locks::mutator_lock_);
@@ -320,10 +302,12 @@ class Monitor {
       REQUIRES(monitor_lock_)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
-  static std::string PrettyContentionInfo(MonitorOwner owner,
+  static std::string PrettyContentionInfo(const std::string& owner_name,
+                                          pid_t owner_tid,
                                           ArtMethod* owners_method,
                                           uint32_t owners_dex_pc,
-                                          size_t num_waiters) REQUIRES_SHARED(Locks::mutator_lock_);
+                                          size_t num_waiters)
+      REQUIRES_SHARED(Locks::mutator_lock_);
 
   // Wait on a monitor until timeout, interrupt, or notification.  Used for Object.wait() and
   // (somewhat indirectly) Thread.sleep() and Thread.join().
@@ -384,7 +368,7 @@ class Monitor {
 
   // monitor_lock_ is acquired on outermost acquisition of monitor, and held while the monitor is
   // held.
-  MonitorMutex monitor_lock_ DEFAULT_MUTEX_ACQUIRED_AFTER;
+  Mutex monitor_lock_ DEFAULT_MUTEX_ACQUIRED_AFTER;
 
   // Pretend to unlock monitor lock.
   void FakeUnlockMonitorLock() RELEASE(monitor_lock_) NO_THREAD_SAFETY_ANALYSIS {}
@@ -449,19 +433,19 @@ class Monitor {
   // At all times, either lock_owner_ is zero, the checksum is valid, or a thread is actively
   // in the process of establishing one of those states. Only one thread at a time can be actively
   // establishing such a state, since writes are protected by the monitor.
-  std::atomic<MonitorOwner> lock_owner_;  // *lock_owner_ may no longer exist!
+  std::atomic<Thread*> lock_owner_;  // *lock_owner_ may no longer exist!
   std::atomic<ArtMethod*> lock_owner_method_;
   std::atomic<uint32_t> lock_owner_dex_pc_;
   std::atomic<uintptr_t> lock_owner_sum_;
 
   // Request lock owner save method and dex_pc. Written asynchronously.
-  std::atomic<MonitorOwner> lock_owner_request_;
+  std::atomic<Thread*> lock_owner_request_;
 
   // Compute method, dex pc, and tid "checksum".
-  uintptr_t LockOwnerInfoChecksum(ArtMethod* m, uint32_t dex_pc, MonitorOwner owner);
+  uintptr_t LockOwnerInfoChecksum(ArtMethod* m, uint32_t dex_pc, Thread* t);
 
-  // Set owning method, dex pc, and tid. owner_ field is set and points to the owner.
-  void SetLockOwnerInfo(ArtMethod* method, uint32_t dex_pc, MonitorOwner owner)
+  // Set owning method, dex pc, and tid. owner_ field is set and points to current thread.
+  void SetLockOwnerInfo(ArtMethod* method, uint32_t dex_pc, Thread* t)
       REQUIRES(monitor_lock_);
 
   // Get owning method and dex pc for the given thread, if available.
@@ -537,12 +521,12 @@ class MonitorList {
 // For use only by the JDWP implementation.
 class MonitorInfo {
  public:
-  MonitorInfo() : owner_(), entry_count_(0) {}
+  MonitorInfo() : owner_(nullptr), entry_count_(0) {}
   MonitorInfo(const MonitorInfo&) = default;
   MonitorInfo& operator=(const MonitorInfo&) = default;
   EXPORT explicit MonitorInfo(ObjPtr<mirror::Object> o) REQUIRES(Locks::mutator_lock_);
 
-  MonitorOwner owner_;
+  Thread* owner_;
   size_t entry_count_;
   std::vector<Thread*> waiters_;
 };

@@ -548,7 +548,7 @@ bool OatWriter::AddVdexDexFilesSource(const VdexFile& vdex_file, const char* loc
       return false;
     }
     // We used `zipped_dex_file_locations_` to keep the strings in memory.
-    std::string multidex_location = DexFileLoader::GetMultiDexLocation(i, location);
+    std::string multidex_location = DexFileLoader::GetMultiDexLocation(location, i);
     if (!AddRawDexFileSource(container,
                              current_dex_data,
                              multidex_location.c_str(),

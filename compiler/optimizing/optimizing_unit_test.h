@@ -907,6 +907,43 @@ class OptimizingUnitTestHelper {
     return suspend_check;
   }
 
+  HLoadConstantTableEntry* MakeLoadConstantTableEntry(HBasicBlock* block,
+                                                      DataType::Type type,
+                                                      HInstruction* index,
+                                                      ArrayRef<const int64_t> entries,
+                                                      uint32_t dex_pc = kNoDexPc) {
+    HLoadConstantTableEntry* lcte = new (GetAllocator()) HLoadConstantTableEntry(
+        type, index, entries, GetAllocator(), dex_pc);
+    AddOrInsertInstruction(block, lcte);
+    return lcte;
+  }
+
+  template <typename T>
+  HLoadConstantTableEntry* MakeLoadConstantTableEntry(HBasicBlock* block,
+                                                      DataType::Type type,
+                                                      HInstruction* index,
+                                                      std::initializer_list<T> entries,
+                                                      uint32_t dex_pc = kNoDexPc) {
+    std::vector<int64_t> i64_entries;
+    auto copy_entries = [&](auto&& convert) {
+      for (T entry : entries) {
+        i64_entries.push_back(convert(entry));
+      }
+    };
+    if (std::is_same_v<T, double>) {
+      CHECK_EQ(type, DataType::Type::kFloat64);
+      copy_entries([](double e) { return bit_cast<int64_t, double>(e); });
+    } else if (std::is_same_v<T, float>) {
+      CHECK_EQ(type, DataType::Type::kFloat32);
+      copy_entries([](float e) { return bit_cast<uint32_t, float>(e); });
+    } else {
+      CHECK_IMPLIES(type != DataType::Type::kInt64, DataType::Kind(type) == DataType::Type::kInt32);
+      copy_entries([](T e) { return e; });
+    }
+    return MakeLoadConstantTableEntry(
+        block, type, index, ArrayRef<const int64_t>(i64_entries), dex_pc);
+  }
+
   void AddOrInsertInstruction(HBasicBlock* block, HInstruction* instruction) {
     CHECK(!instruction->IsControlFlow());
     if (block->GetLastInstruction() != nullptr && block->GetLastInstruction()->IsControlFlow()) {
