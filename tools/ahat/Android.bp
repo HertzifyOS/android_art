@@ -41,6 +41,17 @@ java_binary_host {
     },
 }
 
+droidstubs_host {
+    name: "ahat_api_stubs",
+    srcs: ["src/main/**/*.java"],
+    check_api: {
+        current: {
+            api_file: "etc/ahat_api.txt",
+            removed_api_file: "etc/ahat_removed_api.txt",
+        },
+    },
+}
+
 // --- ahat-test-dump.jar --------------
 java_test_helper_library {
     name: "ahat-test-dump",

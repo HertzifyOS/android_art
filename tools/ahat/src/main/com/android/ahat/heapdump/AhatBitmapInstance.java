@@ -83,7 +83,7 @@ public class AhatBitmapInstance extends AhatClassInstance implements Comparable<
    * @param instances all the instances from where the bitmap dump data will be excluded
    * @return true if valid bitmap dump data is found, false if not
    */
-  public static BitmapDumpData findBitmapDumpData(SuperRoot root, Instances<AhatInstance> instances) {
+  static BitmapDumpData findBitmapDumpData(SuperRoot root, Instances<AhatInstance> instances) {
     final BitmapDumpData result;
     AhatClassObj cls = null;
 
