@@ -49,6 +49,9 @@ Known Issues:
  * Line number decoding for allocations in proguarded classes.
 
 Release History:
+ 1.11.1 February, 2026
+   Strings page: improved performance, added pagination.
+
  1.11 February, 2026
    Add Activity leaks page
    Strings page now correctly shows string object allocation sizes
