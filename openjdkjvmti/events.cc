@@ -1651,7 +1651,7 @@ void EventHandler::Shutdown() {
 }
 
 EventHandler::EventHandler()
-  : envs_lock_("JVMTI Environment List Lock", art::LockLevel::kAllocTrackerLock),
+  : envs_lock_("JVMTI Environment List Lock", art::LockLevel::kPostMutatorTopLockLevel),
     frame_pop_enabled(false),
     internal_event_refcount_({0}) {
   alloc_listener_.reset(new JvmtiEventAllocationListener(this));
