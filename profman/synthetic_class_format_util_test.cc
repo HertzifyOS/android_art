@@ -23,37 +23,37 @@ namespace art {
 TEST(SyntheticClassFormatUtil, RewriteSyntheticProfileClassIfNeeded_Minimization) {
   // Lambda
   EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("LMyClass$$ExternalSyntheticLambda0;"),
-            "LMyClass$0;");
+            "LMyClass$$0;");
 
   // Outline
   EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("LMyClass$$ExternalSyntheticOutline33;"),
-            "LMyClass$33;");
+            "LMyClass$$33;");
 
   // Backport
   EXPECT_EQ(
       RewriteSyntheticProfileClassIfNeeded("LMyClass$$ExternalSyntheticBackportWithForwarding7;"),
-      "LMyClass$7;");
+      "LMyClass$$7;");
 
   // With Package
   EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("Lcom/foo/MyClass$$ExternalSyntheticLambda0;"),
-            "Lcom/foo/MyClass$0;");
+            "Lcom/foo/MyClass$$0;");
 
   // As an array (not expected, but we should handle it gracefully)
   EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("[[LMyClass$$ExternalSyntheticLambda0;"),
-            "[[LMyClass$0;");
+            "[[LMyClass$$0;");
 }
 
 TEST(SyntheticClassFormatUtil, RewriteSyntheticProfileClassIfNeeded_Expansion) {
   // Assumed Lambda
-  EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("LMyClass$0;"),
+  EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("LMyClass$$0;"),
             "LMyClass$$ExternalSyntheticLambda0;");
 
   // With Package
-  EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("Lcom/foo/MyClass$737;"),
+  EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("Lcom/foo/MyClass$$737;"),
             "Lcom/foo/MyClass$$ExternalSyntheticLambda737;");
 
   // As an array (not expected, but we should handle it gracefully)
-  EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("[[Lcom/foo/MyClass$737;"),
+  EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("[[Lcom/foo/MyClass$$737;"),
             "[[Lcom/foo/MyClass$$ExternalSyntheticLambda737;");
 }
 
@@ -63,12 +63,15 @@ TEST(SyntheticClassFormatUtil, RewriteSyntheticProfileClassIfNeeded_Noop) {
             std::nullopt);
   EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("LMyClass$$ExternalSyntheticLambda77Extra;"),
             std::nullopt);
-  EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("LMyClass$77$Extra;"), std::nullopt);
-  EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("LMyClass$Extra77;"), std::nullopt);
-  EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("LMyClass$77Extra;"), std::nullopt);
+  EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("LMyClass$$77$Extra;"), std::nullopt);
+  EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("LMyClass$$Extra77;"), std::nullopt);
+  EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("LMyClass$$77Extra;"), std::nullopt);
+
+  // No change (not an R8 synthetic)
+  EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("LMyClass$1;"), std::nullopt);
 
   // No change (standard inner class)
-  EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("LMyClass$Inner;"), std::nullopt);
+  EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("LMyClass$$Inner;"), std::nullopt);
 
   // No change (regular class)
   EXPECT_EQ(RewriteSyntheticProfileClassIfNeeded("LMyClass;"), std::nullopt);
