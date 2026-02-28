@@ -41,7 +41,7 @@ class BitmapsHandler implements AhatHandler {
     printDuplicateBitmaps(doc, query);
 
     doc.section("All Bitmaps");
-    printAllBitmaps(doc, query);
+    printAllBitmaps(doc);
   }
 
   private void printDuplicateBitmaps(Doc doc, Query query) {
@@ -102,7 +102,7 @@ class BitmapsHandler implements AhatHandler {
     doc.end();
   }
 
-  private void printAllBitmaps(Doc doc, Query query) {
+  private void printAllBitmaps(Doc doc) {
     doc.println(DocString.link(
         DocString.formattedUri("objects?id=0x%x&class=android.graphics.Bitmap",
             mSnapshot.getRootSite().getId()),

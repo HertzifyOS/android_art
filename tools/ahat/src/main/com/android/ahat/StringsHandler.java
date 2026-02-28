@@ -44,7 +44,7 @@ class StringsHandler implements AhatHandler {
     final Size totalSize;
     final String heapName;
 
-    DuplicateStringInfo(int index, List<AhatInstance> instances, Reachability retained) {
+    DuplicateStringInfo(int index, List<AhatInstance> instances, Reachability unusedRetained) {
       this.index = index;
       this.representative = instances.get(0);
       String value = representative.asString();
@@ -180,7 +180,7 @@ class StringsHandler implements AhatHandler {
         new Column("Heap"),
         new Column("Object"));
 
-    SubsetSelector<AhatInstance> selector = new SubsetSelector(query, STRINGS_ID, instances);
+    SubsetSelector<AhatInstance> selector = new SubsetSelector<>(query, STRINGS_ID, instances);
     for (AhatInstance inst : selector.selected()) {
       AhatInstance base = inst.getBaseline();
       SizeTable.row(doc,
@@ -191,6 +191,4 @@ class StringsHandler implements AhatHandler {
     SizeTable.end(doc);
     selector.render(doc);
   }
-
-
 }

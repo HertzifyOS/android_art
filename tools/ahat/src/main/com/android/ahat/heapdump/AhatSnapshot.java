@@ -85,28 +85,9 @@ public class AhatSnapshot implements Diffable<AhatSnapshot> {
       }
     }
 
-    Dominators.Graph<AhatInstance> graph = new Dominators.Graph<AhatInstance>() {
-      @Override
-      public void setDominatorsComputationState(AhatInstance node, Object state) {
-        node.setTemporaryUserData(state);
-      }
-
-      @Override
-      public Object getDominatorsComputationState(AhatInstance node) {
-        return node.getTemporaryUserData();
-      }
-
-      @Override
-      public Iterable<AhatInstance> getReferencesForDominators(AhatInstance node) {
-        return node.getReferencesForDominators(retained);
-      }
-
-      @Override
-      public void setDominator(AhatInstance node, AhatInstance dominator) {
-        node.setDominator(dominator);
-      }
-    };
-    new Dominators(graph).progress(progress, mInstances.size()).computeDominators(mSuperRoot);
+    new Dominators<AhatInstance>(new AhatGraph(retained))
+        .progress(progress, mInstances.size())
+        .computeDominators((AhatInstance) mSuperRoot);
 
     AhatInstance.computeRetainedSize(mSuperRoot, mHeaps.size());
 
@@ -115,6 +96,34 @@ public class AhatSnapshot implements Diffable<AhatSnapshot> {
     }
 
     mRootSite.prepareForUse(0, mHeaps.size(), retained);
+  }
+
+  private static class AhatGraph implements Dominators.Graph<AhatInstance> {
+    private final Reachability retained;
+
+    AhatGraph(Reachability retained) {
+      this.retained = retained;
+    }
+
+    @Override
+    public void setDominatorsComputationState(AhatInstance node, Object state) {
+      node.setTemporaryUserData(state);
+    }
+
+    @Override
+    public Object getDominatorsComputationState(AhatInstance node) {
+      return node.getTemporaryUserData();
+    }
+
+    @Override
+    public Iterable<AhatInstance> getReferencesForDominators(AhatInstance node) {
+      return node.getReferencesForDominators(retained);
+    }
+
+    @Override
+    public void setDominator(AhatInstance node, AhatInstance dominator) {
+      node.setDominator(dominator);
+    }
   }
 
   /**

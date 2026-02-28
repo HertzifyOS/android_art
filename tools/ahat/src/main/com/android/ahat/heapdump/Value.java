@@ -122,6 +122,7 @@ public abstract class Value {
    * @param value the value to get the type of
    * @return the value's type
    */
+  @SuppressWarnings("AmbiguousMethodReference") // Suppress warning about potential ambiguity for method references (static vs instance method with same name).
   public static Type getType(Value value) {
     return value == null ? Type.OBJECT : value.getType();
   }
@@ -129,6 +130,7 @@ public abstract class Value {
   /**
    * Return the type of the given value.
    */
+  @SuppressWarnings("AmbiguousMethodReference") // Suppress warning about potential ambiguity for method references (static vs instance method with same name).
   abstract Type getType();
 
   /**
@@ -231,6 +233,7 @@ public abstract class Value {
   @Override
   public abstract String toString();
 
+  @SuppressWarnings("AmbiguousMethodReference") // Suppress warning about potential ambiguity for method references (static vs instance method with same name).
   Value getBaseline() {
     return this;
   }
@@ -243,6 +246,7 @@ public abstract class Value {
    * @return the baseline of the value
    * @see Diffable#getBaseline
    */
+  @SuppressWarnings("AmbiguousMethodReference") // Suppress warning about potential ambiguity for method references (static vs instance method with same name).
   public static Value getBaseline(Value value) {
     return value == null ? null : value.getBaseline();
   }

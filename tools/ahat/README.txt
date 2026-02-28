@@ -29,7 +29,6 @@ TODO:
  * Show version number with --version.
  * Show somewhere where to send bugs.
  * Include a link to /objects in the overview and menu?
- * Turn on LOCAL_JAVACFLAGS := -Xlint:unchecked -Werror
 
  * [low priority] by site allocations won't line up if the stack has been
    truncated. Is there any way to manually line them up in that case?

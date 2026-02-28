@@ -142,7 +142,7 @@ class ObjectHandler implements AhatHandler {
     }
 
     List<Value> elements = array.getValues();
-    SubsetSelector<Value> selector = new SubsetSelector(query, ARRAY_ELEMENTS_ID, elements);
+    SubsetSelector<Value> selector = new SubsetSelector<>(query, ARRAY_ELEMENTS_ID, elements);
     int i = 0;
     for (Value current : selector.selected()) {
       DocString delta = new DocString();
@@ -178,7 +178,7 @@ class ObjectHandler implements AhatHandler {
     }
 
     List<DiffedFieldValue> fields = DiffFields.diff(current, baseline);
-    SubsetSelector<DiffedFieldValue> selector = new SubsetSelector(query, id, fields);
+    SubsetSelector<DiffedFieldValue> selector = new SubsetSelector<>(query, id, fields);
 
     doc.table(
         new Column("Type"),
@@ -240,7 +240,7 @@ class ObjectHandler implements AhatHandler {
     } else {
       doc.table(new Column("Object"));
       List<AhatInstance> references = inst.getReverseReferences();
-      SubsetSelector<AhatInstance> selector = new SubsetSelector(query, REFS_ID, references);
+      SubsetSelector<AhatInstance> selector = new SubsetSelector<>(query, REFS_ID, references);
       for (AhatInstance ref : selector.selected()) {
         doc.row(Summarizer.summarize(ref));
       }

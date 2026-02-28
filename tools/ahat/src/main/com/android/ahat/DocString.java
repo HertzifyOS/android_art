@@ -16,6 +16,9 @@
 
 package com.android.ahat;
 
+import com.google.errorprone.annotations.FormatMethod;
+import com.google.errorprone.annotations.FormatString;
+
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Duration;
@@ -42,7 +45,8 @@ class DocString {
   /**
    * Construct a new DocString, initialized with the given formatted text.
    */
-  public static DocString format(String format, Object... args) {
+  @FormatMethod
+  public static DocString format(@FormatString String format, Object... args) {
     DocString doc = new DocString();
     return doc.appendFormat(format, args);
   }
@@ -75,7 +79,8 @@ class DocString {
    * Append formatted text to the given doc string.
    * Returns this object.
    */
-  public DocString appendFormat(String format, Object... args) {
+  @FormatMethod
+  public DocString appendFormat(@FormatString String format, Object... args) {
     append(String.format(format, args));
     return this;
   }
@@ -269,7 +274,8 @@ class DocString {
    * Convenience function for constructing a URI from a formatted string with
    * a uri known to be valid.
    */
-  public static URI formattedUri(String format, Object... args) {
+  @FormatMethod
+  public static URI formattedUri(@FormatString String format, Object... args) {
     return uri(String.format(format, args));
   }
 
@@ -286,12 +292,17 @@ class DocString {
   }
 
   @Override
+  public int hashCode() {
+    return html().hashCode();
+  }
+
+  @Override
   public boolean equals(Object obj) {
     if (this == obj) {
       return true;
     }
 
-    if (obj == null || getClass() != obj.getClass()) {
+    if (!(obj instanceof DocString)) {
       return false;
     }
 

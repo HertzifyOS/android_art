@@ -22,7 +22,6 @@ import java.util.List;
 
 class SuperRoot extends AhatInstance {
   private List<AhatInstance> mRoots = new ArrayList<AhatInstance>();
-  private Object mDominatorsComputationState;
 
   SuperRoot() {
     super(0);

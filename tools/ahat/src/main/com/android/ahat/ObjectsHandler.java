@@ -125,7 +125,7 @@ class ObjectsHandler implements AhatHandler {
           new Column("Heap"),
           new Column("Object"));
 
-      SubsetSelector<AhatInstance> selector = new SubsetSelector(query, OBJECTS_ID, insts);
+      SubsetSelector<AhatInstance> selector = new SubsetSelector<>(query, OBJECTS_ID, insts);
       for (AhatInstance inst : selector.selected()) {
         AhatInstance base = inst.getBaseline();
         SizeTable.row(doc,
