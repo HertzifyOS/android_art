@@ -113,8 +113,10 @@ public class StringsTest {
       }
     }
 
-    long expectedSize = StringsHandler.getReachableSize(instances, snapshot.getRetainedReachability()).getSize();
-
+    long expectedSize = 0;
+    for (AhatInstance inst : instances) {
+        expectedSize += inst.getTotalRetainedSize().getSize();
+    }
     // Column index 2 is Total Size (Length, Count, Total Size, Heap, Value)
     String totalSizeStr = duplicateRow.get(2);
     long actualSize = Long.parseLong(totalSizeStr.replace(",", ""));

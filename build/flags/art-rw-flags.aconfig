@@ -23,8 +23,6 @@ flag {
   namespace: "core_libraries"
   description: "Permanent test read-write flag."
   bug: "391379705"
-  is_fixed_read_only: false
-  is_exported: false
 }
 
 # Flag for using userfaultfd move ioctl in CMC
@@ -36,8 +34,6 @@ flag {
   "2. the necessary kernel bug-fixes aren't there, or "
   "3. app's seccomp filter doesn't allow it."
   bug: "343220989"
-  is_fixed_read_only: false
-  is_exported: false
 }
 
 flag {
@@ -45,8 +41,6 @@ flag {
   namespace: "system_performance"
   description: "Enable support for time based GC triggering strategy"
   bug: "425665469"
-  is_fixed_read_only: false
-  is_exported: false
 }
 
 flag {
@@ -57,8 +51,6 @@ flag {
   metadata {
     purpose: PURPOSE_BUGFIX
   }
-  is_fixed_read_only: false
-  is_exported: false
 }
 
 flag {
@@ -69,8 +61,6 @@ flag {
   metadata {
     purpose: PURPOSE_BUGFIX
   }
-  is_fixed_read_only: false
-  is_exported: false
 }
 
 flag {
@@ -78,8 +68,6 @@ flag {
   namespace: "art_performance"
   description: "Flag to control on-demand method tracing feature"
   bug: "352518093"
-  is_fixed_read_only: false
-  is_exported: false
 }
 
 flag {
@@ -87,8 +75,6 @@ flag {
   namespace: "system_performance"
   description: "Flag to enable madvise of vdex using startup hints from the profile"
   bug: "358590127"
-  is_fixed_read_only: false
-  is_exported: false
 }
 
 flag {
@@ -96,8 +82,6 @@ flag {
   namespace: "system_performance"
   description: "Flag to enable explicit madvise of the vdex type lookup table"
   bug: "428102886"
-  is_fixed_read_only: false
-  is_exported: false
 }
 
 flag {
@@ -105,8 +89,6 @@ flag {
   namespace: "system_performance"
   description: "Flag to enable optimized readahead settings for dex/odex madvise"
   bug: "309384435"
-  is_fixed_read_only: false
-  is_exported: false
 }
 
 flag {
@@ -114,26 +96,20 @@ flag {
   namespace: "art_cloud"
   description: "Flag to enable more verbose logging for the \"pm compile\" command"
   bug: "441818922"
-  is_fixed_read_only: false
-  is_exported: false
 }
 
 flag {
     namespace: "core_libraries"
     name: "read_only_dynamic_code_load_ww_log"
-    is_exported: false
     description: "This flag controls if the system logs to WW when loading native code and read only is not enforced"
     bug: "408070506"
-    is_fixed_read_only: false
 }
 
 flag {
     namespace: "core_libraries"
     name: "read_only_dynamic_code_load_throw_exception"
-    is_exported: false
     description: "This flag controls if the system throws an exception when loading native code and read only is not enforced"
     bug: "408070506"
-    is_fixed_read_only: false
 }
 
 
@@ -142,8 +118,6 @@ flag {
   namespace: "responsible_apis"
   description: "Flag to inject the method entry hook when dynamic instrumentation is requested"
   bug: "408255571"
-  is_fixed_read_only: false
-  is_exported: false
 }
 
 flag {
@@ -151,8 +125,6 @@ flag {
   namespace: "art_performance"
   description: "Lower the expectation of 2x throughput from young GCs to reduce zram reads"
   bug: "469158682"
-  is_fixed_read_only: false
-  is_exported: false
 }
 
 flag {
@@ -160,8 +132,6 @@ flag {
   namespace: "art_performance"
   description: "Simplify packed-switch to a load from constant table"
   bug: "283699582"
-  is_fixed_read_only: false
-  is_exported: false
 }
 
 flag {
@@ -169,8 +139,6 @@ flag {
   namespace: "system_performance"
   description: "Use runtime LSE instructions when available to optimize quick lock entry points"
   bug: "474165956"
-  is_fixed_read_only: false
-  is_exported: false
 }
 
 flag {
@@ -178,8 +146,6 @@ flag {
     namespace: "hardware_backed_security"
     description: "Flag for API to enable secure compilation"
     bug: "419024976"
-    is_fixed_read_only: false
-    is_exported: false
 }
 
 flag {
@@ -187,8 +153,6 @@ flag {
   namespace: "art_cloud"
   description: "Flag to enable hybrid pre-reboot dexopt for OTA"
   bug: "477979368"
-  is_fixed_read_only: false
-  is_exported: false
 }
 
 flag {
@@ -196,6 +160,11 @@ flag {
   namespace: "art_performance"
   description: "Skips adding background classes to the app profiles"
   bug: "485143995"
-  is_fixed_read_only: false
-  is_exported: false
+}
+
+flag {
+  name: "jfield_id_change"
+  namespace: "art_performance"
+  description: "Flag for changing the representation of jfieldID"
+  bug: "481456995"
 }

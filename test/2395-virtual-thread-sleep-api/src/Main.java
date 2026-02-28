@@ -18,8 +18,13 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Method;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -104,13 +109,23 @@ public class Main {
             try {
                 Thread t = Thread.currentThread();
                 synchronized (t) {
+                    if (!Thread.holdsLock(t)) {
+                        throw new AssertionError("Lock should be held");
+                    }
                     Thread.sleep(SLEEP_DURATION_MS);
+                    if (!Thread.holdsLock(t)) {
+                        throw new AssertionError("Lock should be held");
+                    }
+                }
+
+                if (Thread.holdsLock(t)) {
+                    throw new AssertionError("Lock shouldn't be held");
                 }
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
         };
-        testSleeping(task, 1, UnmountListener.STATE_UNMOUNTED);
+        testSleeping(task, 100, UnmountListener.STATE_PARKED_AND_UNMOUNTED);
     }
 
     private static void testSleepViaReflection(int numOfThreads) throws InterruptedException {
@@ -196,12 +211,10 @@ public class Main {
         // TODO: investigate why the thread is pinned.
         testSleeping(taskCombinator, numOfThreads, UnmountListener.STATE_UNMOUNTED);
     }
-
-
     private static class UnmountListener implements VirtualThread.JvmtiEventsListener {
 
         private static final int STATE_NOT_UNMOUNTED = 0;
-        // Likely when the virtual thread terminates.
+        // When the virtual thread is pinned or terminates.
         private static final int STATE_UNMOUNTED = 1;
         // When the virtual thread is parked, not pinned.
         private static final int STATE_PARKED_AND_UNMOUNTED = 2;

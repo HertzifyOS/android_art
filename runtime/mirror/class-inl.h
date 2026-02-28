@@ -1473,8 +1473,11 @@ inline void Class::FixThreadId(Class* class_for_descr) {
   if (!IsInitialized()) {
     if (kIsDebugBuild) {
       ClassStatus s = GetStatus();
-      if (s != ClassStatus::kVerified && s != ClassStatus::kRetryVerificationAtRuntime &&
-          s != ClassStatus::kVerifiedNeedsAccessChecks && s != ClassStatus::kResolved) {
+      if (s != ClassStatus::kVerified &&
+          s != ClassStatus::kRetryVerificationAtRuntime &&
+          s != ClassStatus::kVerifiedNeedsAccessChecks &&
+          s != ClassStatus::kVerifying &&
+          s != ClassStatus::kResolved) {
         LOG(FATAL_WITHOUT_ABORT) << "Unexpected status " << s
                                  << " when clearing tid: " << GetClinitThreadId();
         std::string storage;

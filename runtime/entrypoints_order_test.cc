@@ -156,11 +156,13 @@ class EntrypointsOrderTest : public CommonArtTest {
     EXPECT_OFFSET_DIFFP(
         Thread, tlsPtr_, last_no_transaction_checks_cause, current_peer, sizeof(void*));
 #endif
+    EXPECT_OFFSET_DIFFP(Thread, tlsPtr_, current_peer, mounted_virtual_thread_data, sizeof(void*));
     // The first field after tlsPtr_ is forced to a 16 byte alignment so it might have some space.
-    auto offset_tlsptr_end =
-        OFFSETOF_MEMBER(Thread, tlsPtr_) + sizeof(decltype(reinterpret_cast<Thread*>(16)->tlsPtr_));
-    CHECKED(offset_tlsptr_end - OFFSETOF_MEMBER(Thread, tlsPtr_.current_peer) == sizeof(void*),
-            "current_peer last field");
+    auto offset_tlsptr_end = OFFSETOF_MEMBER(Thread, tlsPtr_) +
+        sizeof(decltype(reinterpret_cast<Thread*>(16)->tlsPtr_));
+    CHECKED(offset_tlsptr_end - OFFSETOF_MEMBER(Thread, tlsPtr_.mounted_virtual_thread_data) ==
+                sizeof(void*),
+            "mounted_virtual_thread_data last field");
   }
 
   void CheckJniEntryPoints() {

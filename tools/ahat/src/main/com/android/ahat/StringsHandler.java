@@ -51,46 +51,26 @@ class StringsHandler implements AhatHandler {
       this.length = value == null ? 0 : value.length();
       this.count = instances.size();
       this.heapName = representative.getHeap().getName();
-      this.totalSize = getReachableSize(instances, retained);
-    }
-  }
 
-  /**
-   * Calculates the total shallow size of all objects reachable from the given
-   * roots, following only references that are at least as strong as the given
-   * reachability level. This includes the roots themselves.
-   *
-   * @param roots the objects to start the traversal from
-   * @param retained the weakest reachability level to follow
-   * @return the sum of the shallow sizes of all reachable objects
-   */
-  static Size getReachableSize(Iterable<AhatInstance> roots, Reachability retained) {
-    Set<AhatInstance> reachable = new HashSet<>();
-    Queue<AhatInstance> queue = new ArrayDeque<>();
-
-    for (AhatInstance inst : roots) {
-      if (reachable.add(inst)) {
-        queue.add(inst);
-      }
-    }
-
-    while (!queue.isEmpty()) {
-      AhatInstance inst = queue.poll();
-      for (Reference ref : inst.getReferences()) {
-        if (ref.reachability.notWeakerThan(retained)) {
-          if (reachable.add(ref.ref)) {
-            queue.add(ref.ref);
-          }
+      // To calculate the total size of this group of duplicate strings, we sum the shallow size
+      // of each String instance and the shallow size of its underlying 'value' array. We use a
+      // HashSet to ensure each object is only counted once, which is important if multiple String
+      // instances share the same 'value' array.
+      Set<AhatInstance> counted = new HashSet<>();
+      Size size = Size.ZERO;
+      for (AhatInstance inst : instances) {
+        if (counted.add(inst)) {
+          size = size.plus(inst.getSize());
+        }
+        AhatInstance valueArray = inst.getRefField("value");
+        if (valueArray != null && counted.add(valueArray)) {
+          size = size.plus(valueArray.getSize());
         }
       }
+      this.totalSize = size;
     }
-
-    Size size = Size.ZERO;
-    for (AhatInstance inst : reachable) {
-      size = size.plus(inst.getSize());
-    }
-    return size;
   }
+
 
   public StringsHandler(AhatSnapshot snapshot) {
     mSnapshot = snapshot;
@@ -164,6 +144,9 @@ class StringsHandler implements AhatHandler {
     sorter.addKey("heap", heapCompare);
     sorter.sort(duplicateInfos);
 
+    SubsetSelector<DuplicateStringInfo> selector =
+        new SubsetSelector<>(query, STRINGS_ID, duplicateInfos);
+
     doc.table(
         new Column(sorter.link("len", "Length"), Column.Align.RIGHT),
         new Column(sorter.link("count", "Count"), Column.Align.RIGHT),
@@ -172,7 +155,7 @@ class StringsHandler implements AhatHandler {
         new Column("Value", Column.Align.LEFT)
     );
 
-    for (DuplicateStringInfo info : duplicateInfos) {
+    for (DuplicateStringInfo info : selector.selected()) {
         doc.row(
             DocString.format("%,d", info.length),
             DocString.link(
@@ -184,7 +167,9 @@ class StringsHandler implements AhatHandler {
         );
     }
     doc.end();
+    selector.render(doc);
   }
+
 
   private void printStringInstances(Doc doc, Query query, List<AhatInstance> instances) {
     doc.title("Duplicate String Instances");

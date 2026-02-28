@@ -34,6 +34,7 @@
 #include "mirror/object_array-alloc-inl.h"
 #include "native_util.h"
 #include "reflection-inl.h"
+#include "runtime.h"
 #include "scoped_fast_native_object_access-inl.h"
 #include "well_known_classes.h"
 
@@ -350,6 +351,15 @@ static bool IsUnmodifiable(ObjPtr<mirror::Field> field) REQUIRES_SHARED(Locks::m
 ALWAYS_INLINE inline static bool ThrowIAEIfFieldIsNotOverwritable(ObjPtr<mirror::Field> field)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   ArtField* art_field = field->GetArtField();
+
+  if (UNLIKELY(art_field->IsStatic() && art_field->IsFinal())) {
+    if (art_field->GetDeclaringClass()->IsBootStrapClassLoaded()) {
+      Runtime::Current()->GetMetrics()->BcpStaticFinalFieldOverwrite()->AddOne();
+    } else {
+      Runtime::Current()->GetMetrics()->AppStaticFinalFieldOverwrite()->AddOne();
+    }
+  }
+
   // Write-protected fields can be modified via System.setIn/setOut/setErr methods only.
   // However, before Android C, reflection and JNI APIs were allowed to modify them.
   if (art_field->IsWriteProtected()) {
@@ -366,6 +376,7 @@ ALWAYS_INLINE inline static bool ThrowIAEIfFieldIsNotOverwritable(ObjPtr<mirror:
   } else if (!IsUnmodifiable(field)) {
     return false;
   }
+
   ThrowIllegalAccessException(
       StringPrintf("Cannot set %s field %s of class %s",
           PrettyJavaAccessFlags(art_field->GetAccessFlags()).c_str(),

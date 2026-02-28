@@ -22,6 +22,7 @@
 #include <memory>
 #include <utility>
 
+#include "android-base/macros.h"
 #include "art_field-inl.h"
 #include "art_method-alloc-inl.h"
 #include "base/allocator.h"
@@ -1620,7 +1621,29 @@ class JNI {
     f->SetObject<false>(o, v);
   }
 
+  static bool IsInitialized(ArtField* f) REQUIRES_SHARED(Locks::mutator_lock_) {
+    DCHECK(f->IsStatic()) << f->PrettyField();
+    bool is_prim = f->IsPrimitiveType();
+    bool is_ref = !is_prim;
+    return (is_ref && !f->GetObject(f->GetDeclaringClass()).IsNull()) ||
+            (is_prim && !IsZero(f));
+  }
+
+  static void RecordModificationAttempt(ArtField* f) REQUIRES_SHARED(Locks::mutator_lock_) {
+    DCHECK(f->IsStatic()) << f->PrettyField();
+    if (UNLIKELY(f->IsFinal() && !f->IsWriteProtected())) {
+      if (!Runtime::Current()->IsJavaDebuggableAtInit() || IsInitialized(f)) {
+        if (f->GetDeclaringClass()->IsBootStrapClassLoaded()) {
+          Runtime::Current()->GetMetrics()->BcpStaticFinalFieldOverwrite()->AddOne();
+        } else {
+          Runtime::Current()->GetMetrics()->AppStaticFinalFieldOverwrite()->AddOne();
+        }
+      }
+    }
+  }
+
   static void EnsureModifiable(ArtField* f) REQUIRES_SHARED(Locks::mutator_lock_) {
+    RecordModificationAttempt(f);
     // Android Studio needs to be able to overwrite newly introduced fields in class redefinition
     // process.
     if (IsUnmodifiable(f)) {
@@ -1632,10 +1655,7 @@ class JNI {
                    << " of class "
                    << f->GetDeclaringClass()->PrettyClass();
       } else {
-        bool is_prim = f->IsPrimitiveType();
-        bool is_ref = !is_prim;
-        if ((is_ref && !f->GetObject(f->GetDeclaringClass()).IsNull()) ||
-            (is_prim && !IsZero(f))) {
+        if (IsInitialized(f)) {
           LOG(FATAL) << "Cannot set value of already initialized "
                      << PrettyJavaAccessFlags(f->GetAccessFlags())
                      << " field "

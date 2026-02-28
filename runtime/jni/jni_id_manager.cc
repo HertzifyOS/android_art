@@ -317,7 +317,8 @@ uintptr_t JniIdManager::EncodeGenericId(ReflectiveHandle<ArtType> t) {
     // pointer here.
     return std::is_same_v<ArtType, ArtField>
         ? reinterpret_cast<uintptr_t>(EncodeArtField<false>(reinterpret_cast<ArtField*>(t.Get())))
-        : reinterpret_cast<uintptr_t>(EncodeArtMethod<false>(reinterpret_cast<ArtMethod*>(t.Get())));
+        : reinterpret_cast<uintptr_t>(
+              EncodeArtMethod<false>(reinterpret_cast<ArtMethod*>(t.Get())));
   }
   ObjPtr<mirror::Class> klass = t->GetDeclaringClass();
   ObjPtr<mirror::PointerArray> ids(GetIds(klass, t.Get()));
