@@ -17,6 +17,7 @@
 package com.android.ahat.heapdump;
 
 import com.android.ahat.progress.Progress;
+import com.google.errorprone.annotations.InlineMe;
 import java.awt.image.BufferedImage;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -190,7 +191,9 @@ public abstract class AhatInstance implements Diffable<AhatInstance> {
    *
    * @return true if the object is weakly reachable
    */
-  @Deprecated public boolean isWeaklyReachable() {
+  @Deprecated
+  @InlineMe(replacement = "!this.isStronglyReachable() && !this.isUnreachable()")
+  public final boolean isWeaklyReachable() {
     return !isStronglyReachable() && !isUnreachable();
   }
 
@@ -218,6 +221,8 @@ public abstract class AhatInstance implements Diffable<AhatInstance> {
   /**
    * Returns an iterator over the references this AhatInstance has to other
    * AhatInstances.
+   *
+   * @return an iterator over the references
    */
   public abstract Iterable<Reference> getReferences();
 
@@ -447,7 +452,7 @@ public abstract class AhatInstance implements Diffable<AhatInstance> {
    */
   public List<AhatInstance> getReverseReferences() {
     if (mReverseReferences != null) {
-      return mReverseReferences;
+      return Collections.unmodifiableList(mReverseReferences);
     }
     return Collections.emptyList();
   }
@@ -703,6 +708,8 @@ public abstract class AhatInstance implements Diffable<AhatInstance> {
   /**
    * Read the byte[] value from an hprof Instance.
    * Returns null if the instance is not a byte array.
+   *
+   * @return the byte array value, or null if not a byte array
    */
   public byte[] asByteArray() {
     return null;
@@ -710,6 +717,8 @@ public abstract class AhatInstance implements Diffable<AhatInstance> {
 
   /**
    * Whether this array instance has an underlying byte array.
+   *
+   * @return true if this array instance has an underlying byte array
    */
   public boolean hasByteArray() {
     return asByteArray() != null;
@@ -865,7 +874,7 @@ public abstract class AhatInstance implements Diffable<AhatInstance> {
   }
 
   Iterable<AhatInstance> getReferencesForDominators(Reachability retained) {
-    return new DominatorReferenceIterator(retained, getReferences());
+    return new DominatorReferenceIterable(retained, getReferences());
   }
 
   void setDominator(AhatInstance dominator) {

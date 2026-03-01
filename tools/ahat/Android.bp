@@ -26,9 +26,19 @@ java_binary_host {
     srcs: ["src/main/**/*.java"],
     manifest: "etc/ahat.mf",
     java_resources: ["etc/style.css"],
+    static_libs: ["error_prone_annotations"],
+
     // Use a relaxed version to allow distribution against older runtimes.
     java_version: "11",
-    javacflags: ["-Xdoclint:all/protected"],
+    javacflags: [
+        "-Xdoclint:all/protected",
+        "-Xlint:unchecked",
+        "-Xlint:-options",
+        "-Werror",
+    ],
+    errorprone: {
+        enabled: true,
+    },
 }
 
 // --- ahat-test-dump.jar --------------
