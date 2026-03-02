@@ -1608,12 +1608,14 @@ class RuntimeImageHelper {
 
     // Clear internal state.
     mirror::Class* copy = reinterpret_cast<mirror::Class*>(objects_.data() + offset);
-    copy->FixThreadId(cls.Ptr());
     if (cls->IsArrayClass()) {
       DCHECK(copy->IsVisiblyInitialized());
     } else {
       copy->SetStatusInternal(cls->IsVerified() ? ClassStatus::kVerified : ClassStatus::kResolved);
     }
+    // Fix the thread id after updating status as `FixThreadId` has expectations
+    // on the class' state.
+    copy->FixThreadId(cls.Ptr());
 
     // Clear static field values.
     auto clear_class = [&] () REQUIRES_SHARED(Locks::mutator_lock_) {
