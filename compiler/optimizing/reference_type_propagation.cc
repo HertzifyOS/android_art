@@ -595,7 +595,10 @@ void ReferenceTypePropagation::RTPVisitor::UpdateFieldAccessTypeInfo(HInstructio
 
   // The field is unknown only during tests.
   if (info.GetField() != nullptr) {
-    klass = info.GetField()->LookupResolvedType();
+    klass = info.GetField()->ResolveType();
+    if (klass == nullptr) {
+      Thread::Current()->ClearException();
+    }
   }
 
   SetClassAsTypeInfo(instr, klass, /* is_exact= */ false);
