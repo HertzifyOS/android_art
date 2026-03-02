@@ -1325,7 +1325,7 @@ static std::string ResolveIfAbsolutePath(const std::string& path) {
     return path;
   }
 
-  auto [filename, multi_dex_suffix] = DexFileLoader::SplitMultiDexLocation(path);
+  auto [filename, index] = DexFileLoader::SplitMultiDexLocation(path);
 
   std::string resolved_filename;
   if (!android::base::Realpath(std::string(filename), &resolved_filename)) {
@@ -1333,7 +1333,7 @@ static std::string ResolveIfAbsolutePath(const std::string& path) {
     return path;
   }
 
-  return resolved_filename + std::string(multi_dex_suffix);
+  return DexFileLoader::GetMultiDexLocation(resolved_filename.c_str(), index);
 }
 
 // Returns true if the given dex names are mathing, false otherwise.

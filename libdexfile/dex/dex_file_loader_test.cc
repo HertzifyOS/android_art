@@ -555,13 +555,18 @@ TEST_F(DexFileLoaderTest, GetMultiDexLocation) {
 
 TEST(DexFileUtilsTest, GetBaseLocationAndMultiDexSuffix) {
   EXPECT_EQ("/foo/bar/baz.jar", DexFileLoader::GetBaseLocation("/foo/bar/baz.jar"));
+  EXPECT_EQ("/foo/bar/baz.jar", DexFileLoader::GetBaseLocation("/foo/bar/baz.jar!classes.dex"));
   EXPECT_EQ("/foo/bar/baz.jar", DexFileLoader::GetBaseLocation("/foo/bar/baz.jar!classes2.dex"));
   EXPECT_EQ("/foo/bar/baz.jar", DexFileLoader::GetBaseLocation("/foo/bar/baz.jar!classes8.dex"));
-  EXPECT_EQ("", DexFileLoader::SplitMultiDexLocation("/foo/bar/baz.jar").second);
-  EXPECT_EQ("!classes2.dex",
-            DexFileLoader::SplitMultiDexLocation("/foo/bar/baz.jar!classes2.dex").second);
-  EXPECT_EQ("!classes8.dex",
-            DexFileLoader::SplitMultiDexLocation("/foo/bar/baz.jar!classes8.dex").second);
+  EXPECT_EQ("/foo/bar/baz.jar", DexFileLoader::GetBaseLocation("/foo/bar/baz.jar!0"));
+  EXPECT_EQ("/foo/bar/baz.jar", DexFileLoader::GetBaseLocation("/foo/bar/baz.jar!1"));
+  EXPECT_EQ(0u, DexFileLoader::SplitMultiDexLocation("/foo/bar/baz.jar").second);
+  EXPECT_EQ(0u, DexFileLoader::SplitMultiDexLocation("/foo/bar/baz.jar!classes.dex").second);
+  EXPECT_EQ(1u, DexFileLoader::SplitMultiDexLocation("/foo/bar/baz.jar!classes2.dex").second);
+  EXPECT_EQ(7u, DexFileLoader::SplitMultiDexLocation("/foo/bar/baz.jar!classes8.dex").second);
+  EXPECT_EQ(0u, DexFileLoader::SplitMultiDexLocation("/foo/bar/baz.jar!0").second);
+  EXPECT_EQ(1u, DexFileLoader::SplitMultiDexLocation("/foo/bar/baz.jar!1").second);
+  EXPECT_EQ(10u, DexFileLoader::SplitMultiDexLocation("/foo/bar/baz.jar!10").second);
 }
 
 TEST_F(DexFileLoaderTest, ZipOpenClassesPresent) {

@@ -579,6 +579,11 @@ class OatDexFile final {
 
   DexFile::Sha1 GetSha1() const { return dex_file_sha1_; }
 
+  uint32_t GetVdexIndex() const {
+    DCHECK(vdex_index_.has_value());
+    return vdex_index_.value_or(0u);
+  }
+
   // Returns the OatClass for the class specified by the given DexFile class_def_index.
   EXPORT OatFile::OatClass GetOatClass(uint16_t class_def_index) const;
 
@@ -647,7 +652,8 @@ class OatDexFile final {
              const uint8_t* lookup_table_data,
              const OatFile::BssMappingInfo& bss_mapping_info,
              const uint32_t* oat_class_offsets_pointer,
-             const DexProfileMetadata* dex_profile_metadata);
+             const DexProfileMetadata* dex_profile_metadata,
+             uint32_t vdex_index);
 
   // Create an OatDexFile wrapping an existing DexFile. Will set the OatDexFile
   // pointer in the DexFile.
@@ -659,7 +665,8 @@ class OatDexFile final {
              DexFile::Sha1 dex_file_sha1,
              const std::string& dex_file_location,
              const std::string& canonical_dex_file_location,
-             const uint8_t* lookup_table_data);
+             const uint8_t* lookup_table_data,
+             uint32_t vdex_index);
 
   bool IsBackedByVdexOnly() const;
   void InitializeTypeLookupTable();
@@ -672,6 +679,10 @@ class OatDexFile final {
   const DexFile::Magic dex_file_magic_ = {};
   const uint32_t dex_file_location_checksum_ = 0u;
   const DexFile::Sha1 dex_file_sha1_ = {};
+  // Index of the corresponding entry in vdex file (if we have physical vdex file).
+  // Note that several boot jar files might be represented by a single vdex file,
+  // so this mapping might be non-trivial (not just the multidex location suffix).
+  const std::optional<uint32_t> vdex_index_;
   const std::shared_ptr<DexFileContainer> dex_file_container_;
   const uint8_t* const dex_file_pointer_ = nullptr;
   const uint8_t* const lookup_table_data_ = nullptr;

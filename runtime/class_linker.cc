@@ -5496,7 +5496,8 @@ bool ClassLinker::VerifyClassUsingOatFile(Thread* self,
   // Check the class status with the vdex file.
   const OatFile* oat_file = oat_dex_file->GetOatFile();
   if (oat_file != nullptr) {
-    ClassStatus vdex_status = oat_file->GetVdexFile()->ComputeClassStatus(self, klass);
+    ClassStatus vdex_status =
+        oat_file->GetVdexFile()->ComputeClassStatus(self, klass, oat_dex_file->GetVdexIndex());
     if (vdex_status >= ClassStatus::kVerifiedNeedsAccessChecks) {
       VLOG(verifier) << "Vdex verification success for " << klass->PrettyClass();
       oat_file_class_status = vdex_status;

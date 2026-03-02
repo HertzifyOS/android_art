@@ -541,8 +541,8 @@ class ProfMan final {
             } else {
               // Remove any annotations from the profile key before comparing with the keys we get from apks.
               std::string base_key = ProfileCompilationInfo::GetBaseKeyFromAugmentedKey(profile_key);
-              return profile_filter_keys.find(ProfileFilterKey(base_key, checksum)) !=
-                  profile_filter_keys.end();
+              std::string base_location = DexFileLoader::GetBaseLocation(base_key);
+              return profile_filter_keys.count(ProfileFilterKey(base_location, checksum)) != 0;
             }
         };
 
@@ -568,16 +568,16 @@ class ProfMan final {
 
   bool GetProfileFilterKeyFromApks(std::set<ProfileFilterKey>* profile_filter_keys) {
     return ForEachApkFile([&](File file, const std::string& location) {
+      std::string base_key = ProfileCompilationInfo::GetProfileDexFileBaseKey(location);
       ArtDexFileLoader dex_file_loader(&file, location);
-      std::vector<std::pair<std::string, uint32_t>> checksums;
+      std::vector<uint32_t> checksums;
       std::string error_msg;
       if (!dex_file_loader.GetMultiDexChecksums(&checksums, &error_msg)) {
         LOG(ERROR) << "Open failed for '" << location << "' " << error_msg;
         return false;
       }
-      for (const auto& [multi_dex_location, checksum] : checksums) {
-        profile_filter_keys->emplace(
-            ProfileCompilationInfo::GetProfileDexFileBaseKey(multi_dex_location), checksum);
+      for (const auto checksum : checksums) {
+        profile_filter_keys->emplace(base_key, checksum);
       }
       return true;
     });
