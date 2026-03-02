@@ -6245,7 +6245,7 @@ void VarHandleSlowPathARM64::EmitByteArrayViewCode(CodeGenerator* codegen_in) {
       __ B(GetNativeByteOrderLabel());
       return;
     }
-    __ Ldr(temp, HeapOperand(varhandle, native_byte_order_offset.Int32Value()));
+    __ Ldrb(temp, HeapOperand(varhandle, native_byte_order_offset.Int32Value()));
     __ Cbnz(temp, GetNativeByteOrderLabel());
   }
 

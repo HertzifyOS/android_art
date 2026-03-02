@@ -5466,7 +5466,7 @@ void VarHandleSlowPathX86_64::EmitByteArrayViewCode(CodeGeneratorX86_64* codegen
     __ jmp(GetNativeByteOrderLabel());
     return;
   }
-  __ cmpl(Address(varhandle, native_byte_order_offset.Int32Value()), Immediate(0));
+  __ cmpb(Address(varhandle, native_byte_order_offset.Int32Value()), Immediate(0));
   __ j(kNotEqual, GetNativeByteOrderLabel());
 
   switch (access_mode_template) {

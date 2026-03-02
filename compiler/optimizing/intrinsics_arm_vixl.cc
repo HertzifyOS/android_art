@@ -6067,7 +6067,7 @@ void VarHandleSlowPathARMVIXL::EmitByteArrayViewCode(CodeGenerator* codegen_in) 
         return;
       }
     }
-    __ Ldr(temp2, MemOperand(varhandle, native_byte_order_offset.Int32Value()));
+    __ Ldrb(temp2, MemOperand(varhandle, native_byte_order_offset.Int32Value()));
     __ Cmp(temp2, 0);
     __ B(ne, GetNativeByteOrderLabel());
   }
