@@ -305,8 +305,13 @@ class StackVisitor {
           : StackVisitor(thread_in, nullptr, StackVisitor::StackWalkKind::kIncludeInlinedFrames) {}
 
       bool VisitFrame() override REQUIRES_SHARED(Locks::mutator_lock_) {
-        LOG(kForAbort ? FATAL_WITHOUT_ABORT : INFO)
-            << "Frame Id=" << GetFrameId() << " " << DescribeLocation();
+        // Can't take the risk of calling GetFrameId() in abort case as it also
+        // performs stalk-walk, resulting in infinite recursion (b/489073528).
+        if (kForAbort) {
+          LOG(FATAL_WITHOUT_ABORT) << " " << DescribeLocation();
+        } else {
+          LOG(INFO) << "Frame Id=" << GetFrameId() << " " << DescribeLocation();
+        }
         return true;
       }
     };
