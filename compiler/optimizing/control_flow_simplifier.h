@@ -79,6 +79,12 @@ class HControlFlowSimplifier : public HOptimization {
   static constexpr const char* kControlFlowSimplifierPassName = "control_flow_simplifier";
 
  private:
+  // Coalesces the Return/ReturnVoid instructions into one, if we have two or more.
+  // We do this to avoid generating the exit frame code several times.
+  // This also makes some other optimizations applicable in more cases without
+  // implementing explicit handling of additional `HReturn`/`HReturnVoid` patterns.
+  bool ReturnSinking();
+
   // Try simplifying `HPackedSwitch` using a load from constant table.
   // Certain cases can be simplified even further.
   bool TrySimplifyPackedSwitch(HBasicBlock* block, ScopedArenaAllocator* allocator);

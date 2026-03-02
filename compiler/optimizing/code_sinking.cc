@@ -26,6 +26,7 @@
 #include "base/logging.h"
 #include "base/scoped_arena_allocator.h"
 #include "base/scoped_arena_containers.h"
+#include "com_android_art_rw_flags.h"
 #include "common_dominator.h"
 #include "nodes.h"
 
@@ -38,7 +39,9 @@ bool CodeSinking::Run() {
   }
 
   UncommonBranchSinking();
-  ReturnSinking();
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    ReturnSinking();
+  }
   return true;
 }
 

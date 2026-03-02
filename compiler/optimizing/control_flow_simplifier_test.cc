@@ -122,6 +122,8 @@ class ControlFlowSimplifierTest : public OptimizingUnitTest {
                                  dflt,
                                  ArrayRef<const size_t>(return_block_indexes, num_entries));
   }
+
+  void TestReturnMerging(ArrayRef<const size_t> return_block_indexes);
 };
 
 // HDivZeroCheck might throw and should not be hoisted from the conditional to an unconditional.
@@ -352,19 +354,21 @@ void ControlFlowSimplifierTest::TestSwitchToTable(DataType::Type type,
   HLoadConstantTableEntry* lcte = then_block->GetFirstInstruction()->AsLoadConstantTableEntry();
   EXPECT_EQ(type, lcte->GetType());
   ASSERT_TRUE(EntriesMatch(lcte, entries));
-  // Check phi or return.
-  if (return_block_indexes.empty() || return_block_indexes[0] == 0) {
-    ASSERT_TRUE(then_block->GetLastInstruction()->IsGoto());
-    ASSERT_INS_EQ(phi, ret->InputAt(0));
-    ASSERT_EQ(2u, phi->InputCount());
-    ASSERT_INS_EQ(lcte, phi->InputAt(0));
-    ASSERT_INS_EQ(default_value, phi->InputAt(1));
-  } else {
-    ASSERT_TRUE(then_block->GetLastInstruction()->IsReturn());
-    ASSERT_INS_EQ(lcte, then_block->GetLastInstruction()->AsReturn()->InputAt(0));
-    ASSERT_INS_REMOVED(phi);
-    ASSERT_INS_EQ(default_value, ret->InputAt(0));
+  if (!return_block_indexes.empty()) {
+    // Due to the splitting and merging of blocks, the return block may or may not be the
+    // original `return_block`. Similar for the phi and return instructions.
+    return_block = then_block->GetSingleSuccessor();
+    ASSERT_TRUE(return_block->HasSinglePhi());
+    phi = return_block->GetFirstPhi()->AsPhi();
+    ASSERT_TRUE(return_block->GetLastInstruction()->IsReturn());
+    ret = return_block->GetLastInstruction()->AsReturn();
   }
+  // Check the phi.
+  ASSERT_TRUE(then_block->GetLastInstruction()->IsGoto());
+  ASSERT_INS_EQ(phi, ret->InputAt(0));
+  ASSERT_EQ(2u, phi->InputCount());
+  ASSERT_INS_EQ(lcte, phi->InputAt(0));
+  ASSERT_INS_EQ(default_value, phi->InputAt(1));
 }
 
 TEST_F(ControlFlowSimplifierTest, SwitchToTableBoolean) {
@@ -576,10 +580,11 @@ void ControlFlowSimplifierTest::TestSwitchToTableWithDefault(
   // The packed switch and phi have been replaced by the load from constant table.
   ASSERT_INS_REMOVED(packed_switch);
   ASSERT_INS_REMOVED(phi);
-  if (return_block_indexes.empty() || return_block_indexes[0] == 0u) {
+  if (return_block_indexes.empty()) {
     ASSERT_INS_RETAINED(ret);
   } else {
-    ASSERT_INS_REMOVED(ret);
+    // Due to the splitting and merging of blocks, the return block may or may not be the
+    // original `return_block`. Similar for the return instruction.
     ASSERT_TRUE(switch_block->GetLastInstruction()->IsReturn());
     ret = switch_block->GetLastInstruction()->AsReturn();
   }
@@ -905,6 +910,77 @@ TEST_F(ControlFlowSimplifierTest, SwitchEliminatedWithDefault) {
   ASSERT_INS_REMOVED(packed_switch);
   ASSERT_TRUE(switch_block->GetLastInstruction()->IsReturnVoid());
   ASSERT_BLOCK_REMOVED(return_block);
+}
+
+void ControlFlowSimplifierTest::TestReturnMerging(ArrayRef<const size_t> return_block_indexes) {
+  HBasicBlock* return_block = InitEntryMainExitGraph();
+  HInstruction* switch_input = MakeParam(DataType::Type::kInt32);
+  static constexpr int32_t kStartValue = 0;
+  std::vector<HInstruction*> phi_inputs;
+  for ([[maybe_unused]] size_t i : Range(return_block_indexes.size() + 1u)) {
+    phi_inputs.push_back(MakeParam(DataType::Type::kInt32));
+  }
+  HBasicBlock* switch_block =
+      CreateSwitchPattern(return_block, return_block_indexes.size(), switch_input, kStartValue);
+  HPhi* phi = MakePhi(return_block, phi_inputs);
+  HReturn* ret = MakeReturn(return_block, phi);
+
+  UpdateSwitchWithReturns(switch_block, return_block, return_block_indexes);
+  CHECK_NE(phi->InputCount(), phi_inputs.size());
+
+  // Prevent flattening by inserting invokes.
+  for (HBasicBlock* block : switch_block->GetSuccessors()) {
+    if (block->IsSingleGoto()) {
+      HBasicBlock* merge = block->GetSingleSuccessor();
+      CHECK(merge->GetLastInstruction()->IsReturn());
+      if (merge->GetFirstInstruction() == merge->GetLastInstruction()) {
+        MakeInvokeStatic(merge, DataType::Type::kVoid, {}, {});
+      } else {
+        CHECK(merge->GetFirstInstruction()->IsInvokeStaticOrDirect());
+      }
+    } else {
+      CHECK(block->GetLastInstruction()->IsReturn());
+      CHECK(block->GetFirstInstruction() == block->GetLastInstruction());
+      MakeInvokeStatic(block, DataType::Type::kVoid, {}, {});
+    }
+  }
+
+  bool success = CheckGraphAndTryControlFlowSimplifier();
+  ASSERT_TRUE(success);
+
+  ASSERT_EQ(exit_block_->GetPredecessors().size(), 1u);
+  HBasicBlock* new_return_block = exit_block_->GetPredecessors()[0];
+  ASSERT_TRUE(return_block != new_return_block);
+  ASSERT_EQ(return_block->GetSuccessors().size(), 1u);
+  ASSERT_TRUE(return_block->GetSingleSuccessor() == new_return_block);
+  ASSERT_TRUE(new_return_block->GetLastInstruction()->IsReturn());
+  ASSERT_TRUE(new_return_block->GetLastInstruction()->AsReturn()->InputAt(0)->IsPhi());
+  HPhi* new_phi = new_return_block->GetLastInstruction()->AsReturn()->InputAt(0)->AsPhi();
+  size_t max_return_block_index =
+      *std::max_element(return_block_indexes.begin(), return_block_indexes.end());
+  ASSERT_EQ(new_phi->InputCount(), max_return_block_index + 1u);
+}
+
+TEST_F(ControlFlowSimplifierTest, ReturnMerging) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static const size_t kReturnBlockIndexes1[] = {0, 0, 1, 1, 0, 2, 2, 2, 3, 2};
+  TestReturnMerging(ArrayRef<const size_t>(kReturnBlockIndexes1));
+  static const size_t kReturnBlockIndexes2[] = {0, 1, 2, 3, 4};
+  TestReturnMerging(ArrayRef<const size_t>(kReturnBlockIndexes2));
+  static const size_t kReturnBlockIndexes3[] = {1, 2, 3, 4, 5};
+  TestReturnMerging(ArrayRef<const size_t>(kReturnBlockIndexes3));
+  static const size_t kReturnBlockIndexes4[] = {1, 2, 3, 3, 3};
+  TestReturnMerging(ArrayRef<const size_t>(kReturnBlockIndexes4));
+  static const size_t kReturnBlockIndexes5[] = {0, 0, 1, 0, 0};
+  TestReturnMerging(ArrayRef<const size_t>(kReturnBlockIndexes5));
+  static const size_t kReturnBlockIndexes6[] = {1, 0, 1, 0, 1};
+  TestReturnMerging(ArrayRef<const size_t>(kReturnBlockIndexes6));
+  static const size_t kReturnBlockIndexes7[] = {1, 0, 0, 0, 0, 0};
+  TestReturnMerging(ArrayRef<const size_t>(kReturnBlockIndexes7));
+  static const size_t kReturnBlockIndexes8[] = {1, 1, 1, 1, 1, 1};
+  TestReturnMerging(ArrayRef<const size_t>(kReturnBlockIndexes8));
 }
 
 TEST_F(ControlFlowSimplifierTest, FlattenGotoRight) {

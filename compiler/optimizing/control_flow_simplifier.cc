@@ -17,6 +17,7 @@
 #include "control_flow_simplifier.h"
 
 #include "com_android_art_rw_flags.h"
+#include "common_dominator.h"
 #include "optimizing/nodes.h"
 #include "reference_type_propagation.h"
 
@@ -30,54 +31,102 @@ HControlFlowSimplifier::HControlFlowSimplifier(HGraph* graph,
     : HOptimization(graph, name, stats) {
 }
 
-namespace {  // anonymous namespace
+bool HControlFlowSimplifier::ReturnSinking() {
+  HBasicBlock* exit = graph_->GetExitBlock();
+  if (exit == nullptr) {
+    return false;  // No exit block, only infinite loop(s).
+  }
 
-bool SwitchCaseLeadsToReturn(HBasicBlock* block) {
-  DCHECK(block->GetPhis().IsEmpty());  // Switch cases do not have phis.
-  if (block->GetFirstInstruction() != block->GetLastInstruction()) {
-    return false;
-  }
-  if (block->GetLastInstruction()->IsReturn()) {
-    return true;
-  }
-  if (!block->GetLastInstruction()->IsGoto()) {
-    return false;
-  }
-  // Do not look further than the immediate successor. Rely on `TryFlattenMerge()`
-  // to optimize away longer block sequences that lead to a return.
-  // Do not check phis - any phis not used by the return instruction are dead.
-  HBasicBlock* successor = block->GetSingleSuccessor();
-  return (successor->GetFirstInstruction() == successor->GetLastInstruction()) &&
-         successor->GetLastInstruction()->IsReturn() &&
-         // Avoid cases where we'd need non-trivial adjustments of reverse post order.
-         successor->GetDominator() == block->GetSinglePredecessor();
-}
-
-HInstruction* GetSwitchCaseReturnInput(HBasicBlock* block) {
-  DCHECK(SwitchCaseLeadsToReturn(block));
-  HInstruction* input = nullptr;
-  if (block->GetLastInstruction()->IsReturn()) {
-    input = block->GetLastInstruction()->AsReturn()->InputAt(0);
-  } else {
-    HBasicBlock* successor = block->GetSingleSuccessor();
-    input = successor->GetLastInstruction()->AsReturn()->InputAt(0);
-    if (input->GetBlock() == successor) {
-      DCHECK(input->IsPhi());
-      input = input->AsPhi()->InputAt(successor->GetPredecessorIndexOf(block));
+  size_t number_of_returns = 0u;
+  bool saw_return = false;
+  for (HBasicBlock* pred : exit->GetPredecessors()) {
+    // TODO(solanes): We might have Return/ReturnVoid->TryBoundary->Exit. We can theoretically
+    // handle them and move them out of the TryBoundary. However, it is a border case and it adds
+    // codebase complexity.
+    if (pred->GetLastInstruction()->IsReturn() || pred->GetLastInstruction()->IsReturnVoid()) {
+      DCHECK(!pred->IsInLoop());  // Return can be in a loop only if it's in a try-block.
+      saw_return |= pred->GetLastInstruction()->IsReturn();
+      ++number_of_returns;
     }
   }
-  DCHECK(input != nullptr);
-  return input;
-}
 
-bool SwitchCaseLeadsToMerge(HBasicBlock* block, HBasicBlock* merge) {
-  DCHECK(block->GetPhis().IsEmpty());  // Switch cases do not have phis.
-  return (block->GetFirstInstruction() == block->GetLastInstruction()) &&
-         block->GetLastInstruction()->IsGoto() &&
-         block->GetSingleSuccessor() == merge;
-}
+  if (number_of_returns < 2) {
+    // Nothing to do.
+    return false;
+  }
 
-}  // anonymous namespace
+  // `new_block` will coalesce the Return instructions into Phi+Return,
+  // or the ReturnVoid instructions into a ReturnVoid.
+  HBasicBlock* new_block = nullptr;
+  HInstruction::InstructionKind return_kind =
+      saw_return ? HInstruction::kReturn : HInstruction::kReturnVoid;
+  HReturn* first_return = nullptr;  // The first `HReturn` shall be reused by the new block.
+  HPhi* new_phi = nullptr;
+  size_t new_phi_input_index = 0u;
+  ArrayRef<HBasicBlock* const> rpo(graph_->GetReversePostOrder());
+  size_t rpo_insert_index = 0u;
+  for (size_t rpo_index : Range(rpo.size())) {
+    HBasicBlock* pred = rpo[rpo_index];
+    HInstruction* last_inst = pred->GetLastInstruction();
+    DCHECK_IMPLIES(last_inst == nullptr, pred == exit);
+    if (last_inst == nullptr ||                 // Exit block?
+        last_inst->GetKind() != return_kind ||  // Not `HReturn`/`HReturnVoid`?
+        pred->GetSingleSuccessor() != exit) {   // Leading to try boundary instead of `exit`?
+      continue;
+    }
+    if (new_block == nullptr) {
+      new_block = pred->SplitBefore(last_inst);
+      if (saw_return) {
+        first_return = last_inst->AsReturn();
+        // Create the `new_phi`. We do it here since we need to know the type to assign to it.
+        new_phi = new (graph_->GetAllocator()) HPhi(
+            graph_->GetAllocator(),
+            kNoRegNumber,
+            /*number_of_inputs=*/ number_of_returns,
+            DataType::Kind(first_return->InputAt(0)->GetType()));
+        new_phi->SetRawInputAt(new_phi_input_index, first_return->InputAt(0));
+        ++new_phi_input_index;
+      }
+    } else {
+      pred->ReplaceSuccessor(exit, new_block);
+      if (saw_return) {
+        DCHECK(new_phi != nullptr);
+        new_phi->SetRawInputAt(new_phi_input_index, last_inst->AsReturn()->InputAt(0));
+        ++new_phi_input_index;
+      }
+      pred->ReplaceAndRemoveInstructionWith(
+          last_inst, new (graph_->GetAllocator()) HGoto(last_inst->GetDexPc()));
+    }
+    rpo_insert_index = rpo_index + 1u;
+  }
+  if (saw_return) {
+    DCHECK_EQ(number_of_returns, new_phi_input_index);
+    DCHECK(new_phi != nullptr);
+    new_block->AddPhi(new_phi);
+    DCHECK(first_return != nullptr);
+    first_return->ReplaceInput(new_phi, 0);
+  }
+
+  graph_->reverse_post_order_.insert(graph_->reverse_post_order_.begin() + rpo_insert_index,
+                                     new_block);
+  if (exit->GetPredecessors().size() == 1u) {
+    HBasicBlock* dominator = exit->GetDominator();
+    dominator->RemoveDominatedBlock(exit);
+    new_block->SetDominator(dominator);
+    dominator->AddDominatedBlock(new_block);
+    exit->SetDominator(new_block);
+    new_block->AddDominatedBlock(exit);
+  } else {
+    ArrayRef<HBasicBlock* const> predecessors(new_block->GetPredecessors());
+    CommonDominator dominator(predecessors[0]);
+    for (HBasicBlock* pred : predecessors.SubArray(/*pos=*/ 1u)) {
+      dominator.Update(pred);
+    }
+    new_block->SetDominator(dominator.Get());
+    dominator.Get()->AddDominatedBlock(new_block);
+  }
+  return true;
+}
 
 bool HControlFlowSimplifier::TrySimplifyPackedSwitch(HBasicBlock* block,
                                                      ScopedArenaAllocator* allocator) {
@@ -93,43 +142,28 @@ bool HControlFlowSimplifier::TrySimplifyPackedSwitch(HBasicBlock* block,
     return false;
   }
 
-  // Check if all non-default successors are single-goto blocks merging at the same block,
-  // or if they all are return blocks or single-goto blocks leading to a return block.
+  // Check if all non-default successors are single-goto blocks merging at the same block.
   ArrayRef<HBasicBlock* const> successors(block->GetSuccessors());
   DCHECK_EQ(num_entries + 1u, successors.size());
-  bool return_pattern = SwitchCaseLeadsToReturn(successors[0]);
-  HBasicBlock* merge = nullptr;
-  HPhi* phi = nullptr;
-  if (!return_pattern) {
-    DCHECK(successors[0]->GetPhis().IsEmpty());  // Switch cases do not have phis.
-    if ((successors[0]->GetFirstInstruction() != successors[0]->GetLastInstruction()) ||
-        !successors[0]->GetLastInstruction()->IsGoto()) {
+  if (!successors[0]->IsSingleGoto()) {
+    return false;
+  }
+  HBasicBlock* merge = successors[0]->GetSingleSuccessor();
+  for (size_t i : Range(1, num_entries)) {
+    if (!successors[i]->IsSingleGoto() || successors[i]->GetSingleSuccessor() != merge) {
       return false;
     }
-    merge = successors[0]->GetSingleSuccessor();
-    DCHECK(SwitchCaseLeadsToMerge(successors[0], merge));
-    // Check if the `merge` has at most one Phi.
-    if (merge->GetPhis().IsEmpty()) {
-      // We won't even need a constant table load to simplify this.
-    } else if (merge->HasSinglePhi()) {
-      phi = merge->GetFirstPhi()->AsPhi();
-      DCHECK(phi != nullptr);
-    } else {
-      return false;  // Do not simplify when there are two or more phis.
-    }
   }
-  if (return_pattern) {
-    for (size_t i : Range(1, num_entries)) {
-      if (!SwitchCaseLeadsToReturn(successors[i])) {
-        return false;
-      }
-    }
+
+  // Check if the `merge` has at most one Phi.
+  HPhi* phi = nullptr;
+  if (merge->GetPhis().IsEmpty()) {
+    // We won't even need a constant table load to simplify this.
+  } else if (merge->HasSinglePhi()) {
+    phi = merge->GetFirstPhi()->AsPhi();
+    DCHECK(phi != nullptr);
   } else {
-    for (size_t i : Range(1, num_entries)) {
-      if (!SwitchCaseLeadsToMerge(successors[i], merge)) {
-        return false;
-      }
-    }
+    return false;  // Do not simplify when there are two or more phis.
   }
 
   auto get_value = [](HInstruction* input, int64_t* value) {
@@ -150,31 +184,24 @@ bool HControlFlowSimplifier::TrySimplifyPackedSwitch(HBasicBlock* block,
   // Check if the default case can be included in the simplified pattern.
   HBasicBlock* default_block = successors[num_entries];
   int64_t default_value = 0;
-  bool with_default = false;
-  if (return_pattern) {
-    with_default = SwitchCaseLeadsToReturn(default_block) &&
-                   get_value(GetSwitchCaseReturnInput(default_block), &default_value);
-  } else {
-    with_default =
-        SwitchCaseLeadsToMerge(default_block, merge) &&
-        (phi == nullptr || get_value(phi->InputAt(merge->GetPredecessorIndexOf(default_block)),
-                                     &default_value));
-  }
+  bool with_default =
+      default_block->IsSingleGoto() &&
+      default_block->GetSingleSuccessor() == merge &&
+      (phi == nullptr || get_value(phi->InputAt(merge->GetPredecessorIndexOf(default_block)),
+                                   &default_value));
   bool with_default_index_0 = with_default && packed_switch->GetStartValue() == 1;
 
   ArrayRef<int64_t> entries;
-  if (return_pattern || phi != nullptr) {
-    // Check if all the return or phi's non-default inputs are constants and collect the values.
+  if (phi != nullptr) {
+    // Check if all the phi's non-default inputs are constants and collect the values.
     size_t size = num_entries + (with_default ? 1u : 0u);
     entries = ArrayRef<int64_t>(
         allocator->AllocArray<int64_t>(size, kArenaAllocControlFlowSimplifier), size);
     ArrayRef<int64_t> non_default_entries =
         entries.SubArray(with_default_index_0 ? 1u : 0u, num_entries);
     for (size_t i : Range(num_entries)) {
-      HInstruction* input = return_pattern
-          ? GetSwitchCaseReturnInput(successors[i])
-          : phi->InputAt(merge->GetPredecessorIndexOf(successors[i]));
-      if (!get_value(input, &non_default_entries[i])) {
+      size_t predecessor_index = merge->GetPredecessorIndexOf(successors[i]);
+      if (!get_value(phi->InputAt(predecessor_index), &non_default_entries[i])) {
         return false;
       }
     }
@@ -184,9 +211,7 @@ bool HControlFlowSimplifier::TrySimplifyPackedSwitch(HBasicBlock* block,
   }
 
   // Determine table type.
-  DataType::Type table_type = return_pattern
-      ? GetSwitchCaseReturnInput(successors[0])->GetType()
-      : (phi != nullptr ? phi->GetType() : DataType::Type::kVoid);
+  DataType::Type table_type = (phi != nullptr) ? phi->GetType() : DataType::Type::kVoid;
   if (DataType::Kind(table_type) == DataType::Type::kInt32) {
     // Try to narrow down the type to save space.
     auto [min_it, max_it] = std::minmax_element(entries.begin(), entries.end());
@@ -229,8 +254,8 @@ bool HControlFlowSimplifier::TrySimplifyPackedSwitch(HBasicBlock* block,
     index = new (graph_->GetAllocator()) HSelect(below, index, false_value, dex_pc);
     block->InsertInstructionBefore(index, packed_switch);
   }
-  if (return_pattern || phi != nullptr) {
-    // Insert constant table load and update the phi or return input we intend to keep.
+  if (phi != nullptr) {
+    // Insert constant table load and update the phi input we intend to keep.
     HLoadConstantTableEntry* load = new (graph_->GetAllocator()) HLoadConstantTableEntry(
         table_type, index, ArrayRef<const int64_t>(entries), graph_->GetAllocator(), dex_pc);
     if (with_default) {
@@ -238,49 +263,31 @@ bool HControlFlowSimplifier::TrySimplifyPackedSwitch(HBasicBlock* block,
     } else {
       successors[0]->InsertInstructionBefore(load, successors[0]->GetFirstInstruction());
     }
-    if (phi != nullptr) {
-      phi->ReplaceInput(load, merge->GetPredecessorIndexOf(successors[0]));
-    } else if (successors[0]->GetLastInstruction()->IsReturn()) {
-      successors[0]->GetLastInstruction()->AsReturn()->ReplaceInput(load, 0u);
-    } else {
-      HBasicBlock* ret_merge = successors[0]->GetSingleSuccessor();
-      HReturn* ret = ret_merge->GetLastInstruction()->AsReturn();
-      HInstruction* ret_input = ret->InputAt(0);
-      if (ret_input->GetBlock() == ret_merge) {
-        DCHECK(ret_input->IsPhi());
-        ret_input->ReplaceInput(load, ret_merge->GetPredecessorIndexOf(successors[0]));
-      } else {
-        ret->AsReturn()->ReplaceInput(load, 0u);
-      }
-    }
+    phi->ReplaceInput(load, merge->GetPredecessorIndexOf(successors[0]));
   }
   // Remove the default successor if `with_default` and all non-default successors,
   // except the first. This also removes `phi` inputs and replaces the Phi with the
   // `load` if it's the only remaining input.
   // Note: Stop using `successors` as the underlying vector is being modified.
   for (size_t i : Range(with_default ? 0u : 1u, num_entries)) {
-    HBasicBlock* successor = block->GetSuccessors()[num_entries - i];
-    HBasicBlock* next =
-        successor->GetLastInstruction()->IsGoto() ? successor->GetSingleSuccessor() : nullptr;
-    DCHECK_IMPLIES(next == nullptr, return_pattern);
-    successor->DisconnectAndDelete();
-    // If the `next` block has only one predecessor now, update domination info and merge.
-    if (next != nullptr && next->GetPredecessors().size() == 1u) {
-      HBasicBlock* remaining_block = next->GetSinglePredecessor();
-      DCHECK_IMPLIES(!return_pattern, remaining_block == block->GetSuccessors()[0]);
-      DCHECK(next->GetDominator() == block);
-      block->RemoveDominatedBlock(next);
-      next->SetDominator(remaining_block);
-      remaining_block->AddDominatedBlock(next);
-      remaining_block->MergeWith(next);
-    }
+    block->GetSuccessors()[num_entries - i]->DisconnectAndDelete();
+  }
+  // If the merge block has only one predecessor now, update domination info and merge.
+  if (merge->GetPredecessors().size() == 1u) {
+    HBasicBlock* remaining_block = block->GetSuccessors()[0];
+    DCHECK(remaining_block == merge->GetSinglePredecessor());
+    DCHECK(merge->GetDominator() == block);
+    block->RemoveDominatedBlock(merge);
+    merge->SetDominator(remaining_block);
+    remaining_block->AddDominatedBlock(merge);
+    remaining_block->MergeWith(merge);
   }
   if (with_default) {
     // Merge `block` with its remaining successor.
     DCHECK(block->GetLastInstruction()->IsGoto());  // Updated by last `DisconnectAndDelete()`.
     block->MergeWith(block->GetSingleSuccessor());
   } else {
-    // Replace the switch with `HIf`.
+    // Replace the switch with `HBelow` and `HIf`.
     DCHECK_EQ(2u, block->GetSuccessors().size());
     HIf* if_ = new (graph_->GetAllocator()) HIf(below, dex_pc);
     block->ReplaceAndRemoveInstructionWith(packed_switch, if_);
@@ -709,7 +716,7 @@ bool HControlFlowSimplifier::TryFlattenMerge(HBasicBlock* block,
 }
 
 bool HControlFlowSimplifier::Run() {
-  bool simplified = false;
+  bool simplified = com::android::art::rw::flags::packed_switch_simplification() && ReturnSinking();
 
   ScopedArenaAllocator allocator(graph_->GetArenaStack());
   // Select cache with local allocator for `TryGenerateSelectSimpleDiamondPattern()`.
