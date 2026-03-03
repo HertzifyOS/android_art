@@ -146,7 +146,7 @@ inline uint32_t MonitorOwner::GetThreadId() const {
   }
 
   // Return GetThreadId(), not GetMonitorThreadId() because this monitor
-  // is owned by the carrier thread when IsVirtual() is false,
+  // is owned by the carrier thread when Thread::IsVirtualThreadMounted() is false,
   // regardless whether a virtual thread is mounted on this thread or not.
   return reinterpret_cast<Thread*>(storage_)->GetThreadId();
 }

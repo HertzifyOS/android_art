@@ -422,7 +422,9 @@ void Monitor::AtraceMonitorUnlock() {
   }
 }
 
-std::string Monitor::PrettyContentionInfo(MonitorOwner owner,
+std::string Monitor::PrettyContentionInfo(const std::string& owner_name,
+                                          pid_t owner_tid,
+                                          uint32_t virtual_thread_id,
                                           ArtMethod* owners_method,
                                           uint32_t owners_dex_pc,
                                           size_t num_waiters) {
@@ -433,27 +435,12 @@ std::string Monitor::PrettyContentionInfo(MonitorOwner owner,
     TranslateLocation(owners_method, owners_dex_pc, &owners_filename, &owners_line_number);
   }
   std::ostringstream oss;
-  Thread* owner_thread;
-  if (owner.IsVirtualThread()) {
-    ThreadList* thread_list = Runtime::Current()->GetThreadList();
-    MutexLock mu(Thread::Current(), *Locks::thread_list_lock_);
-    uint32_t carrier_id = thread_list->GetCarrierThreadIdByVirtualThreadId(
-        owner.GetVirtualThreadId());
-    owner_thread = thread_list->FindThreadByThreadId(carrier_id);
-  } else {
-    owner_thread = owner.GetThreadPtr();
-  }
-  if (owner_thread != nullptr) {
-    std::string owner_name;
-    owner_thread->GetThreadName(owner_name);
-    uint32_t owner_tid = owner_thread->GetTid();
+  if (owner_tid != 0) {
     oss << "monitor contention with owner " << owner_name << " (" << owner_tid << ")";
+  } else if (virtual_thread_id != ThreadList::kInvalidThreadId) {
+    oss << "monitor contention with virtual thread owner: " << virtual_thread_id;
   } else {
-    if (owner.IsVirtualThread()) {
-      oss << "monitor contention with virtual thread owner: " << owner.GetVirtualThreadId();
-    } else {
-      oss << "monitor contention with unknown owner";
-    }
+    oss << "monitor contention with unknown owner";
   }
   if (owners_method != nullptr) {
     oss << " at " << owners_method->PrettyMethod();
@@ -515,9 +502,31 @@ void Monitor::Lock(Thread* self) {
     Locks::thread_list_lock_->ExclusiveLock(self);
     orig_owner = owner_.load(std::memory_order_relaxed);
     if (orig_owner != nullptr) {  // Did the owner_ give the lock up?
+      Thread* owner_thread;
+      if (orig_owner.IsVirtualThread()) {
+        ThreadList* thread_list = Runtime::Current()->GetThreadList();
+        uint32_t carrier_id = thread_list->GetCarrierThreadIdByVirtualThreadId(
+            orig_owner.GetVirtualThreadId());
+        owner_thread = thread_list->FindThreadByThreadId(carrier_id);
+      } else {
+        owner_thread = orig_owner.GetThreadPtr();
+      }
+      pid_t owner_thread_tid = 0;
+      std::string owner_name;
+      if (owner_thread != nullptr) {
+        owner_thread_tid = owner_thread->GetTid();
+        owner_thread->GetThreadName(owner_name);
+      }
+      const uint32_t virtual_thread_id = orig_owner.IsVirtualThread() ?
+          orig_owner.GetVirtualThreadId() : ThreadList::kInvalidThreadId;
       GetLockOwnerInfo(&owners_method, &owners_dex_pc, orig_owner);
       std::ostringstream oss;
-      oss << PrettyContentionInfo(orig_owner, owners_method, owners_dex_pc, num_waiters);
+      oss << PrettyContentionInfo(owner_name,
+                                  owner_thread_tid,
+                                  virtual_thread_id,
+                                  owners_method,
+                                  owners_dex_pc,
+                                  num_waiters);
       Locks::thread_list_lock_->ExclusiveUnlock(self);
       // Add info for contending thread.
       uint32_t pc;
@@ -596,6 +605,15 @@ void Monitor::Lock(Thread* self) {
           } else {
             owner_thread = orig_owner.GetThreadPtr();
           }
+          pid_t owner_thread_tid = 0;
+          std::string owner_name;
+          if (owner_thread != nullptr) {
+            owner_thread_tid = owner_thread->GetTid();
+            owner_thread->GetThreadName(owner_name);
+          }
+          const uint32_t virtual_thread_id = orig_owner.IsVirtualThread() ?
+              orig_owner.GetVirtualThreadId() : ThreadList::kInvalidThreadId;
+
           std::string owner_stack_dump;
           if (should_dump_stacks && owner_thread != nullptr) {
             // Very long contention. Dump stacks.
@@ -630,8 +648,8 @@ void Monitor::Lock(Thread* self) {
             ArtMethod* m = self->GetCurrentMethod(&pc);
 
             LOG(WARNING) << "Long "
-                         << PrettyContentionInfo(
-                                orig_owner, owners_method, owners_dex_pc, num_waiters)
+                         << PrettyContentionInfo(owner_name, owner_thread_tid, virtual_thread_id,
+                                owners_method, owners_dex_pc, num_waiters)
                          << " in " << ArtMethod::PrettyMethod(m) << " for "
                          << PrettyDuration(MsToNs(wait_ms)) << "\n"
                          << "Current owner stack:\n"
@@ -642,8 +660,8 @@ void Monitor::Lock(Thread* self) {
             ArtMethod* m = self->GetCurrentMethod(&pc);
             // TODO: We should maybe check that original_owner is still a live thread.
             LOG(WARNING) << "Long "
-                         << PrettyContentionInfo(
-                                orig_owner, owners_method, owners_dex_pc, num_waiters)
+                         << PrettyContentionInfo(owner_name, owner_thread_tid, virtual_thread_id,
+                                owners_method, owners_dex_pc, num_waiters)
                          << " in " << ArtMethod::PrettyMethod(m) << " for "
                          << PrettyDuration(MsToNs(wait_ms));
           }
