@@ -1325,6 +1325,10 @@ class EXPORT Thread {
   template <StackType stack_type>
   ALWAYS_INLINE uint8_t* GetStackEnd() const;
 
+  // Return the nearest page-aligned address below the current stack top.
+  template <StackType>
+  NO_INLINE uint8_t* FindStackTop();
+
   ALWAYS_INLINE uint8_t* GetStackEndForInterpreter(bool implicit_overflow_check) const;
 
   // Set the stack end to that to be used during a stack overflow
@@ -2076,10 +2080,6 @@ class EXPORT Thread {
       REQUIRES(!Locks::thread_suspend_count_lock_)
       REQUIRES_SHARED(Locks::mutator_lock_);
   void RunEmptyCheckpoint();
-
-  // Return the nearest page-aligned address below the current stack top.
-  template <StackType>
-  NO_INLINE uint8_t* FindStackTop();
 
   // Install the protected region for implicit stack checks.
   template <StackType>
