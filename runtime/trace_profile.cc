@@ -151,61 +151,6 @@ LowOverheadTraceType TraceProfiler::GetTraceType() {
 }
 
 namespace {
-void RecordMethodsOnThreadStack(Thread* thread, uintptr_t* method_trace_buffer)
-    REQUIRES_SHARED(Locks::mutator_lock_) {
-  struct MethodEntryStackVisitor final : public StackVisitor {
-    MethodEntryStackVisitor(Thread* thread_in, Context* context)
-        : StackVisitor(thread_in, context, StackVisitor::StackWalkKind::kSkipInlinedFrames) {}
-
-    bool VisitFrame() override REQUIRES_SHARED(Locks::mutator_lock_) {
-      ArtMethod* m = GetMethod();
-      if (m != nullptr && !m->IsRuntimeMethod()) {
-        if (GetCurrentShadowFrame() != nullptr) {
-          // TODO(mythria): Support low-overhead tracing for the switch interpreter.
-        } else {
-          const OatQuickMethodHeader* method_header = GetCurrentOatQuickMethodHeader();
-          if (method_header == nullptr) {
-            // TODO(mythria): Consider low-overhead tracing support for the GenericJni stubs.
-          } else {
-            // Ignore nterp methods. We don't support recording trace events in nterp.
-            if (!method_header->IsNterpMethodHeader()) {
-              stack_methods_.push_back(m);
-            }
-          }
-        }
-      }
-      return true;
-    }
-
-    std::vector<ArtMethod*> stack_methods_;
-  };
-
-  std::unique_ptr<Context> context(Context::Create());
-  MethodEntryStackVisitor visitor(thread, context.get());
-  visitor.WalkStack(true);
-
-  // Create method entry events for all methods currently on the thread's stack.
-  uint64_t init_ts = TimestampCounter::GetTimestamp();
-  // Set the lsb to 0 to indicate method entry.
-  init_ts = init_ts & ~1;
-  size_t index = kAlwaysOnTraceBufSize - 1;
-  for (auto smi = visitor.stack_methods_.rbegin(); smi != visitor.stack_methods_.rend(); smi++) {
-    method_trace_buffer[index--] = reinterpret_cast<uintptr_t>(*smi);
-    method_trace_buffer[index--] = init_ts;
-
-    if (index < kMaxEntriesAfterFlush) {
-      // To keep the implementation simple, ignore methods deep down the stack. If the call stack
-      // unwinds beyond this point then we will see method exits without corresponding method
-      // entries.
-      break;
-    }
-  }
-
-  // Record a placeholder method exit event into the buffer so we record method exits for the
-  // methods that are currently on stack.
-  method_trace_buffer[index] = 0x1;
-  thread->SetMethodTraceBuffer(method_trace_buffer, index);
-}
 
 // Records the thread and method info.
 void DumpThreadMethodInfo(const std::unordered_map<size_t, std::string>& traced_threads,
@@ -293,8 +238,14 @@ static class LongRunningMethodsTraceStartCheckpoint final : public Closure {
  public:
   void Run(Thread* thread) override REQUIRES_SHARED(Locks::mutator_lock_) {
     auto buffer = new uintptr_t[kAlwaysOnTraceBufSize];
+    thread->SetMethodTraceBuffer(buffer, kAlwaysOnTraceBufSize);
     // Record methods that are currently on stack.
-    RecordMethodsOnThreadStack(thread, buffer);
+    TraceProfiler::ReportOnStackMethods(thread, [](ArtMethod* m, Thread* t, bool is_entry) {
+      TraceProfiler::RecordTraceEvent(m, t, is_entry);
+    });
+    // Record a placeholder method exit event into the buffer so we record method exits for the
+    // methods that are currently on stack.
+    TraceProfiler::RecordTraceEvent(nullptr, thread, /*is_entry=*/false);
     thread->UpdateTlsLowOverheadTraceEntrypoints(LowOverheadTraceType::kLongRunningMethods);
   }
 } long_running_methods_checkpoint_;
@@ -422,6 +373,47 @@ void TraceProfiler::StopLocked() {
   DCHECK_NE(trace_data_, nullptr);
   delete trace_data_;
   trace_data_ = nullptr;
+}
+
+void TraceProfiler::ReportOnStackMethods(
+    Thread* thread, std::function<void(ArtMethod*, Thread*, bool)> record_event) {
+  struct MethodEntryStackVisitor final : public StackVisitor {
+    MethodEntryStackVisitor(Thread* thread_in, Context* context)
+        : StackVisitor(thread_in, context, StackVisitor::StackWalkKind::kSkipInlinedFrames) {}
+
+    bool VisitFrame() override REQUIRES_SHARED(Locks::mutator_lock_) {
+      ArtMethod* m = GetMethod();
+      if (m == nullptr || m->IsRuntimeMethod()) {
+        // Skip upcall / runtime methods
+        return true;
+      }
+
+      if (GetCurrentShadowFrame() != nullptr) {
+        stack_methods_.push_back(m);
+        return true;
+      }
+
+      const OatQuickMethodHeader* method_header = GetCurrentOatQuickMethodHeader();
+      if (method_header != nullptr && !m->IsNative() && !method_header->IsNterpMethodHeader()) {
+        DCHECK(method_header->IsOptimized());
+        DCHECK(!IsInInlinedFrame());
+        stack_methods_.push_back(m);
+      }
+
+      return true;
+    }
+
+    std::vector<ArtMethod*> stack_methods_;
+  };
+
+  std::unique_ptr<Context> context(Context::Create());
+  MethodEntryStackVisitor visitor(thread, context.get());
+  visitor.WalkStack(true);
+
+  // Create method entry events for all methods currently on the thread's stack.
+  for (auto smi = visitor.stack_methods_.rbegin(); smi != visitor.stack_methods_.rend(); smi++) {
+    record_event(*smi, thread, /*is_entry=*/true);
+  }
 }
 
 size_t TraceProfiler::DumpBuffer(uint32_t thread_id,
@@ -720,6 +712,9 @@ void TraceProfiler::RecordTraceEvent(ArtMethod* method, Thread* thread, bool is_
   if (is_entry) {
     method_trace_entries[--index] = reinterpret_cast<uintptr_t>(method);
     method_trace_entries[--index] = timestamp & ~1;
+  } else if (method == nullptr) {
+    // Record a placeholder exit event.
+    method_trace_entries[--index] = 0x1;
   } else {
     if (method_trace_entries[index] & 0x1) {
       method_trace_entries[--index] = timestamp | 1;

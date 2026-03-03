@@ -2632,7 +2632,7 @@ ENTRY art_quick_record_entry_trace_event_with_flush
     b.lt .Lhandle_record_entry_overflow
     mrs xIP0, cntvct_el0
     str x0, [xIP1]
-    bfc xIP0, 62, 2
+    lsl xIP0, xIP0, 2
     str xIP0, [xIP1, 8]
     str xIP1, [xSELF, #TRACE_BUFFER_CURRENT_OFFSET]
     ret
@@ -2655,7 +2655,7 @@ ENTRY art_quick_record_exit_trace_event_with_flush
     cmp xIP1, xIP0
     b.lt .Lhandle_record_exit_overflow
     mrs xIP0, cntvct_el0
-    bfc xIP0, 62, 2
+    lsl xIP0, xIP0, 2
     orr xIP0, xIP0, #1
     str xIP0, [xIP1]
     str xIP1, [xSELF, #TRACE_BUFFER_CURRENT_OFFSET]
