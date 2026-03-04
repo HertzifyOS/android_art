@@ -78,6 +78,17 @@ public class PreRebootManager implements PreRebootManagerInterface {
             @NonNull Context context, @NonNull CancellationSignal cancellationSignal,
             @NonNull PackageManagerLocal.FilteredSnapshot snapshot,
             @Nullable byte[] batchDexoptParamsProto) {
+        run(artModuleServiceManager, context, cancellationSignal, snapshot, batchDexoptParamsProto,
+                ReasonMapping.REASON_PRE_REBOOT_DEXOPT);
+    }
+
+    public void run(@NonNull ArtModuleServiceManager artModuleServiceManager,
+            @NonNull Context context, @NonNull CancellationSignal cancellationSignal,
+            @NonNull PackageManagerLocal.FilteredSnapshot snapshot,
+            @Nullable byte[] batchDexoptParamsProto, @NonNull String reason) {
+        Utils.check(reason == ReasonMapping.REASON_PRE_REBOOT_DEXOPT
+                || reason == ReasonMapping.REASON_PRE_REBOOT_DEXOPT_SYNC);
+
         ExecutorService callbackExecutor = Executors.newSingleThreadExecutor();
         try {
             if (!PreRebootGlobalInjector.init(
@@ -134,9 +145,8 @@ public class PreRebootManager implements PreRebootManagerInterface {
                 throw new IllegalArgumentException(e);
             }
 
-            artManagerLocal.dexoptPackagesWithParams(snapshot,
-                    ReasonMapping.REASON_PRE_REBOOT_DEXOPT, cancellationSignal, callbackExecutor,
-                    Map.of(ArtFlags.PASS_MAIN, progressCallback), params);
+            artManagerLocal.dexoptPackagesWithParams(snapshot, reason, cancellationSignal,
+                    callbackExecutor, Map.of(ArtFlags.PASS_MAIN, progressCallback), params);
         } finally {
             // Stop the `artd` service proactively, to ensure a successful and fast teardown.
             PreRebootGlobalInjector.getInstance().stopArtd();

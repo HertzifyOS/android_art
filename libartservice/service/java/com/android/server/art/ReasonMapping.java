@@ -179,6 +179,9 @@ public class ReasonMapping {
                 // unless explicitly overridden.
                 return getCompilerFilterForReason(REASON_BG_DEXOPT);
             }
+            if (reason.equals(REASON_PRE_REBOOT_DEXOPT_SYNC)) {
+                return getCompilerFilterForReason(REASON_PRE_REBOOT_DEXOPT);
+            }
             throw new IllegalArgumentException("No compiler filter for reason '" + reason + "'");
         }
         if (!Utils.isValidArtServiceCompilerFilter(value)) {
@@ -209,6 +212,7 @@ public class ReasonMapping {
                 return ArtFlags.PRIORITY_INTERACTIVE;
             case REASON_BG_DEXOPT:
             case REASON_PRE_REBOOT_DEXOPT:
+            case REASON_PRE_REBOOT_DEXOPT_SYNC:
             case REASON_POST_UNATTENDED_REBOOT:
             case REASON_INACTIVE:
             case REASON_INSTALL_BULK:
@@ -237,6 +241,8 @@ public class ReasonMapping {
             // The Post unattended reboot job is supposed to use the bg-dexopt concurrency, unless
             // explicitly overridden.
             defaultValue = getConcurrencyForReason(REASON_BG_DEXOPT);
+        } else if (reason.equals(REASON_PRE_REBOOT_DEXOPT_SYNC)) {
+            defaultValue = getConcurrencyForReason(REASON_PRE_REBOOT_DEXOPT);
         }
 
         return SystemProperties.getInt("pm.dexopt." + reason + ".concurrency", defaultValue);
