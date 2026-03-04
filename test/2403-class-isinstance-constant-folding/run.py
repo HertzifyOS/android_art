@@ -18,4 +18,5 @@
 def run(ctx, args):
   ctx.default_run(args, runtime_option=["-Xtarget-sdk-version:31"])
   # `static final` field optimizations are enabled starting from target SDK level 37 (Android C)
-  ctx.default_run(args, runtime_option=["-Xtarget-sdk-version:37"])
+  # Setting to 38 to unblock SDK finalization.
+  ctx.default_run(args, runtime_option=["-Xtarget-sdk-version:38"])

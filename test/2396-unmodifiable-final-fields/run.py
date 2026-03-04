@@ -19,4 +19,5 @@ def run(ctx, args):
   # By the time VMRuntime.setTargetSdkVersion can be called bootimage classes are
   # already initialized.
   ctx.default_run(args, runtime_option=["-Xtarget-sdk-version:31"])
-  ctx.default_run(args, runtime_option=["-Xtarget-sdk-version:37"])
+  # Setting to 38 to unblock SDK finalization.
+  ctx.default_run(args, runtime_option=["-Xtarget-sdk-version:38"])
