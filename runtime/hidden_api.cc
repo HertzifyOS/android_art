@@ -206,16 +206,16 @@ static const char* FormatHiddenApiRuntimeFlags(uint32_t runtime_flags) {
   }
 }
 
-static std::optional<Domain> DetermineDomainForApexLocation(const std::string& location) {
+static std::optional<Domain> DetermineDomainForApexLocation(const std::string& dex_location) {
   // If running with APEX, check `path` against known APEX locations.
   // These checks will be skipped on target buildbots where ANDROID_ART_ROOT
   // is set to "/system".
   if (ArtModuleRootDistinctFromAndroidRoot()) {
-    if (LocationIsOnArtModule(location) || LocationIsOnConscryptModule(location)) {
+    if (LocationIsOnArtModule(dex_location) || LocationIsOnConscryptModule(dex_location)) {
       return Domain::kCorePlatform;
     }
 
-    if (LocationIsOnApex(location)) {
+    if (LocationIsOnApex(dex_location)) {
       return Domain::kPlatform;
     }
   }

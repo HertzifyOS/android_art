@@ -960,6 +960,11 @@ class DexFile {
   // DexFileLoader.kMultiDexSeparator (i.e. '!') and the file inside the
   // container.
   //
+  // When dex2oat runs this may be a canonical location where the file is
+  // supposed to be (coming from -Xbootclasspath-locations), rather than where
+  // it actually is. In such cases they won't incorporate a prefix from
+  // ANDROID_ROOT and other path environment variables.
+  //
   // On host this may not be an absolute path.
   //
   // On device libnativeloader uses this to determine the location of the java

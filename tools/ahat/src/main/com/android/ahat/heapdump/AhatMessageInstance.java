@@ -228,8 +228,8 @@ public class AhatMessageInstance extends AhatClassInstance {
    * @param numInsts the number of instances, for tracking progress.
    * @return a MessageDumpData object containing the analysis results.
    */
-  public static MessageDumpData findMessageDumpData(
-      Instances<AhatInstance> instances, Progress progress, long numInsts) {
+  static MessageDumpData findMessageDumpData(
+          Instances<AhatInstance> instances, Progress progress, long numInsts) {
     MessageDumpData data = new MessageDumpData();
     progress.start("Computing message dump", numInsts);
 
