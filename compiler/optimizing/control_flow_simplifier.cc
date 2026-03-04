@@ -68,7 +68,7 @@ HInstruction* GetSwitchCaseReturnInput(HBasicBlock* block) {
   }
   DCHECK(input != nullptr);
   return input;
-};
+}
 
 bool SwitchCaseLeadsToMerge(HBasicBlock* block, HBasicBlock* merge) {
   DCHECK(block->GetPhis().IsEmpty());  // Switch cases do not have phis.
