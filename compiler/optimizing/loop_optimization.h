@@ -130,6 +130,10 @@ class HLoopOptimization : public HOptimization {
     ArrayReference(HInstruction* b, HInstruction* o, DataType::Type t, bool l, bool c = false)
         : base(b), offset(o), type(t), lhs(l), is_string_char_at(c) { }
     bool operator<(const ArrayReference& other) const {
+      DCHECK(base->GetId() != -1);
+      DCHECK(other.base->GetId() != -1);
+      DCHECK(offset->GetId() != -1);
+      DCHECK(other.offset->GetId() != -1);
       return base->GetId() < other.base->GetId() ||
              (base->GetId() == other.base->GetId() &&
               (offset->GetId() < other.offset->GetId() ||
@@ -524,6 +528,8 @@ class HLoopOptimization : public HOptimization {
     bool operator()(const HInstruction* a, const HInstruction* b) const {
       DCHECK(a != nullptr);
       DCHECK(b != nullptr);
+      DCHECK(a->GetId() != -1);
+      DCHECK(b->GetId() != -1);
       return a->GetId() < b->GetId();
     }
   };
