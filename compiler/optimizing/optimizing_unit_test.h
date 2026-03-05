@@ -1019,6 +1019,17 @@ class OptimizingUnitTestHelper {
     }
   }
 
+  HDeoptimize* MakeDeoptimize(HBasicBlock* block,
+                              HInstruction* cond,
+                              DeoptimizationKind kind,
+                              std::initializer_list<HInstruction*> env = {},
+                              uint32_t dex_pc = kNoDexPc) {
+    HDeoptimize* deoptimize = new (GetAllocator()) HDeoptimize(GetAllocator(), cond, kind, dex_pc);
+    block->AddInstruction(deoptimize);
+    ManuallyBuildEnvFor(deoptimize, env);
+    return deoptimize;
+  }
+
   std::tuple<HPhi*, HAdd*> MakeLinearLoopVar(HBasicBlock* header,
                                              HBasicBlock* body,
                                              int32_t initial,
