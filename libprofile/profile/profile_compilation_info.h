@@ -584,7 +584,7 @@ class ProfileCompilationInfo {
     std::string_view base_key = GetBaseKeyViewFromAugmentedKey(dex_file_data->profile_key);
     for (const auto& dex_file : dex_files) {
       if (dex_checksum == dex_file->GetLocationChecksum() &&
-          base_key == GetProfileDexFileBaseKeyView(dex_file->GetLocation())) {
+          base_key == GetProfileDexFileBaseKey(dex_file->GetLocation())) {
         return std::addressof(*dex_file);
       }
     }
@@ -629,7 +629,7 @@ class ProfileCompilationInfo {
   // is solely constructed based on the dex location (as opposed to the one produced by
   // GetProfileDexFileAugmentedKey which may include additional metadata like the origin
   // package name)
-  static std::string GetProfileDexFileBaseKey(const std::string& dex_location);
+  static std::string GetProfileDexFileBaseKey(std::string_view dex_location);
 
   // Returns a base key without the annotation information.
   static std::string GetBaseKeyFromAugmentedKey(const std::string& profile_key);
@@ -1078,10 +1078,6 @@ class ProfileCompilationInfo {
   size_t GetSizeWarningThresholdBytes() const;
   // Returns the threshold size (in bytes) which will cause save/load failures.
   size_t GetSizeErrorThresholdBytes() const;
-
-  // Implementation of `GetProfileDexFileBaseKey()` but returning a subview
-  // referencing the same underlying data to avoid excessive heap allocations.
-  static std::string_view GetProfileDexFileBaseKeyView(std::string_view dex_location);
 
   // Implementation of `GetBaseKeyFromAugmentedKey()` but returning a subview
   // referencing the same underlying data to avoid excessive heap allocations.
