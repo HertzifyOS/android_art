@@ -836,7 +836,7 @@ static bool IsUnmodifiableAndInitialized(ArtField* field, const CompilerOptions&
   uint32_t target_sdk_version = Runtime::Current()->GetTargetSdkVersion();
   // If target_sdk_verson is not yet set then no assumptions about static final fields can be made.
   if (IsSdkVersionUnset(target_sdk_version) ||
-      IsSdkVersionSetAndAtMost(target_sdk_version, SdkVersion::kB)) {
+      IsSdkVersionSetAndAtMost(target_sdk_version, SdkVersion::kC)) {
     return false;
   }
 
@@ -868,7 +868,7 @@ static bool IsUnmodifiableAndInitialized(ArtField* field, const CompilerOptions&
   // Can't use Runtime::GetSdkVersion in the compiler. See Runtime.sdk_version_ comment.
   uint32_t assumed_sdk_int = compiler_options.GetAssumeValueOptions().SdkInt();
   if (IsSdkVersionUnset(assumed_sdk_int) ||
-      IsSdkVersionSetAndAtMost(assumed_sdk_int, SdkVersion::kB)) {
+      IsSdkVersionSetAndAtMost(assumed_sdk_int, SdkVersion::kC)) {
     return false;
   }
 

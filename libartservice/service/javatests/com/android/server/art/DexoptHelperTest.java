@@ -16,6 +16,8 @@
 
 package com.android.server.art;
 
+import static android.platform.test.flag.junit.DeviceFlagsValueProvider.createCheckFlagsRule;
+
 import static com.android.server.art.testing.TestDataHelper.newLibrary;
 import static com.android.server.art.testing.TestDataHelper.newPackageState;
 import static com.android.server.art.testing.TestDataHelper.newSplit;
@@ -36,6 +38,9 @@ import static org.mockito.Mockito.when;
 
 import android.apphibernation.AppHibernationManager;
 import android.os.CancellationSignal;
+import android.platform.test.annotations.RequiresFlagsDisabled;
+import android.platform.test.annotations.RequiresFlagsEnabled;
+import android.platform.test.flag.junit.CheckFlagsRule;
 
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
@@ -50,6 +55,7 @@ import com.android.server.art.model.DexoptResult.DexContainerFileDexoptResult;
 import com.android.server.art.model.DexoptResult.DexoptResultStatus;
 import com.android.server.art.model.DexoptResult.PackageDexoptResult;
 import com.android.server.art.model.OperationProgress;
+import com.android.server.art.model.VerifyDexoptArtifactsResult;
 import com.android.server.art.testing.StaticMockitoRule;
 import com.android.server.art.testing.TestDataHelper.PackageStateBuilder;
 import com.android.server.art.utils.Utils;
@@ -69,6 +75,7 @@ import org.mockito.Mock;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -94,6 +101,8 @@ public class DexoptHelperTest {
 
     @Rule
     public StaticMockitoRule mockitoRule = new StaticMockitoRule(PackageStateModulesUtils.class);
+
+    @Rule public final CheckFlagsRule checkFlagsRule = createCheckFlagsRule();
 
     @Mock private DexoptHelper.Injector mInjector;
     @Mock private PrimaryDexopter mPrimaryDexopter;
@@ -715,6 +724,32 @@ public class DexoptHelperTest {
                 .accept(eq(OperationProgress.create(3 /* current */, 3 /* total */,
                         PackageDexoptResult.create(
                                 PKG_NAME_LIBBAZ, fileResults, null /* packageLevelStatus */))));
+    }
+
+    @Test
+    @RequiresFlagsEnabled(android.content.pm.Flags.FLAG_VERIFIED_DEXOPT)
+    public void testVerifyDexoptArtifacts() throws Exception {
+        lenient().when(mPkgStateFoo.shouldVerifyCompilationArtifacts()).thenReturn(true);
+        lenient().when(mPkgStateBar.shouldVerifyCompilationArtifacts()).thenReturn(false);
+        lenient().when(mPkgStateLibbaz.shouldVerifyCompilationArtifacts()).thenReturn(true);
+        lenient()
+                .when(mSnapshot.getPackageStates())
+                .thenReturn(Map.of(PKG_NAME_FOO, mPkgStateFoo, PKG_NAME_BAR, mPkgStateBar,
+                        PKG_NAME_LIBBAZ, mPkgStateLibbaz));
+
+        VerifyDexoptArtifactsResult result =
+                mDexoptHelper.verifyDexoptArtifacts(mSnapshot, mExecutor);
+
+        assertThat(result.isVerified()).isTrue();
+    }
+
+    @Test
+    @RequiresFlagsDisabled(android.content.pm.Flags.FLAG_VERIFIED_DEXOPT)
+    public void testVerifyDexoptArtifactsFlagDisabled() throws Exception {
+        VerifyDexoptArtifactsResult result =
+                mDexoptHelper.verifyDexoptArtifacts(mSnapshot, mExecutor);
+
+        assertThat(result.isVerified()).isFalse();
     }
 
     private PackageStateBuilder newPackageStateWithDefaults(String packageName) {

@@ -988,7 +988,7 @@ class EXPORT Thread {
     return kIsVirtualThreadEnabled && data != nullptr;
   }
 
-  // Callers should check IsVirtual() before calling this method to obtain the virtual thread id.
+  // Callers should check IsVirtualThreadMounted() before calling GetVirtualThreadId().
   ALWAYS_INLINE uint32_t GetVirtualThreadId() const {
     DCHECK(IsVirtualThreadMounted());
     MountedVirtualThreadData* data = GetMountedVirtualThreadData();

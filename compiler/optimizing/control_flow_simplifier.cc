@@ -17,6 +17,7 @@
 #include "control_flow_simplifier.h"
 
 #include "com_android_art_rw_flags.h"
+#include "common_dominator.h"
 #include "optimizing/nodes.h"
 #include "reference_type_propagation.h"
 
@@ -28,6 +29,103 @@ HControlFlowSimplifier::HControlFlowSimplifier(HGraph* graph,
                                                OptimizingCompilerStats* stats,
                                                const char* name)
     : HOptimization(graph, name, stats) {
+}
+
+bool HControlFlowSimplifier::ReturnSinking() {
+  HBasicBlock* exit = graph_->GetExitBlock();
+  if (exit == nullptr) {
+    return false;  // No exit block, only infinite loop(s).
+  }
+
+  size_t number_of_returns = 0u;
+  bool saw_return = false;
+  for (HBasicBlock* pred : exit->GetPredecessors()) {
+    // TODO(solanes): We might have Return/ReturnVoid->TryBoundary->Exit. We can theoretically
+    // handle them and move them out of the TryBoundary. However, it is a border case and it adds
+    // codebase complexity.
+    if (pred->GetLastInstruction()->IsReturn() || pred->GetLastInstruction()->IsReturnVoid()) {
+      DCHECK(!pred->IsInLoop());  // Return can be in a loop only if it's in a try-block.
+      saw_return |= pred->GetLastInstruction()->IsReturn();
+      ++number_of_returns;
+    }
+  }
+
+  if (number_of_returns < 2) {
+    // Nothing to do.
+    return false;
+  }
+
+  // `new_block` will coalesce the Return instructions into Phi+Return,
+  // or the ReturnVoid instructions into a ReturnVoid.
+  HBasicBlock* new_block = nullptr;
+  HInstruction::InstructionKind return_kind =
+      saw_return ? HInstruction::kReturn : HInstruction::kReturnVoid;
+  HReturn* first_return = nullptr;  // The first `HReturn` shall be reused by the new block.
+  HPhi* new_phi = nullptr;
+  size_t new_phi_input_index = 0u;
+  ArrayRef<HBasicBlock* const> rpo(graph_->GetReversePostOrder());
+  size_t rpo_insert_index = 0u;
+  for (size_t rpo_index : Range(rpo.size())) {
+    HBasicBlock* pred = rpo[rpo_index];
+    HInstruction* last_inst = pred->GetLastInstruction();
+    DCHECK_IMPLIES(last_inst == nullptr, pred == exit);
+    if (last_inst == nullptr ||                 // Exit block?
+        last_inst->GetKind() != return_kind ||  // Not `HReturn`/`HReturnVoid`?
+        pred->GetSingleSuccessor() != exit) {   // Leading to try boundary instead of `exit`?
+      continue;
+    }
+    if (new_block == nullptr) {
+      new_block = pred->SplitBefore(last_inst);
+      if (saw_return) {
+        first_return = last_inst->AsReturn();
+        // Create the `new_phi`. We do it here since we need to know the type to assign to it.
+        new_phi = new (graph_->GetAllocator()) HPhi(
+            graph_->GetAllocator(),
+            kNoRegNumber,
+            /*number_of_inputs=*/ number_of_returns,
+            DataType::Kind(first_return->InputAt(0)->GetType()));
+        new_phi->SetRawInputAt(new_phi_input_index, first_return->InputAt(0));
+        ++new_phi_input_index;
+      }
+    } else {
+      pred->ReplaceSuccessor(exit, new_block);
+      if (saw_return) {
+        DCHECK(new_phi != nullptr);
+        new_phi->SetRawInputAt(new_phi_input_index, last_inst->AsReturn()->InputAt(0));
+        ++new_phi_input_index;
+      }
+      pred->ReplaceAndRemoveInstructionWith(
+          last_inst, new (graph_->GetAllocator()) HGoto(last_inst->GetDexPc()));
+    }
+    rpo_insert_index = rpo_index + 1u;
+  }
+  if (saw_return) {
+    DCHECK_EQ(number_of_returns, new_phi_input_index);
+    DCHECK(new_phi != nullptr);
+    new_block->AddPhi(new_phi);
+    DCHECK(first_return != nullptr);
+    first_return->ReplaceInput(new_phi, 0);
+  }
+
+  graph_->reverse_post_order_.insert(graph_->reverse_post_order_.begin() + rpo_insert_index,
+                                     new_block);
+  if (exit->GetPredecessors().size() == 1u) {
+    HBasicBlock* dominator = exit->GetDominator();
+    dominator->RemoveDominatedBlock(exit);
+    new_block->SetDominator(dominator);
+    dominator->AddDominatedBlock(new_block);
+    exit->SetDominator(new_block);
+    new_block->AddDominatedBlock(exit);
+  } else {
+    ArrayRef<HBasicBlock* const> predecessors(new_block->GetPredecessors());
+    CommonDominator dominator(predecessors[0]);
+    for (HBasicBlock* pred : predecessors.SubArray(/*pos=*/ 1u)) {
+      dominator.Update(pred);
+    }
+    new_block->SetDominator(dominator.Get());
+    dominator.Get()->AddDominatedBlock(new_block);
+  }
+  return true;
 }
 
 bool HControlFlowSimplifier::TrySimplifyPackedSwitch(HBasicBlock* block,
@@ -618,7 +716,7 @@ bool HControlFlowSimplifier::TryFlattenMerge(HBasicBlock* block,
 }
 
 bool HControlFlowSimplifier::Run() {
-  bool simplified = false;
+  bool simplified = com::android::art::rw::flags::packed_switch_simplification() && ReturnSinking();
 
   ScopedArenaAllocator allocator(graph_->GetArenaStack());
   // Select cache with local allocator for `TryGenerateSelectSimpleDiamondPattern()`.

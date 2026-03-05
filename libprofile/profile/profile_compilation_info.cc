@@ -2187,8 +2187,12 @@ std::string ProfileCompilationInfo::DumpInfo(const std::vector<const DexFile*>& 
     } else {
       // Replace the (empty) multidex suffix of the first key with a substitute for easier reading.
       std::string base_key = GetBaseKeyFromAugmentedKey(dex_data->profile_key);
-      std::string_view multidex_suffix = DexFileLoader::SplitMultiDexLocation(base_key).second;
-      os << (multidex_suffix.empty() ? kFirstDexFileKeySubstitute : multidex_suffix);
+      auto [filename, index] = DexFileLoader::SplitMultiDexLocation(base_key);
+      if (filename.size() == base_key.size()) {
+        os << kFirstDexFileKeySubstitute;
+      } else {
+        os << base_key.substr(filename.size());
+      }
     }
     os << " [index=" << static_cast<uint32_t>(dex_data->profile_index) << "]";
     os << " [checksum=" << std::hex << dex_data->checksum << "]" << std::dec;

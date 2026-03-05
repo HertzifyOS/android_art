@@ -66,8 +66,15 @@ class ControlFlowSimplifierTest : public OptimizingUnitTest {
     return true;
   }
 
+  void UpdateSwitchWithReturns(HBasicBlock* switch_block,
+                               HBasicBlock* return_block,
+                               ArrayRef<const size_t> return_block_indexes);
+
   template <typename T>
-  void TestSwitchToTable(DataType::Type type, ArrayRef<const T> entries, int32_t start_value);
+  void TestSwitchToTable(DataType::Type type,
+                         ArrayRef<const T> entries,
+                         int32_t start_value,
+                         ArrayRef<const size_t> return_block_indexes = ArrayRef<const size_t>());
 
   template <typename T, size_t num_entries>
   void TestSwitchToTable(DataType::Type type,
@@ -76,9 +83,24 @@ class ControlFlowSimplifierTest : public OptimizingUnitTest {
     TestSwitchToTable(type, ArrayRef<const T>(entries, num_entries), start_value);
   }
 
+  template <typename T, size_t num_entries>
+  void TestSwitchToTable(DataType::Type type,
+                         const T (&entries)[num_entries],
+                         int32_t start_value,
+                         const size_t (&return_block_indexes)[num_entries]) {
+    TestSwitchToTable(type,
+                      ArrayRef<const T>(entries, num_entries),
+                      start_value,
+                      ArrayRef<const size_t>(return_block_indexes, num_entries));
+  }
+
   template <typename T>
   void TestSwitchToTableWithDefault(
-      DataType::Type type, ArrayRef<const T> entries, int32_t start_value, T dflt);
+      DataType::Type type,
+      ArrayRef<const T> entries,
+      int32_t start_value,
+      T dflt,
+      ArrayRef<const size_t> return_block_indexes = ArrayRef<const size_t>());
 
   template <typename T, size_t num_entries>
   void TestSwitchToTableWithDefault(DataType::Type type,
@@ -87,6 +109,21 @@ class ControlFlowSimplifierTest : public OptimizingUnitTest {
                                     T dflt) {
     TestSwitchToTableWithDefault(type, ArrayRef<const T>(entries, num_entries), start_value, dflt);
   }
+
+  template <typename T, size_t num_entries>
+  void TestSwitchToTableWithDefault(DataType::Type type,
+                                    const T (&entries)[num_entries],
+                                    int32_t start_value,
+                                    T dflt,
+                                    const size_t (&return_block_indexes)[num_entries]) {
+    TestSwitchToTableWithDefault(type,
+                                 ArrayRef<const T>(entries, num_entries),
+                                 start_value,
+                                 dflt,
+                                 ArrayRef<const size_t>(return_block_indexes, num_entries));
+  }
+
+  void TestReturnMerging(ArrayRef<const size_t> return_block_indexes);
 };
 
 // HDivZeroCheck might throw and should not be hoisted from the conditional to an unconditional.
@@ -188,10 +225,87 @@ TEST_F(ControlFlowSimplifierTest, testSelectInIrreducibleLoop) {
   }
 }
 
+// Update switch case blocks for return pattern based on `return_block_indexes` for switch cases.
+//
+// Index 0 specifies the `return_block` and higher indexes specify new blocks that shall be added.
+// If an index is specified only once, it shall get a pure return block, otherwise it shall get
+// a single-goto block that shall merge into a return block, except for index 0 (`return_block`),
+// supporting tests with and without merges with the default case.
+void ControlFlowSimplifierTest::UpdateSwitchWithReturns(
+    HBasicBlock* switch_block,
+    HBasicBlock* return_block,
+    ArrayRef<const size_t> return_block_indexes) {
+  CHECK(switch_block->GetLastInstruction()->IsPackedSwitch());
+  HPackedSwitch* packed_switch = switch_block->GetLastInstruction()->AsPackedSwitch();
+  CHECK_EQ(packed_switch->GetNumEntries(), return_block_indexes.size());
+  CHECK(return_block->HasSinglePhi());
+  HPhi* phi = return_block->GetFirstPhi()->AsPhi();
+  std::vector<HBasicBlock*> ret_blocks;
+  ret_blocks.push_back(return_block);
+  size_t redirected = 0;
+  for (size_t i : Range(return_block_indexes.size())) {
+    if (return_block_indexes[i] != 0) {
+      HInstruction* ret_input = phi->InputAt(i - redirected);
+      phi->RemoveInputAt(i - redirected);
+      ++redirected;
+      HBasicBlock* successor = switch_block->GetSuccessors()[i];
+      if (return_block_indexes[i] == ret_blocks.size()) {
+        if (ContainsElement(return_block_indexes.SubArray(i + 1u), return_block_indexes[i])) {
+          // Create a new block for merging two or more switch cases.
+          HBasicBlock* new_block = AddNewBlock();
+          successor->ReplaceSuccessor(return_block, new_block);
+          new_block->AddSuccessor(exit_block_);
+          MakeReturn(new_block, ret_input);
+          ret_blocks.push_back(new_block);
+        } else {
+          // Update the successor to a return block.
+          HReturn* ret = new (GetAllocator()) HReturn(ret_input);
+          successor->ReplaceAndRemoveInstructionWith(successor->GetLastInstruction(), ret);
+          successor->ReplaceSuccessor(return_block, exit_block_);
+          ret_blocks.push_back(successor);
+        }
+      } else {
+        CHECK_LT(return_block_indexes[i], return_block_indexes.size());
+        HBasicBlock* ret_block = ret_blocks[return_block_indexes[i]];
+        successor->ReplaceSuccessor(return_block, ret_block);
+        if (ret_block->GetPhis().IsEmpty()) {
+          HReturn* ret = ret_block->GetLastInstruction()->AsReturn();
+          if (ret->InputAt(0) != ret_input) {
+            size_t num_predecessors = ret_block->GetPredecessors().size();
+            CHECK_GE(num_predecessors, 2u);
+            std::vector<HInstruction*> phi_inputs(num_predecessors - 1u, ret->InputAt(0));
+            phi_inputs.push_back(ret_input);
+            HPhi* new_phi = MakePhi(ret_block, phi_inputs);
+            ret->ReplaceInput(new_phi, 0);
+          }
+        } else {
+          CHECK(ret_block->HasSinglePhi());
+          ret_block->GetFirstPhi()->AsPhi()->AddInput(ret_input);
+        }
+      }
+    }
+  }
+  if (phi->InputCount() == 1u) {
+    phi->ReplaceWith(phi->InputAt(0));
+    return_block->RemovePhi(phi);
+    CHECK_EQ(return_block->GetPredecessors().size(), 1u);
+    HBasicBlock* predecessor = return_block->GetSinglePredecessor();
+    CHECK(predecessor->IsSingleGoto());
+    switch_block->ReplaceSuccessor(predecessor, return_block);
+    // Remove the `predecessor` manually. Helper functions would try to update
+    // the reverse post order but we have not built it yet.
+    predecessor->RemoveInstruction(predecessor->GetLastInstruction());
+    predecessor->DisconnectFromSuccessors();
+    const_cast<HBasicBlock*&>(graph_->GetBlocks()[predecessor->GetBlockId()]) = nullptr;
+    predecessor->SetGraph(nullptr);
+  }
+}
+
 template <typename T>
 void ControlFlowSimplifierTest::TestSwitchToTable(DataType::Type type,
                                                   ArrayRef<const T> entries,
-                                                  int32_t start_value) {
+                                                  int32_t start_value,
+                                                  ArrayRef<const size_t> return_block_indexes) {
   HBasicBlock* return_block = InitEntryMainExitGraph();
   HInstruction* switch_input = MakeParam(DataType::Type::kInt32);
   HInstruction* default_value = MakeParam(type);
@@ -204,7 +318,14 @@ void ControlFlowSimplifierTest::TestSwitchToTable(DataType::Type type,
   }
   phi_inputs.push_back(default_value);
   HPhi* phi = MakePhi(return_block, phi_inputs);
+  if (return_block_indexes.empty()) {
+    MakeInvokeStatic(return_block, DataType::Type::kVoid, {}, {});  // Avoid the return pattern.
+  }
   HReturn* ret = MakeReturn(return_block, phi);
+  if (!return_block_indexes.empty()) {
+    CHECK_EQ(return_block_indexes.size(), entries.size());
+    UpdateSwitchWithReturns(switch_block, return_block, return_block_indexes);
+  }
 
   bool success = CheckGraphAndTryControlFlowSimplifier();
   ASSERT_TRUE(success);
@@ -227,12 +348,27 @@ void ControlFlowSimplifierTest::TestSwitchToTable(DataType::Type type,
   ASSERT_TRUE(rhs->IsIntConstant());
   EXPECT_EQ(dchecked_integral_cast<int32_t>(entries.size()), rhs->AsIntConstant()->GetValue());
   // Check `HLoadConstantTableEntry`.
-  ASSERT_INS_EQ(phi, ret->InputAt(0));
-  ASSERT_EQ(2u, phi->InputCount());
-  ASSERT_TRUE(phi->InputAt(0)->IsLoadConstantTableEntry());
-  HLoadConstantTableEntry* lcte = phi->InputAt(0)->AsLoadConstantTableEntry();
+  HBasicBlock* then_block = switch_block->GetSuccessors()[0];
+  ASSERT_TRUE(then_block == switch_block->GetLastInstruction()->AsIf()->IfTrueSuccessor());
+  ASSERT_TRUE(then_block->GetFirstInstruction()->IsLoadConstantTableEntry());
+  HLoadConstantTableEntry* lcte = then_block->GetFirstInstruction()->AsLoadConstantTableEntry();
   EXPECT_EQ(type, lcte->GetType());
   ASSERT_TRUE(EntriesMatch(lcte, entries));
+  if (!return_block_indexes.empty()) {
+    // Due to the splitting and merging of blocks, the return block may or may not be the
+    // original `return_block`. Similar for the phi and return instructions.
+    return_block = then_block->GetSingleSuccessor();
+    ASSERT_TRUE(return_block->HasSinglePhi());
+    phi = return_block->GetFirstPhi()->AsPhi();
+    ASSERT_TRUE(return_block->GetLastInstruction()->IsReturn());
+    ret = return_block->GetLastInstruction()->AsReturn();
+  }
+  // Check the phi.
+  ASSERT_TRUE(then_block->GetLastInstruction()->IsGoto());
+  ASSERT_INS_EQ(phi, ret->InputAt(0));
+  ASSERT_EQ(2u, phi->InputCount());
+  ASSERT_INS_EQ(lcte, phi->InputAt(0));
+  ASSERT_INS_EQ(default_value, phi->InputAt(1));
 }
 
 TEST_F(ControlFlowSimplifierTest, SwitchToTableBoolean) {
@@ -318,11 +454,105 @@ TEST_F(ControlFlowSimplifierTest, SwitchToTableDouble) {
   TestSwitchToTable(DataType::Type::kFloat64, kEntries, /*start_value=*/ 1);
 }
 
+TEST_F(ControlFlowSimplifierTest, SwitchReturnToTableBoolean) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static const int32_t kEntries[] = {1, 0, 1, 1, 0, 0, 0, 1, 0, 1};
+  static const size_t kReturnBlockIndexes[] = {0, 0, 1, 1, 0, 2, 2, 2, 3, 2};
+  TestSwitchToTable(DataType::Type::kBool, kEntries, /*start_value=*/ 0, kReturnBlockIndexes);
+  TestSwitchToTable(DataType::Type::kBool, kEntries, /*start_value=*/ 1, kReturnBlockIndexes);
+}
+
+TEST_F(ControlFlowSimplifierTest, SwitchReturnToTableByte) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static const int32_t kEntries[] = {42, 88, -7, 11, 123};
+  static const size_t kReturnBlockIndexes[] = {0, 0, 0, 0, 0};
+  TestSwitchToTable(DataType::Type::kInt8, kEntries, /*start_value=*/ 0, kReturnBlockIndexes);
+  TestSwitchToTable(DataType::Type::kInt8, kEntries, /*start_value=*/ 1, kReturnBlockIndexes);
+}
+
+TEST_F(ControlFlowSimplifierTest, SwitchReturnToTableUint8) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static const int32_t kEntries[] = {42, 88, 7, 11, 255};
+  static const size_t kReturnBlockIndexes[] = {0, 1, 2, 3, 4};
+  TestSwitchToTable(DataType::Type::kUint8, kEntries, /*start_value=*/ 0, kReturnBlockIndexes);
+  TestSwitchToTable(DataType::Type::kUint8, kEntries, /*start_value=*/ 1, kReturnBlockIndexes);
+}
+
+TEST_F(ControlFlowSimplifierTest, SwitchReturnToTableShort) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static const int32_t kEntries[] = {42, 88, -7, 11, 12345};
+  static const size_t kReturnBlockIndexes[] = {1, 2, 3, 4, 5};
+  TestSwitchToTable(DataType::Type::kInt16, kEntries, /*start_value=*/ 0, kReturnBlockIndexes);
+  TestSwitchToTable(DataType::Type::kInt16, kEntries, /*start_value=*/ 1, kReturnBlockIndexes);
+}
+
+TEST_F(ControlFlowSimplifierTest, SwitchReturnToTableChar) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static const int32_t kEntries[] = {42, 88, 7, 11, 54321};
+  static const size_t kReturnBlockIndexes[] = {1, 2, 3, 3, 3};
+  TestSwitchToTable(DataType::Type::kUint16, kEntries, /*start_value=*/ 0, kReturnBlockIndexes);
+  TestSwitchToTable(DataType::Type::kUint16, kEntries, /*start_value=*/ 1, kReturnBlockIndexes);
+}
+
+TEST_F(ControlFlowSimplifierTest, SwitchReturnToTableInt) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static const int32_t kEntries[] = {42, 88, -7, 11, 123456789};
+  static const size_t kReturnBlockIndexes[] = {0, 0, 1, 0, 0};
+  TestSwitchToTable(DataType::Type::kInt32, kEntries, /*start_value=*/ 0, kReturnBlockIndexes);
+  TestSwitchToTable(DataType::Type::kInt32, kEntries, /*start_value=*/ 1, kReturnBlockIndexes);
+}
+
+TEST_F(ControlFlowSimplifierTest, SwitchReturnToTableLong) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static const int64_t kEntries[] = {42, 88, -7, 11, INT64_C(123456789987654321)};
+  static const size_t kReturnBlockIndexes[] = {1, 0, 1, 0, 1};
+  TestSwitchToTable(DataType::Type::kInt64, kEntries, /*start_value=*/ 0, kReturnBlockIndexes);
+  TestSwitchToTable(DataType::Type::kInt64, kEntries, /*start_value=*/ 1, kReturnBlockIndexes);
+}
+
+TEST_F(ControlFlowSimplifierTest, SwitchReturnToTableFloat) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static constexpr float nan = std::numeric_limits<float>::quiet_NaN();
+  static const float kEntries[] = {42.0f, 88.0f, -7.0f, 11.0f, 123456789.0f, nan};
+  static const size_t kReturnBlockIndexes[] = {1, 0, 0, 0, 0, 0};
+  TestSwitchToTable(DataType::Type::kFloat32, kEntries, /*start_value=*/ 0, kReturnBlockIndexes);
+  TestSwitchToTable(DataType::Type::kFloat32, kEntries, /*start_value=*/ 1, kReturnBlockIndexes);
+}
+
+TEST_F(ControlFlowSimplifierTest, SwitchReturnToTableDouble) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static constexpr double nan = std::numeric_limits<double>::quiet_NaN();
+  static const double kEntries[] = {42.0, 88.0, -7.0, 11.0, 123456789.0, nan};
+  static const size_t kReturnBlockIndexes[] = {1, 1, 1, 1, 1, 1};
+  TestSwitchToTable(DataType::Type::kFloat64, kEntries, /*start_value=*/ 0, kReturnBlockIndexes);
+  TestSwitchToTable(DataType::Type::kFloat64, kEntries, /*start_value=*/ 1, kReturnBlockIndexes);
+}
+
 template <typename T>
-void ControlFlowSimplifierTest::TestSwitchToTableWithDefault(DataType::Type type,
-                                                             ArrayRef<const T> entries,
-                                                             int32_t start_value,
-                                                             T dflt) {
+void ControlFlowSimplifierTest::TestSwitchToTableWithDefault(
+    DataType::Type type,
+    ArrayRef<const T> entries,
+    int32_t start_value,
+    T dflt,
+    ArrayRef<const size_t> return_block_indexes) {
   HBasicBlock* return_block = InitEntryMainExitGraph();
   HInstruction* switch_input = MakeParam(DataType::Type::kInt32);
   HInstruction* default_value = GetConstant(type, dflt);
@@ -335,7 +565,14 @@ void ControlFlowSimplifierTest::TestSwitchToTableWithDefault(DataType::Type type
   }
   phi_inputs.push_back(default_value);
   HPhi* phi = MakePhi(return_block, phi_inputs);
+  if (return_block_indexes.empty()) {
+    MakeInvokeStatic(return_block, DataType::Type::kVoid, {}, {});  // Avoid the return pattern.
+  }
   HReturn* ret = MakeReturn(return_block, phi);
+  if (!return_block_indexes.empty()) {
+    CHECK_EQ(return_block_indexes.size(), entries.size());
+    UpdateSwitchWithReturns(switch_block, return_block, return_block_indexes);
+  }
 
   bool success = CheckGraphAndTryControlFlowSimplifier();
   ASSERT_TRUE(success);
@@ -343,6 +580,14 @@ void ControlFlowSimplifierTest::TestSwitchToTableWithDefault(DataType::Type type
   // The packed switch and phi have been replaced by the load from constant table.
   ASSERT_INS_REMOVED(packed_switch);
   ASSERT_INS_REMOVED(phi);
+  if (return_block_indexes.empty()) {
+    ASSERT_INS_RETAINED(ret);
+  } else {
+    // Due to the splitting and merging of blocks, the return block may or may not be the
+    // original `return_block`. Similar for the return instruction.
+    ASSERT_TRUE(switch_block->GetLastInstruction()->IsReturn());
+    ret = switch_block->GetLastInstruction()->AsReturn();
+  }
   ASSERT_TRUE(ret->InputAt(0)->IsLoadConstantTableEntry());
   HLoadConstantTableEntry* lcte = ret->InputAt(0)->AsLoadConstantTableEntry();
   EXPECT_EQ(type, lcte->GetType());
@@ -480,6 +725,143 @@ TEST_F(ControlFlowSimplifierTest, SwitchToTableDoubleWithDefault) {
   TestSwitchToTableWithDefault(DataType::Type::kFloat64, kEntries, /*start_value=*/ 2, kDefault);
 }
 
+TEST_F(ControlFlowSimplifierTest, SwitchReturnToTableBooleanWithDefault) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static const int32_t kDefault = 0;
+  static const int32_t kEntries[] = {1, 0, 1, 1, 0, 0, 0, 1, 0, 1};
+  static const size_t kReturnBlockIndexes[] = {0, 0, 1, 1, 0, 2, 2, 2, 3, 2};
+  TestSwitchToTableWithDefault(
+      DataType::Type::kBool, kEntries, /*start_value=*/ 0, kDefault, kReturnBlockIndexes);
+  TestSwitchToTableWithDefault(
+      DataType::Type::kBool, kEntries, /*start_value=*/ 1, kDefault, kReturnBlockIndexes);
+  TestSwitchToTableWithDefault(
+      DataType::Type::kBool, kEntries, /*start_value=*/ 3, kDefault, kReturnBlockIndexes);
+}
+
+TEST_F(ControlFlowSimplifierTest, SwitchReturnToTableByteWithDefault) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static const int32_t kDefault = -42;
+  static const int32_t kEntries[] = {42, 88, -7, 11, 123};
+  static const size_t kReturnBlockIndexes[] = {0, 0, 0, 0, 0};
+  TestSwitchToTableWithDefault(
+      DataType::Type::kInt8, kEntries, /*start_value=*/ 0, kDefault, kReturnBlockIndexes);
+  TestSwitchToTableWithDefault(
+      DataType::Type::kInt8, kEntries, /*start_value=*/ 1, kDefault, kReturnBlockIndexes);
+  TestSwitchToTableWithDefault(
+      DataType::Type::kInt8, kEntries, /*start_value=*/ 3, kDefault, kReturnBlockIndexes);
+}
+
+TEST_F(ControlFlowSimplifierTest, SwitchReturnToTableUint8WithDefault) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static const int32_t kDefault = 43;
+  static const int32_t kEntries[] = {42, 88, 7, 11, 255};
+  static const size_t kReturnBlockIndexes[] = {0, 1, 2, 3, 4};
+  TestSwitchToTableWithDefault(
+      DataType::Type::kUint8, kEntries, /*start_value=*/ 0, kDefault, kReturnBlockIndexes);
+  TestSwitchToTableWithDefault(
+      DataType::Type::kUint8, kEntries, /*start_value=*/ 1, kDefault, kReturnBlockIndexes);
+  TestSwitchToTableWithDefault(
+      DataType::Type::kUint8, kEntries, /*start_value=*/ 3, kDefault, kReturnBlockIndexes);
+}
+
+TEST_F(ControlFlowSimplifierTest, SwitchReturnToTableShortWithDefault) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static const int32_t kDefault = -42;
+  static const int32_t kEntries[] = {42, 88, -7, 11, 12345};
+  static const size_t kReturnBlockIndexes[] = {1, 2, 3, 4, 5};
+  TestSwitchToTableWithDefault(
+      DataType::Type::kInt16, kEntries, /*start_value=*/ 0, kDefault, kReturnBlockIndexes);
+  TestSwitchToTableWithDefault(
+      DataType::Type::kInt16, kEntries, /*start_value=*/ 1, kDefault, kReturnBlockIndexes);
+  TestSwitchToTableWithDefault(
+      DataType::Type::kInt16, kEntries, /*start_value=*/ 3, kDefault, kReturnBlockIndexes);
+}
+
+TEST_F(ControlFlowSimplifierTest, SwitchReturnToTableCharWithDefault) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static const int32_t kDefault = 43;
+  static const int32_t kEntries[] = {42, 88, 7, 11, 54321};
+  static const size_t kReturnBlockIndexes[] = {1, 2, 3, 3, 3};
+  TestSwitchToTableWithDefault(
+      DataType::Type::kUint16, kEntries, /*start_value=*/ 0, kDefault, kReturnBlockIndexes);
+  TestSwitchToTableWithDefault(
+      DataType::Type::kUint16, kEntries, /*start_value=*/ 1, kDefault, kReturnBlockIndexes);
+  TestSwitchToTableWithDefault(
+      DataType::Type::kUint16, kEntries, /*start_value=*/ 3, kDefault, kReturnBlockIndexes);
+}
+
+TEST_F(ControlFlowSimplifierTest, SwitchReturnToTableIntWithDefault) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static const int32_t kDefault = -42;
+  static const int32_t kEntries[] = {42, 88, -7, 11, 123456789};
+  static const size_t kReturnBlockIndexes[] = {0, 0, 1, 0, 0};
+  TestSwitchToTableWithDefault(
+      DataType::Type::kInt32, kEntries, /*start_value=*/ 0, kDefault, kReturnBlockIndexes);
+  TestSwitchToTableWithDefault
+      (DataType::Type::kInt32, kEntries, /*start_value=*/ 1, kDefault, kReturnBlockIndexes);
+  TestSwitchToTableWithDefault(
+      DataType::Type::kInt32, kEntries, /*start_value=*/ 3, kDefault, kReturnBlockIndexes);
+}
+
+TEST_F(ControlFlowSimplifierTest, SwitchReturnToTableLongWithDefault) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static const int64_t kDefault = -42;
+  static const int64_t kEntries[] = {42, 88, -7, 11, INT64_C(123456789987654321)};
+  static const size_t kReturnBlockIndexes[] = {1, 0, 1, 0, 1};
+  TestSwitchToTableWithDefault(
+      DataType::Type::kInt64, kEntries, /*start_value=*/ 0, kDefault, kReturnBlockIndexes);
+  TestSwitchToTableWithDefault(
+      DataType::Type::kInt64, kEntries, /*start_value=*/ 1, kDefault, kReturnBlockIndexes);
+  TestSwitchToTableWithDefault(
+      DataType::Type::kInt64, kEntries, /*start_value=*/ 2, kDefault, kReturnBlockIndexes);
+}
+
+TEST_F(ControlFlowSimplifierTest, SwitchReturnToTableFloatWithDefault) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static const float kDefault = -42.0f;
+  static constexpr float nan = std::numeric_limits<float>::quiet_NaN();
+  static const float kEntries[] = {42.0f, 88.0f, -7.0f, 11.0f, 123456789.0f, nan};
+  static const size_t kReturnBlockIndexes[] = {1, 0, 0, 0, 0, 0};
+  TestSwitchToTableWithDefault(
+      DataType::Type::kFloat32, kEntries, /*start_value=*/ 0, kDefault, kReturnBlockIndexes);
+  TestSwitchToTableWithDefault(
+      DataType::Type::kFloat32, kEntries, /*start_value=*/ 1, kDefault, kReturnBlockIndexes);
+  TestSwitchToTableWithDefault(
+      DataType::Type::kFloat32, kEntries, /*start_value=*/ 2, kDefault, kReturnBlockIndexes);
+}
+
+TEST_F(ControlFlowSimplifierTest, SwitchReturnToTableDoubleWithDefault) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static const double kDefault = -42.0;
+  static constexpr double nan = std::numeric_limits<double>::quiet_NaN();
+  static const double kEntries[] = {42.0, 88.0, -7.0, 11.0, 123456789.0, nan};
+  static const size_t kReturnBlockIndexes[] = {1, 1, 1, 1, 1, 1};
+  TestSwitchToTableWithDefault(
+      DataType::Type::kFloat64, kEntries, /*start_value=*/ 0, kDefault, kReturnBlockIndexes);
+  TestSwitchToTableWithDefault(
+      DataType::Type::kFloat64, kEntries, /*start_value=*/ 1, kDefault, kReturnBlockIndexes);
+  TestSwitchToTableWithDefault(
+      DataType::Type::kFloat64, kEntries, /*start_value=*/ 2, kDefault, kReturnBlockIndexes);
+}
+
 TEST_F(ControlFlowSimplifierTest, SwitchReplacedByIf) {
   if (!com::android::art::rw::flags::packed_switch_simplification()) {
     GTEST_SKIP() << "packed switch simplification disabled.";
@@ -528,6 +910,77 @@ TEST_F(ControlFlowSimplifierTest, SwitchEliminatedWithDefault) {
   ASSERT_INS_REMOVED(packed_switch);
   ASSERT_TRUE(switch_block->GetLastInstruction()->IsReturnVoid());
   ASSERT_BLOCK_REMOVED(return_block);
+}
+
+void ControlFlowSimplifierTest::TestReturnMerging(ArrayRef<const size_t> return_block_indexes) {
+  HBasicBlock* return_block = InitEntryMainExitGraph();
+  HInstruction* switch_input = MakeParam(DataType::Type::kInt32);
+  static constexpr int32_t kStartValue = 0;
+  std::vector<HInstruction*> phi_inputs;
+  for ([[maybe_unused]] size_t i : Range(return_block_indexes.size() + 1u)) {
+    phi_inputs.push_back(MakeParam(DataType::Type::kInt32));
+  }
+  HBasicBlock* switch_block =
+      CreateSwitchPattern(return_block, return_block_indexes.size(), switch_input, kStartValue);
+  HPhi* phi = MakePhi(return_block, phi_inputs);
+  HReturn* ret = MakeReturn(return_block, phi);
+
+  UpdateSwitchWithReturns(switch_block, return_block, return_block_indexes);
+  CHECK_NE(phi->InputCount(), phi_inputs.size());
+
+  // Prevent flattening by inserting invokes.
+  for (HBasicBlock* block : switch_block->GetSuccessors()) {
+    if (block->IsSingleGoto()) {
+      HBasicBlock* merge = block->GetSingleSuccessor();
+      CHECK(merge->GetLastInstruction()->IsReturn());
+      if (merge->GetFirstInstruction() == merge->GetLastInstruction()) {
+        MakeInvokeStatic(merge, DataType::Type::kVoid, {}, {});
+      } else {
+        CHECK(merge->GetFirstInstruction()->IsInvokeStaticOrDirect());
+      }
+    } else {
+      CHECK(block->GetLastInstruction()->IsReturn());
+      CHECK(block->GetFirstInstruction() == block->GetLastInstruction());
+      MakeInvokeStatic(block, DataType::Type::kVoid, {}, {});
+    }
+  }
+
+  bool success = CheckGraphAndTryControlFlowSimplifier();
+  ASSERT_TRUE(success);
+
+  ASSERT_EQ(exit_block_->GetPredecessors().size(), 1u);
+  HBasicBlock* new_return_block = exit_block_->GetPredecessors()[0];
+  ASSERT_TRUE(return_block != new_return_block);
+  ASSERT_EQ(return_block->GetSuccessors().size(), 1u);
+  ASSERT_TRUE(return_block->GetSingleSuccessor() == new_return_block);
+  ASSERT_TRUE(new_return_block->GetLastInstruction()->IsReturn());
+  ASSERT_TRUE(new_return_block->GetLastInstruction()->AsReturn()->InputAt(0)->IsPhi());
+  HPhi* new_phi = new_return_block->GetLastInstruction()->AsReturn()->InputAt(0)->AsPhi();
+  size_t max_return_block_index =
+      *std::max_element(return_block_indexes.begin(), return_block_indexes.end());
+  ASSERT_EQ(new_phi->InputCount(), max_return_block_index + 1u);
+}
+
+TEST_F(ControlFlowSimplifierTest, ReturnMerging) {
+  if (!com::android::art::rw::flags::packed_switch_simplification()) {
+    GTEST_SKIP() << "packed switch simplification disabled.";
+  }
+  static const size_t kReturnBlockIndexes1[] = {0, 0, 1, 1, 0, 2, 2, 2, 3, 2};
+  TestReturnMerging(ArrayRef<const size_t>(kReturnBlockIndexes1));
+  static const size_t kReturnBlockIndexes2[] = {0, 1, 2, 3, 4};
+  TestReturnMerging(ArrayRef<const size_t>(kReturnBlockIndexes2));
+  static const size_t kReturnBlockIndexes3[] = {1, 2, 3, 4, 5};
+  TestReturnMerging(ArrayRef<const size_t>(kReturnBlockIndexes3));
+  static const size_t kReturnBlockIndexes4[] = {1, 2, 3, 3, 3};
+  TestReturnMerging(ArrayRef<const size_t>(kReturnBlockIndexes4));
+  static const size_t kReturnBlockIndexes5[] = {0, 0, 1, 0, 0};
+  TestReturnMerging(ArrayRef<const size_t>(kReturnBlockIndexes5));
+  static const size_t kReturnBlockIndexes6[] = {1, 0, 1, 0, 1};
+  TestReturnMerging(ArrayRef<const size_t>(kReturnBlockIndexes6));
+  static const size_t kReturnBlockIndexes7[] = {1, 0, 0, 0, 0, 0};
+  TestReturnMerging(ArrayRef<const size_t>(kReturnBlockIndexes7));
+  static const size_t kReturnBlockIndexes8[] = {1, 1, 1, 1, 1, 1};
+  TestReturnMerging(ArrayRef<const size_t>(kReturnBlockIndexes8));
 }
 
 TEST_F(ControlFlowSimplifierTest, FlattenGotoRight) {

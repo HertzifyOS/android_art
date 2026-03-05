@@ -78,7 +78,7 @@ class DexFileLoader {
   // This uses the source path provided to DexFileLoader constructor.
   //
   // Returns false on error.
-  bool GetMultiDexChecksums(/*out*/ std::vector<std::pair<std::string, uint32_t>>* checksums,
+  bool GetMultiDexChecksums(/*out*/ std::vector<uint32_t>* checksums,
                             /*out*/ std::string* error_msg,
                             /*out*/ bool* only_contains_uncompressed_dex = nullptr);
 
@@ -111,7 +111,7 @@ class DexFileLoader {
         break;  // Found another primary dex file, terminate iteration.
       }
       if (!is_primary_dex && dex_file->GetDexVersion() >= DexFile::kDexContainerVersion) {
-        if (dex_file->GetLocationChecksum() == dex_files[*i - 1]->GetLocationChecksum() + 1) {
+        if (dex_file->GetLocationChecksum() == dex_files[*i - 1]->GetLocationChecksum()) {
           continue;
         }
       }
@@ -150,13 +150,9 @@ class DexFileLoader {
   //     the dex_location where its file name part has been made canonical.
   static std::string GetDexCanonicalLocation(const char* dex_location);
 
-  // Split the dex location into the base location (filename) and the multidex suffix.
-  // The suffix includes the kMultiDexSeparator and it may be an empty string.
-  static std::pair<std::string_view, std::string_view> SplitMultiDexLocation(
-      std::string_view location) {
-    size_t pos = location.rfind(kMultiDexSeparator);
-    return {location.substr(0, pos), (pos == std::string_view::npos) ? "" : location.substr(pos)};
-  }
+  // Split the dex location into the base location (filename) and the multidex index.
+  // The index is 0-based.
+  static std::pair<std::string_view, size_t> SplitMultiDexLocation(std::string_view location);
 
   // For normal dex files, location and base location coincide. If a dex file is part of a multidex
   // archive, the base location is the name of the originating jar/apk, stripped of any internal

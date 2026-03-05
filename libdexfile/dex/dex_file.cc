@@ -36,6 +36,7 @@
 #include "class_accessor-inl.h"
 #include "descriptors_names.h"
 #include "dex_file-inl.h"
+#include "dex_file_loader.h"
 #include "standard_dex_file.h"
 #include "utf-inl.h"
 

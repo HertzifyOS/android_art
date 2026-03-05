@@ -322,7 +322,9 @@ class Monitor {
       REQUIRES(monitor_lock_)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
-  static std::string PrettyContentionInfo(MonitorOwner owner,
+  static std::string PrettyContentionInfo(const std::string& owner_name,
+                                          pid_t owner_tid,
+                                          uint32_t virtual_thread_id,
                                           ArtMethod* owners_method,
                                           uint32_t owners_dex_pc,
                                           size_t num_waiters) REQUIRES_SHARED(Locks::mutator_lock_);

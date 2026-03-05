@@ -399,19 +399,13 @@ static const uint32_t* GetExtraStringsOffsets(const DexFile& dex_file,
   return reinterpret_cast<const uint32_t*>(strings_data_start + sizeof(uint32_t));
 }
 
-ClassStatus VdexFile::ComputeClassStatus(Thread* self, Handle<mirror::Class> cls) const {
+ClassStatus VdexFile::ComputeClassStatus(Thread* self,
+                                         Handle<mirror::Class> cls,
+                                         uint32_t index) const {
   const DexFile& dex_file = cls->GetDexFile();
   uint16_t class_def_index = cls->GetDexClassDefIndex();
-
-  // Find which dex file index from within the vdex file.
-  uint32_t index = 0;
-  for (; index < GetNumberOfDexFiles(); ++index) {
-    if (dex_file.GetLocationChecksum() == GetLocationChecksum(index)) {
-      break;
-    }
-  }
-
-  DCHECK_NE(index, GetNumberOfDexFiles());
+  DCHECK_LT(index, GetNumberOfDexFiles());
+  DCHECK_EQ(dex_file.GetLocationChecksum(), GetDexChecksumAt(index));
 
   const uint8_t* verifier_deps = GetVerifierDepsData().data();
   const uint32_t* dex_file_class_defs = GetDexFileClassDefs(verifier_deps, index);

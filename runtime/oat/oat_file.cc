@@ -641,9 +641,9 @@ static bool ComputeAndCheckTypeLookupTableData(const DexFile::Header& header,
 }
 
 bool OatFileBase::Setup(const std::vector<const DexFile*>& dex_files, std::string* error_msg) {
-  uint32_t i = 0;
   const uint8_t* type_lookup_table_start = nullptr;
-  for (const DexFile* dex_file : dex_files) {
+  for (size_t i = 0; i < dex_files.size(); ++i) {
+    const DexFile* dex_file = dex_files[i];
     // Defensively verify external dex file checksum. `OatFileAssistant`
     // expects this check to happen during oat file setup when the oat file
     // does not contain dex code.
@@ -657,7 +657,7 @@ bool OatFileBase::Setup(const std::vector<const DexFile*>& dex_files, std::strin
     std::string dex_location = dex_file->GetLocation();
     std::string canonical_location = DexFileLoader::GetDexCanonicalLocation(dex_location.c_str());
 
-    type_lookup_table_start = vdex_->GetNextTypeLookupTableData(type_lookup_table_start, i++);
+    type_lookup_table_start = vdex_->GetNextTypeLookupTableData(type_lookup_table_start, i);
     const uint8_t* type_lookup_table_data = nullptr;
     if (!ComputeAndCheckTypeLookupTableData(dex_file->GetHeader(),
                                             type_lookup_table_start,
@@ -675,7 +675,8 @@ bool OatFileBase::Setup(const std::vector<const DexFile*>& dex_files, std::strin
                                               dex_file->GetSha1(),
                                               dex_location,
                                               canonical_location,
-                                              type_lookup_table_data);
+                                              type_lookup_table_data,
+                                              i);
     oat_dex_files_storage_.push_back(oat_dex_file);
 
     // Add the location and canonical location (if different) to the oat_dex_files_ table.
@@ -687,7 +688,7 @@ bool OatFileBase::Setup(const std::vector<const DexFile*>& dex_files, std::strin
     }
   }
   // Now that we've created all the OatDexFile, update the dex files.
-  for (i = 0; i < dex_files.size(); ++i) {
+  for (size_t i = 0; i < dex_files.size(); ++i) {
     dex_files[i]->SetOatDexFile(oat_dex_files_storage_[i]);
   }
   return true;
@@ -1111,7 +1112,8 @@ bool OatFileBase::Setup(int zip_fd,
                        lookup_table_data,
                        bss_mapping_info,
                        class_offsets_pointer,
-                       dex_profile_metadata);
+                       dex_profile_metadata,
+                       i);
     oat_dex_files_storage_.push_back(oat_dex_file);
 
     // Add the location and canonical location (if different) to the oat_dex_files_ table.
@@ -1871,7 +1873,8 @@ class OatFileBackedByVdex final : public OatFileBase {
                                                   header->signature_,
                                                   location,
                                                   canonical_location,
-                                                  type_lookup_table_data);
+                                                  type_lookup_table_data,
+                                                  i);
         oat_file->oat_dex_files_storage_.push_back(oat_dex_file);
 
         std::string_view key(oat_dex_file->GetDexFileLocation());
@@ -2330,13 +2333,15 @@ OatDexFile::OatDexFile(const OatFile* oat_file,
                        const uint8_t* lookup_table_data,
                        const OatFile::BssMappingInfo& bss_mapping_info,
                        const uint32_t* oat_class_offsets_pointer,
-                       const DexProfileMetadata* dex_profile_metadata)
+                       const DexProfileMetadata* dex_profile_metadata,
+                       uint32_t vdex_index)
     : oat_file_(oat_file),
       dex_file_location_(dex_file_location),
       canonical_dex_file_location_(canonical_dex_file_location),
       dex_file_magic_(dex_file_magic),
       dex_file_location_checksum_(dex_file_location_checksum),
       dex_file_sha1_(dex_file_sha1),
+      vdex_index_(vdex_index),
       dex_file_container_(dex_file_container),
       dex_file_pointer_(dex_file_pointer),
       lookup_table_data_(lookup_table_data),
@@ -2376,13 +2381,15 @@ OatDexFile::OatDexFile(const OatFile* oat_file,
                        DexFile::Sha1 dex_file_sha1,
                        const std::string& dex_file_location,
                        const std::string& canonical_dex_file_location,
-                       const uint8_t* lookup_table_data)
+                       const uint8_t* lookup_table_data,
+                       uint32_t vdex_index)
     : oat_file_(oat_file),
       dex_file_location_(dex_file_location),
       canonical_dex_file_location_(canonical_dex_file_location),
       dex_file_magic_(dex_file_magic),
       dex_file_location_checksum_(dex_file_location_checksum),
       dex_file_sha1_(dex_file_sha1),
+      vdex_index_(vdex_index),
       dex_file_container_(dex_file_container),
       dex_file_pointer_(dex_file_pointer),
       lookup_table_data_(lookup_table_data) {

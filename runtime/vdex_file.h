@@ -256,7 +256,9 @@ class VdexFile {
   // order must match too.
   bool MatchesDexFileChecksums(const std::vector<const DexFile::Header*>& dex_headers) const;
 
-  ClassStatus ComputeClassStatus(Thread* self, Handle<mirror::Class> cls) const
+  ClassStatus ComputeClassStatus(Thread* self,
+                                 Handle<mirror::Class> cls,
+                                 uint32_t dex_file_index) const
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   // Return the name of the underlying `MemMap` of the vdex file, typically the
