@@ -1104,7 +1104,7 @@ void GraphChecker::VisitPhi(HPhi* phi) {
 
   // Ensure the first input of a phi is not itself.
   ArrayRef<HUserRecord<HInstruction*>> input_records = phi->GetInputRecords();
-  if (input_records[0].GetInstruction() == phi) {
+  if (!input_records.empty() && input_records[0].GetInstruction() == phi) {
     AddError(StringPrintf("Loop phi %d in block %d is its own first input.",
                           phi->GetId(),
                           phi->GetBlock()->GetBlockId()));
