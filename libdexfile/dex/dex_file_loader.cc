@@ -175,7 +175,7 @@ std::string DexFileLoader::GetMultiDexLocation(const char* dex_location, size_t 
   if (index == 0) {
     return dex_location;
   }
-  return StringPrintf("%s%cclasses%zu.dex", dex_location, kMultiDexSeparator, index + 1);
+  return StringPrintf("%s%c%zu", dex_location, kMultiDexSeparator, index);
 }
 
 bool DexFileLoader::GetMultiDexChecksums(
@@ -233,6 +233,10 @@ bool DexFileLoader::GetMultiDexChecksums(
     }
     checksums->emplace_back(header->checksum_);
     ptr += header->file_size_;
+    if (header->HeaderOffset() + header->file_size_ >= header->ContainerSize()) {
+      DCHECK_EQ(ptr, end) << "Unexpected data after dex file: " << filename_;
+      break;  // Stop if we reached the end of the container.
+    }
   }
   return true;
 }

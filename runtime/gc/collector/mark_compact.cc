@@ -4297,14 +4297,6 @@ void MarkCompact::UpdateClassTableClasses(Runtime* runtime, bool immune_class_ta
 void MarkCompact::CompactionPause() {
   TimingLogger::ScopedTiming t(__FUNCTION__, GetTimings());
   Runtime* runtime = Runtime::Current();
-  if (kIsDebugBuild) {
-    DCHECK_EQ(thread_running_gc_, Thread::Current());
-    // TODO(Simulator): Test that this should not operate on the simulated stack when the simulator
-    // supports mark compact.
-    stack_low_addr_ = thread_running_gc_->GetStackEnd<kNativeStackType>();
-    stack_high_addr_ = reinterpret_cast<char*>(stack_low_addr_)
-                       + thread_running_gc_->GetUsableStackSize<kNativeStackType>();
-  }
   {
     ReaderMutexLock rmu(thread_running_gc_, *Locks::heap_bitmap_lock_);
     // Refresh data-structures to catch-up on allocations that may have
@@ -4468,7 +4460,6 @@ void MarkCompact::CompactionPause() {
   } else {
     DCHECK_EQ(compaction_buffer_counter_.load(std::memory_order_relaxed), 1);
   }
-  stack_low_addr_ = nullptr;
 }
 
 void MarkCompact::KernelPrepareRangeForUffd(uint8_t* to_addr, uint8_t* from_addr, size_t map_size) {

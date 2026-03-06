@@ -145,7 +145,7 @@ class EXPORT ClassLoaderContext {
   // elements that appear before it in the containing classloader. E.g. if `this` contains
   // (from child to parent):
   //
-  // PathClassLoader { multidex.apk!classes.dex, multidex.apk!classes2.dex, foo.dex, bar.dex } ->
+  // PathClassLoader { multidex.apk, multidex.apk!1, foo.dex, bar.dex } ->
   //    PathClassLoader { baz.dex } -> BootClassLoader
   //
   // then the return value will look like:

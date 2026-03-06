@@ -2178,7 +2178,7 @@ std::string ProfileCompilationInfo::DumpInfo(const std::vector<const DexFile*>& 
     os << "\n";
   }
 
-  const std::string kFirstDexFileKeySubstitute = "!classes.dex";
+  const std::string kFirstDexFileKeySubstitute = "!0";
 
   for (const std::unique_ptr<DexFileData>& dex_data : info_) {
     os << "\n";

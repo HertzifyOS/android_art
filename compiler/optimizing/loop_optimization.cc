@@ -610,8 +610,8 @@ bool HLoopOptimization::LocalRun() {
   // temporary data structures using the phase-local allocator. All new HIR
   // should use the global allocator.
   ScopedArenaSet<HInstruction*> iset(loop_allocator_->Adapter(kArenaAllocLoopOptimization));
-  ScopedArenaSafeMap<HInstruction*, HInstruction*> reds(
-      std::less<HInstruction*>(), loop_allocator_->Adapter(kArenaAllocLoopOptimization));
+  ScopedArenaSafeMap<HInstruction*, HInstruction*, HInstructionIdComparator> reds(
+      loop_allocator_->Adapter(kArenaAllocLoopOptimization));
   ScopedArenaSet<ArrayReference> refs(loop_allocator_->Adapter(kArenaAllocLoopOptimization));
   ScopedArenaSafeMap<HInstruction*, HInstruction*> map(
       std::less<HInstruction*>(), loop_allocator_->Adapter(kArenaAllocLoopOptimization));

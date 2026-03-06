@@ -365,12 +365,12 @@ ALWAYS_INLINE inline static bool ThrowIAEIfFieldIsNotOverwritable(ObjPtr<mirror:
   if (art_field->IsWriteProtected()) {
     // See `ArtField::IsUnmodifiable()`.
     uint32_t target_sdk_version = Runtime::Current()->GetTargetSdkVersion();
-    if (IsSdkVersionSetAndAtMost(target_sdk_version, SdkVersion::kC)) {
+    if (IsSdkVersionSetAndAtMost(target_sdk_version, SdkVersion::kB)) {
       return false;
     }
 
     uint32_t sdk_version = Runtime::Current()->GetSdkVersion();
-    if (IsSdkVersionSetAndAtMost(sdk_version, SdkVersion::kC)) {
+    if (IsSdkVersionSetAndAtMost(sdk_version, SdkVersion::kB)) {
       return false;
     }
   } else if (!IsUnmodifiable(field)) {

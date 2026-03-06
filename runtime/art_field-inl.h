@@ -529,7 +529,7 @@ inline bool ArtField::IsUnmodifiable(auto&& get_field_type) {
   // record classes being the only exception. For compatibility purposes allow apps targeting B
   // or an older release to overwrite such fields.
   uint32_t target_sdk_version = Runtime::Current()->GetTargetSdkVersion();
-  if (IsSdkVersionSetAndAtMost(target_sdk_version, SdkVersion::kC)) {
+  if (IsSdkVersionSetAndAtMost(target_sdk_version, SdkVersion::kB)) {
     return false;
   }
 
@@ -561,7 +561,7 @@ inline bool ArtField::IsUnmodifiable(auto&& get_field_type) {
 
   // Make sure that OEMs code in bootclasspath won't be affected after ART module update.
   uint32_t sdk_version = Runtime::Current()->GetSdkVersion();
-  if (IsSdkVersionSetAndAtMost(sdk_version, SdkVersion::kC)) {
+  if (IsSdkVersionSetAndAtMost(sdk_version, SdkVersion::kB)) {
     return false;
   }
 

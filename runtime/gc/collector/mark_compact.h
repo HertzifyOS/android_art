@@ -1067,10 +1067,6 @@ class MarkCompact final : public GarbageCollector {
   // TODO: Must be replaced with an efficient mechanism eventually. Or ensure
   // that double updation doesn't happen in the first place.
   std::unique_ptr<std::unordered_set<void*>> updated_roots_ GUARDED_BY(lock_);
-  // TODO: Remove once an efficient mechanism to deal with double root updation
-  // is incorporated.
-  void* stack_high_addr_;
-  void* stack_low_addr_;
   // Following values for logging purposes
   void* prev_post_compact_end_;
   void* prev_black_dense_end_;

@@ -66,9 +66,9 @@ public class Main {
     public static void main(String[] args) throws Throwable {
         System.loadLibrary(args[0]);
 
-        boolean specialCasedStaticFinalAreFinal = getTargetSdkVersion() > 37;
+        boolean specialCasedStaticFinalAreFinal = getTargetSdkVersion() > 36;
         boolean allStaticFinalAreFinal =
-            getTargetSdkVersion() > 37 && (getSdkVersion() == 0 || getSdkVersion() > 37);
+            getTargetSdkVersion() > 36 && (getSdkVersion() == 0 || getSdkVersion() > 36);
 
         testFields(specialCasedStaticFinalAreFinal, allStaticFinalAreFinal);
         runTestInASeparateClassLoader(specialCasedStaticFinalAreFinal, allStaticFinalAreFinal);

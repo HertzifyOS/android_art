@@ -3270,6 +3270,7 @@ double Runtime::GetHashTableMaxLoadFactor() const {
 void Runtime::UpdateProcessState(ProcessState process_state) {
   ProcessState old_process_state = process_state_;
   process_state_ = process_state;
+  was_ever_jank_perceptible_ |= InJankPerceptibleProcessState();
   GetHeap()->UpdateProcessState(old_process_state, process_state);
 
   // When the application switches to the foreground, lock contention on classlinker_classes_lock_
