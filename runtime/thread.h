@@ -32,6 +32,7 @@
 #include "base/atomic.h"
 #include "base/bit_field.h"
 #include "base/bit_utils.h"
+#include "base/globals.h"
 #include "base/locks.h"
 #include "base/macros.h"
 #include "base/offsets.h"
@@ -313,7 +314,7 @@ struct MountedVirtualThreadData {
   const uint32_t carrier_thread_id_;
   uint8_t flags_;
   // art::ThreadList stores a linked list of mounted virtual threads in this field.
-  MountedVirtualThreadData* next_;
+  MountedVirtualThreadData* next_ GUARDED_BY(Locks::thread_list_lock_);
 };
 
 std::ostream& operator<<(std::ostream& os, const MountedVirtualThreadData& data);
@@ -723,6 +724,8 @@ class EXPORT Thread {
   // Returns the thread id used for java monitor lock purpose. If a virtual thread is mounted on
   // this platform thread, the thread id of the virtual thread is returned.
   ALWAYS_INLINE uint32_t GetMonitorThreadId() const {
+    DCHECK_EQ(this, Thread::Current())
+        << "GetMonitorThreadId() should only be called on the current thread.";
     return IsVirtualThreadMounted() ? GetVirtualThreadId() : GetThreadId();
   }
 
@@ -981,9 +984,8 @@ class EXPORT Thread {
   void Unpark();
 
   // Returns true when a virtual thread is mounted on this platform thread.
-  ALWAYS_INLINE bool IsVirtualThreadMounted(
-      std::memory_order order = std::memory_order_relaxed) const {
-    MountedVirtualThreadData* data = GetMountedVirtualThreadData(order);
+  ALWAYS_INLINE bool IsVirtualThreadMounted() const {
+    MountedVirtualThreadData* data = GetMountedVirtualThreadData();
     DCHECK(kIsVirtualThreadEnabled || data == nullptr);
     return kIsVirtualThreadEnabled && data != nullptr;
   }
@@ -991,6 +993,8 @@ class EXPORT Thread {
   // Callers should check IsVirtualThreadMounted() before calling GetVirtualThreadId().
   ALWAYS_INLINE uint32_t GetVirtualThreadId() const {
     DCHECK(IsVirtualThreadMounted());
+    DCHECK_EQ(this, Thread::Current())
+        << "GetVirtualThreadId() should only be called on the current thread.";
     MountedVirtualThreadData* data = GetMountedVirtualThreadData();
     return data->virtual_thread_id_;
   }
@@ -1029,9 +1033,15 @@ class EXPORT Thread {
  private:
   void NotifyLocked(Thread* self) REQUIRES(wait_mutex_);
 
-  ALWAYS_INLINE MountedVirtualThreadData* GetMountedVirtualThreadData(
-      std::memory_order order = std::memory_order_relaxed) const {
-    return tlsPtr_.mounted_virtual_thread_data.load(order);
+  ALWAYS_INLINE MountedVirtualThreadData* GetMountedVirtualThreadData() const {
+    DCHECK_EQ(this, Thread::Current());
+    return tlsPtr_.mounted_virtual_thread_data.load(std::memory_order_relaxed);
+  }
+
+  ALWAYS_INLINE void SetMountedVirtualThreadData(MountedVirtualThreadData* data)
+      REQUIRES(Locks::thread_list_lock_) {
+    DCHECK_EQ(this, Thread::Current());
+    tlsPtr_.mounted_virtual_thread_data.store(data, std::memory_order_release);
   }
 
  public:
@@ -1751,7 +1761,12 @@ class EXPORT Thread {
   }
 
   bool IsForceInterpreter() const {
-    return (tls32_.force_interpreter_count != 0) || GetMountedVirtualThreadData() != nullptr;
+    DCHECK(this == Thread::Current() || IsSuspended() ||
+        Locks::thread_list_lock_->IsExclusiveHeld(Thread::Current()))
+      << "Please suspend this thread or acquire thread_list_lock from another thread. "
+      << "See the doc of mounted_virtual_thread_data field for details.";
+    return (tls32_.force_interpreter_count != 0) ||
+        tlsPtr_.mounted_virtual_thread_data.load(std::memory_order_relaxed) != nullptr;
   }
 
   bool IncrementMakeVisiblyInitializedCounter() {
@@ -2651,8 +2666,19 @@ class EXPORT Thread {
     mirror::Object* current_peer;
 
     // This field is normally set when virtual thread is mounted, and the object is expected
-    // to be allocated in the stack. When no virtual thread is mounted on this carrier,
+    // to be allocated in the stack. When no virtual thread is mounted on this platform thread,
     // the value should be nullptr.
+    // The concurrency model:
+    // 1. This atomic value is expected to be modified by the thread itself while holding
+    //    thread_list_lock_ and mutator_lock_ only.
+    // 2. The flags_ field should only be accessed by the thread itself.
+    // 3. Accessing the next_ field requires thread_list_lock_.
+    // 4. Accessing other fields or reliably performing a null check on this field from other
+    //    threads requires thread_list_lock_ or a thread suspension.
+    // 5. For limited purposes, e.g. logging or DCHECK, where holding thread_list_lock_ or
+    //    a thread suspension is challenging, an atomic null check from other threads
+    //    provides a useful hint whether a virtual thread is mounted on another platform thread, but
+    //    it is not reliable.
     std::atomic<MountedVirtualThreadData*> mounted_virtual_thread_data;
   } tlsPtr_;
 

@@ -89,10 +89,10 @@ struct MonitorOwner {
   // Return the thread id of the owner threads allocated by art::ThreadList.
   // It isn't the tid of an OS thread, nor the id of java.lang.Thread.
   // Unlike GetVirtualThreadId(), GetThreadId() can be called for a platform thread owner.
-  uint32_t GetThreadId() const;
+  uint32_t GetThreadId() const REQUIRES(Locks::thread_list_lock_);
   // Return the owner id used by art::MonitorMutex. If the owner is an OS thread, it's effectively
   // the tid of the OS thread. See art::MonitorMutex::GetSelfId() for the details.
-  pid_t GetMutexOwnerId() const;
+  pid_t GetMutexOwnerId() const REQUIRES(Locks::thread_list_lock_);
   bool operator==(const Thread* selfOrNull) const;
   bool operator==(const MonitorOwner other) const { return storage_ == other.storage_; }
   // Check if the Thread is the owner stored in MonitorOwner.

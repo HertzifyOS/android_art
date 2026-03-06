@@ -1563,7 +1563,8 @@ static constexpr useconds_t kVirtualThreadSuspendSleepUs = 100;
 
 bool Thread::TrySetMountedVirtualThreadData(MountedVirtualThreadData* e, bool spin) {
   CHECK(kIsVirtualThreadEnabled);
-  DCHECK_EQ(tlsPtr_.mounted_virtual_thread_data.load(std::memory_order_relaxed), nullptr);
+  DCHECK(this == Thread::Current());
+  DCHECK_EQ(GetMountedVirtualThreadData(), nullptr);
   DCHECK_NE(e, nullptr);
   DCHECK_EQ(e->carrier_thread_id_, GetThreadId()) << "The carrier thread must be self";
   while (true) {
@@ -1587,7 +1588,7 @@ bool Thread::TrySetMountedVirtualThreadData(MountedVirtualThreadData* e, bool sp
           }
         }
         thread_list->AddMountedVirtualThread(e);
-        tlsPtr_.mounted_virtual_thread_data.store(e, std::memory_order_relaxed);
+        SetMountedVirtualThreadData(e);
         return true;
       }
     }
@@ -1608,7 +1609,8 @@ bool Thread::TrySetMountedVirtualThreadData(MountedVirtualThreadData* e, bool sp
 
 bool Thread::TryClearMountedVirtualThreadData(bool spin) {
   CHECK(kIsVirtualThreadEnabled);
-  MountedVirtualThreadData* e = tlsPtr_.mounted_virtual_thread_data.load(std::memory_order_relaxed);
+  DCHECK(this == Thread::Current());
+  MountedVirtualThreadData* e = GetMountedVirtualThreadData();
   if (e == nullptr) {
     DCHECK_NE(e, nullptr);
     return false;
@@ -1619,11 +1621,11 @@ bool Thread::TryClearMountedVirtualThreadData(bool spin) {
       MutexLock mu(this, *Locks::thread_list_lock_);
       // The virtual thread is suspended by lock inflation if the count isn't 0.
       ThreadList* thread_list = Runtime::Current()->GetThreadList();
-      e = tlsPtr_.mounted_virtual_thread_data.load(std::memory_order_relaxed);
+      e = GetMountedVirtualThreadData();
       uint32_t suspension_count = thread_list->GetVirtualThreadSuspendCount(e->virtual_thread_id_);
       if (suspension_count == 0) {
         thread_list->RemoveMountedVirtualThread(e);
-        tlsPtr_.mounted_virtual_thread_data.store(nullptr, std::memory_order_relaxed);
+        SetMountedVirtualThreadData(nullptr);
         return true;
       }
     }
