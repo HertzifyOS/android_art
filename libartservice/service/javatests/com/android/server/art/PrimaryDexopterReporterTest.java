@@ -17,6 +17,7 @@
 package com.android.server.art;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
+import static com.android.server.art.testing.TestingUtils.SYNC_EXECUTOR;
 
 import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -104,10 +105,7 @@ public final class PrimaryDexopterReporterTest extends PrimaryDexopterTestBase {
                 .thenReturn(dexoptIsNeeded());
 
         // Make asynchronous reporting synchronous.
-        lenient().when(mAsyncExecutor.executeAsync(any(Runnable.class))).thenAnswer(invocation -> {
-            invocation.<Runnable>getArgument(0).run();
-            return CompletableFuture.completedFuture(null);
-        });
+        lenient().when(mInjector.getAsyncExecutor()).thenReturn(SYNC_EXECUTOR);
 
         mockPrimaryDexopter(DEXOPT_PARAMS_SPEED_PROFILE);
     }

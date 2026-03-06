@@ -34,6 +34,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.art.model.ArtFlags;
 import com.android.server.art.model.ArtFlags.PriorityClassApi;
 import com.android.server.art.utils.Utils;
+import com.android.server.art.utils.Utils.Clock;
 import com.android.server.pm.PackageManagerLocal;
 import com.android.server.pm.pkg.PackageState;
 
@@ -249,7 +250,7 @@ public class ReasonMapping {
     public List<String> getDefaultPackagesForReason(PackageManagerLocal.FilteredSnapshot snapshot,
             /* @BatchDexoptReason|REASON_INACTIVE */ String reason) {
         var appHibernationManager = mInjector.getAppHibernationManager();
-        long now = mInjector.getCurrentTimeMillis();
+        long now = mInjector.getClock().currentTimeMillis();
 
         Stream<PackageInfo> packages =
                 snapshot.getPackageStates()
@@ -273,7 +274,7 @@ public class ReasonMapping {
         // dexopt a package.
         long inactiveMs = TimeUnit.DAYS.toMillis(SystemProperties.getInt(
                 "pm.dexopt.downgrade_after_inactive_days", Integer.MAX_VALUE /* def */));
-        long currentTimeMs = mInjector.getCurrentTimeMillis();
+        long currentTimeMs = mInjector.getClock().currentTimeMillis();
         long thresholdTimeMs = currentTimeMs - inactiveMs;
 
         packages = switch (reason) {
@@ -418,8 +419,8 @@ public class ReasonMapping {
             return Utils.isLauncherPackage(mContext, packageName);
         }
 
-        public long getCurrentTimeMillis() {
-            return System.currentTimeMillis();
+        public Clock getClock() {
+            return Clock.DEFAULT;
         }
     }
 }

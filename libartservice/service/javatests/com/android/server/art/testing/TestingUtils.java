@@ -24,6 +24,8 @@ import android.util.Log;
 
 import com.android.server.art.CopyAndRewriteProfileResult;
 import com.android.server.art.PreRebootStagedFilesStatus;
+import com.android.server.art.utils.AsyncExecutor;
+import com.android.server.art.utils.Utils;
 
 import com.google.common.truth.Correspondence;
 import com.google.common.truth.Truth;
@@ -219,5 +221,53 @@ public final class TestingUtils {
             }
         }
         return true;
-    };
+    }
+
+    public static final AsyncExecutor SYNC_EXECUTOR =
+            new AsyncExecutor(new AsyncExecutor.AsyncExecutorImpl() {
+                @Override
+                public boolean executeDelayed(Runnable runnable, Object token, long delayMillis) {
+                    Utils.check(delayMillis == 0);
+                    runnable.run();
+                    return true;
+                }
+
+                @Override
+                public void cancelTask(Object token) {
+                    // Do nothing
+                }
+
+                @Override
+                public void shutdown() {
+                    // Do nothing
+                }
+
+                @Override
+                public void awaitTermination(long timeoutMs) throws InterruptedException {
+                    // Do nothing
+                }
+            });
+
+    public static final AsyncExecutor NOOP_EXECUTOR =
+            new AsyncExecutor(new AsyncExecutor.AsyncExecutorImpl() {
+                @Override
+                public boolean executeDelayed(Runnable runnable, Object token, long delayMillis) {
+                    return true;
+                }
+
+                @Override
+                public void cancelTask(Object token) {
+                    // Do nothing
+                }
+
+                @Override
+                public void shutdown() {
+                    // Do nothing
+                }
+
+                @Override
+                public void awaitTermination(long timeoutMs) throws InterruptedException {
+                    // Do nothing
+                }
+            });
 }

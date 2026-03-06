@@ -46,6 +46,7 @@ import androidx.test.runner.AndroidJUnit4;
 import com.android.art.rw.flags.Flags;
 import com.android.modules.utils.pm.PackageStateModulesUtils;
 import com.android.server.art.model.ArtFlags;
+import com.android.server.art.testing.MockClock;
 import com.android.server.art.testing.StaticMockitoRule;
 import com.android.server.art.testing.TestDataHelper.PackageStateBuilder;
 import com.android.server.pm.PackageManagerLocal;
@@ -88,15 +89,19 @@ public class ReasonMappingTest {
     @Mock private UserManager mUserManager;
     @Mock private DexUseManagerLocal mDexUseManager;
     @Mock private PackageManagerLocal.FilteredSnapshot mSnapshot;
+    private MockClock mMockClock;
     private ReasonMapping mReasonMapping;
 
     @Before
     public void setUp() throws Exception {
+        mMockClock = new MockClock();
+
         lenient().when(mInjector.getAppHibernationManager()).thenReturn(mAppHibernationManager);
         lenient().when(mInjector.getUserManager()).thenReturn(mUserManager);
         lenient().when(mInjector.getDexUseManager()).thenReturn(mDexUseManager);
         lenient().when(mInjector.isSystemUiPackage(any())).thenReturn(false);
         lenient().when(mInjector.isLauncherPackage(any())).thenReturn(false);
+        lenient().when(mInjector.getClock()).thenReturn(mMockClock);
 
         // Set up two users.
         lenient()
@@ -164,7 +169,7 @@ public class ReasonMappingTest {
     @Test
     @RequiresFlagsDisabled(FLAGS_PREFIX + Flags.FLAG_HYBRID_PRE_REBOOT_DEXOPT)
     public void testGetDefaultPackagesForReasonDefaultScoreFlagDisabled() throws Exception {
-        when(mInjector.getCurrentTimeMillis()).thenReturn(CURRENT_TIME_MS);
+        mMockClock.setCurrentTimeMillis(CURRENT_TIME_MS);
 
         lenient()
                 .when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_1), anyLong()))
@@ -200,7 +205,7 @@ public class ReasonMappingTest {
     @Test
     @RequiresFlagsEnabled(FLAGS_PREFIX + Flags.FLAG_HYBRID_PRE_REBOOT_DEXOPT)
     public void testGetDefaultPackagesForReasonDefault() throws Exception {
-        when(mInjector.getCurrentTimeMillis()).thenReturn(CURRENT_TIME_MS);
+        mMockClock.setCurrentTimeMillis(CURRENT_TIME_MS);
 
         when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_1), anyLong())).thenReturn(1D);
         when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_2), anyLong())).thenReturn(2D);
@@ -229,7 +234,7 @@ public class ReasonMappingTest {
     @Test
     @RequiresFlagsDisabled(FLAGS_PREFIX + Flags.FLAG_HYBRID_PRE_REBOOT_DEXOPT)
     public void testGetDefaultPackagesForReasonInactiveScoreFlagDisabled() throws Exception {
-        when(mInjector.getCurrentTimeMillis()).thenReturn(CURRENT_TIME_MS);
+        mMockClock.setCurrentTimeMillis(CURRENT_TIME_MS);
 
         lenient()
                 .when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_1), anyLong()))
@@ -267,7 +272,7 @@ public class ReasonMappingTest {
     @Test
     @RequiresFlagsEnabled(FLAGS_PREFIX + Flags.FLAG_HYBRID_PRE_REBOOT_DEXOPT)
     public void testGetDefaultPackagesForReasonInactive() throws Exception {
-        when(mInjector.getCurrentTimeMillis()).thenReturn(CURRENT_TIME_MS);
+        mMockClock.setCurrentTimeMillis(CURRENT_TIME_MS);
 
         when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_1), anyLong())).thenReturn(2D);
         when(mDexUseManager.calculateDecayedPackageScore(eq(PKG_NAME_2), anyLong())).thenReturn(1D);

@@ -47,6 +47,7 @@ import com.android.server.art.prereboot.PreRebootDriver.PreRebootResult;
 import com.android.server.art.prereboot.PreRebootStatsReporter;
 import com.android.server.art.proto.PreRebootStats.Status;
 import com.android.server.art.testing.CommandExecution;
+import com.android.server.art.testing.MockClock;
 import com.android.server.art.testing.PreRebootStatsReporterHarness;
 import com.android.server.art.testing.StaticMockitoRule;
 import com.android.server.pm.PackageManagerLocal;
@@ -88,10 +89,12 @@ public class ArtShellCommandTest {
     private JobInfo mJobInfo;
     private JobParameters mJobParameters;
     private PreRebootStatsReporterHarness mPreRebootStatsReporterHarness;
+    private MockClock mMockClock;
 
     @Before
     public void setUp() throws Exception {
         mPreRebootStatsReporterHarness = new PreRebootStatsReporterHarness();
+        mMockClock = new MockClock();
 
         lenient()
                 .when(SystemProperties.getBoolean(eq("dalvik.vm.enable_pr_dexopt"), anyBoolean()))
@@ -127,6 +130,7 @@ public class ArtShellCommandTest {
         lenient().when(mPreRebootDexoptJobInjector.getJobScheduler()).thenReturn(mJobScheduler);
         lenient().when(mPreRebootDexoptJobInjector.getArtd()).thenReturn(mArtd);
         lenient().when(mPreRebootDexoptJobInjector.getUpdateEngine()).thenReturn(mUpdateEngine);
+        lenient().when(mPreRebootDexoptJobInjector.getClock()).thenReturn(mMockClock);
         mPreRebootDexoptJob = new PreRebootDexoptJob(mPreRebootDexoptJobInjector);
 
         lenient().when(BackgroundDexoptJobService.getJob(JOB_ID)).thenReturn(mPreRebootDexoptJob);
@@ -140,6 +144,7 @@ public class ArtShellCommandTest {
         lenient().when(mInjector.getArtManagerLocal()).thenReturn(mArtManagerLocal);
         lenient().when(mInjector.getPackageManagerLocal()).thenReturn(mPackageManagerLocal);
         lenient().when(mInjector.isVerificationSupported()).thenReturn(true);
+        lenient().when(mInjector.getSleeper()).thenReturn(mMockClock);
     }
 
     @Test

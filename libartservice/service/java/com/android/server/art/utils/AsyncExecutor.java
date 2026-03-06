@@ -36,26 +36,18 @@ import java.util.concurrent.Executors;
  */
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 public class AsyncExecutor {
-    private final HandlerThread mHandlerThread;
-    private final Handler mHandler;
-
-    private AsyncExecutor() {
-        mHandlerThread =
-                new HandlerThread("ArtService-BgThread", Process.THREAD_PRIORITY_BACKGROUND);
-        mHandlerThread.start();
-        mHandler = new Handler(mHandlerThread.getLooper());
-    }
+    private final AsyncExecutorImpl mImpl;
 
     /** @hide */
     @VisibleForTesting
-    public AsyncExecutor(Handler handler, HandlerThread handlerThread) {
-        mHandler = handler;
-        mHandlerThread = handlerThread;
+    public AsyncExecutor(AsyncExecutorImpl impl) {
+        mImpl = impl;
     }
 
     /** Thread-safe static singleton. */
     private static class InstanceHolder {
-        private static final AsyncExecutor INSTANCE = new AsyncExecutor();
+        private static final AsyncExecutor INSTANCE =
+                new AsyncExecutor(new DefaultAsyncExecutorImpl());
     }
 
     public static AsyncExecutor getInstance() {
@@ -80,7 +72,7 @@ public class AsyncExecutor {
     /** Executes a task asynchronously with a delay. */
     public <T> CompletableFuture<T> executeDelayed(Callable<T> callable, long delayMillis) {
         CompletableFuture<T> future = new CompletableFuture<>();
-        boolean accepted = mHandler.postDelayed(() -> {
+        boolean accepted = mImpl.executeDelayed(() -> {
             try {
                 future.complete(callable.call());
             } catch (Exception e) {
@@ -93,7 +85,7 @@ public class AsyncExecutor {
 
     /** Cancels a task. */
     public void cancelTask(CompletableFuture<?> future) {
-        mHandler.removeCallbacksAndMessages(future);
+        mImpl.cancelTask(future);
     }
 
     /**
@@ -101,11 +93,50 @@ public class AsyncExecutor {
      * all pending tasks but not the ones that are already running.
      */
     public void shutdown() {
-        // Stop the OS thread and drop pending runnables from the queue.
-        mHandlerThread.quitSafely();
+        mImpl.shutdown();
     }
 
     public void awaitTermination(long timeoutMs) throws InterruptedException {
-        mHandlerThread.join(timeoutMs);
+        mImpl.awaitTermination(timeoutMs);
+    }
+
+    public interface AsyncExecutorImpl {
+        boolean executeDelayed(Runnable runnable, Object token, long delayMillis);
+        void cancelTask(Object token);
+        void shutdown();
+        void awaitTermination(long timeoutMs) throws InterruptedException;
+    }
+
+    private static class DefaultAsyncExecutorImpl implements AsyncExecutorImpl {
+        private final HandlerThread mHandlerThread;
+        private final Handler mHandler;
+
+        private DefaultAsyncExecutorImpl() {
+            mHandlerThread =
+                    new HandlerThread("ArtService-BgThread", Process.THREAD_PRIORITY_BACKGROUND);
+            mHandlerThread.start();
+            mHandler = new Handler(mHandlerThread.getLooper());
+        }
+
+        @Override
+        public boolean executeDelayed(Runnable runnable, Object token, long delayMillis) {
+            return mHandler.postDelayed(runnable, token, delayMillis);
+        }
+
+        @Override
+        public void cancelTask(Object token) {
+            mHandler.removeCallbacksAndMessages(token);
+        }
+
+        @Override
+        public void shutdown() {
+            // Stop the OS thread and drop pending runnables from the queue.
+            mHandlerThread.quitSafely();
+        }
+
+        @Override
+        public void awaitTermination(long timeoutMs) throws InterruptedException {
+            mHandlerThread.join(timeoutMs);
+        }
     }
 }

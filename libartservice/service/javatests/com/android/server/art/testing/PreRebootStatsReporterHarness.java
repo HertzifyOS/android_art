@@ -16,7 +16,8 @@
 
 package com.android.server.art.testing;
 
-import static org.mockito.Mockito.any;
+import static com.android.server.art.testing.TestingUtils.SYNC_EXECUTOR;
+
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.anyLong;
 import static org.mockito.Mockito.eq;
@@ -30,32 +31,27 @@ import com.android.server.art.prereboot.PreRebootStatsReporter;
 import com.android.server.art.prereboot.PreRebootStatsReporter.Injector;
 import com.android.server.art.proto.PreRebootStats;
 import com.android.server.art.proto.PreRebootStats.Status;
-import com.android.server.art.utils.AsyncExecutor;
 
 import org.mockito.verification.VerificationMode;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
 public class PreRebootStatsReporterHarness {
     private Injector mInjector = mock(Injector.class);
-    private AsyncExecutor mAsyncExecutor = mock(AsyncExecutor.class);
+    private MockClock mMockClock = new MockClock();
 
     public PreRebootStatsReporterHarness() throws Exception {
         File tempFile = File.createTempFile("pre-reboot-stats", ".pb");
         tempFile.deleteOnExit();
 
         lenient().when(mInjector.getFilename()).thenReturn(tempFile.getAbsolutePath());
-        lenient().when(mInjector.getAsyncExecutor()).thenReturn(mAsyncExecutor);
+        lenient().when(mInjector.getClock()).thenReturn(mMockClock);
 
         // Make asynchronous reporting synchronous.
-        lenient().when(mAsyncExecutor.executeAsync(any(Runnable.class))).thenAnswer(invocation -> {
-            invocation.<Runnable>getArgument(0).run();
-            return CompletableFuture.completedFuture(null);
-        });
+        lenient().when(mInjector.getAsyncExecutor()).thenReturn(SYNC_EXECUTOR);
     }
 
     public Injector getInjector() {

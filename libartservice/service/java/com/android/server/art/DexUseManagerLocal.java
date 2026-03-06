@@ -60,6 +60,7 @@ import com.android.server.art.utils.AsLog;
 import com.android.server.art.utils.AsyncExecutor;
 import com.android.server.art.utils.Debouncer;
 import com.android.server.art.utils.Utils;
+import com.android.server.art.utils.Utils.Clock;
 import com.android.server.pm.PackageManagerLocal;
 import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.AndroidPackageSplit;
@@ -480,7 +481,7 @@ public class DexUseManagerLocal {
         // `Process.isSdkSandboxUid` returns true.
         boolean isolatedProcess = mInjector.isIsolatedUid(mInjector.getCallingUid())
                 || mInjector.isPrivateComputeCoreUid(mInjector.getCallingUid());
-        long lastUsedAtMs = mInjector.getCurrentTimeMillis();
+        long lastUsedAtMs = mInjector.getClock().currentTimeMillis();
 
         for (var entry : classLoaderContextByDexContainerFile.entrySet()) {
             String dexPath = Utils.assertNonEmpty(entry.getKey());
@@ -1508,8 +1509,8 @@ public class DexUseManagerLocal {
             return ArtdRefCache.getInstance().getArtd();
         }
 
-        public long getCurrentTimeMillis() {
-            return System.currentTimeMillis();
+        public Clock getClock() {
+            return Clock.DEFAULT;
         }
 
         @NonNull

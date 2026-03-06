@@ -84,6 +84,7 @@ import com.android.server.art.model.DexoptStatus.DexContainerFileDexoptStatus;
 import com.android.server.art.model.VerifyDexoptArtifactsResult;
 import com.android.server.art.prereboot.PreRebootStatsReporter;
 import com.android.server.art.proto.DexMetadataConfig;
+import com.android.server.art.testing.MockClock;
 import com.android.server.art.testing.PreRebootStatsReporterHarness;
 import com.android.server.art.testing.StaticMockitoRule;
 import com.android.server.art.testing.TestDataHelper.PackageStateBuilder;
@@ -165,6 +166,7 @@ public class ArtManagerLocalTest {
     private DexMetadataHelper mDexMetadataHelper;
     private Map<String, Set<BroadcastReceiver>> mBroadcastReceivers = new HashMap<>();
     private PreRebootStatsReporterHarness mPreRebootStatsReporterHarness;
+    private MockClock mMockClock;
 
     // True if the artifacts should be in dalvik-cache.
     @Parameter(0) public boolean mIsInDalvikCache;
@@ -183,6 +185,7 @@ public class ArtManagerLocalTest {
         mConfig = new Config();
         mDexMetadataHelper = new DexMetadataHelper(mDexMetadataHelperInjector);
         mPreRebootStatsReporterHarness = new PreRebootStatsReporterHarness();
+        mMockClock = new MockClock();
 
         // Use `lenient()` to suppress `UnnecessaryStubbingException` thrown by the strict stubs.
         // These are the default test setups. They may or may not be used depending on the code path
@@ -208,6 +211,7 @@ public class ArtManagerLocalTest {
         lenient().when(mInjector.getActivityManager()).thenReturn(mActivityManager);
         lenient().when(mInjector.getBackgroundDexoptJob()).thenReturn(mBackgroundDexoptJob);
         lenient().when(mInjector.getReasonMapping()).thenReturn(mReasonMapping);
+        lenient().when(mInjector.getClock()).thenReturn(mMockClock);
 
         lenient().when(mArtFileManagerInjector.getArtd()).thenReturn(mArtd);
         lenient().when(mArtFileManagerInjector.getUserManager()).thenReturn(mUserManager);
@@ -1637,7 +1641,7 @@ public class ArtManagerLocalTest {
         when(mArtd.checkPreRebootStagedFilesStatus())
                 .thenReturn(TestingUtils.createPreRebootStagedFilesStatus(
                         true /* isCommittable */, 200 /* createdAtMillis */));
-        when(mInjector.getCurrentTimeMillis()).thenReturn(800l);
+        mMockClock.setCurrentTimeMillis(800l);
 
         mArtManagerLocal.onBoot(ReasonMapping.REASON_BOOT_AFTER_OTA,
                 null /* progressCallbackExecutor */, null /* progressCallback */);
@@ -1717,7 +1721,7 @@ public class ArtManagerLocalTest {
         when(mArtd.checkPreRebootStagedFilesStatus())
                 .thenReturn(TestingUtils.createPreRebootStagedFilesStatus(
                         false /* isCommittable */, 200 /* createdAtMillis */));
-        when(mInjector.getCurrentTimeMillis()).thenReturn(800l);
+        mMockClock.setCurrentTimeMillis(800l);
 
         mArtManagerLocal.onBoot(ReasonMapping.REASON_BOOT_AFTER_OTA,
                 null /* progressCallbackExecutor */, null /* progressCallback */);

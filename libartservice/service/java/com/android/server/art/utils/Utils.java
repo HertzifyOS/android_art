@@ -545,14 +545,6 @@ public final class Utils {
         return uid == Process.SYSTEM_UID || uid == Process.ROOT_UID || uid == Process.SHELL_UID;
     }
 
-    public static void sleep(long millis) {
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException e) {
-            AsLog.wtf("Sleep interrupted", e);
-        }
-    }
-
     public static boolean pathStartsWith(@NonNull String path, @NonNull String prefix) {
         check(!prefix.isEmpty() && !path.isEmpty() && prefix.charAt(0) == '/'
                 && path.charAt(0) == '/');
@@ -678,5 +670,19 @@ public final class Utils {
     @FunctionalInterface
     private interface ProfileInitializer {
         CopyAndRewriteProfileResult get() throws RemoteException;
+    }
+
+    @FunctionalInterface
+    public interface Sleeper {
+        void sleep(long millis) throws InterruptedException;
+
+        Sleeper DEFAULT = Thread::sleep;
+    }
+
+    @FunctionalInterface
+    public interface Clock {
+        long currentTimeMillis();
+
+        Clock DEFAULT = System::currentTimeMillis;
     }
 }

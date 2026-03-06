@@ -52,6 +52,7 @@ import com.android.server.art.prereboot.PreRebootDriver;
 import com.android.server.art.prereboot.PreRebootDriver.PreRebootResult;
 import com.android.server.art.prereboot.PreRebootStatsReporter;
 import com.android.server.art.proto.PreRebootStats.Status;
+import com.android.server.art.testing.MockClock;
 import com.android.server.art.testing.PreRebootStatsReporterHarness;
 import com.android.server.art.testing.StaticMockitoRule;
 import com.android.server.art.testing.TestingUtils;
@@ -74,7 +75,6 @@ import java.util.function.Supplier;
 @RunWith(MockitoJUnitRunner.StrictStubs.class)
 public class PreRebootDexoptJobTest {
     private static final long TIMEOUT_SEC = 10;
-    private static final long CURRENT_TIME_MS = 10000000000l;
 
     @Rule
     public StaticMockitoRule mockitoRule =
@@ -90,10 +90,12 @@ public class PreRebootDexoptJobTest {
     private JobInfo mJobInfo;
     private JobParameters mJobParameters;
     private PreRebootStatsReporterHarness mPreRebootStatsReporterHarness;
+    private MockClock mMockClock;
 
     @Before
     public void setUp() throws Exception {
         mPreRebootStatsReporterHarness = new PreRebootStatsReporterHarness();
+        mMockClock = new MockClock();
 
         // By default, the job is enabled by a build-time flag.
         lenient()
@@ -114,7 +116,7 @@ public class PreRebootDexoptJobTest {
                 .thenReturn(mPreRebootStatsReporterHarness.createStatsReporter());
         lenient().when(mInjector.getArtd()).thenReturn(mArtd);
         lenient().when(mInjector.getUpdateEngine()).thenReturn(mUpdateEngine);
-        lenient().when(mInjector.getCurrentTimeMillis()).thenReturn(CURRENT_TIME_MS);
+        lenient().when(mInjector.getClock()).thenReturn(mMockClock);
 
         lenient().when(mJobScheduler.schedule(any())).thenAnswer(invocation -> {
             mJobInfo = invocation.<JobInfo>getArgument(0);
@@ -538,8 +540,8 @@ public class PreRebootDexoptJobTest {
 
         when(mArtd.checkPreRebootStagedFilesStatus())
                 .thenReturn(TestingUtils.createPreRebootStagedFilesStatus(
-                        false /* isCommittable */, 200 /* createdAtMillis */));
-        when(mInjector.getCurrentTimeMillis()).thenReturn(800l);
+                        false /* isCommittable */, mMockClock.currentTimeMillis()));
+        mMockClock.advanceTime(600);
 
         response = Utils.getFuture(mPreRebootDexoptJob.onUpdateReady(
                 "_a" /* otaSlot */, false /* isUpdateEngineReady */, JobSynchronicity.ASYNC));
@@ -556,9 +558,12 @@ public class PreRebootDexoptJobTest {
      */
     @Test
     public void testRace1() throws Exception {
+        var dexoptCancelled = new Semaphore(0);
         var jobBlocker = new Semaphore(0);
 
         when(mPreRebootDriver.run(any(), anyBoolean(), any())).thenAnswer(invocation -> {
+            var cancellationSignal = invocation.<CancellationSignal>getArgument(2);
+            cancellationSignal.setOnCancelListener(() -> dexoptCancelled.release());
             // Simulate that the job takes a while to exit, no matter it's cancelled or not.
             assertThat(jobBlocker.tryAcquire(TIMEOUT_SEC, TimeUnit.SECONDS)).isTrue();
             return new PreRebootResult(Status.STATUS_FINISHED);
@@ -600,7 +605,7 @@ public class PreRebootDexoptJobTest {
         thread.start();
 
         // Wait a while for `thread` to block on waiting for the old job to exit.
-        Utils.sleep(200);
+        assertThat(dexoptCancelled.tryAcquire(TIMEOUT_SEC, TimeUnit.SECONDS)).isTrue();
 
         // The old job now exits, unblocking `thread`.
         jobBlocker.release();
@@ -695,7 +700,8 @@ public class PreRebootDexoptJobTest {
     @Test
     public void testCheckStagedFilesAge() throws Exception {
         when(SystemProperties.getInt(eq("dalvik.vm.pr_dexopt_retention"), anyInt())).thenReturn(30);
-        Duration createdAt = Duration.ofMillis(CURRENT_TIME_MS).minusDays(30).plusMillis(1);
+        Duration createdAt =
+                Duration.ofMillis(mMockClock.currentTimeMillis()).minusDays(30).plusMillis(1);
         when(mArtd.checkPreRebootStagedFilesStatus())
                 .thenReturn(TestingUtils.createPreRebootStagedFilesStatus(
                         false /* isCommittable */, createdAt.toMillis()));
@@ -708,7 +714,7 @@ public class PreRebootDexoptJobTest {
     @Test
     public void testCheckStagedFilesAgeExpired() throws Exception {
         when(SystemProperties.getInt(eq("dalvik.vm.pr_dexopt_retention"), anyInt())).thenReturn(30);
-        Duration createdAt = Duration.ofMillis(CURRENT_TIME_MS).minusDays(30);
+        Duration createdAt = Duration.ofMillis(mMockClock.currentTimeMillis()).minusDays(30);
         when(mArtd.checkPreRebootStagedFilesStatus())
                 .thenReturn(TestingUtils.createPreRebootStagedFilesStatus(
                         false /* isCommittable */, createdAt.toMillis()));

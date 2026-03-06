@@ -37,6 +37,7 @@ import com.android.server.art.utils.ArtdRefCache;
 import com.android.server.art.utils.AsLog;
 import com.android.server.art.utils.AsyncExecutor;
 import com.android.server.art.utils.Utils;
+import com.android.server.art.utils.Utils.Clock;
 import com.android.server.pm.PackageManagerLocal;
 
 import java.io.File;
@@ -105,7 +106,7 @@ public class PreRebootStatsReporter {
                 .setJobType(isOtaUpdate ? JobType.JOB_TYPE_OTA : JobType.JOB_TYPE_MAINLINE);
         // Omit job_scheduled_timestamp_millis to indicate a synchronous job.
         if (isAsync) {
-            statsBuilder.setJobScheduledTimestampMillis(mInjector.getCurrentTimeMillis());
+            statsBuilder.setJobScheduledTimestampMillis(mInjector.getClock().currentTimeMillis());
         }
         save(statsBuilder);
     }
@@ -126,8 +127,8 @@ public class PreRebootStatsReporter {
             return;
         }
 
-        JobRun.Builder runBuilder =
-                JobRun.newBuilder().setJobStartedTimestampMillis(mInjector.getCurrentTimeMillis());
+        JobRun.Builder runBuilder = JobRun.newBuilder().setJobStartedTimestampMillis(
+                mInjector.getClock().currentTimeMillis());
         statsBuilder.setStatus(Status.STATUS_STARTED)
                 .clearFailureReason()
                 .addJobRuns(runBuilder)
@@ -175,7 +176,7 @@ public class PreRebootStatsReporter {
         Utils.check(lastRun.getJobEndedTimestampMillis() == 0);
 
         JobRun.Builder runBuilder = JobRun.newBuilder(lastRun).setJobEndedTimestampMillis(
-                mInjector.getCurrentTimeMillis());
+                mInjector.getClock().currentTimeMillis());
 
         Utils.check(result.status() == Status.STATUS_FINISHED
                 || result.status() == Status.STATUS_FAILED
@@ -386,8 +387,8 @@ public class PreRebootStatsReporter {
             return FILENAME;
         }
 
-        public long getCurrentTimeMillis() {
-            return System.currentTimeMillis();
+        public Clock getClock() {
+            return Clock.DEFAULT;
         }
 
         @NonNull

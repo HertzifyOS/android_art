@@ -61,6 +61,7 @@ import com.android.server.art.model.VerifyDexoptArtifactsResult;
 import com.android.server.art.prereboot.PreRebootDriver;
 import com.android.server.art.utils.AsLog;
 import com.android.server.art.utils.Utils;
+import com.android.server.art.utils.Utils.Sleeper;
 import com.android.server.pm.PackageManagerLocal;
 import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageState;
@@ -1294,7 +1295,8 @@ public final class ArtShellCommand extends BasicShellCommandHandler {
             for (String packageName : packageNames) {
                 DexoptResult result;
                 try (var loggingFd = verbose && allowLogRedirection()
-                                ? BufferedOutputFileDescriptor.wrap(getErrFileDescriptor())
+                                ? BufferedOutputFileDescriptor.wrap(
+                                          getErrFileDescriptor(), mInjector)
                                 : null) {
                     DexoptParams localParams = loggingFd != null
                             ? params.toBuilder().setLoggingFd(loggingFd.getFd()).build()
@@ -1426,17 +1428,19 @@ public final class ArtShellCommand extends BasicShellCommandHandler {
      * it occasionally, for more efficient, less frequent reads.
      */
     private static class BufferedOutputFileDescriptor implements AutoCloseable {
-        private final int BUFFER_SIZE = 200 * 1024 * 1024;
-        private final int SYNC_INTERVAL_MILLIS = 10;
+        private static final int BUFFER_SIZE = 200 * 1024 * 1024;
+        private static final int SYNC_INTERVAL_MILLIS = 10;
 
+        private final Injector mInjector;
         private final FileDescriptor mOriginalFd;
         private final ParcelFileDescriptor[] mPipe;
         private final int mActualBufferSize;
         private final Thread mSyncThread;
 
-        public static @Nullable BufferedOutputFileDescriptor wrap(FileDescriptor originalFd) {
+        public static @Nullable BufferedOutputFileDescriptor wrap(
+                FileDescriptor originalFd, Injector injector) {
             try {
-                return new BufferedOutputFileDescriptor(originalFd);
+                return new BufferedOutputFileDescriptor(originalFd, injector);
             } catch (ErrnoException | IOException e) {
                 AsLog.w("Failed to wrap FD " + originalFd.getInt$(), e);
                 return null;
@@ -1447,8 +1451,9 @@ public final class ArtShellCommand extends BasicShellCommandHandler {
             return mPipe[1];
         }
 
-        private BufferedOutputFileDescriptor(FileDescriptor originalFd)
+        private BufferedOutputFileDescriptor(FileDescriptor originalFd, Injector injector)
                 throws ErrnoException, IOException {
+            mInjector = injector;
             mOriginalFd = originalFd;
             mPipe = ParcelFileDescriptor.createPipe();
             mActualBufferSize = ArtJni.setPipeSize(mPipe[0].getFileDescriptor(), BUFFER_SIZE);
@@ -1465,7 +1470,7 @@ public final class ArtShellCommand extends BasicShellCommandHandler {
                 while ((n = in.read(buf)) != -1) {
                     out.write(buf, 0, n);
                     try {
-                        Thread.sleep(SYNC_INTERVAL_MILLIS);
+                        mInjector.getSleeper().sleep(SYNC_INTERVAL_MILLIS);
                     } catch (InterruptedException e) {
                         // Expected.
                     }
@@ -1517,6 +1522,10 @@ public final class ArtShellCommand extends BasicShellCommandHandler {
 
         public boolean isVerificationSupported() {
             return Build.VERSION.SDK_INT >= Build.VERSION_CODES.CUR_DEVELOPMENT;
+        }
+
+        public Sleeper getSleeper() {
+            return Sleeper.DEFAULT;
         }
     }
 }

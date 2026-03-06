@@ -53,6 +53,7 @@ import com.android.server.art.proto.PreRebootStats.Status;
 import com.android.server.art.utils.ArtdRefCache;
 import com.android.server.art.utils.AsLog;
 import com.android.server.art.utils.Utils;
+import com.android.server.art.utils.Utils.Clock;
 
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -626,7 +627,9 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
             statsAfterRebootSession.setExpectFound(false);
             statsAfterRebootSession.recordArtifactsEndStatus(
                     PreRebootStatsReporter.END_STATUS_SUPERSEDED,
-                    status != null ? mInjector.getCurrentTimeMillis() - status.createdAtMillis : 0);
+                    status != null
+                            ? mInjector.getClock().currentTimeMillis() - status.createdAtMillis
+                            : 0);
             // Usually does nothing, unless there are pending stats to report.
             statsAfterRebootSession.report();
         }
@@ -644,8 +647,8 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
             if (status == null) {
                 return null;
             }
-            Duration age =
-                    Duration.ofMillis(mInjector.getCurrentTimeMillis() - status.createdAtMillis);
+            Duration age = Duration.ofMillis(
+                    mInjector.getClock().currentTimeMillis() - status.createdAtMillis);
             return new StagedFilesAge(age, age.compareTo(retentionPeriod) >= 0);
         } catch (ServiceSpecificException | RemoteException e) {
             AsLog.e("Failed to check Pre-reboot staged files status", e);
@@ -768,8 +771,8 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
             return new UpdateEngine();
         }
 
-        public long getCurrentTimeMillis() {
-            return System.currentTimeMillis();
+        public Clock getClock() {
+            return Clock.DEFAULT;
         }
 
         @ChecksSdkIntAtLeast(api = 36)
