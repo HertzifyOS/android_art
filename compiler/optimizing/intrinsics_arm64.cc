@@ -1539,6 +1539,7 @@ static void GenerateCompareAndSet(CodeGeneratorARM64* codegen,
         }
         break;
       case DataType::Type::kReference:
+        assembler->MaybePoisonHeapReference(old_value);
         assembler->MaybePoisonHeapReference(new_value);
         FALLTHROUGH_INTENDED;
       case DataType::Type::kInt32:
@@ -1553,6 +1554,7 @@ static void GenerateCompareAndSet(CodeGeneratorARM64* codegen,
           __ Cas(old_value, new_value, MemOperand(ptr));
         }
         if (type == DataType::Type::kReference) {
+          assembler->MaybeUnpoisonHeapReference(old_value);
           assembler->MaybeUnpoisonHeapReference(new_value);
         }
         break;
