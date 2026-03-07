@@ -73,9 +73,8 @@ import java.util.function.Function;
 public class DexoptHelper {
     @NonNull private final Injector mInjector;
 
-    public DexoptHelper(
-            @NonNull Context context, @NonNull Config config, @NonNull Executor reporterExecutor) {
-        this(new Injector(context, config, reporterExecutor));
+    public DexoptHelper(@NonNull Context context, @NonNull Config config) {
+        this(new Injector(context, config));
     }
 
     @VisibleForTesting
@@ -356,13 +355,10 @@ public class DexoptHelper {
     public static class Injector {
         @NonNull private final Context mContext;
         @NonNull private final Config mConfig;
-        @NonNull private final Executor mReporterExecutor;
 
-        Injector(@NonNull Context context, @NonNull Config config,
-                @NonNull Executor reporterExecutor) {
+        Injector(@NonNull Context context, @NonNull Config config) {
             mContext = context;
             mConfig = config;
-            mReporterExecutor = reporterExecutor;
 
             // Call the getters for the dependencies that aren't optional, to ensure correct
             // initialization order.
@@ -373,16 +369,16 @@ public class DexoptHelper {
         PrimaryDexopter getPrimaryDexopter(@NonNull FilteredSnapshot snapshot,
                 @NonNull PackageState pkgState, @NonNull AndroidPackage pkg,
                 @NonNull DexoptParams params, @NonNull CancellationSignal cancellationSignal) {
-            return new PrimaryDexopter(mContext, mConfig, mReporterExecutor, snapshot, pkgState,
-                    pkg, params, cancellationSignal);
+            return new PrimaryDexopter(
+                    mContext, mConfig, snapshot, pkgState, pkg, params, cancellationSignal);
         }
 
         @NonNull
         SecondaryDexopter getSecondaryDexopter(@NonNull PackageState pkgState,
                 @NonNull AndroidPackage pkg, @NonNull DexoptParams params,
                 @NonNull CancellationSignal cancellationSignal) {
-            return new SecondaryDexopter(mContext, mConfig, mReporterExecutor, pkgState, pkg,
-                    params, cancellationSignal);
+            return new SecondaryDexopter(
+                    mContext, mConfig, pkgState, pkg, params, cancellationSignal);
         }
 
         @NonNull

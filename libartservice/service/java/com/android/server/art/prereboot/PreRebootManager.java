@@ -37,6 +37,7 @@ import com.android.server.art.proto.BatchDexoptParamsProto;
 import com.android.server.art.proto.PreRebootStats.Status;
 import com.android.server.art.utils.ArtdRefCache;
 import com.android.server.art.utils.AsLog;
+import com.android.server.art.utils.AsyncExecutor;
 import com.android.server.art.utils.Utils;
 import com.android.server.pm.PackageManagerLocal;
 
@@ -137,13 +138,14 @@ public class PreRebootManager implements PreRebootManagerInterface {
                     ReasonMapping.REASON_PRE_REBOOT_DEXOPT, cancellationSignal, callbackExecutor,
                     Map.of(ArtFlags.PASS_MAIN, progressCallback), params);
         } finally {
-            ArtdRefCache.getInstance().reset();
             // Stop the `artd` service proactively, to ensure a successful and fast teardown.
             PreRebootGlobalInjector.getInstance().stopArtd();
             callbackExecutor.shutdown();
+            AsyncExecutor.getInstance().shutdown();
             try {
                 // Make sure we have no running threads when we tear down.
                 callbackExecutor.awaitTermination(5, TimeUnit.SECONDS);
+                AsyncExecutor.getInstance().awaitTermination(5000);
             } catch (InterruptedException e) {
                 AsLog.wtf("Interrupted", e);
             }

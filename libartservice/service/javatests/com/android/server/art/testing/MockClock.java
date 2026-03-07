@@ -16,27 +16,68 @@
 
 package com.android.server.art.testing;
 
-import android.annotation.NonNull;
-import android.util.Pair;
+import static com.google.common.truth.Truth.assertThat;
 
-import java.util.ArrayList;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyLong;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.reset;
+
+import android.os.Handler;
+import android.os.HandlerThread;
+
+import com.android.server.art.utils.AsyncExecutor;
+
 import java.util.Comparator;
-import java.util.List;
 import java.util.PriorityQueue;
-import java.util.concurrent.RunnableScheduledFuture;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 public class MockClock {
-    private long mCurrentTimeMs = 0;
-    @NonNull private List<ScheduledExecutor> mExecutors = new ArrayList<>();
+    private Handler mHandler;
+    private HandlerThread mHandlerThread;
+    private AsyncExecutor mExecutor;
 
-    @NonNull
-    public ScheduledExecutor createScheduledExecutor() {
-        var executor = new ScheduledExecutor();
-        mExecutors.add(executor);
-        return executor;
+    private long mCurrentTimeMs = 0;
+    private PriorityQueue<Task> mTasks =
+            new PriorityQueue<>(Comparator.comparingLong(Task::scheduledTimeMs));
+    private boolean mIsShutdown = false;
+
+    public MockClock() {
+        mHandler = mock(Handler.class);
+        mHandlerThread = mock(HandlerThread.class);
+
+        lenient()
+                .when(mHandler.postDelayed(any(Runnable.class), any(), anyLong()))
+                .thenAnswer(invocation -> {
+                    Runnable runnable = invocation.getArgument(0);
+                    Object token = invocation.getArgument(1);
+                    long delayMillis = invocation.getArgument(2);
+
+                    assertThat(mIsShutdown).isFalse();
+                    mTasks.add(new Task(runnable, token, mCurrentTimeMs + delayMillis));
+                    return true;
+                });
+
+        lenient()
+                .doAnswer(invocation -> {
+                    Object token = invocation.getArgument(0);
+                    mTasks.removeIf(task -> task.token == token);
+                    return null;
+                })
+                .when(mHandler)
+                .removeCallbacksAndMessages(any());
+
+        lenient().when(mHandlerThread.quitSafely()).thenAnswer(invocation -> {
+            mTasks.clear();
+            mIsShutdown = true;
+            return true;
+        });
+
+        mExecutor = new AsyncExecutor(mHandler, mHandlerThread);
+    }
+
+    public AsyncExecutor getAsyncExecutor() {
+        return mExecutor;
     }
 
     public long getCurrentTimeMs() {
@@ -45,53 +86,14 @@ public class MockClock {
 
     public void advanceTime(long timeMs) {
         mCurrentTimeMs += timeMs;
-        for (ScheduledExecutor executor : mExecutors) {
-            executor.notifyUpdate();
+        while (!mTasks.isEmpty() && mTasks.peek().scheduledTimeMs <= mCurrentTimeMs) {
+            mTasks.poll().runnable.run();
         }
     }
 
-    @NonNull
-    public List<ScheduledExecutor> getCreatedExecutors() {
-        return mExecutors;
+    public Handler getHandler() {
+        return mHandler;
     }
 
-    public class ScheduledExecutor extends ScheduledThreadPoolExecutor {
-        // The second element of the pair is the scheduled time.
-        @NonNull
-        private PriorityQueue<Pair<RunnableScheduledFuture<?>, Long>> tasks = new PriorityQueue<>(
-                1 /* initialCapacity */, Comparator.comparingLong(pair -> pair.second));
-
-        public ScheduledExecutor() {
-            super(1 /* corePoolSize */);
-        }
-
-        @NonNull
-        public ScheduledFuture<?> schedule(
-                @NonNull Runnable command, long delay, @NonNull TimeUnit unit) {
-            // Use `Long.MAX_VALUE` to prevent the task from being automatically run.
-            var task = (RunnableScheduledFuture<?>) super.schedule(
-                    command, Long.MAX_VALUE, TimeUnit.MILLISECONDS);
-            tasks.add(Pair.create(task, getCurrentTimeMs() + unit.toMillis(delay)));
-            return task;
-        }
-
-        public void notifyUpdate() {
-            while (!tasks.isEmpty()) {
-                Pair<RunnableScheduledFuture<?>, Long> pair = tasks.peek();
-                RunnableScheduledFuture<?> task = pair.first;
-                long scheduledTimeMs = pair.second;
-                if (getCurrentTimeMs() >= scheduledTimeMs || task.isCancelled()) {
-                    if (!task.isDone() && !task.isCancelled()) {
-                        task.run();
-                    }
-                    tasks.poll();
-                    // Remove the task from the queue of the executor. Terminate the executor if
-                    // it's shutdown and the queue is empty.
-                    super.remove(task);
-                } else {
-                    break;
-                }
-            }
-        }
-    }
+    private record Task(Runnable runnable, Object token, long scheduledTimeMs) {}
 }

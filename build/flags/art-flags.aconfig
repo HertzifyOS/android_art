@@ -213,3 +213,13 @@ flag {
   is_fixed_read_only: true
   is_exported: true
 }
+
+flag {
+  name: "value_classes"
+  namespace: "core_libraries"
+  description: "Flag to treat certain classes as value-based classes"
+  bug: "488315413"
+  is_fixed_read_only: true
+  is_exported: true
+}
+

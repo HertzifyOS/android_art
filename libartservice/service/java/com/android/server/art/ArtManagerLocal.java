@@ -115,9 +115,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
@@ -1736,7 +1733,6 @@ public final class ArtManagerLocal {
         @Nullable private final Context mContext;
         @Nullable private final PackageManagerLocal mPackageManagerLocal;
         @Nullable private final Config mConfig;
-        @Nullable private final ThreadPoolExecutor mReporterExecutor;
         @Nullable private BackgroundDexoptJob mBgDexoptJob = null;
         @Nullable private PreRebootDexoptJob mPrDexoptJob = null;
 
@@ -1747,7 +1743,6 @@ public final class ArtManagerLocal {
             mContext = null;
             mPackageManagerLocal = null;
             mConfig = null;
-            mReporterExecutor = null;
         }
 
         @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
@@ -1758,10 +1753,6 @@ public final class ArtManagerLocal {
             mPackageManagerLocal = Objects.requireNonNull(
                     LocalManagerRegistry.getManager(PackageManagerLocal.class));
             mConfig = new Config();
-            mReporterExecutor =
-                    new ThreadPoolExecutor(1 /* corePoolSize */, 1 /* maximumPoolSize */,
-                            60 /* keepTimeAlive */, TimeUnit.SECONDS, new LinkedBlockingQueue<>());
-            mReporterExecutor.allowsCoreThreadTimeOut();
 
             // Call the getters for the dependencies that aren't optional, to ensure correct
             // initialization order.
@@ -1810,19 +1801,13 @@ public final class ArtManagerLocal {
         @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
         @NonNull
         public DexoptHelper getDexoptHelper() {
-            return new DexoptHelper(getContext(), getConfig(), getReporterExecutor());
+            return new DexoptHelper(getContext(), getConfig());
         }
 
         @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
         @NonNull
         public Config getConfig() {
             return mConfig;
-        }
-
-        @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-        @NonNull
-        public Executor getReporterExecutor() {
-            return mReporterExecutor;
         }
 
         /** Returns the registered {@link AppHibernationManager} instance. */

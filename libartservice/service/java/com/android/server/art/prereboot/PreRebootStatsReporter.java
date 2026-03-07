@@ -35,6 +35,7 @@ import com.android.server.art.proto.PreRebootStats.JobType;
 import com.android.server.art.proto.PreRebootStats.Status;
 import com.android.server.art.utils.ArtdRefCache;
 import com.android.server.art.utils.AsLog;
+import com.android.server.art.utils.AsyncExecutor;
 import com.android.server.art.utils.Utils;
 import com.android.server.pm.PackageManagerLocal;
 
@@ -53,7 +54,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ForkJoinPool;
 import java.util.function.Function;
 
 /**
@@ -209,12 +209,10 @@ public class PreRebootStatsReporter {
         }
 
         public void reportAsync() {
-            new CompletableFuture()
-                    .runAsync(this::report, mInjector.getExecutor())
-                    .exceptionally(t -> {
-                        AsLog.e("Failed to report stats", t);
-                        return null;
-                    });
+            mInjector.getAsyncExecutor().executeAsync(this::report).exceptionally(t -> {
+                AsLog.e("Failed to report stats", t);
+                return null;
+            });
         }
 
         public void report() {
@@ -426,8 +424,8 @@ public class PreRebootStatsReporter {
         }
 
         @NonNull
-        public Executor getExecutor() {
-            return ForkJoinPool.commonPool();
+        public AsyncExecutor getAsyncExecutor() {
+            return AsyncExecutor.getInstance();
         }
     }
 }

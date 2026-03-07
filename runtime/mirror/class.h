@@ -612,7 +612,7 @@ class EXPORT MANAGED Class final : public Object {
   // The size of java.lang.Class.class.
   static uint32_t ClassClassSize(PointerSize pointer_size) {
     // The number of vtable entries in java.lang.Class.
-    uint32_t vtable_entries = Object::kVTableLength + 83;
+    uint32_t vtable_entries = Object::kVTableLength + 85;
     return ComputeClassSize(true, vtable_entries, 0, 0, 4, 1, 0, 0, pointer_size);
   }
 

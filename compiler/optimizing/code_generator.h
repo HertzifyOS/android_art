@@ -96,6 +96,14 @@ class SlowPathCode : public DeletableArenaObject<kArenaAllocSlowPaths> {
 
   virtual void EmitNativeCode(CodeGenerator* codegen) = 0;
 
+  // Returns true if the native code generated for this slow path is identical to
+  // the code generated for the slow path for provided `instruction`.
+  virtual bool EmitsSameNativeCodeAsSlowPathForInstruction(
+      [[maybe_unused]] const HInstruction* instruction,
+      [[maybe_unused]] const CodeGenerator* codegen) const {
+    return false;
+  }
+
   // Save live core and floating-point caller-save registers and
   // update the stack mask in `locations` for registers holding object
   // references.
@@ -979,6 +987,7 @@ class CodeGenerator : public DeletableArenaObject<kArenaAllocCodeGenerator> {
 
   friend class OptimizingCFITest;
   friend class RegisterAllocatorTest;
+  friend class CodegenTest;
   ART_FRIEND_TEST(CodegenTest, ARM64FrameSizeSIMD);
   ART_FRIEND_TEST(CodegenTest, ARM64FrameSizeNoSIMD);
 
@@ -1072,7 +1081,7 @@ class SlowPathGenerator {
         InstructionType* other_instruction = it.first;
         SlowPathCodeType* other_slow_path = down_cast<SlowPathCodeType*>(it.second);
         // Determine if the instructions allow for slow-path sharing.
-        if (HaveSameLiveRegisters(instruction, other_instruction) &&
+        if (other_slow_path->EmitsSameNativeCodeAsSlowPathForInstruction(instruction, codegen_) &&
             HaveSameStackMap(instruction, other_instruction)) {
           // Can share: reuse existing one.
           return other_slow_path;
@@ -1092,19 +1101,6 @@ class SlowPathGenerator {
   }
 
  private:
-  // Tests if both instructions have same set of live physical registers. This ensures
-  // the slow-path has exactly the same preamble on saving these registers to stack.
-  bool HaveSameLiveRegisters(const InstructionType* i1, const InstructionType* i2) const {
-    const uint32_t core_spill = ~codegen_->GetCoreSpillMask();
-    const uint32_t fpu_spill = ~codegen_->GetFpuSpillMask();
-    RegisterSet* live1 = i1->GetLocations()->GetLiveRegisters();
-    RegisterSet* live2 = i2->GetLocations()->GetLiveRegisters();
-    return (((live1->GetCoreRegisterSet() & core_spill) ==
-             (live2->GetCoreRegisterSet() & core_spill)) &&
-            ((live1->GetFpuRegisterSet() & fpu_spill) ==
-             (live2->GetFpuRegisterSet() & fpu_spill)));
-  }
-
   // Tests if both instructions have the same stack map. This ensures the interpreter
   // will find exactly the same dex-registers at the same entries.
   bool HaveSameStackMap(const InstructionType* i1, const InstructionType* i2) const {
@@ -1146,6 +1142,43 @@ class InstructionCodeGenerator : public HGraphVisitor {
   // TODO: under current regime, only deopt sharing make sense; extend later.
   SlowPathGenerator<HDeoptimize> deopt_slow_paths_;
 };
+
+// Tests if slow-paths for both instructions save the same set of live registers.
+//
+// Although, in general, the implementation of a slow-path depends on its type and target
+// architecture, it typically includes the following:
+// * Saving live caller-save registers (all or those required by the custom slow-path calling
+//   convention) — preamble.
+// * Preparing arguments for and calling the corresponding runtime entry point.
+//
+// For such slow-paths, this method can be used to check that they have the same preamble,
+// which is a required condition for deduplication.
+inline bool HaveSameSlowPathSavedRegisters(const HInstruction* i1,
+                                           const HInstruction* i2,
+                                           const CodeGenerator* codegen) {
+  // CodeGenerator::GetSlowPathSpills returns the set of live registers that will be saved
+  // in an instruction's slow-path (unrelated to the save location). Currently, concrete
+  // implementations of SlowPathCode::SaveLiveRegisters also use this method.
+  RegisterSet spills1 = codegen->GetSlowPathSpills(i1->GetLocations());
+  RegisterSet spills2 = codegen->GetSlowPathSpills(i2->GetLocations());
+  return spills1.GetCoreRegisterSet() == spills2.GetCoreRegisterSet() &&
+         spills1.GetFpuRegisterSet() == spills2.GetFpuRegisterSet();
+}
+
+// Returns true if both instructions are Deoptimize and have the same kind and slow-path spills.
+inline bool IsDeoptWithSameKindAndSlowPathSavedRegisters(const HInstruction* i1,
+                                                         const HInstruction* i2,
+                                                         const CodeGenerator* codegen) {
+  if (!i1->IsDeoptimize() || !i2->IsDeoptimize()) {
+    return false;
+  }
+  // Check that slow-paths have the same argument-preparation part.
+  if (i1->AsDeoptimize()->GetDeoptimizationKind() != i2->AsDeoptimize()->GetDeoptimizationKind()) {
+    return false;
+  }
+  // Check that slow-paths have the same preamble.
+  return HaveSameSlowPathSavedRegisters(i1, i2, codegen);
+}
 
 }  // namespace art
 

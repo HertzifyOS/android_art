@@ -187,9 +187,7 @@ public class DexUseManagerTest {
         lenient().when(mInjector.getArtd()).thenReturn(mArtd);
         lenient().when(mInjector.getCurrentTimeMillis()).thenReturn(0L);
         lenient().when(mInjector.getFilename()).thenReturn(mTempFile.getPath());
-        lenient()
-                .when(mInjector.createScheduledExecutor())
-                .thenAnswer(invocation -> mMockClock.createScheduledExecutor());
+        lenient().when(mInjector.getAsyncExecutor()).thenReturn(mMockClock.getAsyncExecutor());
         lenient().when(mInjector.getContext()).thenReturn(mContext);
         lenient().when(mInjector.getAllPackageNames()).thenReturn(mPackageStates.keySet());
         lenient().when(mInjector.isPreReboot()).thenReturn(false);

@@ -50,6 +50,7 @@ import com.android.server.art.model.DexoptResult.DexContainerFileDexoptResult;
 import com.android.server.art.testing.StaticMockitoRule;
 import com.android.server.art.testing.TestingUtils;
 import com.android.server.art.utils.AidlUtils;
+import com.android.server.art.utils.AsyncExecutor;
 import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageState;
 
@@ -61,6 +62,7 @@ import org.mockito.Mock;
 
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.function.Function;
 
@@ -113,7 +115,7 @@ public class SecondaryDexopterTest {
     @Mock private IArtd mArtd;
     @Mock private DexUseManagerLocal mDexUseManager;
     @Mock private DexMetadataHelper.Injector mDexMetadataHelperInjector;
-    @Mock private ThreadPoolExecutor mReporterExecutor;
+    @Mock private AsyncExecutor mAsyncExecutor;
     private PackageState mPkgState;
     private AndroidPackage mPkg;
     private CancellationSignal mCancellationSignal;
@@ -149,7 +151,7 @@ public class SecondaryDexopterTest {
         lenient().when(mInjector.isLauncherPackage(any())).thenReturn(false);
         lenient().when(mInjector.getDexUseManager()).thenReturn(mDexUseManager);
         lenient().when(mInjector.getConfig()).thenReturn(mConfig);
-        lenient().when(mInjector.getReporterExecutor()).thenReturn(mReporterExecutor);
+        lenient().when(mInjector.getAsyncExecutor()).thenReturn(mAsyncExecutor);
         lenient().when(mInjector.getDexMetadataHelper()).thenReturn(mDexMetadataHelper);
 
         List<CheckedSecondaryDexInfo> secondaryDexInfo = createSecondaryDexInfo();
@@ -173,6 +175,11 @@ public class SecondaryDexopterTest {
         lenient()
                 .when(mArtd.createCancellationSignal())
                 .thenReturn(mock(IArtdCancellationSignal.class));
+
+        // Swallow the async tasks. They are for metric reporting and are not needed here.
+        lenient()
+                .when(mAsyncExecutor.executeAsync(any(Runnable.class)))
+                .thenReturn(CompletableFuture.completedFuture(null));
 
         mSecondaryDexopter = new SecondaryDexopter(
                 mInjector, mPkgState, mPkg, mDexoptParams, mCancellationSignal);

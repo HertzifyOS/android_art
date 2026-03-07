@@ -527,6 +527,8 @@ class DeoptimizationSlowPathARM64 : public SlowPathCodeARM64 {
   explicit DeoptimizationSlowPathARM64(HDeoptimize* instruction)
       : SlowPathCodeARM64(instruction) {}
 
+  // NB: Any changes to this method must also be reflected in
+  // EmitsSameNativeCodeAsSlowPathForInstruction.
   void EmitNativeCode(CodeGenerator* codegen) override {
     CodeGeneratorARM64* arm64_codegen = down_cast<CodeGeneratorARM64*>(codegen);
     __ Bind(GetEntryLabel());
@@ -537,6 +539,11 @@ class DeoptimizationSlowPathARM64 : public SlowPathCodeARM64 {
            static_cast<uint32_t>(instruction_->AsDeoptimize()->GetDeoptimizationKind()));
     arm64_codegen->InvokeRuntime(kQuickDeoptimize, instruction_, this);
     CheckEntrypointTypes<kQuickDeoptimize, void, DeoptimizationKind>();
+  }
+
+  bool EmitsSameNativeCodeAsSlowPathForInstruction(const HInstruction* instruction,
+                                                   const CodeGenerator* codegen) const override {
+    return IsDeoptWithSameKindAndSlowPathSavedRegisters(instruction, instruction_, codegen);
   }
 
   const char* GetDescription() const override { return "DeoptimizationSlowPathARM64"; }

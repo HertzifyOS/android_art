@@ -118,8 +118,8 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
     /**
      * A separate thread for executing `mRunningJob`. We avoid using any known thread / thread pool
      * such as {@link java.util.concurrent.ForkJoinPool} and {@link
-     * com.android.internal.os.BackgroundThread} because we don't want to block other things that
-     * use known threads / thread pools.
+     * com.android.server.art.utils.AsyncExecutor} because we don't want to block other things that
+     * use known threads / thread pools by this long running job.
      */
     @NonNull
     private final ThreadPoolExecutor mExecutor =
