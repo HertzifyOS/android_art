@@ -57,7 +57,7 @@ class CodegenTargetConfig {
       : isa_(isa), create_codegen_(create_codegen) {
   }
   InstructionSet GetInstructionSet() const { return isa_; }
-  CodeGenerator* CreateCodeGenerator(HGraph* graph, const CompilerOptions& compiler_options) const {
+  CodeGenerator* CreateCodeGenerator(HGraph* graph, const CompilerOptions& compiler_options) {
     return create_codegen_(graph, compiler_options);
   }
 
@@ -267,9 +267,12 @@ static void ValidateGraph(HGraph* graph) {
   ASSERT_TRUE(graph_checker.IsValid());
 }
 
-inline void GenerateCode(CodeGenerator* codegen,
-                         HGraph* graph,
-                         const std::function<void(HGraph*)>& hook_before_codegen) {
+template <typename Expected>
+static void RunCodeNoCheck(CodeGenerator* codegen,
+                           HGraph* graph,
+                           const std::function<void(HGraph*)>& hook_before_codegen,
+                           bool has_result,
+                           Expected expected) {
   {
     ScopedArenaAllocator local_allocator(graph->GetArenaStack());
     SsaLivenessAnalysis liveness(graph, codegen, &local_allocator);
@@ -281,15 +284,6 @@ inline void GenerateCode(CodeGenerator* codegen,
   }
   hook_before_codegen(graph);
   codegen->Compile();
-}
-
-template <typename Expected>
-static void RunCodeNoCheck(CodeGenerator* codegen,
-                           HGraph* graph,
-                           const std::function<void(HGraph*)>& hook_before_codegen,
-                           bool has_result,
-                           Expected expected) {
-  GenerateCode(codegen, graph, hook_before_codegen);
   Run(*codegen, has_result, expected);
 }
 
