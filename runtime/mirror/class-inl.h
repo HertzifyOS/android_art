@@ -641,6 +641,7 @@ inline void Class::SetClinitThreadId(pid_t new_clinit_thread_id) {
       uint32_t pid_max = atoi(buf);
       CHECK_GE(pid_max, 1024u);                          // Just another sanity check.
       CHECK_EQ((pid_max - 1) & kTidUnusedBitsMask, 0u);  // The real check.
+      close(fd);
     };
     std::call_once(of, check_unused_bits);
   }
