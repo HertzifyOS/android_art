@@ -832,7 +832,9 @@ void FastCompilerARM64::StartBranchTarget(bool flow_continues, uint32_t dex_pc) 
 }
 
 bool FastCompilerARM64::ProcessBlock(uint32_t dex_pc) {
-  bool flow_continues = false;
+  // In the case of the first instruction, we consider the flow to continue from
+  // prologue to dex pc 0 to get the DEX registers into the right locations.
+  bool flow_continues = (dex_pc == 0u);
   DexInstructionIterator it = GetCodeItemAccessor().InstructionsFrom(dex_pc).begin();
   DexInstructionIterator end = GetCodeItemAccessor().end();
   do {

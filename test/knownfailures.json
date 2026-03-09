@@ -1255,6 +1255,7 @@
                   "876-ifconst",
                   "877-long",
                   "878-can-be-null",
+                  "879-loop-entry",
                   "999-redefine-hiddenapi",
                   "1000-non-moving-space-stress",
                   "1001-app-image-regions",
