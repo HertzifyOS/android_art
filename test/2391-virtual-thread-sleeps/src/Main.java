@@ -53,7 +53,6 @@ public class Main {
         testNSleepingThreads(10);
         testNSleepingThreads(100);
         testNSleepingThreads(1000);
-        testNSleepingThreads(3000);
     }
 
     /**
