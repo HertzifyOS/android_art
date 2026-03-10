@@ -1428,6 +1428,8 @@ class EXPORT MANAGED Class final : public Object {
   // ComputeClassDescriptor() assumes that.
   void FixThreadId(Class* class_for_descr) REQUIRES_SHARED(Locks::mutator_lock_);
 
+  void ClearThreadId() REQUIRES_SHARED(Locks::mutator_lock_);
+
  private:
   template <typename SignatureType>
   static ArtMethod* FindInterfaceMethodWithSignature(ObjPtr<Class> klass,

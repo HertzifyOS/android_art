@@ -1612,10 +1612,8 @@ class RuntimeImageHelper {
       DCHECK(copy->IsVisiblyInitialized());
     } else {
       copy->SetStatusInternal(cls->IsVerified() ? ClassStatus::kVerified : ClassStatus::kResolved);
+      copy->ClearThreadId();
     }
-    // Fix the thread id after updating status as `FixThreadId` has expectations
-    // on the class' state.
-    copy->FixThreadId(cls.Ptr());
 
     // Clear static field values.
     auto clear_class = [&] () REQUIRES_SHARED(Locks::mutator_lock_) {
