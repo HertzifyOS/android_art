@@ -72,6 +72,7 @@ public class Main {
     // register (setting it to 0 on failure) before returning to the main path.
     /// CHECK:      ReadBarrierCasSlowPathARM64
     /// CHECK:      csel w{{[0-9]+}}, w{{[0-9]+}}, wzr, eq
+    /// CHECK-FI:
     public boolean testWeakCas(Object expected, Object newValue) {
         return sTop.weakCompareAndSetRelease(this, expected, newValue);
     }
