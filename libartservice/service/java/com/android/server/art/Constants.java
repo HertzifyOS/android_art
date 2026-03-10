@@ -47,7 +47,9 @@ import java.util.Set;
 public class Constants {
     private Constants() {}
 
-    @GuardedBy("Constants.class") private static Set<String> sWebviewPackageNamesCache;
+    @GuardedBy("Constants.class") private static volatile Set<String> sWebviewPackageNamesCache;
+    @GuardedBy("Constants.class")
+    private static volatile Set<String> sPreRebootDexoptSyncForcedPackagesCache;
 
     /** Returns the ABI that the device prefers. */
     @NonNull
@@ -122,5 +124,24 @@ public class Constants {
             }
         }
         return Collections.unmodifiableSet(packageNames);
+    }
+
+    public static Set<String> getPreRebootDexoptSyncForcedPackages() {
+        if (sPreRebootDexoptSyncForcedPackagesCache == null) {
+            synchronized (Constants.class) {
+                if (sPreRebootDexoptSyncForcedPackagesCache == null) {
+                    Resources resources = Resources.getSystem();
+                    int id = resources.getIdentifier(
+                            "config_pr_dexopt_sync_forced_packages", "array", "android");
+                    if (id == 0) {
+                        sPreRebootDexoptSyncForcedPackagesCache = Collections.emptySet();
+                    } else {
+                        sPreRebootDexoptSyncForcedPackagesCache =
+                                Set.of(resources.getStringArray(id));
+                    }
+                }
+            }
+        }
+        return sPreRebootDexoptSyncForcedPackagesCache;
     }
 }
