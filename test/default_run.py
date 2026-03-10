@@ -606,6 +606,12 @@ def default_run(ctx, args, **kwargs):
     # Some jvmti tests are flaky without -Xint on the RI.
     if IS_JVMTI_TEST:
       FLAGS += " -Xint"
+
+    # Disable the creation of perf data files (e.g., in /tmp/hsperfdata_...).
+    # When tests are run in parallel, these files can cause "locked by another process"
+    # warnings. This pollutes stdout/stderr and causes the test's output diff to fail.
+    FLAGS += " -XX:-UsePerfData"
+
     # Xmx is necessary since we don't pass down the ART flags to JVM.
     # We pass the classes2 path whether it's used (src-multidex) or not.
     cmdline = f"{JAVA} {DEBUGGER_OPTS} {JVM_VERIFY_ARG} -Xmx256m -classpath classes:classes2 {FLAGS} {MAIN} {ARGS}"
