@@ -57,6 +57,7 @@ import com.android.server.art.model.DexoptResult.PackageDexoptResult;
 import com.android.server.art.model.DexoptStatus;
 import com.android.server.art.model.DexoptStatus.DexContainerFileDexoptStatus;
 import com.android.server.art.model.OperationProgress;
+import com.android.server.art.model.VerifyDexoptArtifactsResult;
 import com.android.server.art.prereboot.PreRebootDriver;
 import com.android.server.art.utils.AsLog;
 import com.android.server.art.utils.Utils;
@@ -204,6 +205,9 @@ public final class ArtShellCommand extends BasicShellCommandHandler {
             }
             case "configure-batch-dexopt": {
                 return handleConfigureBatchDexopt(pw);
+            }
+            case "verify-dexopt-artifacts": {
+                return handleVerifyDexoptArtifacts(pw, snapshot);
             }
             default:
                 pw.printf("Error: Unknown 'art' sub-command '%s'\n", subcmd);
@@ -967,6 +971,26 @@ public final class ArtShellCommand extends BasicShellCommandHandler {
         return 0;
     }
 
+    private int handleVerifyDexoptArtifacts(
+            @NonNull PrintWriter pw, @NonNull PackageManagerLocal.FilteredSnapshot snapshot) {
+        if (!mInjector.isVerificationSupported()) {
+            pw.println("Error: Unsupported command 'verify-dexopt-artifacts'");
+            return 1;
+        }
+
+        pw.println("Verifying dexopt artifacts...");
+        pw.flush();
+        VerifyDexoptArtifactsResult result =
+                mInjector.getArtManagerLocal().verifyDexoptArtifacts(snapshot);
+        if (result.isVerified()) {
+            pw.println("All dexopt artifacts are verified");
+            return 0;
+        }
+        pw.println("Verification failed. Some dexopt artifacts are not produced by trusted "
+                + "environments");
+        return 1;
+    }
+
     @Override
     public void onHelp() {
         // No one should call this. The help text should be printed by the `onHelp` handler of `cmd
@@ -1182,6 +1206,10 @@ public final class ArtShellCommand extends BasicShellCommandHandler {
         pw.println("      --package PACKAGE_NAME The package name to dexopt. This flag can be");
         pw.println("        passed multiple times, to specify multiple packages. If not");
         pw.println("        specified, the default package list will be used.");
+        pw.println();
+        pw.println("  verify-dexopt-artifacts");
+        pw.println("    Verify that the dexopt artifacts for packages are produced by trusted");
+        pw.println("    environments.");
     }
 
     private void enforceRootOrShell() {
@@ -1485,6 +1513,10 @@ public final class ArtShellCommand extends BasicShellCommandHandler {
 
         public int getCallingUid() {
             return Binder.getCallingUid();
+        }
+
+        public boolean isVerificationSupported() {
+            return Build.VERSION.SDK_INT >= Build.VERSION_CODES.CUR_DEVELOPMENT;
         }
     }
 }

@@ -1539,6 +1539,7 @@ static void GenerateCompareAndSet(CodeGeneratorARM64* codegen,
         }
         break;
       case DataType::Type::kReference:
+        assembler->MaybePoisonHeapReference(old_value);
         assembler->MaybePoisonHeapReference(new_value);
         FALLTHROUGH_INTENDED;
       case DataType::Type::kInt32:
@@ -1553,6 +1554,7 @@ static void GenerateCompareAndSet(CodeGeneratorARM64* codegen,
           __ Cas(old_value, new_value, MemOperand(ptr));
         }
         if (type == DataType::Type::kReference) {
+          assembler->MaybeUnpoisonHeapReference(old_value);
           assembler->MaybeUnpoisonHeapReference(new_value);
         }
         break;
@@ -1647,6 +1649,11 @@ class ReadBarrierCasSlowPathARM64 : public SlowPathCodeARM64 {
     CodeGeneratorARM64* arm64_codegen = down_cast<CodeGeneratorARM64*>(codegen);
     Arm64Assembler* assembler = arm64_codegen->GetAssembler();
     MacroAssembler* masm = assembler->GetVIXLAssembler();
+
+    // Check if we need to finalize the boolean result in the slow path (weak CAS, returns
+    // success, main path uses LSE and thus skips result finalization at the exit label).
+    bool emit_success_csel = !strong_ && !update_old_value_ && arm64_codegen->ShouldUseLSE();
+
     __ Bind(GetEntryLabel());
 
     // Mark the `old_value_` from the main path and compare with `expected_`.
@@ -1663,7 +1670,11 @@ class ReadBarrierCasSlowPathARM64 : public SlowPathCodeARM64 {
       // Update the old value if we're going to return from the slow path.
       __ Csel(old_value_, old_value_temp_, old_value_, ne);
     }
-    __ B(GetExitLabel(), ne);  // If taken, Z=false indicates failure.
+
+    // If the main path uses LSE, it skips the CSEL at the exit label. We must ensure that
+    // all failure paths from the slow path also finalize the result register to 0.
+    vixl::aarch64::Label success_csel_label;
+    __ B(emit_success_csel ? &success_csel_label : GetExitLabel(), ne);
 
     // The `old_value` we have read did not match `expected` (which is always a to-space
     // reference) but after the read barrier the marked to-space value matched, so the
@@ -1679,10 +1690,9 @@ class ReadBarrierCasSlowPathARM64 : public SlowPathCodeARM64 {
     // Recalculate the `tmp_ptr` from main path clobbered by the read barrier above.
     __ Add(tmp_ptr, base_.X(), Operand(offset_));
 
-    // Check if we need CSEL in the slow path (weak CAS, returns success, main path uses LSE).
-    bool emit_success_csel = !strong_ && !update_old_value_ && arm64_codegen->ShouldUseLSE();
     vixl::aarch64::Label mark_old_value;
-    vixl::aarch64::Label success_csel_label;
+    // By using 'success_csel_label' as the failure label for GenerateCompareAndSet,
+    // we ensure that a comparison mismatch will branch to the CSEL which sets the result to 0.
     vixl::aarch64::Label* cmp_failure = emit_success_csel
         ? &success_csel_label
         : (update_old_value_ ? &mark_old_value : GetExitLabel());
@@ -1706,8 +1716,10 @@ class ReadBarrierCasSlowPathARM64 : public SlowPathCodeARM64 {
 
     // Z=true from the CMP+CCMP in GenerateCompareAndSet() above indicates comparison success.
     // For strong CAS, that's the overall success. For weak CAS, the code also needs to check
-    // the `store_result` to determine the success. With LSE enabled, we emit the CSEL here,
-    // otherwise we rely on the CSEL already emitted in the main path.
+    // the `store_result` from the STLXR to determine the success.
+    // With LSE enabled, the main path skips the CSEL, so we emit it here to ensure
+    // 'store_result' is correctly finalized for both fallthrough (success) and
+    // branch-to-label (failure) paths.
     if (emit_success_csel) {
       __ Bind(&success_csel_label);
       __ Csel(store_result, store_result, wzr, eq);
@@ -5757,7 +5769,8 @@ static void GenerateVarHandleCompareAndSetOrExchange(HInvoke* invoke,
     if (strong) {
       __ Cset(out.W(), eq);
     } else if (use_lse) {
-      // The result from `GenerateCompareAndSet()` is already final with LSE.
+      // The result from `GenerateCompareAndSet()` is already final with LSE for the common case.
+      // The slow path must ensure it finalizes the result if it's taken.
       DCHECK(store_result.Is(out));
     } else {
       // On success, the Z flag is set and the store result is 1, see GenerateCompareAndSet().

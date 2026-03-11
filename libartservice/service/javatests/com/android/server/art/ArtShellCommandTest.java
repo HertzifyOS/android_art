@@ -41,6 +41,7 @@ import android.os.UpdateEngine;
 
 import androidx.test.filters.SmallTest;
 
+import com.android.server.art.model.VerifyDexoptArtifactsResult;
 import com.android.server.art.prereboot.PreRebootDriver;
 import com.android.server.art.prereboot.PreRebootDriver.PreRebootResult;
 import com.android.server.art.prereboot.PreRebootStatsReporter;
@@ -78,6 +79,7 @@ public class ArtShellCommandTest {
     @Mock private UpdateEngine mUpdateEngine;
     @Mock private PreRebootDexoptJob.Injector mPreRebootDexoptJobInjector;
     @Mock private ArtManagerLocal.Injector mArtManagerLocalInjector;
+    @Mock private DexoptHelper mDexoptHelper;
     @Mock private PackageManagerLocal mPackageManagerLocal;
     @Mock private ArtShellCommand.Injector mInjector;
 
@@ -132,10 +134,12 @@ public class ArtShellCommandTest {
         lenient()
                 .when(mArtManagerLocalInjector.getPreRebootDexoptJob())
                 .thenReturn(mPreRebootDexoptJob);
+        lenient().when(mArtManagerLocalInjector.getDexoptHelper()).thenReturn(mDexoptHelper);
         mArtManagerLocal = new ArtManagerLocal(mArtManagerLocalInjector);
 
         lenient().when(mInjector.getArtManagerLocal()).thenReturn(mArtManagerLocal);
         lenient().when(mInjector.getPackageManagerLocal()).thenReturn(mPackageManagerLocal);
+        lenient().when(mInjector.isVerificationSupported()).thenReturn(true);
     }
 
     @Test
@@ -628,6 +632,52 @@ public class ArtShellCommandTest {
             String outputs = getOutputs(execution);
             assertWithMessage(outputs).that(exitCode).isEqualTo(0);
             assertThat(outputs).contains("Pre-reboot Dexopt job cancelled");
+        }
+    }
+
+    @Test
+    public void testVerifyDexoptArtifacts() throws Exception {
+        when(mInjector.getCallingUid()).thenReturn(Process.ROOT_UID);
+        when(mDexoptHelper.verifyDexoptArtifacts(any(), any()))
+                .thenReturn(new VerifyDexoptArtifactsResult(true));
+
+        try (var execution =
+                        new CommandExecution(createHandler(), "art", "verify-dexopt-artifacts")) {
+            int exitCode = execution.waitAndGetExitCode();
+            String outputs = getOutputs(execution);
+            assertThat(exitCode).isEqualTo(0);
+            assertThat(outputs).contains("Verifying dexopt artifacts...");
+            assertThat(outputs).contains("All dexopt artifacts are verified");
+        }
+    }
+
+    @Test
+    public void testVerifyDexoptArtifactsFailure() throws Exception {
+        when(mInjector.getCallingUid()).thenReturn(Process.ROOT_UID);
+        when(mDexoptHelper.verifyDexoptArtifacts(any(), any()))
+                .thenReturn(new VerifyDexoptArtifactsResult(false));
+
+        try (var execution =
+                        new CommandExecution(createHandler(), "art", "verify-dexopt-artifacts")) {
+            int exitCode = execution.waitAndGetExitCode();
+            String outputs = getOutputs(execution);
+            assertThat(exitCode).isEqualTo(1);
+            assertThat(outputs).contains("Verifying dexopt artifacts...");
+            assertThat(outputs).contains("Verification failed");
+        }
+    }
+
+    @Test
+    public void testVerifyDexoptArtifactsUnsupported() throws Exception {
+        when(mInjector.getCallingUid()).thenReturn(Process.ROOT_UID);
+        when(mInjector.isVerificationSupported()).thenReturn(false);
+
+        try (var execution =
+                        new CommandExecution(createHandler(), "art", "verify-dexopt-artifacts")) {
+            int exitCode = execution.waitAndGetExitCode();
+            String outputs = getOutputs(execution);
+            assertThat(exitCode).isEqualTo(1);
+            assertThat(outputs).contains("Error: Unsupported command 'verify-dexopt-artifacts'");
         }
     }
 
