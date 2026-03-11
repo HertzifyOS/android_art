@@ -995,11 +995,17 @@ public class Parser {
       mBuffer.flip();
     }
 
+    private void readChannel(ByteBuffer dst) throws IOException {
+      if (mChannel.read(dst) <= 0) {
+        throw new BufferUnderflowException();
+      }
+    }
+
     private ByteBuffer read(int num_bytes) throws IOException {
       while (num_bytes > mBuffer.remaining()) {
         mBufferStartPosition = mChannel.position() - mBuffer.remaining();
         mBuffer.compact();
-        mChannel.read(mBuffer);
+        readChannel(mBuffer);
         mBuffer.flip();
       }
       return mBuffer;
@@ -1094,7 +1100,7 @@ public class Parser {
       ByteBuffer buf = ByteBuffer.wrap(bytes);
       buf.put(mBuffer);
       while (buf.hasRemaining()) {
-        mChannel.read(buf);
+        readChannel(buf);
       }
       mBuffer.clear();
       mBuffer.flip();

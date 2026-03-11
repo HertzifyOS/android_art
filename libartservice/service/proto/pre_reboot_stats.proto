@@ -28,6 +28,7 @@ message PreRebootStats {
         STATUS_UNKNOWN = 0;
         STATUS_SCHEDULED = 1;
         STATUS_STARTED = 2;
+        STATUS_PARTIALLY_FINISHED = 9;
         STATUS_FAILED = 3;
         // The job is either finished or cancelled. The server will determine the case based on the
         // package counts.

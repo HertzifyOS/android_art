@@ -32,6 +32,7 @@ import com.android.server.art.DexUseManagerLocal.DexLoader;
 import com.android.server.art.model.DexoptStatus.DexContainerFileDexoptStatus;
 import com.android.server.art.utils.IndentingPrintWriter;
 import com.android.server.art.utils.Utils;
+import com.android.server.art.utils.Utils.Clock;
 import com.android.server.pm.PackageManagerLocal;
 import com.android.server.pm.pkg.PackageState;
 
@@ -230,7 +231,7 @@ public class DumpHelper {
 
     private void dumpPackageScores(@NonNull IndentingPrintWriter ipw,
             @NonNull PackageManagerLocal.FilteredSnapshot snapshot) {
-        long now = mInjector.getCurrentTimeMillis();
+        long now = mInjector.getClock().currentTimeMillis();
         ipw.printf("Current Time (ms): %d\n", now);
         snapshot.getPackageStates()
                 .values()
@@ -282,8 +283,8 @@ public class DumpHelper {
             return GlobalInjector.getInstance().getDexUseManager();
         }
 
-        public long getCurrentTimeMillis() {
-            return System.currentTimeMillis();
+        public Clock getClock() {
+            return Clock.DEFAULT;
         }
     }
 }

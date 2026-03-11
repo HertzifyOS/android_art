@@ -87,6 +87,7 @@ import com.android.server.art.utils.ArtdRefCache;
 import com.android.server.art.utils.AsLog;
 import com.android.server.art.utils.Utils;
 import com.android.server.art.utils.Utils.Abi;
+import com.android.server.art.utils.Utils.Clock;
 import com.android.server.art.utils.Utils.InitProfileResult;
 import com.android.server.pm.PackageManagerLocal;
 import com.android.server.pm.pkg.AndroidPackage;
@@ -1003,7 +1004,8 @@ public final class ArtManagerLocal {
                             // artifacts are for an old Mainline version), we should clean them up.
                             statsAfterRebootSession.recordArtifactsEndStatus(
                                     PreRebootStatsReporter.END_STATUS_OBSOLETE,
-                                    mInjector.getCurrentTimeMillis() - status.createdAtMillis);
+                                    mInjector.getClock().currentTimeMillis()
+                                            - status.createdAtMillis);
                             AsLog.i("Staged files discarded: " + status.reason);
                             mInjector.getArtd().cleanUpPreRebootStagedFiles();
                         } else {
@@ -1015,7 +1017,8 @@ public final class ArtManagerLocal {
                             // secondary dex files because they are not decrypted before then.
                             statsAfterRebootSession.recordArtifactsEndStatus(
                                     PreRebootStatsReporter.END_STATUS_COMMITTED,
-                                    mInjector.getCurrentTimeMillis() - status.createdAtMillis);
+                                    mInjector.getClock().currentTimeMillis()
+                                            - status.createdAtMillis);
                             mShouldCommitPreRebootStagedFiles = true;
                             // The stats reporting will be deferred to `systemReady`.
                             mStatsAfterRebootSession = statsAfterRebootSession;
@@ -1854,8 +1857,8 @@ public final class ArtManagerLocal {
         }
 
         @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-        public long getCurrentTimeMillis() {
-            return System.currentTimeMillis();
+        public Clock getClock() {
+            return Clock.DEFAULT;
         }
 
         @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)

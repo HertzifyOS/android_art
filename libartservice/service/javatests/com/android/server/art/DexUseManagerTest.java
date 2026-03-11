@@ -185,7 +185,8 @@ public class DexUseManagerTest {
                 .thenReturn(mUnfilteredSnapshot);
 
         lenient().when(mInjector.getArtd()).thenReturn(mArtd);
-        lenient().when(mInjector.getCurrentTimeMillis()).thenReturn(0L);
+        lenient().when(mInjector.getClock()).thenReturn(mMockClock);
+        mMockClock.setCurrentTimeMillis(0L);
         lenient().when(mInjector.getFilename()).thenReturn(mTempFile.getPath());
         lenient().when(mInjector.getAsyncExecutor()).thenReturn(mMockClock.getAsyncExecutor());
         lenient().when(mInjector.getContext()).thenReturn(mContext);
@@ -345,7 +346,7 @@ public class DexUseManagerTest {
     private void verifyPrimaryDexMultipleEntries(
             boolean saveAndLoad, boolean shutdown, boolean cleanup) throws Exception {
         long now = System.currentTimeMillis();
-        when(mInjector.getCurrentTimeMillis()).thenReturn(now - 2000L);
+        mMockClock.setCurrentTimeMillis(now - 2000L);
 
         lenient()
                 .when(mArtd.getDexFileVisibility(BASE_APK))
@@ -374,7 +375,7 @@ public class DexUseManagerTest {
         when(mInjector.isIsolatedUid(anyInt())).thenReturn(true);
         mDexUseManager.notifyDexContainersLoaded(
                 mSnapshot, OWNING_PKG_NAME, Map.of(BASE_APK, "CLC"));
-        when(mInjector.getCurrentTimeMillis()).thenReturn(now - 1000L);
+        mMockClock.setCurrentTimeMillis(now - 1000L);
         mDexUseManager.notifyDexContainersLoaded(
                 mSnapshot, OWNING_PKG_NAME, Map.of(BASE_APK, "CLC"));
 
@@ -490,7 +491,7 @@ public class DexUseManagerTest {
 
     @Test
     public void testSecondaryDexNativeAbiSetChange() {
-        when(mInjector.getCurrentTimeMillis()).thenReturn(1000L);
+        mMockClock.setCurrentTimeMillis(1000L);
 
         mDexUseManager.notifyDexContainersLoaded(
                 mSnapshot, OWNING_PKG_NAME, Map.of(mCeDir + "/foo.apk", "CLC"));
@@ -550,7 +551,7 @@ public class DexUseManagerTest {
 
     private void verifySecondaryDexMultipleEntries(
             boolean saveAndLoad, boolean shutdown, boolean cleanup) throws Exception {
-        when(mInjector.getCurrentTimeMillis()).thenReturn(1000L);
+        mMockClock.setCurrentTimeMillis(1000L);
 
         lenient()
                 .when(mArtd.getDexFileVisibility(mCeDir + "/foo.apk"))
@@ -591,7 +592,7 @@ public class DexUseManagerTest {
         when(mInjector.isIsolatedUid(anyInt())).thenReturn(true);
         mDexUseManager.notifyDexContainersLoaded(
                 mSnapshot, OWNING_PKG_NAME, Map.of(mCeDir + "/foo.apk", "CLC"));
-        when(mInjector.getCurrentTimeMillis()).thenReturn(2000L);
+        mMockClock.setCurrentTimeMillis(2000L);
         mDexUseManager.notifyDexContainersLoaded(mSnapshot, OWNING_PKG_NAME,
                 Map.of(mCeDir + "/foo.apk", SecondaryDexInfo.UNSUPPORTED_CLASS_LOADER_CONTEXT));
 
@@ -1090,7 +1091,7 @@ public class DexUseManagerTest {
         long now = System.currentTimeMillis();
 
         // Only the base APK load should count into the package score.
-        when(mInjector.getCurrentTimeMillis()).thenReturn(now - 2000);
+        mMockClock.setCurrentTimeMillis(now - 2000);
         mDexUseManager.notifyDexContainersLoaded(mSnapshot, OWNING_PKG_NAME,
                 Map.of("/somewhere/app/" + OWNING_PKG_NAME + "/base.apk", "CLC"));
         mDexUseManager.notifyDexContainersLoaded(mSnapshot, OWNING_PKG_NAME,
@@ -1099,7 +1100,7 @@ public class DexUseManagerTest {
                 mSnapshot, OWNING_PKG_NAME, Map.of(mCeDir + "/foo.apk", "CLC"));
 
         // Base APK loads within the 5-second cooldown period should not count.
-        when(mInjector.getCurrentTimeMillis()).thenReturn(now - 1000);
+        mMockClock.setCurrentTimeMillis(now - 1000);
         mDexUseManager.notifyDexContainersLoaded(mSnapshot, OWNING_PKG_NAME,
                 Map.of("/somewhere/app/" + OWNING_PKG_NAME + "/base.apk", "CLC"));
 
@@ -1114,19 +1115,19 @@ public class DexUseManagerTest {
         long now = System.currentTimeMillis();
 
         // Simulate that the app was opened 28, 21, 14, 7 days ago.
-        when(mInjector.getCurrentTimeMillis()).thenReturn(now - PACKAGE_SCORE_HALF_LIFE_MS * 4);
+        mMockClock.setCurrentTimeMillis(now - PACKAGE_SCORE_HALF_LIFE_MS * 4);
         mDexUseManager.notifyDexContainersLoaded(mSnapshot, OWNING_PKG_NAME,
                 Map.of("/somewhere/app/" + OWNING_PKG_NAME + "/base.apk", "CLC"));
 
-        when(mInjector.getCurrentTimeMillis()).thenReturn(now - PACKAGE_SCORE_HALF_LIFE_MS * 3);
+        mMockClock.setCurrentTimeMillis(now - PACKAGE_SCORE_HALF_LIFE_MS * 3);
         mDexUseManager.notifyDexContainersLoaded(mSnapshot, OWNING_PKG_NAME,
                 Map.of("/somewhere/app/" + OWNING_PKG_NAME + "/base.apk", "CLC"));
 
-        when(mInjector.getCurrentTimeMillis()).thenReturn(now - PACKAGE_SCORE_HALF_LIFE_MS * 2);
+        mMockClock.setCurrentTimeMillis(now - PACKAGE_SCORE_HALF_LIFE_MS * 2);
         mDexUseManager.notifyDexContainersLoaded(mSnapshot, OWNING_PKG_NAME,
                 Map.of("/somewhere/app/" + OWNING_PKG_NAME + "/base.apk", "CLC"));
 
-        when(mInjector.getCurrentTimeMillis()).thenReturn(now - PACKAGE_SCORE_HALF_LIFE_MS);
+        mMockClock.setCurrentTimeMillis(now - PACKAGE_SCORE_HALF_LIFE_MS);
         mDexUseManager.notifyDexContainersLoaded(mSnapshot, OWNING_PKG_NAME,
                 Map.of("/somewhere/app/" + OWNING_PKG_NAME + "/base.apk", "CLC"));
 

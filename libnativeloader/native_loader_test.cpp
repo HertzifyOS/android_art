@@ -346,7 +346,7 @@ TEST_P(NativeLoaderTest, OpenNativeLibraryWithoutClassloaderInFramework) {
                               /*target_sdk_version=*/17,
                               test_lib_path,
                               /*class_loader=*/nullptr,
-                              /*caller_location=*/"/system/framework/framework.jar",
+                              /*caller_location=*/"/system/framework/framework.jar!classes1.dex",
                               /*library_path=*/nullptr,
                               &needs_native_bridge,
                               &errmsg));

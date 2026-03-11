@@ -19,5 +19,5 @@ def run(ctx, args):
   ctx.default_run(
       args,
       Xcompiler_option=[
-          "--no-inline-from=core-oj,569-checker-pattern-replacement.jar!1"
+          "--no-inline-from=core-oj,569-checker-pattern-replacement.jar!classes2.dex"
       ])

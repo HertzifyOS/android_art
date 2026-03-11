@@ -35,6 +35,7 @@ import com.android.server.art.proto.PreRebootStats.FailureReason;
 import com.android.server.art.proto.PreRebootStats.JobRun;
 import com.android.server.art.proto.PreRebootStats.JobType;
 import com.android.server.art.proto.PreRebootStats.Status;
+import com.android.server.art.testing.MockClock;
 import com.android.server.art.testing.PreRebootStatsReporterHarness;
 import com.android.server.pm.PackageManagerLocal;
 
@@ -60,23 +61,26 @@ public class PreRebootStatsReporterTest {
     @Mock private ArtManagerLocal mArtManagerLocal;
     private PreRebootStatsReporterHarness mReporterHarness;
     private PreRebootStatsReporter.Injector mInjector;
+    private MockClock mMockClock;
 
     @Before
     public void setUp() throws Exception {
         mReporterHarness = new PreRebootStatsReporterHarness();
         mInjector = mReporterHarness.getInjector();
+        mMockClock = new MockClock();
 
         lenient().when(mPackageManagerLocal.withFilteredSnapshot()).thenReturn(mSnapshot);
 
         lenient().when(mInjector.getPackageManagerLocal()).thenReturn(mPackageManagerLocal);
         lenient().when(mInjector.getArtManagerLocal()).thenReturn(mArtManagerLocal);
+        lenient().when(mInjector.getClock()).thenReturn(mMockClock);
     }
 
     @Test
     public void testSuccess() throws Exception {
         var reporter = mReporterHarness.createStatsReporter();
 
-        doReturn(50l).when(mInjector).getCurrentTimeMillis();
+        mMockClock.setCurrentTimeMillis(50l);
         reporter.recordJobScheduled(true /* isAsync */, false /* isOtaUpdate */);
         checkProto(PreRebootStats.newBuilder()
                         .setStatus(Status.STATUS_SCHEDULED)
@@ -85,7 +89,7 @@ public class PreRebootStatsReporterTest {
                         .build());
 
         {
-            doReturn(200l).when(mInjector).getCurrentTimeMillis();
+            mMockClock.setCurrentTimeMillis(200l);
             reporter.recordJobStarted();
             checkProto(PreRebootStats.newBuilder()
                             .setStatus(Status.STATUS_STARTED)
@@ -117,7 +121,7 @@ public class PreRebootStatsReporterTest {
                             .setPackagesWithArtifactsBeforeRebootCount(4)
                             .build());
 
-            doReturn(300l).when(mInjector).getCurrentTimeMillis();
+            mMockClock.setCurrentTimeMillis(300l);
             reporter.recordJobEnded(new PreRebootResult(Status.STATUS_FINISHED));
             checkProto(PreRebootStats.newBuilder()
                             .setStatus(Status.STATUS_FINISHED)
@@ -136,7 +140,7 @@ public class PreRebootStatsReporterTest {
         }
 
         {
-            doReturn(400l).when(mInjector).getCurrentTimeMillis();
+            mMockClock.setCurrentTimeMillis(400l);
             reporter.recordJobStarted();
             checkProto(PreRebootStats.newBuilder()
                             .setStatus(Status.STATUS_STARTED)
@@ -174,7 +178,7 @@ public class PreRebootStatsReporterTest {
                             .setPackagesWithArtifactsBeforeRebootCount(8)
                             .build());
 
-            doReturn(600l).when(mInjector).getCurrentTimeMillis();
+            mMockClock.setCurrentTimeMillis(600l);
             reporter.recordJobEnded(new PreRebootResult(Status.STATUS_FINISHED));
             checkProto(PreRebootStats.newBuilder()
                             .setStatus(Status.STATUS_FINISHED)
@@ -266,7 +270,7 @@ public class PreRebootStatsReporterTest {
                         .build());
 
         {
-            doReturn(200l).when(mInjector).getCurrentTimeMillis();
+            mMockClock.setCurrentTimeMillis(200l);
             reporter.recordJobStarted();
             checkProto(PreRebootStats.newBuilder()
                             .setStatus(Status.STATUS_STARTED)
@@ -296,7 +300,7 @@ public class PreRebootStatsReporterTest {
                             .setPackagesWithArtifactsBeforeRebootCount(8)
                             .build());
 
-            doReturn(300l).when(mInjector).getCurrentTimeMillis();
+            mMockClock.setCurrentTimeMillis(300l);
             reporter.recordJobEnded(new PreRebootResult(Status.STATUS_FINISHED));
             checkProto(PreRebootStats.newBuilder()
                             .setStatus(Status.STATUS_FINISHED)
@@ -340,7 +344,7 @@ public class PreRebootStatsReporterTest {
             int failureReasonForStatsd) throws Exception {
         var reporter = mReporterHarness.createStatsReporter();
 
-        doReturn(50l).when(mInjector).getCurrentTimeMillis();
+        mMockClock.setCurrentTimeMillis(50l);
         reporter.recordJobScheduled(true /* isAsync */, false /* isOtaUpdate */);
         checkProto(PreRebootStats.newBuilder()
                         .setStatus(Status.STATUS_SCHEDULED)
@@ -349,7 +353,7 @@ public class PreRebootStatsReporterTest {
                         .build());
 
         {
-            doReturn(200l).when(mInjector).getCurrentTimeMillis();
+            mMockClock.setCurrentTimeMillis(200l);
             reporter.recordJobStarted();
             checkProto(PreRebootStats.newBuilder()
                             .setStatus(Status.STATUS_STARTED)
@@ -363,7 +367,7 @@ public class PreRebootStatsReporterTest {
                             .setPackagesWithArtifactsBeforeRebootCount(0)
                             .build());
 
-            doReturn(300l).when(mInjector).getCurrentTimeMillis();
+            mMockClock.setCurrentTimeMillis(300l);
             reporter.recordJobEnded(new PreRebootResult(status, failureReason));
             checkProto(PreRebootStats.newBuilder()
                             .setStatus(status)
@@ -420,7 +424,7 @@ public class PreRebootStatsReporterTest {
     public void testStarted() throws Exception {
         var reporter = mReporterHarness.createStatsReporter();
 
-        doReturn(50l).when(mInjector).getCurrentTimeMillis();
+        mMockClock.setCurrentTimeMillis(50l);
         reporter.recordJobScheduled(true /* isAsync */, false /* isOtaUpdate */);
         checkProto(PreRebootStats.newBuilder()
                         .setStatus(Status.STATUS_SCHEDULED)
@@ -429,7 +433,7 @@ public class PreRebootStatsReporterTest {
                         .build());
 
         {
-            doReturn(200l).when(mInjector).getCurrentTimeMillis();
+            mMockClock.setCurrentTimeMillis(200l);
             reporter.recordJobStarted();
             checkProto(PreRebootStats.newBuilder()
                             .setStatus(Status.STATUS_STARTED)
@@ -488,7 +492,7 @@ public class PreRebootStatsReporterTest {
     public void testScheduled() throws Exception {
         var reporter = mReporterHarness.createStatsReporter();
 
-        doReturn(50l).when(mInjector).getCurrentTimeMillis();
+        mMockClock.setCurrentTimeMillis(50l);
         reporter.recordJobScheduled(true /* isAsync */, false /* isOtaUpdate */);
         checkProto(PreRebootStats.newBuilder()
                         .setStatus(Status.STATUS_SCHEDULED)

@@ -39,6 +39,7 @@ import com.android.server.art.DexUseManagerLocal.DexLoader;
 import com.android.server.art.DexUseManagerLocal.SecondaryDexInfo;
 import com.android.server.art.model.DexoptStatus;
 import com.android.server.art.model.DexoptStatus.DexContainerFileDexoptStatus;
+import com.android.server.art.testing.MockClock;
 import com.android.server.art.testing.StaticMockitoRule;
 import com.android.server.pm.PackageManagerLocal;
 import com.android.server.pm.pkg.AndroidPackage;
@@ -73,11 +74,15 @@ public class DumpHelperTest {
     @Mock private ArtManagerLocal mArtManagerLocal;
     @Mock private DexUseManagerLocal mDexUseManagerLocal;
     @Mock private PackageManagerLocal.FilteredSnapshot mSnapshot;
+    private MockClock mMockClock;
 
     private DumpHelper mDumpHelper;
 
     @Before
     public void setUp() throws Exception {
+        mMockClock = new MockClock();
+        mMockClock.setCurrentTimeMillis(123456789L);
+
         lenient().when(Constants.getPreferredAbi()).thenReturn("arm64-v8a");
         lenient().when(Constants.getNative64BitAbi()).thenReturn("arm64-v8a");
         lenient().when(Constants.getNative32BitAbi()).thenReturn("armeabi-v7a");
@@ -91,7 +96,7 @@ public class DumpHelperTest {
 
         lenient().when(mInjector.getArtManagerLocal()).thenReturn(mArtManagerLocal);
         lenient().when(mInjector.getDexUseManager()).thenReturn(mDexUseManagerLocal);
-        lenient().when(mInjector.getCurrentTimeMillis()).thenReturn(123456789L);
+        lenient().when(mInjector.getClock()).thenReturn(mMockClock);
 
         Map<String, PackageState> pkgStates = createPackageStates();
         lenient().when(mSnapshot.getPackageStates()).thenReturn(pkgStates);

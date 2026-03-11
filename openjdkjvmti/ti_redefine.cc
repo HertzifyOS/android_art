@@ -522,9 +522,9 @@ art::MemMap Redefiner::MoveDataToMemMap(const std::string& original_location,
   std::string modified_location = StringPrintf("%s-transformed", original_location.c_str());
   // A dangling multi-dex location appended to bootclasspath can cause inaccuracy in oat file
   // validation. For simplicity, just convert it to a normal location.
-  auto [filename, index] = art::DexFileLoader::SplitMultiDexLocation(modified_location);
-  if (filename.size() < modified_location.size()) {
-    modified_location[filename.size()] = '-';
+  size_t pos = modified_location.find(art::DexFileLoader::kMultiDexSeparator);
+  if (pos != std::string::npos) {
+    modified_location[pos] = '-';
   }
   art::MemMap map = art::MemMap::MapAnonymous(
       modified_location.c_str(),

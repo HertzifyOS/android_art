@@ -143,7 +143,7 @@ static jobjectArray VMClassLoader_getBootClassPathEntries(JNIEnv* env, jclass) {
 
   const DexFile* last_dex_file = nullptr;
   auto dchecked_is_base_dex = [&](const DexFile* dex_file) {
-    // For multidex locations, e.g., x.jar!1, we want to look into x.jar.
+    // For multidex locations, e.g., x.jar!classes2.dex, we want to look into x.jar.
     // But we do not need to look into the base dex file more than once so we filter
     // out multidex locations using the fact that they follow the base location.
     if (kIsDebugBuild) {

@@ -70,11 +70,7 @@ class DexFileLoader {
   static std::string GetMultiDexZipEntryName(size_t index);
 
   // Return the (possibly synthetic) dex location for a multidex entry. This is dex_location for
-  // index == 0, and (dex_location + multi-dex-separator + dex-file-index) otherwise.
-  // This uses consecutive integer indices as unique index, regardless of whether we use
-  // muliti-dex (several zip files), container dex (singe file), or combination of those.
-  // Note that it is allowed to have several zip files, which in turn are container dex files
-  // (eg: classes.dex may have two dex files and classes2.dex may have 3rd and 4th dex file).
+  // index == 0, and dex_location + multi-dex-separator + GetMultiDexZipEntryName(index) else.
   static std::string GetMultiDexLocation(const char* dex_location, size_t index);
 
   // Returns the multidex location and the checksum for each dex file in a zip or a dex container.

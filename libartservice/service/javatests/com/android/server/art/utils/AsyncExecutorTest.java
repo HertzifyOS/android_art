@@ -172,7 +172,6 @@ public class AsyncExecutorTest {
 
         // Mockito mocks hold the arguments of historical calls. `reset` removes them.
         reset(binder);
-        reset(mMockClock.getHandler());
 
         Runtime.getRuntime().gc();
         Runtime.getRuntime().runFinalization();

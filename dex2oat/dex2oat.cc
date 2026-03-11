@@ -1924,7 +1924,7 @@ class Dex2Oat final {
         for (const DexFile* dex_file : *dex_file_vector) {
           for (const std::string& filter : no_inline_filters) {
             // Use dex_file->GetLocation() rather than dex_file->GetBaseLocation(). This
-            // allows tests to specify <test-dexfile>!1 if needed but if the
+            // allows tests to specify <test-dexfile>!classes2.dex if needed but if the
             // base location passes the `starts_with()` test, so do all extra locations.
             std::string dex_location = dex_file->GetLocation();
             if (filter.find('/') == std::string::npos) {
