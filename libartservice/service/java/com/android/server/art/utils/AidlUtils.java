@@ -16,28 +16,32 @@
 
 package com.android.server.art.utils;
 
-import static com.android.server.art.OutputArtifacts.PermissionSettings;
-import static com.android.server.art.OutputArtifacts.PermissionSettings.SeContext;
-import static com.android.server.art.ProfilePath.PrebuiltProfilePath;
-import static com.android.server.art.ProfilePath.PrimaryCurProfilePath;
-import static com.android.server.art.ProfilePath.PrimaryRefProfilePath;
-import static com.android.server.art.ProfilePath.SecondaryCurProfilePath;
-import static com.android.server.art.ProfilePath.SecondaryRefProfilePath;
-import static com.android.server.art.ProfilePath.TmpProfilePath;
-import static com.android.server.art.ProfilePath.WritableProfilePath;
-
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 
 import com.android.server.art.ArtifactsPath;
 import com.android.server.art.DexMetadataPath;
+import com.android.server.art.DexoptTrigger;
+import com.android.server.art.DexoptTrigger.DexoptComparator;
 import com.android.server.art.FsPermission;
 import com.android.server.art.OutputArtifacts;
+import com.android.server.art.OutputArtifacts.PermissionSettings;
+import com.android.server.art.OutputArtifacts.PermissionSettings.SeContext;
 import com.android.server.art.OutputProfile;
 import com.android.server.art.OutputSecureDexMetadataCompanion;
 import com.android.server.art.ProfilePath;
+import com.android.server.art.ProfilePath.PrebuiltProfilePath;
+import com.android.server.art.ProfilePath.PrimaryCurProfilePath;
+import com.android.server.art.ProfilePath.PrimaryRefProfilePath;
+import com.android.server.art.ProfilePath.SecondaryCurProfilePath;
+import com.android.server.art.ProfilePath.SecondaryRefProfilePath;
+import com.android.server.art.ProfilePath.TmpProfilePath;
+import com.android.server.art.ProfilePath.WritableProfilePath;
 import com.android.server.art.RuntimeArtifactsPath;
 import com.android.server.art.SecureDexMetadataWithCompanionPaths;
+
+import java.util.Arrays;
+import java.util.List;
 
 /** @hide */
 public final class AidlUtils {
@@ -253,6 +257,21 @@ public final class AidlUtils {
     }
 
     @NonNull
+    public static DexoptTrigger buildDexoptTrigger(
+            @NonNull List<Integer> dexoptComparators, @Nullable String customComparatorReason) {
+        var dexoptTrigger = new DexoptTrigger();
+        dexoptTrigger.dexoptComparators =
+                dexoptComparators.stream().mapToInt(Integer::intValue).toArray();
+        dexoptTrigger.customComparatorReason = customComparatorReason;
+        return dexoptTrigger;
+    }
+
+    @NonNull
+    public static DexoptTrigger buildDexoptTrigger(@NonNull List<Integer> dexoptComparators) {
+        return buildDexoptTrigger(dexoptComparators, null /* customComparatorReason */);
+    }
+
+    @NonNull
     public static WritableProfilePath toWritableProfilePath(@NonNull ProfilePath profile) {
         switch (profile.getTag()) {
             case ProfilePath.primaryRefProfilePath:
@@ -324,5 +343,11 @@ public final class AidlUtils {
         return String.format(
                 "SecureDexMetadataWithCompanionPaths[dexPath = %s, isa = %s, isInDalvikCache = %b]",
                 paths.dexPath, paths.isa, paths.isInDalvikCache);
+    }
+
+    @NonNull
+    public static String toString(@NonNull DexoptTrigger trigger) {
+        return String.format("DexoptTrigger[dexoptComparators = %s, customComparatorReason = %s]",
+                Arrays.toString(trigger.dexoptComparators), trigger.customComparatorReason);
     }
 }
