@@ -77,7 +77,7 @@ class MemoryToolLargeObjectMapSpace final : public LargeObjectMapSpace {
     return LargeObjectMapSpace::IsZygoteLargeObject(self, ObjectWithRedzone(obj));
   }
 
-  size_t Free(Thread* self, mirror::Object* obj) override {
+  size_t Free(Thread* self, mirror::Object* obj) override REQUIRES_SHARED(Locks::mutator_lock_) {
     mirror::Object* object_with_rdz = ObjectWithRedzone(obj);
     MEMORY_TOOL_MAKE_UNDEFINED(object_with_rdz, AllocationSize(obj, nullptr));
     return LargeObjectMapSpace::Free(self, object_with_rdz);
@@ -197,7 +197,6 @@ size_t LargeObjectMapSpace::Free(Thread* self, mirror::Object* ptr) {
   MutexLock mu(self, lock_);
   auto it = large_objects_.find(ptr);
   if (UNLIKELY(it == large_objects_.end())) {
-    ScopedObjectAccess soa(self);
     Runtime::Current()->GetHeap()->DumpSpaces(LOG_STREAM(FATAL_WITHOUT_ABORT));
     LOG(FATAL) << "Attempted to free large object " << ptr << " which was not live";
   }

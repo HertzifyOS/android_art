@@ -480,6 +480,8 @@ class DeoptimizationSlowPathRISCV64 : public SlowPathCodeRISCV64 {
   explicit DeoptimizationSlowPathRISCV64(HDeoptimize* instruction)
       : SlowPathCodeRISCV64(instruction) {}
 
+  // NB: Any changes to this method must also be reflected in
+  // EmitsSameNativeCodeAsSlowPathForInstruction.
   void EmitNativeCode(CodeGenerator* codegen) override {
     CodeGeneratorRISCV64* riscv64_codegen = down_cast<CodeGeneratorRISCV64*>(codegen);
     __ Bind(GetEntryLabel());
@@ -490,6 +492,11 @@ class DeoptimizationSlowPathRISCV64 : public SlowPathCodeRISCV64 {
                    static_cast<uint32_t>(instruction_->AsDeoptimize()->GetDeoptimizationKind()));
     riscv64_codegen->InvokeRuntime(kQuickDeoptimize, instruction_, this);
     CheckEntrypointTypes<kQuickDeoptimize, void, DeoptimizationKind>();
+  }
+
+  bool EmitsSameNativeCodeAsSlowPathForInstruction(const HInstruction* instruction,
+                                                   const CodeGenerator* codegen) const override {
+    return IsDeoptWithSameKindAndSlowPathSavedRegisters(instruction, instruction_, codegen);
   }
 
   const char* GetDescription() const override { return "DeoptimizationSlowPathRISCV64"; }

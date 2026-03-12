@@ -1255,7 +1255,7 @@ dchecked_vector<ObjPtr<mirror::DexCache>> ImageWriter::FindDexCaches(Thread* sel
   dchecked_vector<ObjPtr<mirror::DexCache>> dex_caches;
   ClassLinker* class_linker = Runtime::Current()->GetClassLinker();
   ReaderMutexLock mu2(self, *Locks::dex_lock_);
-  dex_caches.reserve(class_linker->GetDexCachesData().size());
+  dex_caches.reserve(class_linker->GetDexCacheCount());
   for (const auto& entry : class_linker->GetDexCachesData()) {
     const ClassLinker::DexCacheData& data = entry.second;
     if (self->IsJWeakCleared(data.weak_root)) {
@@ -2015,10 +2015,9 @@ void ImageWriter::LayoutHelper::ProcessDexFileObjects(Thread* self) {
       DCHECK(it != image_writer_->dex_file_oat_index_map_.end()) << dex_file->GetLocation();
       const size_t oat_index = it->second;
       // Assign bin slot to this file's dex cache and add it to the end of the work queue.
-      auto dcd_it = class_linker->GetDexCachesData().find(dex_file);
-      DCHECK(dcd_it != class_linker->GetDexCachesData().end()) << dex_file->GetLocation();
-      auto dex_cache =
-          DecodeWeakGlobalWithoutRB<mirror::DexCache>(vm, self, dcd_it->second.weak_root);
+      const ClassLinker::DexCacheData* data = class_linker->FindDexCacheDataLocked(*dex_file);
+      DCHECK(data != nullptr) << dex_file->GetLocation();
+      auto dex_cache = DecodeWeakGlobalWithoutRB<mirror::DexCache>(vm, self, data->weak_root);
       DCHECK(dex_cache != nullptr);
       bool assigned = TryAssignBinSlot(dex_cache, oat_index);
       DCHECK(assigned);

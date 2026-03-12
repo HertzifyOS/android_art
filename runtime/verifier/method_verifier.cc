@@ -5954,6 +5954,7 @@ void MethodVerifier::VerifyMethodAndDump(Thread* self,
                                          const dex::CodeItem* code_item,
                                          uint32_t method_access_flags,
                                          uint32_t api_level) {
+  DCHECK_EQ(dex_cache->GetDexFile(), dex_file);
   Runtime* runtime = Runtime::Current();
   ClassLinker* class_linker = runtime->GetClassLinker();
   ArenaPool* arena_pool = runtime->GetArenaPool();

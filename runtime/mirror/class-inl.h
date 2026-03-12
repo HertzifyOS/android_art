@@ -1470,6 +1470,10 @@ ALWAYS_INLINE FLATTEN inline ArtMethod* Class::FindDeclaredClassMethodFast(
   return nullptr;
 }
 
+inline void Class::ClearThreadId() {
+  clinit_thread_id_or_hash_.store(0u, std::memory_order_relaxed);
+}
+
 inline void Class::FixThreadId(Class* class_for_descr) {
   if (!IsInitialized()) {
     if (kIsDebugBuild) {

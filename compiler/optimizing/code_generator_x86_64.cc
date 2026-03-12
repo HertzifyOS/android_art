@@ -480,6 +480,8 @@ class DeoptimizationSlowPathX86_64 : public SlowPathCodeX86_64 {
   explicit DeoptimizationSlowPathX86_64(HDeoptimize* instruction)
       : SlowPathCodeX86_64(instruction) {}
 
+  // NB: Any changes to this method must also be reflected in
+  // EmitsSameNativeCodeAsSlowPathForInstruction.
   void EmitNativeCode(CodeGenerator* codegen) override {
     CodeGeneratorX86_64* x86_64_codegen = down_cast<CodeGeneratorX86_64*>(codegen);
     __ Bind(GetEntryLabel());
@@ -491,6 +493,11 @@ class DeoptimizationSlowPathX86_64 : public SlowPathCodeX86_64 {
         static_cast<uint32_t>(instruction_->AsDeoptimize()->GetDeoptimizationKind()));
     x86_64_codegen->InvokeRuntime(kQuickDeoptimize, instruction_, this);
     CheckEntrypointTypes<kQuickDeoptimize, void, DeoptimizationKind>();
+  }
+
+  bool EmitsSameNativeCodeAsSlowPathForInstruction(const HInstruction* instruction,
+                                                   const CodeGenerator* codegen) const override {
+    return IsDeoptWithSameKindAndSlowPathSavedRegisters(instruction, instruction_, codegen);
   }
 
   const char* GetDescription() const override { return "DeoptimizationSlowPathX86_64"; }
@@ -1466,8 +1473,7 @@ void CodeGeneratorX86_64::LoadIntrinsicDeclaringClass(CpuRegister reg, HInvoke* 
             Address::Absolute(CodeGeneratorX86_64::kPlaceholder32BitOffset, /* no_rip= */ false));
     MethodReference target_method = invoke->GetResolvedMethodReference();
     dex::TypeIndex type_idx = target_method.dex_file->GetMethodId(target_method.index).class_idx_;
-    boot_image_type_patches_.emplace_back(target_method.dex_file, type_idx.index_);
-    __ Bind(&boot_image_type_patches_.back().label);
+    RecordBootImageTypePatch(*target_method.dex_file, type_idx);
   } else {
     uint32_t boot_image_offset = GetBootImageOffsetOfIntrinsicDeclaringClass(invoke);
     LoadBootImageAddress(reg, boot_image_offset);
@@ -1476,10 +1482,12 @@ void CodeGeneratorX86_64::LoadIntrinsicDeclaringClass(CpuRegister reg, HInvoke* 
 
 void CodeGeneratorX86_64::LoadClassRootForIntrinsic(CpuRegister reg, ClassRoot class_root) {
   if (GetCompilerOptions().IsBootImage()) {
+    // Load the type the same way as for HLoadClass::LoadKind::kBootImageLinkTimePcRelative.
+    __ leal(reg,
+            Address::Absolute(CodeGeneratorX86_64::kPlaceholder32BitOffset, /* no_rip= */ false));
     ScopedObjectAccess soa(Thread::Current());
     ObjPtr<mirror::Class> klass = GetClassRoot(class_root);
-    boot_image_type_patches_.emplace_back(&klass->GetDexFile(), klass->GetDexTypeIndex().index_);
-    __ Bind(&boot_image_type_patches_.back().label);
+    RecordBootImageTypePatch(klass->GetDexFile(), klass->GetDexTypeIndex());
   } else {
     uint32_t boot_image_offset = GetBootImageOffset(class_root);
     LoadBootImageAddress(reg, boot_image_offset);

@@ -1550,6 +1550,7 @@ TEST_F(ClassLinkerTest, RegisterDexFileName) {
                                                                               arraysize(data),
                                                                               data)));
   const DexFile* old_dex_file = dex_cache->GetDexFile();
+  class_linker->RemoveDexFromCaches(*old_dex_file);
 
   auto container =
       std::make_shared<MemoryDexFileContainer>(old_dex_file->Begin(), old_dex_file->Size());
