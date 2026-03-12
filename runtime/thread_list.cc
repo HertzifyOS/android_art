@@ -1884,19 +1884,38 @@ void ThreadList::AddMountedVirtualThread(MountedVirtualThreadData* entry) {
   virtual_and_carrier_map_ = entry;
 }
 
-void ThreadList::RemoveMountedVirtualThreadByThreadId(uint32_t virtual_thread_id) {
-  DCHECK_NE(virtual_thread_id, kInvalidThreadId);
+void ThreadList::RemoveMountedVirtualThread(MountedVirtualThreadData* entry) {
+  DCHECK(entry != nullptr);
   MountedVirtualThreadData** cur = &virtual_and_carrier_map_;
+  // Check no double entries with the same virtual thread id in the debug build.
+  if (kIsDebugBuild) {
+    while (*cur != nullptr) {
+      if (*cur != entry && (*cur)->virtual_thread_id_ == entry->virtual_thread_id_) {
+        // Release the thread_list_lock_ first before the crash to allow ART dump all threads.
+        Locks::thread_list_lock_->Unlock(Thread::Current());
+        LOG(FATAL) << ("A virtual thread has been mounted by a second carrier thread! ")
+          << "virtual thread id : " << entry->virtual_thread_id_
+          << ", this carrier thread id : " << entry->carrier_thread_id_
+          << ", another carrier thread id : " << (*cur)->carrier_thread_id_;
+        UNREACHABLE();
+      }
+      cur = &(*cur)->next_;
+    }
+    cur = &virtual_and_carrier_map_;
+  }
+
   while (*cur != nullptr) {
-    MountedVirtualThreadData* entry = *cur;
-    if (entry->virtual_thread_id_ == virtual_thread_id) {
+    if (*cur == entry) {
       *cur = entry->next_;
       entry->next_ = nullptr;
       return;
     }
-    cur = &entry->next_;
+    cur = &(*cur)->next_;
   }
-  LOG(FATAL) << "Virtual thread id isn't found.";
+  // Release the thread_list_lock_ first before the crash to allow ART dump all threads.
+  Locks::thread_list_lock_->ExclusiveUnlock(Thread::Current());
+  LOG(FATAL) << "Mounted virtual thread data isn't found. virtual thread id: "
+    << entry->virtual_thread_id_ << ", carrier thread id: " << entry->carrier_thread_id_;
   UNREACHABLE();
 }
 
