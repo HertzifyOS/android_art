@@ -504,7 +504,7 @@ perfetto::protos::pbzero::HeapGraphRoot::Type ToProtoType(art::RootType art_type
 
 perfetto::protos::pbzero::HeapGraphType::Kind ProtoClassKind(uint32_t class_flags) {
   using perfetto::protos::pbzero::HeapGraphType;
-  class_flags &= ~art::mirror::kClassFlagStaticRefInfo;
+  class_flags &= ~art::mirror::kClassFlagPerfettoIgnoredFlags;
   switch (class_flags) {
     case art::mirror::kClassFlagNormal:
     case art::mirror::kClassFlagRecord:
@@ -595,7 +595,7 @@ std::vector<std::pair<std::string, art::mirror::Object*>> GetReferences(art::mir
   std::vector<std::pair<std::string, art::mirror::Object*>> referred_objects;
   ReferredObjectsFinder objf(&referred_objects, emit_field_ids);
 
-  uint32_t klass_flags = klass->GetClassFlags() & ~art::mirror::kClassFlagStaticRefInfo;
+  uint32_t klass_flags = klass->GetClassFlags() & ~art::mirror::kClassFlagPerfettoIgnoredFlags;
   if (klass_flags != art::mirror::kClassFlagNormal &&
       klass_flags != art::mirror::kClassFlagSoftReference &&
       klass_flags != art::mirror::kClassFlagWeakReference &&
@@ -827,7 +827,8 @@ class HeapGraphDumper {
                       art::mirror::Class* klass,
                       perfetto::protos::pbzero::HeapGraphObject* object_proto)
       REQUIRES_SHARED(art::Locks::mutator_lock_) {
-    const uint32_t klass_flags = klass->GetClassFlags() & ~art::mirror::kClassFlagStaticRefInfo;
+    const uint32_t klass_flags =
+        klass->GetClassFlags() & ~art::mirror::kClassFlagPerfettoIgnoredFlags;
     const bool emit_field_ids = klass_flags != art::mirror::kClassFlagObjectArray &&
                                 klass_flags != art::mirror::kClassFlagNormal &&
                                 klass_flags != art::mirror::kClassFlagSoftReference &&

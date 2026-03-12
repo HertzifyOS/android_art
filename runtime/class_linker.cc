@@ -69,6 +69,7 @@
 #include "class_table-inl.h"
 #include "common_throws.h"
 #include "compiler_callbacks.h"
+#include "com_android_art_flags.h"
 #include "debug_print.h"
 #include "debugger.h"
 #include "dex/class_accessor-inl.h"
@@ -6882,6 +6883,10 @@ bool ClassLinker::LinkSuperClass(Handle<mirror::Class> klass) {
     DCHECK(Thread::Current()->IsExceptionPending());
     return false;
   }
+  if (!VerifyValueClass(klass)) {
+    DCHECK(Thread::Current()->IsExceptionPending());
+    return false;
+  }
 
   // Inherit kAccClassIsFinalizable from the superclass in case this
   // class doesn't override finalize.
@@ -10270,6 +10275,58 @@ bool ClassLinker::VerifyRecordClass(Handle<mirror::Class> klass, ObjPtr<mirror::
 
   // Set kClassFlagRecord.
   klass->SetRecordClass();
+  return true;
+}
+
+class ValueClassAnnotationVisitor final : public annotations::AnnotationVisitor {
+ public:
+  ValueClassAnnotationVisitor() {}
+
+  annotations::VisitorStatus VisitAnnotation(const char* annotation_descriptor,
+                                             DexFile::DexVisibility visibility) override {
+    if (visibility != DexFile::DexVisibility::kRuntime) {
+      return annotations::VisitorStatus::kVisitNext;
+    }
+    if (strcmp(annotation_descriptor, "Ljdk/internal/ValueBased;") != 0) {
+      return annotations::VisitorStatus::kVisitNext;
+    }
+    has_valuebased_annotation_ = true;
+    return annotations::VisitorStatus::kVisitBreak;
+  }
+  annotations::VisitorStatus VisitAnnotationElement(const char*,
+                                                    uint8_t,
+                                                    const JValue&) override {
+    return annotations::VisitorStatus::kVisitNext;
+  }
+  annotations::VisitorStatus VisitArrayElement(uint8_t,
+                                               uint32_t,
+                                               uint8_t,
+                                               const JValue&) override {
+    return annotations::VisitorStatus::kVisitNext;
+  }
+
+  bool IsValueClass() const {
+    return has_valuebased_annotation_;
+  }
+
+ private:
+  bool has_valuebased_annotation_ = false;
+};
+
+// Value classes are still a preview feature and a class being a value class is indicated by using
+// @jdk.internal.ValueBased annotation. This work is behind a flag and for simplicity sake this
+// method always returns true. The full fledged feature will have all validations in place.
+bool ClassLinker::VerifyValueClass(Handle<mirror::Class> klass) {
+  if (!com::android::art::flags::value_classes()) {
+    return true;
+  }
+
+  ValueClassAnnotationVisitor visitor;
+  annotations::VisitClassAnnotations(klass, &visitor);
+  if (visitor.IsValueClass()) {
+    klass->SetValueClass();
+  }
+
   return true;
 }
 
