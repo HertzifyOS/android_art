@@ -157,6 +157,7 @@ art_cc_defaults {
         "optimizing/control_flow_simplifier.cc",
         "optimizing/data_type.cc",
         "optimizing/dead_code_elimination.cc",
+        "optimizing/environment_input_elimination.cc",
         "optimizing/escape.cc",
         "optimizing/graph.cc",
         "optimizing/graph_checker.cc",

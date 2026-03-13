@@ -1805,6 +1805,11 @@
         "variant": "continuous-gc",
         "bug": "b/462511710",
         "description": ["temporarily disable the test till we investigate the test"]
+    },
+    {
+        "tests": ["2274-checker-environment-input-elimination"],
+        "variant": "jvm",
+        "description": ["Test uses Android-specific @DeadReferenceSafe annotation."]
     }
 
 ]
