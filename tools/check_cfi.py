@@ -39,6 +39,10 @@ IGNORE : Dict[str, List[str]] = {
     "art_quick_generic_jni_trampoline": ["arm", "i386", "x86_64"],
     # Starts with non-zero offset at the start of the method.
     "art_quick_throw_null_pointer_exception_from_signal": ARCHES,
+    "art_quick_throw_array_bounds_from_signal": ARCHES,
+    "art_quick_throw_string_bounds_from_signal": ARCHES,
+    "art_quick_throw_class_cast_from_signal": ARCHES,
+    "art_quick_deoptimize_from_signal": ARCHES,
     # Pops stack without static control flow past the opcode.
     "nterp_op_return": ["arm", "i386", "x86_64", "riscv64"],
     "nterp0_op_return": ["aarch64"],

@@ -32,7 +32,8 @@ namespace art {
 class TestFaultHandler final : public FaultHandler {
  public:
   explicit TestFaultHandler()
-      : map_error_(),
+      : FaultHandler(SIGSEGV),
+        map_error_(),
         target_map_(MemMap::MapAnonymous("test-305-mmap",
                                          /* addr */ nullptr,
                                          /* byte_count */ MemMap::GetPageSize(),

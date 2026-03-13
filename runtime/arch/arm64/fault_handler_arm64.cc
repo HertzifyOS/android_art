@@ -16,6 +16,7 @@
 
 #include <sys/ucontext.h>
 
+#include "arch/arm64/faulting_slow_path_arm64.h"
 #include "arch/instruction_set.h"
 #include "art_method.h"
 #include "base/hex_dump.h"
@@ -32,6 +33,10 @@
 extern "C" void art_quick_throw_stack_overflow();
 extern "C" void art_quick_throw_null_pointer_exception_from_signal();
 extern "C" void art_quick_implicit_suspend();
+extern "C" void art_quick_throw_array_bounds_from_signal();
+extern "C" void art_quick_throw_string_bounds_from_signal();
+extern "C" void art_quick_deoptimize_from_signal();
+extern "C" void art_quick_throw_class_cast_from_signal();
 
 //
 // ARM64 specific fault handler functions.
@@ -217,4 +222,87 @@ bool StackOverflowHandler::Action([[maybe_unused]] int sig,
   // The kernel will now return to the address in sc->pc.
   return true;
 }
+
+bool FaultingSlowPathHandler::Action([[maybe_unused]] int sig, siginfo_t* info, void* context) {
+  uint32_t* instructions = reinterpret_cast<uint32_t*>(info->si_addr);
+  ucontext_t* uc = reinterpret_cast<ucontext_t*>(context);
+  mcontext_t* mc = reinterpret_cast<mcontext_t*>(&uc->uc_mcontext);
+
+  constexpr uint32_t kUdfImmMask = 0xffff;
+  constexpr uint32_t kUdfImmFixedMask = 0xffff0000;
+  constexpr uint32_t kUdfFixedValue = 0;
+
+  uint32_t instruction = instructions[0];
+  if ((instruction & kUdfImmFixedMask) != kUdfFixedValue) {
+    VLOG(signals) << "Unexpected signaling instruction: " << std::hex << instruction;
+    return false;
+  }
+
+  uint32_t data = instruction & kUdfImmMask;
+  if (!Arm64FaultingSlowPathArguments::IsValid(data)) {
+    VLOG(signals) << "Unexpected UDF's immediate value: " << std::hex << data;
+    return false;
+  }
+
+  // Extract the arguments and slow path type from the immediate. For more information,
+  // see arch/arm64/faulting_slow_path_arm64.h.
+  Arm64FaultingSlowPathArguments args(instruction & kUdfImmMask);
+
+  uintptr_t new_pc;
+
+  auto slow_path = args.SlowPath();
+  switch (slow_path) {
+    case FaultingSlowPath::kArrayBoundsCheck: {
+      new_pc = reinterpret_cast<uintptr_t>(art_quick_throw_array_bounds_from_signal);
+      break;
+    };
+    case FaultingSlowPath::kStringBoundsCheck: {
+      new_pc = reinterpret_cast<uintptr_t>(art_quick_throw_string_bounds_from_signal);
+      break;
+    };
+    case FaultingSlowPath::kTypeCheck: {
+      new_pc = reinterpret_cast<uintptr_t>(art_quick_throw_class_cast_from_signal);
+      break;
+    }
+    case FaultingSlowPath::kDeoptimize: {
+      new_pc = reinterpret_cast<uintptr_t>(art_quick_deoptimize_from_signal);
+      break;
+    }
+    default:
+      LOG(FATAL) << "Unexpected slow path: " << static_cast<uint32_t>(slow_path);
+      UNREACHABLE();
+  }
+
+  VLOG(signals) << slow_path;
+
+  auto read_arg = [mc](Arm64FaultingSlowPathArguments::Arg arg) -> uintptr_t {
+    if (arg.GetType() == Arm64FaultingSlowPathArguments::Arg::Type::kConstant) {
+      return arg.GetConstant();
+    } else {
+      return mc->regs[arg.GetRegister()];
+    }
+  };
+
+  size_t num_args = GetNumberOfSlowPathArguments(slow_path);
+
+  // Save the registers to the stack, then use them for argument passing
+  // Instead of LR, we save the address of the next instruction - the one
+  // after the faulting instruction.
+  mc->sp -= sizeof(uintptr_t) * num_args;
+  auto* sp = reinterpret_cast<uintptr_t*>(mc->sp);
+  size_t i = 0;
+  size_t reg = art::arm64::LR - num_args + 1;
+  for (; i < num_args - 1; i++, reg++) {
+    sp[i] = mc->regs[reg];
+    mc->regs[reg] = read_arg(args.GetArg(i));
+  }
+  DCHECK_EQ(reg, static_cast<size_t>(art::arm64::LR)) << reg;
+  // Set LR to the instruction next to the faulting one.
+  sp[i] = mc->pc + 4u;
+  mc->regs[reg] = read_arg(args.GetArg(i));
+  mc->pc = new_pc;
+
+  return true;
+}
+
 }       // namespace art
