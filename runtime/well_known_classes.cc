@@ -275,6 +275,12 @@ static ArtMethod* CacheMethod(ObjPtr<mirror::Class> klass,
   return method;
 }
 
+static ArtMethod* CacheConstructor(ObjPtr<mirror::Class> klass,
+                                   const char* signature,
+                                   PointerSize pointer_size) REQUIRES_SHARED(Locks::mutator_lock_) {
+  return CacheMethod(klass, /*is_static=*/ false, "<init>", signature, pointer_size);
+}
+
 static ArtMethod* CachePrimitiveBoxingMethod(ClassLinker* class_linker,
                                              Thread* self,
                                              char prim_name,
@@ -449,36 +455,18 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
   java_lang_Short_valueOf =
       CachePrimitiveBoxingMethod(class_linker, self, 'S', "Ljava/lang/Short;");
 
-  java_lang_Byte_ByteCache_init = CacheMethod(
-      FindSystemClass(class_linker, self, "Ljava/lang/Byte$ByteCache;"),
-      /*is_static=*/ false,
-      "<init>",
-      "()V",
-      pointer_size);
-  java_lang_Character_CharacterCache_init = CacheMethod(
+  java_lang_Byte_ByteCache_init = CacheConstructor(
+      FindSystemClass(class_linker, self, "Ljava/lang/Byte$ByteCache;"), "()V", pointer_size);
+  java_lang_Character_CharacterCache_init = CacheConstructor(
       FindSystemClass(class_linker, self, "Ljava/lang/Character$CharacterCache;"),
-      /*is_static=*/ false,
-      "<init>",
       "()V",
       pointer_size);
-  java_lang_Integer_IntegerCache_init = CacheMethod(
-      FindSystemClass(class_linker, self, "Ljava/lang/Integer$IntegerCache;"),
-      /*is_static=*/ false,
-      "<init>",
-      "()V",
-      pointer_size);
-  java_lang_Long_LongCache_init = CacheMethod(
-      FindSystemClass(class_linker, self, "Ljava/lang/Long$LongCache;"),
-      /*is_static=*/ false,
-      "<init>",
-      "()V",
-      pointer_size);
-  java_lang_Short_ShortCache_init = CacheMethod(
-      FindSystemClass(class_linker, self, "Ljava/lang/Short$ShortCache;"),
-      /*is_static=*/ false,
-      "<init>",
-      "()V",
-      pointer_size);
+  java_lang_Integer_IntegerCache_init = CacheConstructor(
+      FindSystemClass(class_linker, self, "Ljava/lang/Integer$IntegerCache;"), "()V", pointer_size);
+  java_lang_Long_LongCache_init = CacheConstructor(
+      FindSystemClass(class_linker, self, "Ljava/lang/Long$LongCache;"), "()V", pointer_size);
+  java_lang_Short_ShortCache_init = CacheConstructor(
+      FindSystemClass(class_linker, self, "Ljava/lang/Short$ShortCache;"), "()V", pointer_size);
 
   java_lang_Byte_ByteCache_cache = CacheBoxingCacheField(
       class_linker, self, "Ljava/lang/Byte$ByteCache;", "[Ljava/lang/Byte;");
@@ -620,54 +608,26 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
       "getLdLibraryPath",
       "()Ljava/lang/String;",
       pointer_size);
-  dalvik_system_DelegateLastClassLoader_init = CacheMethod(
-      d_s_dlcl.Get(),
-      /*is_static=*/ false,
-      "<init>",
-      "(Ljava/lang/String;Ljava/lang/ClassLoader;)V",
-      pointer_size);
-  dalvik_system_DexClassLoader_init = CacheMethod(
+  dalvik_system_DelegateLastClassLoader_init = CacheConstructor(
+      d_s_dlcl.Get(), "(Ljava/lang/String;Ljava/lang/ClassLoader;)V", pointer_size);
+  dalvik_system_DexClassLoader_init = CacheConstructor(
       d_s_dcl.Get(),
-      /*is_static=*/ false,
-      "<init>",
       "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V",
       pointer_size);
-  dalvik_system_DexFile_init = CacheMethod(
-      d_s_df.Get(),
-      /*is_static=*/ false,
-      "<init>",
-      "(Ljava/lang/String;)V",
-      pointer_size);
-  dalvik_system_DexPathList_init = CacheMethod(
+  dalvik_system_DexFile_init =
+      CacheConstructor(d_s_df.Get(), "(Ljava/lang/String;)V", pointer_size);
+  dalvik_system_DexPathList_init = CacheConstructor(
       d_s_dpl.Get(),
-      /*is_static=*/ false,
-      "<init>",
       "(Ljava/lang/ClassLoader;Ljava/lang/String;Ljava/lang/String;Ljava/io/File;)V",
       pointer_size);
-  dalvik_system_DexPathList__Element_init = CacheMethod(
-      d_s_dpl_e.Get(),
-      /*is_static=*/ false,
-      "<init>",
-      "(Ldalvik/system/DexFile;Ljava/io/File;)V",
-      pointer_size);
-  dalvik_system_InMemoryDexClassLoader_init = CacheMethod(
-      d_s_imdcl.Get(),
-      /*is_static=*/ false,
-      "<init>",
-      "(Ljava/nio/ByteBuffer;Ljava/lang/ClassLoader;)V",
-      pointer_size);
-  dalvik_system_PathClassLoader_init = CacheMethod(
-      d_s_pcl.Get(),
-      /*is_static=*/ false,
-      "<init>",
-      "(Ljava/lang/String;Ljava/lang/ClassLoader;)V",
-      pointer_size);
-  dalvik_system_VirtualThreadParkedStates_init = CacheMethod(
-      d_s_vtps.Get(),
-      /*is_static=*/ false,
-      "<init>",
-      "()V",
-      pointer_size);
+  dalvik_system_DexPathList__Element_init =
+      CacheConstructor(d_s_dpl_e.Get(), "(Ldalvik/system/DexFile;Ljava/io/File;)V", pointer_size);
+  dalvik_system_InMemoryDexClassLoader_init = CacheConstructor(
+      d_s_imdcl.Get(), "(Ljava/nio/ByteBuffer;Ljava/lang/ClassLoader;)V", pointer_size);
+  dalvik_system_PathClassLoader_init = CacheConstructor(
+      d_s_pcl.Get(), "(Ljava/lang/String;Ljava/lang/ClassLoader;)V", pointer_size);
+  dalvik_system_VirtualThreadParkedStates_init =
+      CacheConstructor(d_s_vtps.Get(), "()V", pointer_size);
 
   dalvik_system_VMRuntime_hiddenApiUsed = CacheMethod(
       d_s_vmr.Get(),
@@ -676,8 +636,7 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
       "(ILjava/lang/String;Ljava/lang/String;IZ)V",
       pointer_size);
 
-  java_lang_BootClassLoader_init =
-      CacheMethod(j_l_bcl.Get(), /*is_static=*/ false, "<init>", "()V", pointer_size);
+  java_lang_BootClassLoader_init = CacheConstructor(j_l_bcl.Get(), "()V", pointer_size);
   java_lang_ClassLoader_loadClass = CacheMethod(
       j_l_cl.Get(),
       /*is_static=*/ false,
@@ -685,12 +644,8 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
       "(Ljava/lang/String;)Ljava/lang/Class;",
       pointer_size);
 
-  java_lang_ClassNotFoundException_init = CacheMethod(
-      j_l_cnfe.Get(),
-      /*is_static=*/ false,
-      "<init>",
-      "(Ljava/lang/String;Ljava/lang/Throwable;)V",
-      pointer_size);
+  java_lang_ClassNotFoundException_init =
+      CacheConstructor(j_l_cnfe.Get(), "(Ljava/lang/String;Ljava/lang/Throwable;)V", pointer_size);
 
   ObjPtr<mirror::Class> j_l_Double = java_lang_Double_valueOf->GetDeclaringClass();
   java_lang_Double_doubleToRawLongBits =
@@ -706,20 +661,19 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
   java_lang_Daemons_waitForDaemonStart = CacheMethod(
       j_l_Daemons.Get(), /*is_static=*/ true, "waitForDaemonStart", "()V", pointer_size);
 
-  java_lang_Error_init = CacheMethod(
-      j_l_Error.Get(), /*is_static=*/ false, "<init>", "()V", pointer_size);
-  java_lang_IllegalAccessError_init = CacheMethod(
-      j_l_IllegalAccessError.Get(), /*is_static=*/ false, "<init>", "()V", pointer_size);
-  java_lang_NoClassDefFoundError_init = CacheMethod(
-      j_l_NoClassDefFoundError.Get(), /*is_static=*/ false, "<init>", "()V", pointer_size);
-  java_lang_OutOfMemoryError_init = CacheMethod(
-      j_l_OutOfMemoryError.Get(), /*is_static=*/ false, "<init>", "()V", pointer_size);
+  java_lang_Error_init = CacheConstructor(j_l_Error.Get(), "()V", pointer_size);
+  java_lang_IllegalAccessError_init =
+      CacheConstructor(j_l_IllegalAccessError.Get(), "()V", pointer_size);
+  java_lang_NoClassDefFoundError_init =
+      CacheConstructor(j_l_NoClassDefFoundError.Get(), "()V", pointer_size);
+  java_lang_OutOfMemoryError_init =
+      CacheConstructor(j_l_OutOfMemoryError.Get(), "()V", pointer_size);
   java_lang_Runnable_run =
       CacheMethod(j_l_Runnable.Get(), /*is_static=*/false, "run", "()V", pointer_size);
-  java_lang_RuntimeException_init = CacheMethod(
-      j_l_RuntimeException.Get(), /*is_static=*/ false, "<init>", "()V", pointer_size);
-  java_lang_StackOverflowError_init = CacheMethod(
-      j_l_StackOverflowError.Get(), /*is_static=*/ false, "<init>", "()V", pointer_size);
+  java_lang_RuntimeException_init =
+      CacheConstructor(j_l_RuntimeException.Get(), "()V", pointer_size);
+  java_lang_StackOverflowError_init =
+      CacheConstructor(j_l_StackOverflowError.Get(), "()V", pointer_size);
 
   ObjPtr<mirror::Class> j_l_String = GetClassRoot<mirror::String>(class_linker);
   java_lang_String_charAt = CacheMethod(
@@ -738,12 +692,8 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
       "dispatchUncaughtException",
       "(Ljava/lang/Throwable;)V",
       pointer_size);
-  java_lang_Thread_init = CacheMethod(
-      j_l_Thread.Get(),
-      /*is_static=*/ false,
-      "<init>",
-      "(Ljava/lang/ThreadGroup;Ljava/lang/String;IZ)V",
-      pointer_size);
+  java_lang_Thread_init = CacheConstructor(
+      j_l_Thread.Get(), "(Ljava/lang/ThreadGroup;Ljava/lang/String;IZ)V", pointer_size);
   java_lang_Thread_parkVirtualInternal =
       CacheMethod(j_l_Thread.Get(),
                   /*is_static=*/true,
@@ -774,18 +724,12 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
       "invokeExact",
       "([Ljava/lang/Object;)Ljava/lang/Object;",
       pointer_size);
-  java_lang_invoke_MethodHandleImpl_fieldInit = CacheMethod(
+  java_lang_invoke_MethodHandleImpl_fieldInit = CacheConstructor(
     j_l_i_MethodHandleImpl.Get(),
-    /*is_static=*/ false,
-    "<init>",
     "(Ljava/lang/reflect/Field;ILjava/lang/invoke/MethodType;)V",
     pointer_size);
-  java_lang_invoke_MethodHandleImpl_init = CacheMethod(
-      j_l_i_MethodHandleImpl.Get(),
-      /*is_static=*/ false,
-      "<init>",
-      "(JILjava/lang/invoke/MethodType;)V",
-      pointer_size);
+  java_lang_invoke_MethodHandleImpl_init = CacheConstructor(
+      j_l_i_MethodHandleImpl.Get(), "(JILjava/lang/invoke/MethodType;)V", pointer_size);
   java_lang_invoke_MethodHandles_lookup = CacheMethod(
       j_l_i_MethodHandles.Get(),
       /*is_static=*/ true,
@@ -816,22 +760,16 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
   java_lang_ref_ReferenceQueue_add = CacheMethod(
       j_l_r_rq.Get(), /*is_static=*/ true, "add", "(Ljava/lang/ref/Reference;)V", pointer_size);
 
-  java_lang_reflect_InvocationTargetException_init = CacheMethod(
-      j_l_rl_ite.Get(), /*is_static=*/ false, "<init>", "(Ljava/lang/Throwable;)V", pointer_size);
-  java_lang_reflect_Parameter_init = CacheMethod(
+  java_lang_reflect_InvocationTargetException_init =
+      CacheConstructor(j_l_rl_ite.Get(), "(Ljava/lang/Throwable;)V", pointer_size);
+  java_lang_reflect_Parameter_init = CacheConstructor(
       j_l_rl_Parameter.Get(),
-      /*is_static=*/ false,
-      "<init>",
       "(Ljava/lang/String;ILjava/lang/reflect/Executable;I)V",
       pointer_size);
 
   ObjPtr<mirror::Class> j_l_rl_Proxy = GetClassRoot<mirror::Proxy>(class_linker);
-  java_lang_reflect_Proxy_init = CacheMethod(
-      j_l_rl_Proxy,
-      /*is_static=*/ false,
-      "<init>",
-      "(Ljava/lang/reflect/InvocationHandler;)V",
-      pointer_size);
+  java_lang_reflect_Proxy_init =
+      CacheConstructor(j_l_rl_Proxy, "(Ljava/lang/reflect/InvocationHandler;)V", pointer_size);
   java_lang_reflect_Proxy_invoke = CacheMethod(
       j_l_rl_Proxy,
       /*is_static=*/ true,
@@ -841,8 +779,7 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
 
   java_nio_Buffer_isDirect =
       CacheMethod(j_n_b.Get(), /*is_static=*/ false, "isDirect", "()Z", pointer_size);
-  java_nio_DirectByteBuffer_init =
-      CacheMethod(j_n_dbb.Get(), /*is_static=*/ false, "<init>", "(JI)V", pointer_size);
+  java_nio_DirectByteBuffer_init = CacheConstructor(j_n_dbb.Get(), "(JI)V", pointer_size);
 
   java_util_Collections_emptyList = CacheMethod(
       j_u_c.Get(),
@@ -899,18 +836,11 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
       "createAnnotation",
       "(Ljava/lang/Class;[Llibcore/reflect/AnnotationMember;)Ljava/lang/annotation/Annotation;",
       pointer_size);
-  libcore_reflect_AnnotationMember_init = CacheMethod(
+  libcore_reflect_AnnotationMember_init = CacheConstructor(
       l_r_am.Get(),
-      /*is_static=*/ false,
-      "<init>",
       "(Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Class;Ljava/lang/reflect/Method;)V",
       pointer_size);
-  libcore_util_EmptyArray_init = CacheMethod(
-      l_u_ea.Get(),
-      /*is_static=*/ false,
-      "<init>",
-      "()V",
-      pointer_size);
+  libcore_util_EmptyArray_init = CacheConstructor(l_u_ea.Get(), "()V", pointer_size);
 
   org_apache_harmony_dalvik_ddmc_DdmServer_broadcast =
       CacheMethod(o_a_h_d_d_ds.Get(), /*is_static=*/ true, "broadcast", "(I)V", pointer_size);
