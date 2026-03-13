@@ -151,20 +151,21 @@ bool CompilerOptions::IsImageClass(TypeReference type_ref, size_t array_dim) con
   return image_classes_.Contains(type_ref, array_dim);
 }
 
-bool CompilerOptions::IsNoPreloadClass(Handle<mirror::Class> klass) const {
-  if (profile_compilation_info_ != nullptr) {
-    ScopedObjectAccess soa(Thread::Current());
+bool CompilerOptions::IsNoPreloadClass(Handle<mirror::Class> klass) const
+    REQUIRES_SHARED(Locks::mutator_lock_) {
+  if (ignore_preloaded_classes_) {
+    // Search for the class in the "classes-no-preload" profile section.
+    CHECK(profile_compilation_info_ != nullptr);
     const ArenaSet<dex::TypeIndex>* classes_no_preload =
         profile_compilation_info_->GetClassesNoPreload(klass->GetDexFile());
-    if (classes_no_preload != nullptr) {
-      return classes_no_preload->find(klass->GetDexTypeIndex()) != classes_no_preload->end();
-    }
+    return (classes_no_preload == nullptr)
+        ? false
+        : classes_no_preload->find(klass->GetDexTypeIndex()) != classes_no_preload->end();
+  } else {
+    // Search for the class in the preloaded-classes file.
+    // TODO(b/383506474): deprecate this and rely only on the profile.
+    return preloaded_classes_.find(klass->PrettyDescriptor()) == preloaded_classes_.end();
   }
-  return false;
-}
-
-bool CompilerOptions::IsPreloadedClass(std::string_view pretty_descriptor) const {
-  return preloaded_classes_.find(pretty_descriptor) != preloaded_classes_.end();
 }
 
 bool CompilerOptions::ShouldCompileWithClinitCheck(ArtMethod* method) const {
