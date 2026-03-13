@@ -187,6 +187,10 @@ public class ArtManagerLocalTest {
         mPreRebootStatsReporterHarness = new PreRebootStatsReporterHarness();
         mMockClock = new MockClock();
 
+        lenient()
+                .when(mPreRebootStatsReporterHarness.getInjector().getClock())
+                .thenReturn(mMockClock);
+
         // Use `lenient()` to suppress `UnnecessaryStubbingException` thrown by the strict stubs.
         // These are the default test setups. They may or may not be used depending on the code path
         // that each test case examines.

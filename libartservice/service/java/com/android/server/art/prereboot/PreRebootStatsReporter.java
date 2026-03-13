@@ -53,6 +53,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -274,11 +275,18 @@ public class PreRebootStatsReporter {
             if (jobRuns.size() == 0) {
                 jobDurationMs = -1;
             }
-            long jobLatencyMs =
-                    (jobRuns.size() > 0 && statsBuilder.getJobScheduledTimestampMillis() > 0)
-                    ? (jobRuns.get(0).getJobStartedTimestampMillis()
-                              - statsBuilder.getJobScheduledTimestampMillis())
-                    : -1;
+            long jobLatencyMs = -1;
+            long scheduledTime = statsBuilder.getJobScheduledTimestampMillis();
+            if (scheduledTime > 0) {
+                Optional<JobRun> firstAsyncRun =
+                        jobRuns.stream()
+                                .filter(run -> run.getJobStartedTimestampMillis() >= scheduledTime)
+                                .findFirst();
+                if (firstAsyncRun.isPresent()) {
+                    jobLatencyMs =
+                            firstAsyncRun.get().getJobStartedTimestampMillis() - scheduledTime;
+                }
+            }
 
             mInjector.writeStats(ArtStatsLog.PREREBOOT_DEXOPT_JOB_ENDED,
                     getStatusForStatsd(statsBuilder.getStatus()),

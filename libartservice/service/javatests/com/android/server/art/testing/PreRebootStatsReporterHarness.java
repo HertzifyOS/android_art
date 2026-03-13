@@ -41,14 +41,12 @@ import java.util.function.Supplier;
 
 public class PreRebootStatsReporterHarness {
     private Injector mInjector = mock(Injector.class);
-    private MockClock mMockClock = new MockClock();
 
     public PreRebootStatsReporterHarness() throws Exception {
         File tempFile = File.createTempFile("pre-reboot-stats", ".pb");
         tempFile.deleteOnExit();
 
         lenient().when(mInjector.getFilename()).thenReturn(tempFile.getAbsolutePath());
-        lenient().when(mInjector.getClock()).thenReturn(mMockClock);
 
         // Make asynchronous reporting synchronous.
         lenient().when(mInjector.getAsyncExecutor()).thenReturn(SYNC_EXECUTOR);
@@ -79,23 +77,29 @@ public class PreRebootStatsReporterHarness {
         verifyImpl(times(1),
                 ()
                         -> eq(PreRebootStatsReporter.getStatusForStatsd(status)),
-                () -> anyInt(), () -> anyLong());
+                () -> anyLong(), () -> anyInt(), () -> anyLong());
+    }
+
+    public void verifyJobLatency(long latency) {
+        verifyImpl(times(1), () -> anyInt(), () -> eq(latency), () -> anyInt(), () -> anyLong());
     }
 
     public void verifyArtifactsStats(int endStatus, long ageMillis) {
-        verifyImpl(times(1), () -> anyInt(), () -> eq(endStatus), () -> eq(ageMillis));
+        verifyImpl(times(1),
+                () -> anyInt(), () -> anyLong(), () -> eq(endStatus), () -> eq(ageMillis));
     }
 
     public void verifyTimes(int n) {
-        verifyImpl(times(n), () -> anyInt(), () -> anyInt(), () -> anyLong());
+        verifyImpl(times(n), () -> anyInt(), () -> anyLong(), () -> anyInt(), () -> anyLong());
     }
 
     private void verifyImpl(VerificationMode mode, Supplier<Integer> statusMatcher,
-            Supplier<Integer> artifactsEndStatusMatcher, Supplier<Long> artifactsAgeMillisMatcher) {
+            Supplier<Long> latencyMatcher, Supplier<Integer> artifactsEndStatusMatcher,
+            Supplier<Long> artifactsAgeMillisMatcher) {
         verify(mInjector, mode)
                 .writeStats(eq(ArtStatsLog.PREREBOOT_DEXOPT_JOB_ENDED), statusMatcher.get(),
-                        anyInt(), anyInt(), anyInt(), anyInt(), anyLong(), anyLong(), anyInt(),
-                        anyInt(), anyInt(), anyInt(), anyInt(), anyInt(),
+                        anyInt(), anyInt(), anyInt(), anyInt(), anyLong(), latencyMatcher.get(),
+                        anyInt(), anyInt(), anyInt(), anyInt(), anyInt(), anyInt(),
                         artifactsEndStatusMatcher.get(), artifactsAgeMillisMatcher.get());
     }
 }
