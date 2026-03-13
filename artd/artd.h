@@ -221,7 +221,11 @@ class Artd : public aidl::com::android::server::art::BnArtd {
       const aidl::com::android::server::art::MergeProfileOptions& in_options,
       bool* _aidl_return) override;
 
-  ndk::ScopedAStatus getArtifactsVisibility(
+  ndk::ScopedAStatus getOdexVisibility(
+      const aidl::com::android::server::art::ArtifactsPath& in_artifactsPath,
+      aidl::com::android::server::art::FileVisibility* _aidl_return) override;
+
+  ndk::ScopedAStatus getVdexVisibility(
       const aidl::com::android::server::art::ArtifactsPath& in_artifactsPath,
       aidl::com::android::server::art::FileVisibility* _aidl_return) override;
 

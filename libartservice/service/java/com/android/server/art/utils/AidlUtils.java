@@ -99,10 +99,12 @@ public final class AidlUtils {
 
     @NonNull
     public static PermissionSettings buildPermissionSettings(@NonNull FsPermission dirFsPermission,
-            @NonNull FsPermission fileFsPermission, @Nullable SeContext seContext) {
+            @NonNull FsPermission odexFileFsPermission, @NonNull FsPermission vdexFileFsPermission,
+            @Nullable SeContext seContext) {
         var permissionSettings = new PermissionSettings();
         permissionSettings.dirFsPermission = dirFsPermission;
-        permissionSettings.fileFsPermission = fileFsPermission;
+        permissionSettings.odexFileFsPermission = odexFileFsPermission;
+        permissionSettings.vdexFileFsPermission = vdexFileFsPermission;
         permissionSettings.seContext = seContext;
         return permissionSettings;
     }

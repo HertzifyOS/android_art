@@ -200,9 +200,16 @@ public abstract class Dexopter<DexInfoType extends DetailedDexInfo> {
                         DexFile.isProfileGuidedCompilerFilter(compilerFilter);
                 Utils.check(isProfileGuidedCompilerFilter == (profile != null));
 
-                boolean canBePublic = (!isProfileGuidedCompilerFilter || isOtherReadable)
+                // For vdex, it can always follow the same permission as the dex file, so if the dex
+                // file is public, then the vdex file can be public too. This is safe because the
+                // vdex file doesn't contain anything from the profile. In this way, when the app is
+                // loaded by other apps, it can run at least in the "verify" mode even if the other
+                // artifacts are not public.
+                boolean canOdexBePublic = (!isProfileGuidedCompilerFilter || isOtherReadable)
                         && isDexFilePublic(dexInfo);
-                PermissionSettings permissionSettings = getPermissionSettings(dexInfo, canBePublic);
+                boolean canVdexBePublic = isDexFilePublic(dexInfo);
+                PermissionSettings permissionSettings =
+                        getPermissionSettings(dexInfo, canOdexBePublic, canVdexBePublic);
 
                 DexoptOptions dexoptOptions =
                         getDexoptOptions(dexInfo, isProfileGuidedCompilerFilter);
@@ -227,7 +234,8 @@ public abstract class Dexopter<DexInfoType extends DetailedDexInfo> {
                         var options = GetDexoptNeededOptions.builder()
                                               .setProfileMerged(profileMerged)
                                               .setFlags(mParams.getFlags())
-                                              .setCanBePublic(canBePublic)
+                                              .setCanOdexBePublic(canOdexBePublic)
+                                              .setCanVdexBePublic(canVdexBePublic)
                                               .build();
 
                         if (mInjector.isPreReboot()) {
@@ -235,7 +243,7 @@ public abstract class Dexopter<DexInfoType extends DetailedDexInfo> {
                                     AidlUtils.buildArtifactsPathAsInputPreReboot(
                                             target.dexInfo().dexPath(), target.isa(),
                                             target.isInDalvikCache());
-                            if (mInjector.getArtd().getArtifactsVisibility(existingArtifacts)
+                            if (mInjector.getArtd().getOdexVisibility(existingArtifacts)
                                     != FileVisibility.NOT_FOUND) {
                                 // Because `getDexoptNeeded` doesn't check Pre-reboot artifacts, we
                                 // do a simple check here to handle job resuming. If the Pre-reboot
@@ -578,15 +586,23 @@ public abstract class Dexopter<DexInfoType extends DetailedDexInfo> {
         ArtifactsPath existingArtifactsPath = AidlUtils.buildArtifactsPathAsInput(
                 target.dexInfo().dexPath(), target.isa(), target.isInDalvikCache());
 
-        if (options.canBePublic()
-                && mInjector.getArtd().getArtifactsVisibility(existingArtifactsPath)
+        if (DexFile.isOptimizedCompilerFilter(target.compilerFilter()) && options.canOdexBePublic()
+                && mInjector.getArtd().getOdexVisibility(existingArtifactsPath)
                         == FileVisibility.NOT_OTHER_READABLE) {
             // Typically, this happens after an app starts being used by other apps and we have a
             // public profile that can be used. We can re-dexopt the app if it doesn't regress the
             // compiler filter, as this will allow other apps to use the artifacts as well.
             dexoptComparators.add(DexoptComparator.CUSTOM_TARGET_IS_BETTER_THAN_CURRENT);
-            return AidlUtils.buildDexoptTrigger(
-                    dexoptComparators, "target artifacts visibility is better");
+            return AidlUtils.buildDexoptTrigger(dexoptComparators, "odex visibility is better");
+        }
+
+        if (options.canVdexBePublic()
+                && mInjector.getArtd().getVdexVisibility(existingArtifactsPath)
+                        == FileVisibility.NOT_OTHER_READABLE) {
+            // Typically, this happens after an app sets the "other-readable" bit on the dex file,
+            // which is only applicable in the secondary dex case.
+            dexoptComparators.add(DexoptComparator.CUSTOM_TARGET_IS_BETTER_THAN_CURRENT);
+            return AidlUtils.buildDexoptTrigger(dexoptComparators, "vdex visibility is better");
         }
 
         dexoptComparators.add(DexoptComparator.COMPARING_PRIMARY_BOOT_IMAGE_STATUS);
@@ -746,7 +762,7 @@ public abstract class Dexopter<DexInfoType extends DetailedDexInfo> {
     /** Returns the permission settings to use for the artifacts of the given dex file. */
     @NonNull
     protected abstract PermissionSettings getPermissionSettings(
-            @NonNull DexInfoType dexInfo, boolean canBePublic);
+            @NonNull DexInfoType dexInfo, boolean canOdexBePublic, boolean canVdexBePublic);
 
     /** Returns all ABIs that the given dex file should be compiled for. */
     @NonNull protected abstract List<Abi> getAllAbis(@NonNull DexInfoType dexInfo);
@@ -810,7 +826,8 @@ public abstract class Dexopter<DexInfoType extends DetailedDexInfo> {
     abstract static class GetDexoptNeededOptions {
         abstract @DexoptFlags int flags();
         abstract boolean profileMerged();
-        abstract boolean canBePublic();
+        abstract boolean canOdexBePublic();
+        abstract boolean canVdexBePublic();
 
         static Builder builder() {
             return new AutoValue_Dexopter_GetDexoptNeededOptions.Builder();
@@ -820,7 +837,8 @@ public abstract class Dexopter<DexInfoType extends DetailedDexInfo> {
         abstract static class Builder {
             abstract Builder setFlags(@DexoptFlags int value);
             abstract Builder setProfileMerged(boolean value);
-            abstract Builder setCanBePublic(boolean value);
+            abstract Builder setCanOdexBePublic(boolean value);
+            abstract Builder setCanVdexBePublic(boolean value);
             abstract GetDexoptNeededOptions build();
         }
     }

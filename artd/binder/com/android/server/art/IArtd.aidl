@@ -130,11 +130,19 @@ interface IArtd {
             in com.android.server.art.MergeProfileOptions options);
 
     /**
-     * Returns the visibility of the artifacts.
+     * Returns the visibility of the ODEX and ART files.
      *
      * Throws fatal and non-fatal errors.
      */
-    com.android.server.art.FileVisibility getArtifactsVisibility(
+    com.android.server.art.FileVisibility getOdexVisibility(
+            in com.android.server.art.ArtifactsPath artifactsPath);
+
+    /**
+     * Returns the visibility of the VDEX files.
+     *
+     * Throws fatal and non-fatal errors.
+     */
+    com.android.server.art.FileVisibility getVdexVisibility(
             in com.android.server.art.ArtifactsPath artifactsPath);
 
     /**

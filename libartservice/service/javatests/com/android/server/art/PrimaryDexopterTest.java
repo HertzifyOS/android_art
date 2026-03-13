@@ -54,7 +54,6 @@ import com.android.server.art.testing.TestingUtils;
 import com.android.server.art.utils.AidlUtils;
 
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.InOrder;
@@ -130,7 +129,8 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
                 .thenThrow(NoSuchFileException.class);
 
         // By default, no artifacts exist.
-        lenient().when(mArtd.getArtifactsVisibility(any())).thenReturn(FileVisibility.NOT_FOUND);
+        lenient().when(mArtd.getOdexVisibility(any())).thenReturn(FileVisibility.NOT_FOUND);
+        lenient().when(mArtd.getVdexVisibility(any())).thenReturn(FileVisibility.NOT_FOUND);
 
         // Dexopt is by default needed and successful.
         lenient()
@@ -249,7 +249,7 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
         verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm64"), any(), eq("speed-profile"),
                 deepEq(mDefaultDexoptTrigger), any());
         checkDexoptWithProfile(
-                verify(mArtd), mDexPath, "arm64", mRefProfile, false /* isOtherReadable */);
+                verify(mArtd), mDexPath, "arm64", mRefProfile, false /* isOdexOtherReadable */);
 
         // There is no profile for split 0, so it should fall back to "verify".
         verify(mArtd).getDexoptNeeded(eq(mSplit0DexPath), eq("arm64"), any(), eq("verify"),
@@ -277,9 +277,9 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
         verifyStatusAllOk(results);
 
         checkDexoptWithProfile(
-                verify(mArtd), mDexPath, "arm64", mRefProfile, true /* isOtherReadable */);
+                verify(mArtd), mDexPath, "arm64", mRefProfile, true /* isOdexOtherReadable */);
         checkDexoptWithProfile(
-                verify(mArtd), mDexPath, "arm", mRefProfile, true /* isOtherReadable */);
+                verify(mArtd), mDexPath, "arm", mRefProfile, true /* isOdexOtherReadable */);
 
         verifyProfileNotUsed(mPrebuiltProfile);
         verifyProfileNotUsed(mDmProfile);
@@ -302,10 +302,10 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
 
         checkDexoptWithProfile(inOrder.verify(mArtd), mDexPath, "arm64",
                 ProfilePath.tmpProfilePath(mPublicOutputProfile.profilePath),
-                true /* isOtherReadable */);
+                true /* isOdexOtherReadable */);
         checkDexoptWithProfile(inOrder.verify(mArtd), mDexPath, "arm",
                 ProfilePath.tmpProfilePath(mPublicOutputProfile.profilePath),
-                true /* isOtherReadable */);
+                true /* isOdexOtherReadable */);
 
         inOrder.verify(mArtd).commitTmpProfile(deepEq(mPublicOutputProfile.profilePath));
 
@@ -347,13 +347,13 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
                 deepEq(dexoptTrigger), any());
         checkDexoptWithProfile(inOrder.verify(mArtd), mDexPath, "arm64",
                 ProfilePath.tmpProfilePath(mPrivateOutputProfile.profilePath),
-                false /* isOtherReadable */);
+                false /* isOdexOtherReadable */);
 
         inOrder.verify(mArtd).getDexoptNeeded(
                 eq(mDexPath), eq("arm"), any(), eq("speed-profile"), deepEq(dexoptTrigger), any());
         checkDexoptWithProfile(inOrder.verify(mArtd), mDexPath, "arm",
                 ProfilePath.tmpProfilePath(mPrivateOutputProfile.profilePath),
-                false /* isOtherReadable */);
+                false /* isOdexOtherReadable */);
 
         inOrder.verify(mArtd).commitTmpProfile(deepEq(mPrivateOutputProfile.profilePath));
     }
@@ -396,12 +396,12 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
         verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm64"), any(), eq("speed-profile"),
                 deepEq(mDefaultDexoptTrigger), any());
         checkDexoptWithProfile(
-                verify(mArtd), mDexPath, "arm64", mRefProfile, true /* isOtherReadable */);
+                verify(mArtd), mDexPath, "arm64", mRefProfile, true /* isOdexOtherReadable */);
 
         verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm"), any(), eq("speed-profile"),
                 deepEq(mDefaultDexoptTrigger), any());
         checkDexoptWithProfile(
-                verify(mArtd), mDexPath, "arm", mRefProfile, true /* isOtherReadable */);
+                verify(mArtd), mDexPath, "arm", mRefProfile, true /* isOdexOtherReadable */);
 
         verify(mArtd, never()).deleteProfile(any());
         verify(mArtd, never()).commitTmpProfile(any());
@@ -441,10 +441,10 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
 
         checkDexoptWithProfile(verify(mArtd), mDexPath, "arm64",
                 ProfilePath.tmpProfilePath(mPublicOutputProfile.profilePath),
-                true /* isOtherReadable */);
+                true /* isOdexOtherReadable */);
         checkDexoptWithProfile(verify(mArtd), mDexPath, "arm",
                 ProfilePath.tmpProfilePath(mPublicOutputProfile.profilePath),
-                true /* isOtherReadable */);
+                true /* isOdexOtherReadable */);
 
         verifyProfileNotUsed(mRefProfile);
         verifyProfileNotUsed(mPrebuiltProfile);
@@ -476,10 +476,10 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
 
         checkDexoptWithProfile(verify(mArtd), mDexPath, "arm64",
                 ProfilePath.tmpProfilePath(mPublicOutputProfile.profilePath),
-                true /* isOtherReadable */);
+                true /* isOdexOtherReadable */);
         checkDexoptWithProfile(verify(mArtd), mDexPath, "arm",
                 ProfilePath.tmpProfilePath(mPublicOutputProfile.profilePath),
-                true /* isOtherReadable */);
+                true /* isOdexOtherReadable */);
 
         verifyProfileNotUsed(mRefProfile);
         verifyProfileNotUsed(mPrebuiltProfile);
@@ -603,10 +603,13 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
         // The DM profile is usable and should be used.
         makeProfileUsable(mDmProfile);
 
-        // The existing artifacts are private.
-        when(mArtd.getArtifactsVisibility(
-                     argThat(artifactsPath -> artifactsPath.dexPath == mDexPath)))
+        // The odex files are private.
+        when(mArtd.getOdexVisibility(argThat(artifactsPath -> artifactsPath.dexPath == mDexPath)))
                 .thenReturn(FileVisibility.NOT_OTHER_READABLE);
+        lenient()
+                .when(mArtd.getVdexVisibility(
+                        argThat(artifactsPath -> artifactsPath.dexPath == mDexPath)))
+                .thenReturn(FileVisibility.OTHER_READABLE);
 
         List<DexContainerFileDexoptResult> results = mPrimaryDexopter.dexopt();
         verifyStatusAllOk(results);
@@ -614,24 +617,24 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
         verify(mArtd).copyAndRewriteProfile(
                 deepEq(mDmProfile), deepEq(mPublicOutputProfile), eq(mDexPath));
 
-        // We have a public profile that can be used, while the existing artifacts are private.
+        // We have a public profile that can be used, while the existing odex files are private.
         // Re-dexopt if it doesn't regress the compiler filter.
         DexoptTrigger dexoptTrigger = AidlUtils.buildDexoptTrigger(
                 List.of(DexoptComparator.COMPARING_COMPILER_FILTER,
                         DexoptComparator.CUSTOM_TARGET_IS_BETTER_THAN_CURRENT),
-                "target artifacts visibility is better");
+                "odex visibility is better");
 
         verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm64"), any(), eq("speed-profile"),
                 deepEq(dexoptTrigger), any());
         checkDexoptWithProfile(verify(mArtd), mDexPath, "arm64",
                 ProfilePath.tmpProfilePath(mPublicOutputProfile.profilePath),
-                true /* isOtherReadable */);
+                true /* isOdexOtherReadable */);
 
         verify(mArtd).getDexoptNeeded(
                 eq(mDexPath), eq("arm"), any(), eq("speed-profile"), deepEq(dexoptTrigger), any());
         checkDexoptWithProfile(verify(mArtd), mDexPath, "arm",
                 ProfilePath.tmpProfilePath(mPublicOutputProfile.profilePath),
-                true /* isOtherReadable */);
+                true /* isOdexOtherReadable */);
 
         verifyProfileNotUsed(mRefProfile);
         verifyProfileNotUsed(mPrebuiltProfile);
@@ -647,9 +650,13 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
 
         makeProfileUsable(mRefProfile);
         lenient()
-                .when(mArtd.getArtifactsVisibility(
+                .when(mArtd.getOdexVisibility(
                         argThat(artifactsPath -> artifactsPath.dexPath == mDexPath)))
                 .thenReturn(FileVisibility.NOT_OTHER_READABLE);
+        lenient()
+                .when(mArtd.getVdexVisibility(
+                        argThat(artifactsPath -> artifactsPath.dexPath == mDexPath)))
+                .thenReturn(FileVisibility.OTHER_READABLE);
 
         List<DexContainerFileDexoptResult> results = mPrimaryDexopter.dexopt();
         verifyStatusAllOk(results);
@@ -658,12 +665,12 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
         verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm64"), any(), eq("speed-profile"),
                 deepEq(mDefaultDexoptTrigger), any());
         checkDexoptWithProfile(
-                verify(mArtd), mDexPath, "arm64", mRefProfile, false /* isOtherReadable */);
+                verify(mArtd), mDexPath, "arm64", mRefProfile, false /* isOdexOtherReadable */);
 
         verify(mArtd).getDexoptNeeded(eq(mDexPath), eq("arm"), any(), eq("speed-profile"),
                 deepEq(mDefaultDexoptTrigger), any());
         checkDexoptWithProfile(
-                verify(mArtd), mDexPath, "arm", mRefProfile, false /* isOtherReadable */);
+                verify(mArtd), mDexPath, "arm", mRefProfile, false /* isOdexOtherReadable */);
     }
 
     @Test
@@ -676,8 +683,9 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
 
         makeProfileUsable(mRefProfile);
         makeProfileUsable(mDmProfile);
-        when(mArtd.getArtifactsVisibility(
-                     argThat(artifactsPath -> artifactsPath.dexPath == mDexPath)))
+        when(mArtd.getOdexVisibility(argThat(artifactsPath -> artifactsPath.dexPath == mDexPath)))
+                .thenReturn(FileVisibility.OTHER_READABLE);
+        when(mArtd.getVdexVisibility(argThat(artifactsPath -> artifactsPath.dexPath == mDexPath)))
                 .thenReturn(FileVisibility.OTHER_READABLE);
 
         List<DexContainerFileDexoptResult> results = mPrimaryDexopter.dexopt();
@@ -690,8 +698,6 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
                 deepEq(mDefaultDexoptTrigger), any());
     }
 
-    // TODO(b/483950133): Fix the code to make this test pass.
-    @Ignore("b/483950133")
     @Test
     public void testDexoptUsedByOtherAppsNonProfileGuidedFilter() throws Exception {
         // Same setup as `testDexoptUsedByOtherApps`, but the requested compiler filter is not
@@ -703,9 +709,12 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
 
         makeProfileUsable(mRefProfile);
         makeProfileUsable(mDmProfile);
-        when(mArtd.getArtifactsVisibility(
-                     argThat(artifactsPath -> artifactsPath.dexPath == mDexPath)))
+        lenient()
+                .when(mArtd.getOdexVisibility(
+                        argThat(artifactsPath -> artifactsPath.dexPath == mDexPath)))
                 .thenReturn(FileVisibility.NOT_OTHER_READABLE);
+        when(mArtd.getVdexVisibility(argThat(artifactsPath -> artifactsPath.dexPath == mDexPath)))
+                .thenReturn(FileVisibility.OTHER_READABLE);
 
         mDexoptParams = mDexoptParams.toBuilder().setCompilerFilter("verify").build();
         mPrimaryDexopter = new PrimaryDexopter(
@@ -738,12 +747,12 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
         verify(mArtd).getDexoptNeeded(eq(mSplit0DexPath), eq("arm64"), any(), eq("speed-profile"),
                 deepEq(mDefaultDexoptTrigger), any());
         checkDexoptWithProfile(verify(mArtd), mSplit0DexPath, "arm64", mSplit0RefProfile,
-                false /* isOtherReadable */);
+                false /* isOdexOtherReadable */);
 
         verify(mArtd).getDexoptNeeded(eq(mSplit0DexPath), eq("arm"), any(), eq("speed-profile"),
                 deepEq(mDefaultDexoptTrigger), any());
         checkDexoptWithProfile(verify(mArtd), mSplit0DexPath, "arm", mSplit0RefProfile,
-                false /* isOtherReadable */);
+                false /* isOdexOtherReadable */);
     }
 
     @Test
@@ -964,7 +973,7 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
     public void testDexoptPreRebootArtifactsExist() throws Exception {
         when(mInjector.isPreReboot()).thenReturn(true);
 
-        when(mArtd.getArtifactsVisibility(deepEq(AidlUtils.buildArtifactsPathAsInputPreReboot(
+        when(mArtd.getOdexVisibility(deepEq(AidlUtils.buildArtifactsPathAsInputPreReboot(
                      mDexPath, "arm", false /* isInDalvikCache */))))
                 .thenReturn(FileVisibility.OTHER_READABLE);
 
@@ -1004,9 +1013,8 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
     public void testDexoptNotAffectedByPreRebootArtifacts() throws Exception {
         // Same setup as above, but `isPreReboot` is false.
         lenient()
-                .when(mArtd.getArtifactsVisibility(
-                        deepEq(AidlUtils.buildArtifactsPathAsInputPreReboot(
-                                mDexPath, "arm", false /* isInDalvikCache */))))
+                .when(mArtd.getOdexVisibility(deepEq(AidlUtils.buildArtifactsPathAsInputPreReboot(
+                        mDexPath, "arm", false /* isInDalvikCache */))))
                 .thenReturn(FileVisibility.OTHER_READABLE);
 
         mPrimaryDexopter = new PrimaryDexopter(
@@ -1036,7 +1044,7 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
         FsPermission fileFsPermission = AidlUtils.buildFsPermission(
                 Process.SYSTEM_UID /* uid */, SHARED_GID /* gid */, true /* isOtherReadable */);
         PermissionSettings permissionSettings = AidlUtils.buildPermissionSettings(
-                dirFsPermission, fileFsPermission, null /* seContext */);
+                dirFsPermission, fileFsPermission, fileFsPermission, null /* seContext */);
 
         verify(mArtd).maybeCreateSdc(deepEq(AidlUtils.buildOutputSecureDexMetadataCompanion(
                 mDexPath, "arm64", false /* isInDalvikCache */, permissionSettings)));
@@ -1066,10 +1074,13 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
     }
 
     private void checkDexoptWithProfile(IArtd artd, String dexPath, String isa, ProfilePath profile,
-            boolean isOtherReadable) throws Exception {
-        artd.dexopt(argThat(artifacts
-                            -> artifacts.permissionSettings.fileFsPermission.isOtherReadable
-                                    == isOtherReadable),
+            boolean isOdexOtherReadable) throws Exception {
+        artd.dexopt(
+                argThat(artifacts
+                        -> artifacts.permissionSettings.odexFileFsPermission.isOtherReadable
+                                        == isOdexOtherReadable
+                                && artifacts.permissionSettings.vdexFileFsPermission.isOtherReadable
+                                        == true),
                 eq(dexPath), eq(isa), any(), eq("speed-profile"), deepEq(profile), any(), any(),
                 anyInt(), argThat(dexoptOptions -> dexoptOptions.generateAppImage == true), any(),
                 any());
@@ -1079,7 +1090,9 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
             IArtd artd, String dexPath, String isa, String compilerFilter) throws Exception {
         artd.dexopt(
                 argThat(artifacts
-                        -> artifacts.permissionSettings.fileFsPermission.isOtherReadable == true),
+                        -> artifacts.permissionSettings.odexFileFsPermission.isOtherReadable == true
+                                && artifacts.permissionSettings.vdexFileFsPermission.isOtherReadable
+                                        == true),
                 eq(dexPath), eq(isa), any(), eq(compilerFilter), isNull(), any(), any(), anyInt(),
                 argThat(dexoptOptions -> dexoptOptions.generateAppImage == false), any(), any());
     }

@@ -135,8 +135,8 @@ public class PrimaryDexopter extends Dexopter<DetailedPrimaryDexInfo> {
 
     @Override
     @NonNull
-    protected PermissionSettings getPermissionSettings(
-            @NonNull DetailedPrimaryDexInfo dexInfo, boolean canBePublic) {
+    protected PermissionSettings getPermissionSettings(@NonNull DetailedPrimaryDexInfo dexInfo,
+            boolean canOdexBePublic, boolean canVdexBePublic) {
         // The files and directories should belong to the system so that Package Manager can manage
         // them (e.g., move them around).
         // We don't need the "read" bit for "others" on the directories because others only need to
@@ -144,11 +144,14 @@ public class PrimaryDexopter extends Dexopter<DetailedPrimaryDexInfo> {
         FsPermission dirFsPermission = AidlUtils.buildFsPermission(Process.SYSTEM_UID /* uid */,
                 Process.SYSTEM_UID /* gid */, false /* isOtherReadable */,
                 true /* isOtherExecutable */);
-        FsPermission fileFsPermission = AidlUtils.buildFsPermission(
-                Process.SYSTEM_UID /* uid */, mSharedGid /* gid */, canBePublic);
+        FsPermission odexFileFsPermission = AidlUtils.buildFsPermission(
+                Process.SYSTEM_UID /* uid */, mSharedGid /* gid */, canOdexBePublic);
+        FsPermission vdexFileFsPermission = AidlUtils.buildFsPermission(
+                Process.SYSTEM_UID /* uid */, mSharedGid /* gid */, canVdexBePublic);
         // For primary dex, we can use the default SELinux context.
         SeContext seContext = null;
-        return AidlUtils.buildPermissionSettings(dirFsPermission, fileFsPermission, seContext);
+        return AidlUtils.buildPermissionSettings(
+                dirFsPermission, odexFileFsPermission, vdexFileFsPermission, seContext);
     }
 
     @Override
@@ -197,8 +200,8 @@ public class PrimaryDexopter extends Dexopter<DetailedPrimaryDexInfo> {
     private void maybeCreateSdc(@NonNull DetailedPrimaryDexInfo dexInfo, @NonNull String isa,
             boolean isInDalvikCache) throws RemoteException {
         // SDC file doesn't contain sensitive data, so it can always to public.
-        PermissionSettings permissionSettings =
-                getPermissionSettings(dexInfo, true /* canBePublic */);
+        PermissionSettings permissionSettings = getPermissionSettings(
+                dexInfo, true /* canOdexBePublic */, true /* canVdexBePublic */);
         OutputSecureDexMetadataCompanion outputSdc =
                 AidlUtils.buildOutputSecureDexMetadataCompanion(
                         dexInfo.dexPath(), isa, isInDalvikCache, permissionSettings);
