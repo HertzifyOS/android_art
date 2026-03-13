@@ -64,9 +64,6 @@ class FaultManager {
   // Try to handle a SIGSYS fault, returns true if successful.
   bool HandleSigsysFault(int sig, siginfo_t* info, void* context);
 
-  // Try to handle a SIGILL fault, returns true if successful.
-  bool HandleSigillFault(int sig, siginfo_t* info, void* context);
-
   // Added handlers are owned by the fault handler and will be freed on Shutdown().
   EXPORT void AddHandler(FaultHandler* handler, bool generated_code);
 
@@ -116,8 +113,6 @@ class FaultManager {
   void CheckForUnrecognizedImplicitSuspendCheckInBootImage(siginfo_t* siginfo, void* context)
       NO_THREAD_SAFETY_ANALYSIS;
 
-  bool HandleFault(int sig, siginfo_t* info, void* context);
-
   // Note: The lock guards modifications of the ranges but the function `IsInGeneratedCode()`
   // walks the list in the context of a signal handler without holding the lock.
   Mutex generated_code_ranges_lock_;
@@ -143,14 +138,12 @@ class FaultManager {
 
 class FaultHandler {
  public:
-  EXPORT explicit FaultHandler(int sig) : sig_(sig) {}
+  EXPORT FaultHandler() {}
   virtual ~FaultHandler() {}
 
   virtual bool Action(int sig, siginfo_t* siginfo, void* context) = 0;
-  bool CanHandle(int sig) { return sig == sig_; }
 
  private:
-  int sig_;
   DISALLOW_COPY_AND_ASSIGN(FaultHandler);
 };
 
@@ -159,7 +152,7 @@ class FaultHandler {
 //
 class NullPointerHandler final : public FaultHandler {
  public:
-  NullPointerHandler() : FaultHandler(Signal()) {}
+  NullPointerHandler() {}
 
   // NO_THREAD_SAFETY_ANALYSIS: Called after the fault manager determined that
   // the thread is `Runnable` and holds the mutator lock (shared) but without
@@ -167,7 +160,6 @@ class NullPointerHandler final : public FaultHandler {
   bool Action(int sig, siginfo_t* siginfo, void* context) override
       NO_THREAD_SAFETY_ANALYSIS;
   constexpr static bool IsGeneratedCodeHandler() { return true; }
-  constexpr static int Signal() { return SIGSEGV; }
 
   // Helper functions for checking whether the signal can be interpreted
   // as implicit NPE check. Note that the runtime will do more exhaustive
@@ -194,10 +186,9 @@ class NullPointerHandler final : public FaultHandler {
 //
 class SuspensionHandler final : public FaultHandler {
  public:
-  SuspensionHandler() : FaultHandler(Signal()) {}
+  SuspensionHandler() {}
   bool Action(int sig, siginfo_t* siginfo, void* context) override;
   constexpr static bool IsGeneratedCodeHandler() { return true; }
-  constexpr static int Signal() { return SIGSEGV; }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SuspensionHandler);
@@ -208,10 +199,9 @@ class SuspensionHandler final : public FaultHandler {
 //
 class StackOverflowHandler final : public FaultHandler {
  public:
-  StackOverflowHandler() : FaultHandler(Signal()) {}
+  StackOverflowHandler() {}
   bool Action(int sig, siginfo_t* siginfo, void* context) override;
   constexpr static bool IsGeneratedCodeHandler() { return true; }
-  constexpr static int Signal() { return SIGSEGV; }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(StackOverflowHandler);
@@ -222,36 +212,15 @@ class StackOverflowHandler final : public FaultHandler {
 //
 class JavaStackTraceHandler final : public FaultHandler {
  public:
-  explicit JavaStackTraceHandler(FaultManager* manager)
-      : FaultHandler(Signal()), manager_(manager) {}
+  explicit JavaStackTraceHandler(FaultManager* manager) : manager_(manager) {}
 
   bool Action(int sig, siginfo_t* siginfo, void* context) override NO_THREAD_SAFETY_ANALYSIS;
   constexpr static bool IsGeneratedCodeHandler() { return false; }
-  constexpr static int Signal() { return SIGSEGV; }
 
  private:
   FaultManager* manager_;
 
   DISALLOW_COPY_AND_ASSIGN(JavaStackTraceHandler);
-};
-
-//
-// Faulting slow path handler.
-//
-// Handles illegal instructions that the compiler may emit in slow paths instead of calling
-// the quick entrypoint in order to reduce code size by packing its arguments into the illegal
-// instruction. Currently implemented only for Arm64, see arch/arm64/faulting_slow_path_arm64.h
-// for more details.
-//
-class FaultingSlowPathHandler final : public FaultHandler {
- public:
-  FaultingSlowPathHandler() : FaultHandler(Signal()) {}
-  bool Action(int sig, siginfo_t* siginfo, void* context) override;
-  constexpr static bool IsGeneratedCodeHandler() { return true; }
-  constexpr static int Signal() { return SIGILL; }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(FaultingSlowPathHandler);
 };
 
 #ifdef ART_USE_SIMULATOR
@@ -262,11 +231,10 @@ class FaultingSlowPathHandler final : public FaultHandler {
 
 class NullPointerHandlerSimulator final : public FaultHandler {
  public:
-  NullPointerHandlerSimulator() : FaultHandler(Signal()) {}
+  NullPointerHandlerSimulator() {}
 
   bool Action(int sig, siginfo_t* siginfo, void* context) override;
   constexpr static bool IsGeneratedCodeHandler() { return true; }
-  constexpr static int Signal() { return SIGSEGV; }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(NullPointerHandlerSimulator);

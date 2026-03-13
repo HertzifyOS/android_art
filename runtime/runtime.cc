@@ -346,7 +346,6 @@ Runtime::Runtime()
       implicit_null_checks_(false),
       implicit_so_checks_(false),
       implicit_suspend_checks_(false),
-      faulting_slow_paths_(false),
       no_sig_chain_(false),
       force_native_bridge_(false),
       is_native_bridge_loaded_(false),
@@ -2016,7 +2015,6 @@ bool Runtime::Init(RuntimeArgumentMap&& runtime_options_in) {
   switch (kRuntimeQuickCodeISA) {
     case InstructionSet::kArm64:
       implicit_suspend_checks_ = true;
-      faulting_slow_paths_ = true;
       FALLTHROUGH_INTENDED;
     case InstructionSet::kArm:
     case InstructionSet::kThumb2:
@@ -2033,9 +2031,8 @@ bool Runtime::Init(RuntimeArgumentMap&& runtime_options_in) {
   }
 
 #ifdef ART_USE_RESTRICTED_MODE
-  // TODO(Simulator): support implicit suspend checks and faulting slow paths.
+  // TODO(Simulator): support implicit suspend checks.
   implicit_suspend_checks_ = false;
-  faulting_slow_paths_ = false;
 #endif  // ART_USE_RESTRICTED_MODE
 
   fault_manager.Init(!no_sig_chain_);
@@ -2074,11 +2071,6 @@ bool Runtime::Init(RuntimeArgumentMap&& runtime_options_in) {
         // Nterp code can use signal handling just like the compiled managed code.
         OatQuickMethodHeader* nterp_header = OatQuickMethodHeader::NterpMethodHeader;
         fault_manager.AddGeneratedCodeRange(nterp_header->GetCode(), nterp_header->GetCodeSize());
-      }
-
-      if (faulting_slow_paths_) {
-        fault_manager.AddHandler(new FaultingSlowPathHandler(),
-                                 FaultingSlowPathHandler::IsGeneratedCodeHandler());
       }
     }
   }

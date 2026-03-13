@@ -62,11 +62,6 @@ extern "C" NO_INLINE __attribute__((visibility("default"))) void art_sigsys_faul
   VLOG(signals) << "Caught unknown SIGSYS in ART fault handler - chaining to next handler.";
 }
 
-extern "C" NO_INLINE __attribute__((visibility("default"))) void art_sigill_fault() {
-  // Set a breakpoint here to be informed when a SIGILL is unhandled by ART.
-  VLOG(signals) << "Caught unknown SIGILL in ART fault handler - chaining to next handler.";
-}
-
 // Signal handler called on SIGSEGV.
 static bool art_sigsegv_handler(int sig, siginfo_t* info, void* context) {
   return fault_manager.HandleSigsegvFault(sig, info, context);
@@ -80,11 +75,6 @@ static bool art_sigbus_handler(int sig, siginfo_t* info, void* context) {
 // Signal handler called on SIGSYS.
 static bool art_sigsys_handler(int sig, siginfo_t* info, void* context) {
   return fault_manager.HandleSigsysFault(sig, info, context);
-}
-
-// Signal handler called on SIGILL.
-static bool art_sigill_handler(int sig, siginfo_t* info, void* context) {
-  return fault_manager.HandleSigillFault(sig, info, context);
 }
 
 FaultManager::FaultManager()
@@ -175,11 +165,6 @@ void FaultManager::Init(bool use_sig_chain) {
       AddSpecialSignalHandlerFn(SIGSYS, &sa);
     }
 
-    if (Runtime::Current()->GetFaultingSlowPaths()) {
-      sa.sc_sigaction = art_sigill_handler;
-      AddSpecialSignalHandlerFn(SIGILL, &sa);
-    }
-
     // Notify the kernel that we intend to use a specific `membarrier()` command.
     int result = art::membarrier(MembarrierCommand::kRegisterPrivateExpedited);
     if (result != 0) {
@@ -233,9 +218,6 @@ void FaultManager::Release() {
       RemoveSpecialSignalHandlerFn(SIGBUS, art_sigbus_handler);
       RemoveSpecialSignalHandlerFn(SIGSYS, art_sigsys_handler);
     }
-    if (Runtime::Current()->GetFaultingSlowPaths()) {
-      RemoveSpecialSignalHandlerFn(SIGILL, art_sigill_handler);
-    }
     initialized_ = false;
   }
 }
@@ -279,9 +261,6 @@ bool FaultManager::HandleFaultByOtherHandlers(int sig, siginfo_t* info, void* co
   DCHECK(Runtime::Current() != nullptr);
   DCHECK(Runtime::Current()->IsStarted());
   for (const auto& handler : other_handlers_) {
-    if (!handler->CanHandle(sig)) {
-      continue;
-    }
     if (handler->Action(sig, info, context)) {
       return true;
     }
@@ -378,22 +357,20 @@ inline void FaultManager::CheckForUnrecognizedImplicitSuspendCheckInBootImage(
   UNREACHABLE();
 }
 
-bool FaultManager::HandleFault(int sig, siginfo_t* info, void* context) {
+
+bool FaultManager::HandleSigsegvFault(int sig, siginfo_t* info, void* context) {
   if (VLOG_IS_ON(signals)) {
-    PrintSignalInfo(VLOG_STREAM(signals) << "Handling fault:\n", info);
+    PrintSignalInfo(VLOG_STREAM(signals) << "Handling SIGSEGV fault:\n", info);
   }
 
 #ifdef TEST_NESTED_SIGNAL
   // Simulate a crash in a handler.
-  raise(sig);
+  raise(SIGSEGV);
 #endif
 
   if (IsInGeneratedCode(info, context)) {
     VLOG(signals) << "in generated code, looking for handler";
     for (const auto& handler : generated_code_handlers_) {
-      if (!handler->CanHandle(sig)) {
-        continue;
-      }
       VLOG(signals) << "invoking Action on handler " << handler;
       if (handler->Action(sig, info, context)) {
         // We have handled a signal so it's time to return from the
@@ -401,8 +378,7 @@ bool FaultManager::HandleFault(int sig, siginfo_t* info, void* context) {
         return true;
       }
     }
-  } else if (sig == SuspensionHandler::Signal() &&
-             kRuntimeQuickCodeISA == InstructionSet::kArm64) {
+  } else if (kRuntimeQuickCodeISA == InstructionSet::kArm64) {
     CheckForUnrecognizedImplicitSuspendCheckInBootImage(info, context);
   }
 
@@ -413,26 +389,8 @@ bool FaultManager::HandleFault(int sig, siginfo_t* info, void* context) {
     return true;
   }
 
-  return false;
-}
-
-bool FaultManager::HandleSigsegvFault(int sig, siginfo_t* info, void* context) {
-  if (HandleFault(sig, info, context)) {
-    return true;
-  }
-
   // Set a breakpoint in this function to catch unhandled signals.
   art_sigsegv_fault();
-  return false;
-}
-
-bool FaultManager::HandleSigillFault(int sig, siginfo_t* info, void* context) {
-  if (HandleFault(sig, info, context)) {
-    return true;
-  }
-
-  // Set a breakpoint in this function to catch unhandled signals.
-  art_sigill_fault();
   return false;
 }
 

@@ -260,10 +260,6 @@ class CompilerOptions final {
     return implicit_suspend_checks_;
   }
 
-  bool GetFaultingSlowPaths() const {
-    return faulting_slow_paths_;
-  }
-
   bool IsGeneratingImage() const {
     return IsBootImage() || IsBootImageExtension() || IsAppImage();
   }
@@ -501,7 +497,6 @@ class CompilerOptions final {
   bool implicit_null_checks_;
   bool implicit_so_checks_;
   bool implicit_suspend_checks_;
-  bool faulting_slow_paths_;
   bool compile_pic_;
   bool dump_timings_;
   bool dump_pass_timings_;
@@ -572,7 +567,6 @@ class CompilerOptions final {
   bool enable_profile_code_;
 
   friend class Dex2Oat;
-  friend class CodegenTest;
   friend class CommonCompilerDriverTest;
   friend class CommonCompilerTestImpl;
   friend class jit::JitCompiler;
