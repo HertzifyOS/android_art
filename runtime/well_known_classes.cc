@@ -68,13 +68,19 @@ jclass WellKnownClasses::sun_misc_Unsafe;
 ArtMethod* WellKnownClasses::dalvik_system_BaseDexClassLoader_getLdLibraryPath;
 ArtMethod* WellKnownClasses::dalvik_system_DelegateLastClassLoader_init;
 ArtMethod* WellKnownClasses::dalvik_system_DexClassLoader_init;
+ArtMethod* WellKnownClasses::dalvik_system_DexFile_init;
+ArtMethod* WellKnownClasses::dalvik_system_DexPathList_init;
+ArtMethod* WellKnownClasses::dalvik_system_DexPathList__Element_init;
 ArtMethod* WellKnownClasses::dalvik_system_InMemoryDexClassLoader_init;
 ArtMethod* WellKnownClasses::dalvik_system_PathClassLoader_init;
 ArtMethod* WellKnownClasses::dalvik_system_VMRuntime_hiddenApiUsed;
+ArtMethod* WellKnownClasses::dalvik_system_VirtualThreadParkedStates_init;
 ArtMethod* WellKnownClasses::java_lang_Boolean_valueOf;
 ArtMethod* WellKnownClasses::java_lang_BootClassLoader_init;
 ArtMethod* WellKnownClasses::java_lang_Byte_valueOf;
+ArtMethod* WellKnownClasses::java_lang_Byte_ByteCache_init;
 ArtMethod* WellKnownClasses::java_lang_Character_valueOf;
+ArtMethod* WellKnownClasses::java_lang_Character_CharacterCache_init;
 ArtMethod* WellKnownClasses::java_lang_ClassLoader_loadClass;
 ArtMethod* WellKnownClasses::java_lang_ClassNotFoundException_init;
 ArtMethod* WellKnownClasses::java_lang_Daemons_start;
@@ -87,15 +93,19 @@ ArtMethod* WellKnownClasses::java_lang_Float_floatToRawIntBits;
 ArtMethod* WellKnownClasses::java_lang_Float_valueOf;
 ArtMethod* WellKnownClasses::java_lang_IllegalAccessError_init;
 ArtMethod* WellKnownClasses::java_lang_Integer_valueOf;
+ArtMethod* WellKnownClasses::java_lang_Integer_IntegerCache_init;
 ArtMethod* WellKnownClasses::java_lang_Long_valueOf;
+ArtMethod* WellKnownClasses::java_lang_Long_LongCache_init;
 ArtMethod* WellKnownClasses::java_lang_NoClassDefFoundError_init;
 ArtMethod* WellKnownClasses::java_lang_OutOfMemoryError_init;
 ArtMethod* WellKnownClasses::java_lang_Runnable_run;
 ArtMethod* WellKnownClasses::java_lang_Runtime_nativeLoad;
 ArtMethod* WellKnownClasses::java_lang_RuntimeException_init;
 ArtMethod* WellKnownClasses::java_lang_Short_valueOf;
+ArtMethod* WellKnownClasses::java_lang_Short_ShortCache_init;
 ArtMethod* WellKnownClasses::java_lang_StackOverflowError_init;
 ArtMethod* WellKnownClasses::java_lang_String_charAt;
+ArtMethod* WellKnownClasses::java_lang_System_identityHashCode;
 ArtMethod* WellKnownClasses::java_lang_Thread_dispatchUncaughtException;
 ArtMethod* WellKnownClasses::java_lang_Thread_init;
 ArtMethod* WellKnownClasses::java_lang_Thread_parkVirtualInternal;
@@ -118,7 +128,9 @@ ArtMethod* WellKnownClasses::java_lang_reflect_Proxy_init;
 ArtMethod* WellKnownClasses::java_lang_reflect_Proxy_invoke;
 ArtMethod* WellKnownClasses::java_nio_Buffer_isDirect;
 ArtMethod* WellKnownClasses::java_nio_DirectByteBuffer_init;
+ArtMethod* WellKnownClasses::java_util_Collections_emptyList;
 ArtMethod* WellKnownClasses::java_util_function_Consumer_accept;
+ArtMethod* WellKnownClasses::jdk_internal_foreign_NativeMemorySegmentImpl_isNative;
 ArtMethod* WellKnownClasses::jdk_internal_math_FloatingDecimal_getBinaryToASCIIConverter_D;
 ArtMethod* WellKnownClasses::jdk_internal_math_FloatingDecimal_getBinaryToASCIIConverter_F;
 ArtMethod* WellKnownClasses::jdk_internal_math_FloatingDecimal_BinaryToASCIIBuffer_getChars;
@@ -127,6 +139,7 @@ ArtMethod* WellKnownClasses::jdk_internal_vm_Continuation_enter;
 ArtMethod* WellKnownClasses::jdk_internal_vm_Continuation_enterSpecial;
 ArtMethod* WellKnownClasses::libcore_reflect_AnnotationFactory_createAnnotation;
 ArtMethod* WellKnownClasses::libcore_reflect_AnnotationMember_init;
+ArtMethod* WellKnownClasses::libcore_util_EmptyArray_init;
 ArtMethod* WellKnownClasses::org_apache_harmony_dalvik_ddmc_DdmServer_broadcast;
 ArtMethod* WellKnownClasses::org_apache_harmony_dalvik_ddmc_DdmServer_dispatch;
 
@@ -417,6 +430,7 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
   Thread* self = Thread::ForEnv(env);
   ScopedObjectAccess soa(self);
   ClassLinker* class_linker = Runtime::Current()->GetClassLinker();
+  PointerSize pointer_size = class_linker->GetImagePointerSize();
 
   java_lang_Boolean_valueOf =
       CachePrimitiveBoxingMethod(class_linker, self, 'Z', "Ljava/lang/Boolean;");
@@ -434,6 +448,37 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
       CachePrimitiveBoxingMethod(class_linker, self, 'J', "Ljava/lang/Long;");
   java_lang_Short_valueOf =
       CachePrimitiveBoxingMethod(class_linker, self, 'S', "Ljava/lang/Short;");
+
+  java_lang_Byte_ByteCache_init = CacheMethod(
+      FindSystemClass(class_linker, self, "Ljava/lang/Byte$ByteCache;"),
+      /*is_static=*/ false,
+      "<init>",
+      "()V",
+      pointer_size);
+  java_lang_Character_CharacterCache_init = CacheMethod(
+      FindSystemClass(class_linker, self, "Ljava/lang/Character$CharacterCache;"),
+      /*is_static=*/ false,
+      "<init>",
+      "()V",
+      pointer_size);
+  java_lang_Integer_IntegerCache_init = CacheMethod(
+      FindSystemClass(class_linker, self, "Ljava/lang/Integer$IntegerCache;"),
+      /*is_static=*/ false,
+      "<init>",
+      "()V",
+      pointer_size);
+  java_lang_Long_LongCache_init = CacheMethod(
+      FindSystemClass(class_linker, self, "Ljava/lang/Long$LongCache;"),
+      /*is_static=*/ false,
+      "<init>",
+      "()V",
+      pointer_size);
+  java_lang_Short_ShortCache_init = CacheMethod(
+      FindSystemClass(class_linker, self, "Ljava/lang/Short$ShortCache;"),
+      /*is_static=*/ false,
+      "<init>",
+      "()V",
+      pointer_size);
 
   java_lang_Byte_ByteCache_cache = CacheBoxingCacheField(
       class_linker, self, "Ljava/lang/Byte$ByteCache;", "[Ljava/lang/Byte;");
@@ -568,7 +613,6 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
       hs.NewHandle(FindSystemClass(class_linker, self, "Lorg/apache/harmony/dalvik/ddmc/DdmServer;"));
 
   ScopedAssertNoThreadSuspension sants(__FUNCTION__);
-  PointerSize pointer_size = class_linker->GetImagePointerSize();
 
   dalvik_system_BaseDexClassLoader_getLdLibraryPath = CacheMethod(
       d_s_bdcl.Get(),
@@ -588,6 +632,24 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
       "<init>",
       "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V",
       pointer_size);
+  dalvik_system_DexFile_init = CacheMethod(
+      d_s_df.Get(),
+      /*is_static=*/ false,
+      "<init>",
+      "(Ljava/lang/String;)V",
+      pointer_size);
+  dalvik_system_DexPathList_init = CacheMethod(
+      d_s_dpl.Get(),
+      /*is_static=*/ false,
+      "<init>",
+      "(Ljava/lang/ClassLoader;Ljava/lang/String;Ljava/lang/String;Ljava/io/File;)V",
+      pointer_size);
+  dalvik_system_DexPathList__Element_init = CacheMethod(
+      d_s_dpl_e.Get(),
+      /*is_static=*/ false,
+      "<init>",
+      "(Ldalvik/system/DexFile;Ljava/io/File;)V",
+      pointer_size);
   dalvik_system_InMemoryDexClassLoader_init = CacheMethod(
       d_s_imdcl.Get(),
       /*is_static=*/ false,
@@ -599,6 +661,12 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
       /*is_static=*/ false,
       "<init>",
       "(Ljava/lang/String;Ljava/lang/ClassLoader;)V",
+      pointer_size);
+  dalvik_system_VirtualThreadParkedStates_init = CacheMethod(
+      d_s_vtps.Get(),
+      /*is_static=*/ false,
+      "<init>",
+      "()V",
       pointer_size);
 
   dalvik_system_VMRuntime_hiddenApiUsed = CacheMethod(
@@ -656,6 +724,13 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
   ObjPtr<mirror::Class> j_l_String = GetClassRoot<mirror::String>(class_linker);
   java_lang_String_charAt = CacheMethod(
       j_l_String, /*is_static=*/ false, "charAt", "(I)C", pointer_size);
+
+  java_lang_System_identityHashCode = CacheMethod(
+      j_l_System.Get(),
+      /*is_static=*/ true,
+      "identityHashCode",
+      "(Ljava/lang/Object;)I",
+      pointer_size);
 
   java_lang_Thread_dispatchUncaughtException = CacheMethod(
       j_l_Thread.Get(),
@@ -769,8 +844,22 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
   java_nio_DirectByteBuffer_init =
       CacheMethod(j_n_dbb.Get(), /*is_static=*/ false, "<init>", "(JI)V", pointer_size);
 
+  java_util_Collections_emptyList = CacheMethod(
+      j_u_c.Get(),
+      /*is_static=*/ true,
+      "emptyList",
+      "()Ljava/util/List;",
+      pointer_size);
+
   java_util_function_Consumer_accept = CacheMethod(
       j_u_f_c.Get(), /*is_static=*/ false, "accept", "(Ljava/lang/Object;)V", pointer_size);
+
+  jdk_internal_foreign_NativeMemorySegmentImpl_isNative = CacheMethod(
+      j_i_f_nmsi.Get(),
+      /*is_static=*/ false,
+      "isNative",
+      "()Z",
+      pointer_size);
 
   jdk_internal_math_FloatingDecimal_getBinaryToASCIIConverter_D = CacheMethod(
       j_i_m_fd.Get(),
@@ -815,6 +904,12 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
       /*is_static=*/ false,
       "<init>",
       "(Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Class;Ljava/lang/reflect/Method;)V",
+      pointer_size);
+  libcore_util_EmptyArray_init = CacheMethod(
+      l_u_ea.Get(),
+      /*is_static=*/ false,
+      "<init>",
+      "()V",
       pointer_size);
 
   org_apache_harmony_dalvik_ddmc_DdmServer_broadcast =
@@ -1030,13 +1125,19 @@ void WellKnownClasses::Clear() {
   dalvik_system_BaseDexClassLoader_getLdLibraryPath = nullptr;
   WellKnownClasses::dalvik_system_DelegateLastClassLoader_init = nullptr;
   WellKnownClasses::dalvik_system_DexClassLoader_init = nullptr;
+  WellKnownClasses::dalvik_system_DexFile_init = nullptr;
+  WellKnownClasses::dalvik_system_DexPathList_init = nullptr;
+  WellKnownClasses::dalvik_system_DexPathList__Element_init = nullptr;
   WellKnownClasses::dalvik_system_InMemoryDexClassLoader_init = nullptr;
   WellKnownClasses::dalvik_system_PathClassLoader_init = nullptr;
   dalvik_system_VMRuntime_hiddenApiUsed = nullptr;
+  dalvik_system_VirtualThreadParkedStates_init = nullptr;
   java_io_FileDescriptor_descriptor = nullptr;
   java_lang_Boolean_valueOf = nullptr;
   java_lang_Byte_valueOf = nullptr;
+  java_lang_Byte_ByteCache_init = nullptr;
   java_lang_Character_valueOf = nullptr;
+  java_lang_Character_CharacterCache_init = nullptr;
   java_lang_BootClassLoader_init = nullptr;
   java_lang_ClassLoader_loadClass = nullptr;
   java_lang_ClassNotFoundException_init = nullptr;
@@ -1050,15 +1151,19 @@ void WellKnownClasses::Clear() {
   java_lang_Float_valueOf = nullptr;
   java_lang_IllegalAccessError_init = nullptr;
   java_lang_Integer_valueOf = nullptr;
+  java_lang_Integer_IntegerCache_init = nullptr;
   java_lang_Long_valueOf = nullptr;
+  java_lang_Long_LongCache_init = nullptr;
   java_lang_NoClassDefFoundError_init = nullptr;
   java_lang_OutOfMemoryError_init = nullptr;
   java_lang_Runnable_run = nullptr;
   java_lang_Runtime_nativeLoad = nullptr;
   java_lang_RuntimeException_init = nullptr;
   java_lang_Short_valueOf = nullptr;
+  java_lang_Short_ShortCache_init = nullptr;
   java_lang_StackOverflowError_init = nullptr;
   java_lang_String_charAt = nullptr;
+  java_lang_System_identityHashCode = nullptr;
   java_lang_Thread_dispatchUncaughtException = nullptr;
   java_lang_Thread_init = nullptr;
   java_lang_Thread_parkVirtualInternal = nullptr;
@@ -1081,6 +1186,8 @@ void WellKnownClasses::Clear() {
   java_lang_reflect_Proxy_invoke = nullptr;
   java_nio_Buffer_isDirect = nullptr;
   java_nio_DirectByteBuffer_init = nullptr;
+  java_util_Collections_emptyList = nullptr;
+  jdk_internal_foreign_NativeMemorySegmentImpl_isNative = nullptr;
   jdk_internal_math_FloatingDecimal_getBinaryToASCIIConverter_D = nullptr;
   jdk_internal_math_FloatingDecimal_getBinaryToASCIIConverter_F = nullptr;
   jdk_internal_math_FloatingDecimal_BinaryToASCIIBuffer_getChars = nullptr;
@@ -1089,6 +1196,7 @@ void WellKnownClasses::Clear() {
   jdk_internal_vm_Continuation_enterSpecial = nullptr;
   libcore_reflect_AnnotationFactory_createAnnotation = nullptr;
   libcore_reflect_AnnotationMember_init = nullptr;
+  libcore_util_EmptyArray_init = nullptr;
   org_apache_harmony_dalvik_ddmc_DdmServer_broadcast = nullptr;
   org_apache_harmony_dalvik_ddmc_DdmServer_dispatch = nullptr;
 
