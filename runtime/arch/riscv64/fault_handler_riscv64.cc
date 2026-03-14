@@ -125,4 +125,11 @@ bool StackOverflowHandler::Action([[maybe_unused]] int sig,
   return true;
 }
 
+bool FaultingSlowPathHandler::Action([[maybe_unused]] int sig,
+                                     [[maybe_unused]] siginfo_t* info,
+                                     [[maybe_unused]] void* context) {
+  LOG(FATAL) << "FaultingSlowPathHandler::Action is not implemented for RISC-V";
+  return false;
+}
+
 }  // namespace art

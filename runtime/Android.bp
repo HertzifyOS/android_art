@@ -905,6 +905,7 @@ gensrcs {
     cmd: "$(location generate_operator_out) art/runtime $(in) > $(out)",
     tools: ["generate_operator_out"],
     srcs: [
+        "arch/arm64/faulting_slow_path_arm64.h",
         "base/callee_save_type.h",
         "base/locks.h",
         "class_status.h",

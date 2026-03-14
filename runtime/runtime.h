@@ -672,6 +672,10 @@ class Runtime {
     return implicit_null_checks_;
   }
 
+  bool GetFaultingSlowPaths() const {
+    return faulting_slow_paths_;
+  }
+
   void DisableVerifier();
   bool IsVerificationEnabled() const;
   EXPORT bool IsVerificationSoftFail() const;
@@ -1191,8 +1195,8 @@ class Runtime {
   Runtime();
 
   bool HandlesSignalsInCompiledCode() const {
-    return !no_sig_chain_ &&
-           (implicit_null_checks_ || implicit_so_checks_ || implicit_suspend_checks_);
+    return !no_sig_chain_ && (implicit_null_checks_ || implicit_so_checks_ ||
+                              implicit_suspend_checks_ || faulting_slow_paths_);
   }
 
   void BlockSignals();
@@ -1431,6 +1435,10 @@ class Runtime {
   bool implicit_null_checks_;       // NullPointer checks are implicit.
   bool implicit_so_checks_;         // StackOverflow checks are implicit.
   bool implicit_suspend_checks_;    // Thread suspension checks are implicit.
+
+  // Use faulting instruction instead of call in some compiler slow paths.
+  // See art/runtime/arch/arm64/faulting_slow_path_arm64.h for more details.
+  bool faulting_slow_paths_;
 
   // Whether or not the sig chain (and implicitly the fault handler) should be
   // disabled. Tools like dex2oat don't need them. This enables

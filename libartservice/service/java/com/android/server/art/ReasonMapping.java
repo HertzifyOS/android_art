@@ -298,11 +298,23 @@ public class ReasonMapping {
             // exclude all packages when m.dexopt.downgrade_after_inactive_days is set. See
             // aosp/3237478 for more details.
             case ReasonMapping.REASON_FIRST_BOOT -> packages;
-            default ->
-                packages.filter(pkgInfo -> pkgInfo.lastActiveTime() > thresholdTimeMs)
-                        .sorted(Comparator.<PackageInfo>comparingDouble(pkgInfo -> pkgInfo.score())
-                                        .thenComparingLong(pkgInfo -> pkgInfo.lastActiveTime())
-                                        .reversed());
+            default -> {
+                Comparator<PackageInfo> comparator =
+                        Comparator.<PackageInfo>comparingDouble(PackageInfo::score)
+                                .thenComparingLong(PackageInfo::lastActiveTime)
+                                .reversed();
+                if (reason.equals(REASON_PRE_REBOOT_DEXOPT_SYNC)) {
+                    comparator = Comparator
+                                         .comparing((PackageInfo pkgInfo) -> {
+                                             return Constants.getPreRebootDexoptSyncForcedPackages()
+                                                     .contains(pkgInfo.pkgState().getPackageName());
+                                         })
+                                         .reversed()
+                                         .thenComparing(comparator);
+                }
+                yield packages.filter(pkgInfo -> pkgInfo.lastActiveTime() > thresholdTimeMs)
+                        .sorted(comparator);
+            }
         };
 
         return packages.map(pkgInfo -> pkgInfo.pkgState().getPackageName()).toList();

@@ -19,6 +19,7 @@
 #include "aarch64/assembler-aarch64.h"
 #include "aarch64/registers-aarch64.h"
 #include "arch/arm64/asm_support_arm64.h"
+#include "arch/arm64/faulting_slow_path_arm64.h"
 #include "arch/arm64/instruction_set_features_arm64.h"
 #include "arch/arm64/jni_frame_arm64.h"
 #include "art_method-inl.h"
@@ -216,6 +217,46 @@ void SlowPathCodeARM64::RestoreLiveRegisters(CodeGenerator* codegen, LocationSum
   visitor->RestoreLiveRegistersHelper(locations, codegen->GetFirstRegisterSlotInSlowPath());
 }
 
+// This function is used to emit a faulting instruction (UDF) for a slow path
+// instead of a call to a quick entrypoint. `data` contains encoded arguments
+// (see Arm64FaultingSlowPathArguments).
+static void EmitFaultingInstructionForSlowPath(CodeGeneratorARM64* codegen,
+                                               SlowPathCodeARM64* slow_path,
+                                               uint16_t data) {
+  ExactAssemblyScope eas(codegen->GetVIXLAssembler(),
+                         kInstructionSize,
+                         CodeBufferCheckScope::kExactSize);
+  __ udf(data);
+  codegen->RecordPcInfo(slow_path->GetInstruction());
+}
+
+static void SetupSlowPathRegisterArgument(Arm64FaultingSlowPathArguments& slow_path_args,
+                                          LocationSummary* locations,
+                                          size_t index) {
+  DCHECK(locations->InAt(index).IsCoreRegister());
+  slow_path_args.SetArg(
+      index, Arm64FaultingSlowPathArguments::Arg::Register(locations->InAt(index).reg()));
+}
+
+static void SetupSlowPathArgument(CodeGeneratorARM64* codegen,
+                                  UseScratchRegisterScope& temps,
+                                  Arm64FaultingSlowPathArguments& slow_path_args,
+                                  LocationSummary* locations,
+                                  size_t index) {
+  if (locations->InAt(index).IsConstant()) {
+    int64_t value = Int64FromLocation(locations->InAt(index));
+    if (!Arm64FaultingSlowPathArguments::Arg::IsEncodableConstant(value)) {
+      Register arg = temps.AcquireX();
+      codegen->MoveConstant(arg, locations->InAt(index).GetConstant());
+      slow_path_args.SetArg(index, Arm64FaultingSlowPathArguments::Arg::Register(arg.GetCode()));
+    } else {
+      slow_path_args.SetArg(index, Arm64FaultingSlowPathArguments::Arg::Constant(value));
+    }
+  } else {
+    SetupSlowPathRegisterArgument(slow_path_args, locations, index);
+  }
+}
+
 class BoundsCheckSlowPathARM64 : public SlowPathCodeARM64 {
  public:
   explicit BoundsCheckSlowPathARM64(HBoundsCheck* instruction) : SlowPathCodeARM64(instruction) {}
@@ -225,6 +266,28 @@ class BoundsCheckSlowPathARM64 : public SlowPathCodeARM64 {
     CodeGeneratorARM64* arm64_codegen = down_cast<CodeGeneratorARM64*>(codegen);
 
     __ Bind(GetEntryLabel());
+
+    if (codegen->GetCompilerOptions().GetFaultingSlowPaths()) {
+      // In faulting mode, we don't need to save any registers in the slow path, as all registers
+      // will be saved by the corresponding runtime entrypoint.
+      DCHECK_IMPLIES(instruction_->CanThrowIntoCatchBlock(),
+                     codegen->GetSlowPathSpills(locations).GetNumberOfRegisters() == 0u);
+      // Pack arguments (index and array length) and slow path type into the 16-bit immediate
+      // operand of a faulting instruction (UDF) to call a corresponding quick entrypoint from
+      // the signal handler.
+      UseScratchRegisterScope temps(arm64_codegen->GetVIXLAssembler());
+      Arm64FaultingSlowPathArguments slow_path_args;
+      SetupSlowPathArgument(arm64_codegen, temps, slow_path_args, locations, 0);
+      SetupSlowPathArgument(arm64_codegen, temps, slow_path_args, locations, 1);
+
+      slow_path_args.SetSlowPath(instruction_->AsBoundsCheck()->IsStringCharAt() ?
+          FaultingSlowPath::kStringBoundsCheck :
+          FaultingSlowPath::kArrayBoundsCheck);
+
+      EmitFaultingInstructionForSlowPath(arm64_codegen, this, slow_path_args.Data());
+      return;
+    }
+
     if (instruction_->CanThrowIntoCatchBlock()) {
       // Live registers will be restored in the catch block if caught.
       SaveLiveRegisters(codegen, instruction_->GetLocations());
@@ -468,6 +531,11 @@ class SuspendCheckSlowPathARM64 : public SlowPathCodeARM64 {
   DISALLOW_COPY_AND_ASSIGN(SuspendCheckSlowPathARM64);
 };
 
+static bool CanUseFaultingSlowPathForCheckCast(CodeGenerator* codegen, HCheckCast* check_cast) {
+  return codegen->GetCompilerOptions().GetFaultingSlowPaths() &&
+         codegen->IsTypeCheckSlowPathFatal(check_cast);
+}
+
 class TypeCheckSlowPathARM64 : public SlowPathCodeARM64 {
  public:
   TypeCheckSlowPathARM64(HInstruction* instruction, bool is_fatal)
@@ -481,6 +549,24 @@ class TypeCheckSlowPathARM64 : public SlowPathCodeARM64 {
     CodeGeneratorARM64* arm64_codegen = down_cast<CodeGeneratorARM64*>(codegen);
 
     __ Bind(GetEntryLabel());
+
+    if (is_fatal_ && codegen->GetCompilerOptions().GetFaultingSlowPaths()) {
+      DCHECK(CanUseFaultingSlowPathForCheckCast(codegen, instruction_->AsCheckCast()));
+      // In faulting mode, we don't need to save any registers in the slow path, as all registers
+      // will be saved by the corresponding runtime entrypoint.
+      DCHECK_IMPLIES(instruction_->CanThrowIntoCatchBlock(),
+                     codegen->GetSlowPathSpills(locations).GetNumberOfRegisters() == 0u);
+      // Pack arguments (object and destination type) and slow path type into the 16-bit immediate
+      // operand of a faulting instruction (UDF) to call a corresponding quick entrypoint from
+      // the signal handler.
+      Arm64FaultingSlowPathArguments slow_path_args;
+      SetupSlowPathRegisterArgument(slow_path_args, locations, 0);
+      SetupSlowPathRegisterArgument(slow_path_args, locations, 1);
+      slow_path_args.SetSlowPath(FaultingSlowPath::kTypeCheck);
+
+      EmitFaultingInstructionForSlowPath(arm64_codegen, this, slow_path_args.Data());
+      return;
+    }
 
     if (!is_fatal_ || instruction_->CanThrowIntoCatchBlock()) {
       SaveLiveRegisters(codegen, locations);
@@ -532,7 +618,26 @@ class DeoptimizationSlowPathARM64 : public SlowPathCodeARM64 {
   void EmitNativeCode(CodeGenerator* codegen) override {
     CodeGeneratorARM64* arm64_codegen = down_cast<CodeGeneratorARM64*>(codegen);
     __ Bind(GetEntryLabel());
+
     LocationSummary* locations = instruction_->GetLocations();
+
+    if (codegen->GetCompilerOptions().GetFaultingSlowPaths()) {
+      // In faulting mode, we don't need to save any registers in the slow path, as all registers
+      // will be saved by the corresponding runtime entrypoint.
+      DCHECK_EQ(codegen->GetSlowPathSpills(locations).GetNumberOfRegisters(), 0u);
+      // Pack the deoptimization kind and slow path type into the 16-bit immediate operand of
+      // a faulting instruction (UDF) to call a corresponding quick entrypoint from the signal
+      // handler.
+      Arm64FaultingSlowPathArguments slow_path_args;
+      slow_path_args.SetArg(0,
+                            Arm64FaultingSlowPathArguments::Arg::Constant(static_cast<int64_t>(
+                                instruction_->AsDeoptimize()->GetDeoptimizationKind())));
+      slow_path_args.SetSlowPath(FaultingSlowPath::kDeoptimize);
+
+      EmitFaultingInstructionForSlowPath(arm64_codegen, this, slow_path_args.Data());
+      return;
+    }
+
     SaveLiveRegisters(codegen, locations);
     InvokeRuntimeCallingConvention calling_convention;
     __ Mov(calling_convention.GetRegisterAt(0),
@@ -3346,8 +3451,18 @@ void InstructionCodeGeneratorARM64::VisitArraySet(HArraySet* instruction) {
 void LocationsBuilderARM64::VisitBoundsCheck(HBoundsCheck* instruction) {
   RegisterSet caller_saves = RegisterSet::Empty();
   InvokeRuntimeCallingConvention calling_convention;
-  caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(0).GetCode());
-  caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(1).GetCode());
+  if (!codegen_->GetCompilerOptions().GetFaultingSlowPaths()) {
+    // In the slow path, we only need to save registers that will be overwritten there.
+    // Currently, that's only the registers used to pass the two arguments (index and length)
+    // to the runtime entry point. Since it saves all registers, we don't need to save
+    // any other non-callee-saved registers.
+    //
+    // For faulting slow paths, we don't call the runtime entry point explicitly, so we
+    // don't use any registers. The corresponding runtime entry point saves all registers,
+    // so there's nothing to save in the slow path.
+    caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(0).GetCode());
+    caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(1).GetCode());
+  }
   LocationSummary* locations = codegen_->CreateThrowingSlowPathLocations(instruction, caller_saves);
 
   // If both index and length are constant, we can check the bounds statically and
@@ -4199,7 +4314,13 @@ void LocationsBuilderARM64::VisitDeoptimize(HDeoptimize* deoptimize) {
       LocationSummary::Create(allocator_, deoptimize, LocationSummary::kCallOnSlowPath);
   InvokeRuntimeCallingConvention calling_convention;
   RegisterSet caller_saves = RegisterSet::Empty();
-  caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(0).GetCode());
+  if (!codegen_->GetCompilerOptions().GetFaultingSlowPaths()) {
+    // In the non-faulting case, the slow path uses only one register to pass the
+    // deoptimization kind to the runtime entrypoint, so we only need to save that
+    // register in the slow path.
+    // See the comment in LocationsBuilderARM64::VisitBoundsCheck for more details.
+    caller_saves.AddCoreRegister(calling_convention.GetRegisterAt(0).GetCode());
+  }
   locations->SetCustomSlowPathCallerSaves(caller_saves);
   if (IsBooleanValueOrMaterializedCondition(deoptimize->InputAt(0))) {
     locations->SetInAt(0, Location::RequiresCoreRegister());
@@ -4686,6 +4807,12 @@ void LocationsBuilderARM64::VisitCheckCast(HCheckCast* instruction) {
   TypeCheckKind type_check_kind = instruction->GetTypeCheckKind();
   LocationSummary::CallKind call_kind = codegen_->GetCheckCastCallKind(instruction);
   LocationSummary* locations = LocationSummary::Create(allocator_, instruction, call_kind);
+  if (locations->OnlyCallsOnSlowPath() &&
+      CanUseFaultingSlowPathForCheckCast(codegen_, instruction)) {
+    // For fatal faulting slow paths we don't need to save caller-saved registers because the
+    // corresponding runtime entry point saves them.
+    locations->SetCustomSlowPathCallerSaves(RegisterSet::Empty());
+  }
   locations->SetInAt(0, Location::RequiresCoreRegister());
   if (type_check_kind == TypeCheckKind::kBitstringCheck) {
     locations->SetInAt(1, Location::ConstantLocation(instruction->InputAt(1)));

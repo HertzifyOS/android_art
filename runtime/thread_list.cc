@@ -600,13 +600,6 @@ void ThreadList::RunEmptyCheckpoint() {
   }
 }
 
-// Separate function to disable just the right amount of thread-safety analysis.
-ALWAYS_INLINE void AcquireMutatorLockSharedUncontended(Thread* self)
-    ACQUIRE_SHARED(*Locks::mutator_lock_) NO_THREAD_SAFETY_ANALYSIS {
-  bool success = Locks::mutator_lock_->SharedTryLock(self, /*check=*/false);
-  CHECK(success);
-}
-
 // A checkpoint/suspend-all hybrid to switch thread roots from
 // from-space to to-space refs. Used to synchronize threads at a point
 // to mark the initiation of marking while maintaining the to-space
@@ -698,13 +691,19 @@ void ThreadList::FlipThreadRoots(Closure* thread_flip_visitor,
 
   // Try to run the closure on the other threads.
   TimingLogger::ScopedTiming split3("RunningThreadFlips", collector->GetTimings());
-  // Reacquire the mutator lock while holding suspend_count_lock. This cannot fail, since we
-  // do not acquire the mutator lock unless suspend_all_count was read as 0 while holding
-  // suspend_count_lock. We did not release suspend_count_lock since releasing the mutator
-  // lock.
-  AcquireMutatorLockSharedUncontended(self);
+  [self]()
+      ACQUIRE_SHARED(*Locks::mutator_lock_)
+      RELEASE(Locks::thread_suspend_count_lock_)
+      NO_THREAD_SAFETY_ANALYSIS {
+    // Reacquire the mutator lock while holding suspend_count_lock. This cannot fail, since we
+    // do not acquire the mutator lock unless suspend_all_count was read as 0 while holding
+    // suspend_count_lock. We did not release suspend_count_lock since releasing the mutator
+    // lock. This technically goes against lock ordering, so use `NO_THREAD_SAFETY_ANALYSIS`.
+    bool success = Locks::mutator_lock_->SharedTryLock(self, /*check=*/ false);
+    CHECK(success);
+    Locks::thread_suspend_count_lock_->Unlock(self);
+  }();
 
-  Locks::thread_suspend_count_lock_->Unlock(self);
   // Concurrent SuspendAll may now see zero suspend_all_count_, but block on mutator_lock_.
 
   collector->GetHeap()->ThreadFlipEnd(self);
