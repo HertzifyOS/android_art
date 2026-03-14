@@ -445,12 +445,4 @@ bool StackOverflowHandler::Action(int, siginfo_t* info, void* context) {
 
   return true;
 }
-
-bool FaultingSlowPathHandler::Action([[maybe_unused]] int sig,
-                                     [[maybe_unused]] siginfo_t* info,
-                                     [[maybe_unused]] void* context) {
-  LOG(FATAL) << "FaultingSlowPathHandler::Action is not implemented for x86";
-  return false;
-}
-
 }       // namespace art

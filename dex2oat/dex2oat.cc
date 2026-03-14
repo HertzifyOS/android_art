@@ -851,7 +851,6 @@ class Dex2Oat final {
     switch (compiler_options_->GetInstructionSet()) {
       case InstructionSet::kArm64:
         compiler_options_->implicit_suspend_checks_ = true;
-        compiler_options_->faulting_slow_paths_ = true;
         FALLTHROUGH_INTENDED;
       case InstructionSet::kArm:
       case InstructionSet::kThumb2:

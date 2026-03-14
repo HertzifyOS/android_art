@@ -18,7 +18,6 @@
 #include <memory>
 #include <regex>
 
-#include "arch/arm64/faulting_slow_path_arm64.h"
 #include "base/macros.h"
 #include "base/utils.h"
 #include "builder.h"
@@ -85,8 +84,7 @@ class CodegenTest : public CommonCompilerTest, public OptimizingUnitTestHelper {
   template <typename GraphBuilder>
   void TestDeoptimizeSlowPathDeduplication(const std::string& test_case,
                                            const CodegenTargetConfig& target_config,
-                                           GraphBuilder builder,
-                                           bool faulting_slow_paths = false);
+                                           GraphBuilder builder);
 };
 
 void CodegenTest::TestCode(const std::vector<uint16_t>& data, bool has_result, int32_t expected) {
@@ -732,15 +730,13 @@ TEST_F(CodegenTest, PackedSwitchInHugeMethod) {
 template <typename GraphBuilder>
 void CodegenTest::TestDeoptimizeSlowPathDeduplication(const std::string& test_case,
                                                       const CodegenTargetConfig& target_config,
-                                                      GraphBuilder builder,
-                                                      bool faulting_slow_paths) {
+                                                      GraphBuilder builder) {
   SCOPED_TRACE(test_case);
 
   ResetPoolAndAllocator();
 
   std::unique_ptr<CompilerOptions> compiler_options =
       CommonCompilerTest::CreateCompilerOptions(target_config.GetInstructionSet(), "default");
-  compiler_options->faulting_slow_paths_ = faulting_slow_paths;
 
   HBasicBlock* block = InitEntryMainExitGraph();
   // Required to emit vreg info for HEnvironment.
@@ -1174,50 +1170,6 @@ TEST_F(CodegenTest, ARM64SvePredicateToBoolean) {
       }
     }
   }
-}
-
-TEST_F(CodegenTest, ARM64FaultingSlowPathDeduplication) {
-  CodegenTargetConfig target_config(InstructionSet::kArm64, create_codegen_arm64);
-
-  TestDeoptimizeSlowPathDeduplication(
-      "Different sets of spilled registers",
-      target_config,
-      [this](HBasicBlock* block, HInstruction* param1, HInstruction* param2) {
-        HCondition* cond = MakeCondition(block, kCondA, param1, param2);
-        HDeoptimize* deopt_live_method =
-            MakeDeoptimize(block, cond, DeoptimizationKind::kLoopNullBCE);
-        // Make the current method live. It uses the same register as the first parameter
-        // of the deoptimize entrypoint, but since we don't call the runtime entrypoint
-        // from faulting slow paths, the register is not saved in the slow path and deduplication
-        // is unaffected.
-        HCurrentMethod* method = block->GetGraph()->GetCurrentMethod();
-        MakeUnOp<HNeg>(block, method->GetType(), method);
-        HDeoptimize* deopt = MakeDeoptimize(block, cond, DeoptimizationKind::kLoopNullBCE);
-
-        MakeReturnVoid(block);
-
-        return [=](std::unordered_map<HInstruction*, std::string>& instructions_with_slow_paths,
-                   CodeGenerator* codegen,
-                   const std::string& dump) {
-          EXPECT_TRUE(HaveSameSlowPathSavedRegisters(deopt, deopt_live_method, codegen)) << dump;
-
-          EXPECT_EQ(instructions_with_slow_paths.size(), 1u);
-          ASSERT_TRUE(instructions_with_slow_paths.contains(deopt_live_method)) << dump;
-
-          // UDF immediate operand is encoded in the 16 least significant bits.
-          size_t udf_imm =
-              std::strtol(instructions_with_slow_paths[deopt_live_method].c_str(), nullptr, 16) &
-              0xFFFF;
-
-          Arm64FaultingSlowPathArguments args;
-          args.SetArg(0,
-                      Arm64FaultingSlowPathArguments::Arg::Constant(
-                          static_cast<int64_t>(DeoptimizationKind::kLoopNullBCE)));
-          args.SetSlowPath(FaultingSlowPath::kDeoptimize);
-          EXPECT_EQ(udf_imm, args.Data()) << dump;
-        };
-      },
-      /*faulting_slow_paths=*/true);
 }
 
 void CodegenTest::TestVectorComparison(IfCondition condition,

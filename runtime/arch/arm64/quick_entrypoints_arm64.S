@@ -304,45 +304,6 @@ ENTRY \c_name
 END \c_name
 .endm
 
-.macro TWO_ARG_RUNTIME_EXCEPTION_FROM_SIGNAL_SAVE_EVERYTHING c_name, cxx_name
-    .extern \cxx_name
-ENTRY \c_name
-    // The fault handler pushes FP (x29) and LR to stack and use them to pass arguments
-    // for the runtime entrypoint. So we need to set up the CFI info accordingly.
-    .cfi_def_cfa_offset 2 * __SIZEOF_POINTER__
-    .cfi_rel_offset fp, 0
-    .cfi_rel_offset lr, __SIZEOF_POINTER__
-    // Save all registers as basis for long jump context.
-    INCREASE_FRAME (FRAME_SIZE_SAVE_EVERYTHING - 2 * __SIZEOF_POINTER__)
-    SETUP_SAVE_EVERYTHING_FRAME_DECREMENTED_SP_SKIP_X29_LR
-    mov x0, x29
-    mov x1, lr
-    mov x2, xSELF
-    CALL_SYMBOL \cxx_name                               // \cxx_name(arg1, arg2, Thread*)
-    CALL_SYMBOL art_quick_do_long_jump                  // (Context*)
-    brk 0  // Unreached
-END \c_name
-.endm
-
-.macro ONE_ARG_RUNTIME_EXCEPTION_FROM_SIGNAL_SAVE_EVERYTHING c_name, cxx_name
-    .extern \cxx_name
-ENTRY \c_name
-    // The fault handler pushes the gc map address, i.e. "return address", to stack
-    // and passes the fault address in LR. So we need to set up the CFI info accordingly.
-    .cfi_def_cfa_offset __SIZEOF_POINTER__
-    .cfi_rel_offset lr, 0
-    // Save all registers as basis for long jump context.
-    INCREASE_FRAME (FRAME_SIZE_SAVE_EVERYTHING - __SIZEOF_POINTER__)
-    SAVE_REG x29, (FRAME_SIZE_SAVE_EVERYTHING - 2 * __SIZEOF_POINTER__)  // LR already saved.
-    SETUP_SAVE_EVERYTHING_FRAME_DECREMENTED_SP_SKIP_X29_LR
-    mov x0, lr
-    mov x1, xSELF
-    CALL_SYMBOL \cxx_name                               // \cxx_name(arg, Thread*).
-    CALL_SYMBOL art_quick_do_long_jump                  // (Context*)
-    brk 0  // Unreached
-END \c_name
-.endm
-
     /*
      * Called by managed code, saves callee saves and then calls artThrowException
      * that will place a mock Method* at the bottom of the stack. Arg1 holds the exception.
@@ -358,8 +319,22 @@ NO_ARG_RUNTIME_EXCEPTION_SAVE_EVERYTHING \
     /*
      * Call installed by a signal handler to create and deliver a NullPointerException.
      */
-ONE_ARG_RUNTIME_EXCEPTION_FROM_SIGNAL_SAVE_EVERYTHING \
-        art_quick_throw_null_pointer_exception_from_signal, artThrowNullPointerExceptionFromSignal
+    .extern art_quick_throw_null_pointer_exception_from_signal
+ENTRY art_quick_throw_null_pointer_exception_from_signal
+    // The fault handler pushes the gc map address, i.e. "return address", to stack
+    // and passes the fault address in LR. So we need to set up the CFI info accordingly.
+    .cfi_def_cfa_offset __SIZEOF_POINTER__
+    .cfi_rel_offset lr, 0
+    // Save all registers as basis for long jump context.
+    INCREASE_FRAME (FRAME_SIZE_SAVE_EVERYTHING - __SIZEOF_POINTER__)
+    SAVE_REG x29, (FRAME_SIZE_SAVE_EVERYTHING - 2 * __SIZEOF_POINTER__)  // LR already saved.
+    SETUP_SAVE_EVERYTHING_FRAME_DECREMENTED_SP_SKIP_X29_LR
+    mov x0, lr                        // pass the fault address stored in LR by the fault handler.
+    mov x1, xSELF                     // pass Thread::Current.
+    CALL_SYMBOL artThrowNullPointerExceptionFromSignal  // (arg, Thread*).
+    CALL_SYMBOL art_quick_do_long_jump                  // (Context*)
+    brk 0  // Unreached
+END art_quick_throw_null_pointer_exception_from_signal
 
     /*
      * Called by managed code to create and deliver an ArithmeticException.
@@ -373,23 +348,11 @@ NO_ARG_RUNTIME_EXCEPTION_SAVE_EVERYTHING art_quick_throw_div_zero, artThrowDivZe
 TWO_ARG_RUNTIME_EXCEPTION_SAVE_EVERYTHING art_quick_throw_array_bounds, artThrowArrayBoundsFromCode
 
     /*
-     * Call installed by a signal handler to create and deliver a ArrayIndexOutOfBoundsException.
-     */
-TWO_ARG_RUNTIME_EXCEPTION_FROM_SIGNAL_SAVE_EVERYTHING \
-        art_quick_throw_array_bounds_from_signal, artThrowArrayBoundsFromCode
-
-    /*
      * Called by managed code to create and deliver a StringIndexOutOfBoundsException
      * as if thrown from a call to String.charAt(). Arg1 holds index, arg2 holds limit.
      */
 TWO_ARG_RUNTIME_EXCEPTION_SAVE_EVERYTHING \
         art_quick_throw_string_bounds, artThrowStringBoundsFromCode
-
-    /*
-     * Call installed by a signal handler to create and deliver a StringIndexOutOfBoundsException.
-     */
-TWO_ARG_RUNTIME_EXCEPTION_FROM_SIGNAL_SAVE_EVERYTHING \
-        art_quick_throw_string_bounds_from_signal, artThrowStringBoundsFromCode
 
     /*
      * Called by managed code to create and deliver a StackOverflowError.
@@ -1008,12 +971,6 @@ ENTRY art_quick_check_instance_of
     CALL_SYMBOL art_quick_do_long_jump               // (Context*)
     brk 0  // Unreached
 END art_quick_check_instance_of
-
-    /*
-     * Call installed by a signal handler to create and deliver a ClassCastException.
-     */
-TWO_ARG_RUNTIME_EXCEPTION_FROM_SIGNAL_SAVE_EVERYTHING \
-        art_quick_throw_class_cast_from_signal, artThrowClassCastExceptionForObject
 
 // Restore xReg's value from [sp, #offset] if xReg is not the same as xExclude.
 .macro POP_REG_NE xReg, offset, xExclude
@@ -2001,12 +1958,6 @@ ENTRY art_quick_deoptimize_from_compiled_code
     brk 0  // Unreached
 END art_quick_deoptimize_from_compiled_code
 
-    /*
-     * Call installed by a signal handler to deoptimize into the interpreter. The deoptimization
-     * will long jump to the upcall with a special exception of -1.
-     */
-ONE_ARG_RUNTIME_EXCEPTION_FROM_SIGNAL_SAVE_EVERYTHING \
-        art_quick_deoptimize_from_signal, artDeoptimizeFromCompiledCode
 
     /*
      * String's indexOf.

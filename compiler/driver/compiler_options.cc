@@ -64,7 +64,6 @@ CompilerOptions::CompilerOptions()
       implicit_null_checks_(false),
       implicit_so_checks_(true),
       implicit_suspend_checks_(false),
-      faulting_slow_paths_(false),
       compile_pic_(false),
       dump_timings_(false),
       dump_pass_timings_(false),

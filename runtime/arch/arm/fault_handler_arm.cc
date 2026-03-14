@@ -249,12 +249,4 @@ bool StackOverflowHandler::Action([[maybe_unused]] int sig,
   // The kernel will now return to the address in sc->arm_pc.
   return true;
 }
-
-bool FaultingSlowPathHandler::Action([[maybe_unused]] int sig,
-                                     [[maybe_unused]] siginfo_t* info,
-                                     [[maybe_unused]] void* context) {
-  LOG(FATAL) << "FaultingSlowPathHandler::Action is not implemented for ARM";
-  return false;
-}
-
 }       // namespace art
