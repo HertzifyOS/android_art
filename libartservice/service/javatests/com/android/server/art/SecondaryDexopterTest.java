@@ -42,6 +42,7 @@ import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.server.art.DexUseManagerLocal.CheckedSecondaryDexInfo;
+import com.android.server.art.DexoptTrigger.DexoptComparator;
 import com.android.server.art.OutputArtifacts.PermissionSettings;
 import com.android.server.art.model.ArtFlags;
 import com.android.server.art.model.Config;
@@ -96,11 +97,14 @@ public class SecondaryDexopterTest {
             AidlUtils.buildOutputProfileForSecondary(
                     DEX_2, UID, UID, false /* isOtherReadable */, false /* isPreReboot */);
 
-    private final int mDefaultDexoptTrigger = DexoptTrigger.COMPILER_FILTER_IS_BETTER
-            | DexoptTrigger.PRIMARY_BOOT_IMAGE_BECOMES_USABLE | DexoptTrigger.NEED_EXTRACTION;
-    private final int mBetterOrSameDexoptTrigger = DexoptTrigger.COMPILER_FILTER_IS_BETTER
-            | DexoptTrigger.COMPILER_FILTER_IS_SAME
-            | DexoptTrigger.PRIMARY_BOOT_IMAGE_BECOMES_USABLE | DexoptTrigger.NEED_EXTRACTION;
+    private final DexoptTrigger mDefaultDexoptTrigger =
+            AidlUtils.buildDexoptTrigger(List.of(DexoptComparator.COMPARING_COMPILER_FILTER,
+                    DexoptComparator.COMPARING_PRIMARY_BOOT_IMAGE_STATUS,
+                    DexoptComparator.COMPARING_EXTRACTION_STATUS));
+    private final DexoptTrigger mProfileChangedDexoptTrigger = AidlUtils.buildDexoptTrigger(
+            List.of(DexoptComparator.COMPARING_COMPILER_FILTER,
+                    DexoptComparator.CUSTOM_TARGET_IS_BETTER_THAN_CURRENT),
+            "profile changed");
 
     private final MergeProfileOptions mMergeProfileOptions = new MergeProfileOptions();
 
@@ -160,7 +164,7 @@ public class SecondaryDexopterTest {
 
         // Dexopt is always needed and successful.
         lenient()
-                .when(mArtd.getDexoptNeeded(any(), any(), any(), any(), anyInt(), any()))
+                .when(mArtd.getDexoptNeeded(any(), any(), any(), any(), any(), any()))
                 .thenReturn(dexoptIsNeeded());
         lenient()
                 .when(mArtd.dexopt(any(), any(), any(), any(), any(), any(), any(), any(), anyInt(),
@@ -198,7 +202,7 @@ public class SecondaryDexopterTest {
                 deepEq(mMergeProfileOptions));
 
         verify(mArtd).getDexoptNeeded(eq(DEX_1), eq("arm64"), any(), eq("speed-profile"),
-                eq(mBetterOrSameDexoptTrigger), any());
+                deepEq(mProfileChangedDexoptTrigger), any());
         checkDexoptWithPrivateProfile(verify(mArtd), DEX_1, "arm64",
                 ProfilePath.tmpProfilePath(mDex1PrivateOutputProfile.profilePath), "CLC_FOR_DEX_1");
 
@@ -212,13 +216,13 @@ public class SecondaryDexopterTest {
                 deepEq(mDex2PrivateOutputProfile), deepEq(List.of(DEX_2)),
                 deepEq(mMergeProfileOptions));
 
-        verify(mArtd).getDexoptNeeded(
-                eq(DEX_2), eq("arm64"), any(), eq("speed-profile"), eq(mBetterOrSameDexoptTrigger), any());
+        verify(mArtd).getDexoptNeeded(eq(DEX_2), eq("arm64"), any(), eq("speed-profile"),
+                deepEq(mProfileChangedDexoptTrigger), any());
         checkDexoptWithPrivateProfile(verify(mArtd), DEX_2, "arm64",
                 ProfilePath.tmpProfilePath(mDex2PrivateOutputProfile.profilePath), "CLC_FOR_DEX_2");
 
-        verify(mArtd).getDexoptNeeded(
-                eq(DEX_2), eq("arm"), any(), eq("speed-profile"), eq(mBetterOrSameDexoptTrigger), any());
+        verify(mArtd).getDexoptNeeded(eq(DEX_2), eq("arm"), any(), eq("speed-profile"),
+                deepEq(mProfileChangedDexoptTrigger), any());
         checkDexoptWithPrivateProfile(verify(mArtd), DEX_2, "arm",
                 ProfilePath.tmpProfilePath(mDex2PrivateOutputProfile.profilePath), "CLC_FOR_DEX_2");
 
@@ -230,8 +234,8 @@ public class SecondaryDexopterTest {
         verify(mArtd, never()).isProfileUsable(deepEq(mDex3RefProfile), any());
         verify(mArtd, never()).mergeProfiles(any(), deepEq(mDex3RefProfile), any(), any(), any());
 
-        verify(mArtd).getDexoptNeeded(
-                eq(DEX_3), eq("arm64"), isNull(), eq("verify"), eq(mDefaultDexoptTrigger), any());
+        verify(mArtd).getDexoptNeeded(eq(DEX_3), eq("arm64"), isNull(), eq("verify"),
+                deepEq(mDefaultDexoptTrigger), any());
         checkDexoptWithNoProfile(verify(mArtd), DEX_3, "arm64", "verify",
                 null /* classLoaderContext */, false /* isPublic */);
     }

@@ -13,7 +13,53 @@ using `dex2oat`.
     **simulate compilation** with debug flags (like `--dump-cfg`) to understand
     *why* and *how* code is being compiled (or not).
 
-## 2. Inspecting Compiled Code with `oatdump`
+## 2. Building and Running the Tools
+
+Before using these tools on your host, you must build them from your local
+checkout.
+
+### 2.1. Building the Tools
+
+Run the following command from the root of your Android tree:
+
+```bash
+m oatdump dex2oat
+```
+
+Other commonly used targets include:
+
+*   **`m oatdumpd dex2oatd`**: Builds the **debug** versions of these tools.
+    These are recommended for analysis as they contain additional assertions and
+    detailed logging.
+*   **`m build-art-host`**: A high-level target that builds most ART host tools,
+    their dependencies (like ICU and TZData), and core boot images.
+
+### 2.2. Running Binaries from Output Directory
+
+After building, the binaries are located in the host output directory. You can
+run them directly using their relative paths from the root of the checkout:
+
+```bash
+# General path format: ./out/host/linux-x86/bin/<tool_name>
+./out/host/linux-x86/bin/oatdump --help
+./out/host/linux-x86/bin/dex2oat --help
+```
+
+If you have initialized your environment using `lunch`, you can use the
+`$ANDROID_HOST_OUT` environment variable:
+
+```bash
+$ANDROID_HOST_OUT/bin/oatdump --help
+```
+
+**Tip:** If you see errors related to missing shared libraries (`.so` files),
+ensure your `LD_LIBRARY_PATH` includes the host library directory:
+
+```bash
+export LD_LIBRARY_PATH=$ANDROID_HOST_OUT/lib64:$LD_LIBRARY_PATH
+```
+
+## 3. Inspecting Compiled Code with `oatdump`
 
 ### Locating Files
 
@@ -44,13 +90,13 @@ source build/envsetup.sh
 lunch <your_target>  # e.g., lunch raven-userdebug
 
 # Basic header dump (check compiler filter, etc.)
-oatdump --oat-file=$OUT/system/framework/arm64/boot.oat --header-only
+$ANDROID_HOST_OUT/bin/oatdump --oat-file=$OUT/system/framework/arm64/boot.oat --header-only
 
 # Disassemble a specific class
 # Note: "android.os.Looper" is in framework.jar (boot extension).
 # For java.util.* (core-oj), check the ART APEX path.
-oatdump --oat-file=$OUT/system/framework/arm64/boot.oat \
-        --class-filter=android.os.Looper
+$ANDROID_HOST_OUT/bin/oatdump --oat-file=$OUT/system/framework/arm64/boot.oat \
+                              --class-filter=android.os.Looper
 ```
 
 **Tip:** If you see "NO CODE", the method might not have been compiled
@@ -86,7 +132,7 @@ adb pull /data/local/tmp/dump.txt
 *   `--header-only`: Just the file header (checksums, key-value store,
     compiler-filter).
 
-## 3. Analyzing Compiler Decisions with `dex2oat`
+## 4. Analyzing Compiler Decisions with `dex2oat`
 
 If `oatdump` shows "NO CODE" or suboptimal code, you can use `dex2oat` to
 **recompile** the DEX file locally with verbose logging or CFG dumping.
@@ -132,7 +178,7 @@ register allocation, etc.).
     *   Look for passes like `Inliner` to see if a method was inlined or
         rejected (and why).
 
-## 4. Common Recipes
+## 5. Common Recipes
 
 ### Check "Why wasn't this method inlined?"
 
@@ -190,12 +236,12 @@ For installed APKs:
     bash adb shell oatdump --oat-file=/data/app/.../base.odex
     ```
 
-## 5. ARM64 Disassembly Guide
+## 6. ARM64 Disassembly Guide
 
 This section provides a brief overview of the ARM64 architecture specifics
 relevant when disassembling code compiled by `dex2oat`.
 
-### 5.1 Registers
+### 6.1 Registers
 
 ART uses the standard ARM64 register set, but reserves some registers for
 special purposes.
@@ -230,7 +276,7 @@ special purposes.
         then load null into `x21`, and the second such instruction will trap. It
         is callee-saved.
 
-### 5.2 Calling Convention (Managed)
+### 6.2 Calling Convention (Managed)
 
 ART uses a custom calling convention for `dex2oat` compiled managed code.
 
@@ -268,7 +314,7 @@ ART uses a custom calling convention for `dex2oat` compiled managed code.
         ldr wzr, [x16]
         ```
 
-### 5.3 Common Code Patterns
+### 6.3 Common Code Patterns
 
 When inspecting disassembly, you will frequently encounter these patterns. The
 following examples are based on compiling the code below:

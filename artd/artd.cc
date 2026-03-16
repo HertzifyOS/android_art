@@ -150,6 +150,7 @@ using ::art::tools::NonFatal;
 using ::ndk::ScopedAStatus;
 using ::ndk::ScopedFileDescriptor;
 
+using DexoptComparator = DexoptTrigger::DexoptComparator;
 using PrimaryCurProfilePath = ProfilePath::PrimaryCurProfilePath;
 using TmpProfilePath = ProfilePath::TmpProfilePath;
 using WritableProfilePath = ProfilePath::WritableProfilePath;
@@ -211,24 +212,53 @@ Result<CompilerFilter::Filter> ParseCompilerFilter(const std::string& compiler_f
   return compiler_filter;
 }
 
-OatFileAssistant::DexOptTrigger DexOptTriggerFromAidl(int32_t aidl_value) {
-  OatFileAssistant::DexOptTrigger trigger{};
-  if ((aidl_value & static_cast<int32_t>(DexoptTrigger::COMPILER_FILTER_IS_BETTER)) != 0) {
-    trigger.targetFilterIsBetter = true;
+Result<OatFileAssistant::DexoptTrigger> DexoptTriggerFromAidl(const DexoptTrigger& aidl_value) {
+  if (aidl_value.dexoptComparators.empty()) {
+    return Errorf("No dexopt comparators provided");
   }
-  if ((aidl_value & static_cast<int32_t>(DexoptTrigger::COMPILER_FILTER_IS_SAME)) != 0) {
-    trigger.targetFilterIsSame = true;
+  constexpr std::array kPrimaryComparators = {
+      DexoptComparator::COMPARING_COMPILER_FILTER,
+      DexoptComparator::COMPARING_COMPILER_FILTER_REVERSED,
+      DexoptComparator::CUSTOM_TARGET_IS_BETTER_THAN_CURRENT,
+      DexoptComparator::CUSTOM_TARGET_IS_WORSE_THAN_CURRENT};
+  if (std::ranges::find(kPrimaryComparators, aidl_value.dexoptComparators[0]) ==
+      kPrimaryComparators.end()) {
+    return Errorf("The first comparator must be a primary comparator");
   }
-  if ((aidl_value & static_cast<int32_t>(DexoptTrigger::COMPILER_FILTER_IS_WORSE)) != 0) {
-    trigger.targetFilterIsWorse = true;
+
+  std::vector<OatFileAssistant::DexoptComparator> comparators;
+  for (const DexoptComparator& aidl_comparator : aidl_value.dexoptComparators) {
+    switch (aidl_comparator) {
+      case DexoptComparator::COMPARING_COMPILER_FILTER:
+        comparators.push_back(OatFileAssistant::DexoptComparator::kComparingCompilerFilter);
+        continue;
+      case DexoptComparator::COMPARING_COMPILER_FILTER_REVERSED:
+        comparators.push_back(OatFileAssistant::DexoptComparator::kComparingCompilerFilterReversed);
+        continue;
+      case DexoptComparator::COMPARING_PRIMARY_BOOT_IMAGE_STATUS:
+        comparators.push_back(OatFileAssistant::DexoptComparator::kComparingPrimaryBootImageStatus);
+        continue;
+      case DexoptComparator::COMPARING_EXTRACTION_STATUS:
+        comparators.push_back(OatFileAssistant::DexoptComparator::kComparingExtractionStatus);
+        continue;
+      case DexoptComparator::CUSTOM_TARGET_IS_BETTER_THAN_CURRENT:
+        if (!aidl_value.customComparatorReason.has_value()) {
+          return Errorf("No custom comparator reason provided");
+        }
+        comparators.push_back(OatFileAssistant::DexoptComparator::kCustomTargetIsBetterThanCurrent);
+        continue;
+      case DexoptComparator::CUSTOM_TARGET_IS_WORSE_THAN_CURRENT:
+        if (!aidl_value.customComparatorReason.has_value()) {
+          return Errorf("No custom comparator reason provided");
+        }
+        comparators.push_back(OatFileAssistant::DexoptComparator::kCustomTargetIsWorseThanCurrent);
+        continue;
+        // No default. All cases should be explicitly handled, or the compilation will fail.
+    }
+    // This should never happen. Just in case we get a non-enumerator value.
+    LOG(FATAL) << "Unexpected comparator " << static_cast<int>(aidl_comparator);
   }
-  if ((aidl_value & static_cast<int32_t>(DexoptTrigger::PRIMARY_BOOT_IMAGE_BECOMES_USABLE)) != 0) {
-    trigger.primaryBootImageBecomesUsable = true;
-  }
-  if ((aidl_value & static_cast<int32_t>(DexoptTrigger::NEED_EXTRACTION)) != 0) {
-    trigger.needExtraction = true;
-  }
-  return trigger;
+  return OatFileAssistant::DexoptTrigger{std::move(comparators), aidl_value.customComparatorReason};
 }
 
 ArtifactsLocation ArtifactsLocationToAidl(OatFileAssistant::Location location) {
@@ -1081,7 +1111,7 @@ ndk::ScopedAStatus Artd::getDexoptNeeded(const std::string& in_dexFile,
                                          const std::string& in_instructionSet,
                                          const std::optional<std::string>& in_classLoaderContext,
                                          const std::string& in_compilerFilter,
-                                         int32_t in_dexoptTrigger,
+                                         const DexoptTrigger& in_dexoptTrigger,
                                          const ScopedFileDescriptor& in_loggingFd,
                                          GetDexoptNeededResult* _aidl_return) {
   Result<OatFileAssistantContext*> ofa_context = GetOatFileAssistantContext();
@@ -1109,7 +1139,7 @@ ndk::ScopedAStatus Artd::getDexoptNeeded(const std::string& in_dexFile,
   OatFileAssistant::DexOptStatus status;
   _aidl_return->isDexoptNeeded =
       oat_file_assistant->GetDexOptNeeded(OR_RETURN_FATAL(ParseCompilerFilter(in_compilerFilter)),
-                                          DexOptTriggerFromAidl(in_dexoptTrigger),
+                                          OR_RETURN_FATAL(DexoptTriggerFromAidl(in_dexoptTrigger)),
                                           &status);
   _aidl_return->isVdexUsable = status.IsVdexUsable();
   _aidl_return->artifactsLocation = ArtifactsLocationToAidl(status.GetLocation());
@@ -1966,8 +1996,7 @@ Result<const std::vector<std::string>*> Artd::GetBootImageLocations() {
   return &cached_boot_image_locations_.value();
 }
 
-Result<BootClasspathFds> Artd::OpenBootClasspathFds(
-    const std::vector<std::string>& bcp_jars) {
+Result<BootClasspathFds> Artd::OpenBootClasspathFds(const std::vector<std::string>& bcp_jars) {
   BootClasspathFds result;
   for (const std::string& jar : bcp_jars) {
     // Special treatment for Compilation OS.  When we pass in files to CompOS we also need to pass

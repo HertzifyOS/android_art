@@ -83,6 +83,7 @@ static constexpr const char* kAndroidDataDefaultPath = "/data";
 static constexpr const char* kAndroidExpandEnvVar = "ANDROID_EXPAND";
 static constexpr const char* kAndroidExpandDefaultPath = "/mnt/expand";
 static constexpr const char* kAndroidArtRootEnvVar = "ANDROID_ART_ROOT";
+static constexpr const char* kAndroidApexRootEnvVar = "ANDROID_APEX_ROOT";
 static constexpr const char* kApexDefaultPath = "/apex/";
 static constexpr const char* kArtApexDataEnvVar = "ART_APEX_DATA";
 static constexpr const char* kBootImageStem = "boot";
@@ -259,6 +260,30 @@ std::string GetAndroidExpand() {
 
 std::string GetArtApexData() {
   return GetAndroidDir(kArtApexDataEnvVar, kArtApexDataDefaultPath, /*must_exist=*/false);
+}
+
+std::string GetApexRoot() {
+  return GetAndroidDir(kAndroidApexRootEnvVar, kApexDefaultPath, /*must_exist=*/false);
+}
+
+std::vector<std::string> GetMainlineBootImageProfilePaths(
+    const std::vector<std::string>& mainline_bcp_jars) {
+  std::unordered_set<std::string> profiles;
+  std::string apex_root = GetApexRoot();
+
+  for (const std::string& jar : mainline_bcp_jars) {
+    std::string_view apex_name = ApexNameFromLocation(jar);
+    if (apex_name.empty()) {
+      continue;
+    }
+
+    std::string profile = ART_FORMAT("{}/{}/etc/boot-image.prof", apex_root, apex_name);
+
+    if (OS::FileExists(profile.c_str())) {
+      profiles.insert(std::move(profile));
+    }
+  }
+  return std::vector<std::string>(profiles.begin(), profiles.end());
 }
 
 static std::string GetPrebuiltPrimaryBootImageDir(const std::string& android_root) {
@@ -774,14 +799,15 @@ bool LocationIsOnSystemExtFramework(std::string_view dex_location) {
 }
 
 bool LocationIsOnApex(std::string_view dex_location) {
-  return dex_location.starts_with(kApexDefaultPath);
+  return dex_location.starts_with(GetApexRoot());
 }
 
 std::string_view ApexNameFromLocation(std::string_view dex_location) {
-  if (!dex_location.starts_with(kApexDefaultPath)) {
+  std::string apex_root = GetApexRoot();
+  if (!dex_location.starts_with(apex_root)) {
     return {};
   }
-  size_t start = strlen(kApexDefaultPath);
+  size_t start = apex_root.length();
   size_t end = dex_location.find('/', start);
   if (end == std::string_view::npos) {
     return {};

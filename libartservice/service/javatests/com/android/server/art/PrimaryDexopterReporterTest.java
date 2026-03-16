@@ -101,7 +101,7 @@ public final class PrimaryDexopterReporterTest extends PrimaryDexopterTestBase {
         // Dexopt is by default needed and successful.
         lenient()
                 .when(mArtd.getDexoptNeeded(
-                        anyString(), anyString(), anyString(), anyString(), anyInt(), any()))
+                        anyString(), anyString(), anyString(), anyString(), any(), any()))
                 .thenReturn(dexoptIsNeeded());
 
         // Make asynchronous reporting synchronous.

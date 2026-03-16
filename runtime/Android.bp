@@ -165,10 +165,12 @@ cc_defaults {
     ],
     shared_libs: [
         "libartbase",
-        "libart-simulator-container",
         "libdexfile#impl",
         "libprofile",
-    ],
+    ] + select(soong_config_variable("art_module", "art_use_simulator"), {
+        true: ["libart-simulator-container"],
+        default: [],
+    }),
     export_shared_lib_headers: [
         "libdexfile#impl",
     ],
@@ -182,10 +184,13 @@ cc_defaults {
     ],
     shared_libs: [
         "libartbased",
-        "libartd-simulator-container",
         "libdexfiled#impl",
         "libprofiled",
-    ],
+    ] + select(soong_config_variable("art_module", "art_use_simulator"), {
+        true: ["libartd-simulator-container"],
+        default: [],
+    }),
+
     export_shared_lib_headers: [
         "libdexfiled#impl",
     ],
@@ -772,14 +777,16 @@ cc_defaults {
     ],
     whole_static_libs: [
         "libartpalette",
-        "libart-simulator-container",
         "libbase",
         "liblz4",
         "liblzma", // libelffile dependency; must be repeated here since it's a static lib.
         "libnativebridge",
         "libnativeloader",
         "libodrstatslog",
-    ],
+    ] + select(soong_config_variable("art_module", "art_use_simulator"), {
+        true: ["libart-simulator-container"],
+        default: [],
+    }),
     target: {
         host: {
             cflags: [

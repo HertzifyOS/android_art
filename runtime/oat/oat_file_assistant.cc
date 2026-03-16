@@ -316,23 +316,28 @@ bool OatFileAssistant::IsInBootClassPath() {
   return false;
 }
 
-OatFileAssistant::DexOptTrigger OatFileAssistant::GetDexOptTrigger(
+OatFileAssistant::DexoptTrigger OatFileAssistant::GetDexoptTrigger(
     CompilerFilter::Filter target_compiler_filter, bool profile_changed, bool downgrade) {
   if (downgrade) {
     // The caller's intention is to downgrade the compiler filter. We should only re-compile if the
     // target compiler filter is worse than the current one.
-    return DexOptTrigger{.targetFilterIsWorse = true};
+    return {.dexopt_comparators = {DexoptComparator::kComparingCompilerFilterReversed},
+            .custom_comparator_reason = std::nullopt};
   }
 
   // This is the usual case. The caller's intention is to see if a better oat file can be generated.
-  DexOptTrigger dexopt_trigger{
-      .targetFilterIsBetter = true, .primaryBootImageBecomesUsable = true, .needExtraction = true};
+  std::vector<DexoptComparator> dexopt_comparators{DexoptComparator::kComparingCompilerFilter};
   if (profile_changed && CompilerFilter::DependsOnProfile(target_compiler_filter)) {
     // Since the profile has been changed, we should re-compile even if the compilation does not
     // make the compiler filter better.
-    dexopt_trigger.targetFilterIsSame = true;
+    dexopt_comparators.push_back(DexoptComparator::kCustomTargetIsBetterThanCurrent);
+    return {.dexopt_comparators = std::move(dexopt_comparators),
+            .custom_comparator_reason = "profile changed"};
   }
-  return dexopt_trigger;
+  dexopt_comparators.push_back(DexoptComparator::kComparingPrimaryBootImageStatus);
+  dexopt_comparators.push_back(DexoptComparator::kComparingExtractionStatus);
+  return {.dexopt_comparators = std::move(dexopt_comparators),
+          .custom_comparator_reason = std::nullopt};
 }
 
 int OatFileAssistant::GetDexOptNeeded(CompilerFilter::Filter target_compiler_filter,
@@ -340,7 +345,7 @@ int OatFileAssistant::GetDexOptNeeded(CompilerFilter::Filter target_compiler_fil
                                       bool downgrade) {
   OatFileInfo& info = GetBestInfo();
   DexOptNeeded dexopt_needed = info.GetDexOptNeeded(
-      target_compiler_filter, GetDexOptTrigger(target_compiler_filter, profile_changed, downgrade));
+      target_compiler_filter, GetDexoptTrigger(target_compiler_filter, profile_changed, downgrade));
   if (dexopt_needed != kNoDexOptNeeded &&
       (info.GetType() == OatFileType::kDm || info.GetType() == OatFileType::kSdm)) {
     // The usable vdex file is in the DM file. This information cannot be encoded in the integer.
@@ -355,7 +360,7 @@ int OatFileAssistant::GetDexOptNeeded(CompilerFilter::Filter target_compiler_fil
 }
 
 bool OatFileAssistant::GetDexOptNeeded(CompilerFilter::Filter target_compiler_filter,
-                                       DexOptTrigger dexopt_trigger,
+                                       const DexoptTrigger& dexopt_trigger,
                                        /*out*/ DexOptStatus* dexopt_status) {
   OatFileInfo& info = GetBestInfo();
   DexOptNeeded dexopt_needed = info.GetDexOptNeeded(target_compiler_filter, dexopt_trigger);
@@ -582,8 +587,7 @@ bool OatFileAssistant::IsAnonymousVdexBasename(const std::string& basename) {
   DCHECK(basename.find('/') == std::string::npos);
   // `basename` must have format: <kAnonymousDexPrefix><checksum><kVdexExtension>
   if (basename.size() < strlen(kAnonymousDexPrefix) + strlen(kVdexExtension) + 1 ||
-      !basename.starts_with(kAnonymousDexPrefix) ||
-      !basename.ends_with(kVdexExtension)) {
+      !basename.starts_with(kAnonymousDexPrefix) || !basename.ends_with(kVdexExtension)) {
     return false;
   }
   // Check that all characters between the prefix and extension are decimal digits.
@@ -935,15 +939,25 @@ OatFileAssistant::OatStatus OatFileAssistant::OatFileInfo::Status(/*out*/ std::s
 }
 
 OatFileAssistant::DexOptNeeded OatFileAssistant::OatFileInfo::GetDexOptNeeded(
-    CompilerFilter::Filter target_compiler_filter, const DexOptTrigger dexopt_trigger) {
+    CompilerFilter::Filter target_compiler_filter, const DexoptTrigger& dexopt_trigger) {
+  DCHECK_GE(dexopt_trigger.dexopt_comparators.size(), 1u);
+  constexpr std::array kPrimaryComparators = {DexoptComparator::kComparingCompilerFilter,
+                                              DexoptComparator::kComparingCompilerFilterReversed,
+                                              DexoptComparator::kCustomTargetIsBetterThanCurrent,
+                                              DexoptComparator::kCustomTargetIsWorseThanCurrent};
+  DCHECK(std::ranges::find(kPrimaryComparators, dexopt_trigger.dexopt_comparators[0]) !=
+         kPrimaryComparators.end());
+
   if (IsUseable()) {
-    return ShouldRecompileForFilter(target_compiler_filter, dexopt_trigger) ? kDex2OatForFilter :
-                                                                              kNoDexOptNeeded;
+    return ShouldRecompileForComparators(target_compiler_filter, dexopt_trigger) ? kDex2OatForFilter
+                                                                                 : kNoDexOptNeeded;
   }
 
   // In this case, the oat file is not usable. If the caller doesn't seek for a better compiler
-  // filter (e.g., the caller wants to downgrade), then we should not recompile.
-  if (!dexopt_trigger.targetFilterIsBetter) {
+  // filter or force the compilation (e.g., the caller wants to downgrade), then we should not
+  // recompile.
+  if (dexopt_trigger.dexopt_comparators[0] != DexoptComparator::kComparingCompilerFilter &&
+      dexopt_trigger.dexopt_comparators[0] != DexoptComparator::kCustomTargetIsBetterThanCurrent) {
     return kNoDexOptNeeded;
   }
 
@@ -1105,66 +1119,90 @@ std::unique_ptr<OatFile> OatFileAssistant::OatFileInfoBackedByDm::LoadFile(
                                                         error_msg));
 }
 
-bool OatFileAssistant::OatFileInfo::ShouldRecompileForFilter(CompilerFilter::Filter target,
-                                                             const DexOptTrigger dexopt_trigger) {
+bool OatFileAssistant::OatFileInfo::ShouldRecompileForComparators(
+    CompilerFilter::Filter target, const DexoptTrigger& dexopt_trigger) {
   const OatFile* file = GetFile();
   DCHECK(file != nullptr);
 
   const ArtLogger& logger = oat_file_assistant_->logger_;
-
   CompilerFilter::Filter current = file->GetCompilerFilter();
-  if (dexopt_trigger.targetFilterIsBetter && CompilerFilter::IsBetter(target, current)) {
-    VLOG_TO(logger, oat) << ART_FORMAT(
-        "Should recompile: targetFilterIsBetter (current: {}, target: {})",
-        CompilerFilter::NameOfFilter(current),
-        CompilerFilter::NameOfFilter(target));
-    return true;
-  }
-  if (dexopt_trigger.targetFilterIsSame && current == target) {
-    VLOG_TO(logger, oat) << ART_FORMAT(
-        "Should recompile: targetFilterIsSame (current: {}, target: {})",
-        CompilerFilter::NameOfFilter(current),
-        CompilerFilter::NameOfFilter(target));
-    return true;
-  }
-  if (dexopt_trigger.targetFilterIsWorse && CompilerFilter::IsBetter(current, target)) {
-    VLOG_TO(logger, oat) << ART_FORMAT(
-        "Should recompile: targetFilterIsWorse (current: {}, target: {})",
-        CompilerFilter::NameOfFilter(current),
-        CompilerFilter::NameOfFilter(target));
-    return true;
-  }
 
-  // Don't regress the compiler filter for the triggers handled below.
-  if (CompilerFilter::IsBetter(current, target)) {
-    VLOG_TO(logger, oat) << "Should not recompile: current filter is better";
-    return false;
-  }
+  auto filter_comparison_message = [&] {
+    return ART_FORMAT("(current: {}, target: {})",
+                      CompilerFilter::NameOfFilter(current),
+                      CompilerFilter::NameOfFilter(target));
+  };
 
-  if (dexopt_trigger.primaryBootImageBecomesUsable &&
-      CompilerFilter::IsAotCompilationEnabled(current)) {
-    // If the oat file has been compiled without an image, and the runtime is
-    // now running with an image loaded from disk, return that we need to
-    // re-compile. The recompilation will generate a better oat file, and with an app
-    // image for profile guided compilation.
-    // However, don't recompile for "verify". Although verification depends on the boot image, the
-    // penalty of being verified without a boot image is low. Consider the case where a dex file
-    // is verified by "ab-ota", we don't want it to be re-verified by "boot-after-ota".
-    const char* oat_boot_class_path_checksums =
-        file->GetOatHeader().GetStoreValueByKey(OatHeader::kBootClassPathChecksumsKey);
-    if (oat_boot_class_path_checksums != nullptr &&
-        oat_boot_class_path_checksums[0] != 'i' &&
-        oat_file_assistant_->IsPrimaryBootImageUsable()) {
-      DCHECK(!file->GetOatHeader().RequiresImage());
-      VLOG_TO(logger, oat) << "Should recompile: primaryBootImageBecomesUsable";
-      return true;
+  for (DexoptComparator dexopt_comparator : dexopt_trigger.dexopt_comparators) {
+    switch (dexopt_comparator) {
+      case DexoptComparator::kComparingCompilerFilter: {
+        if (CompilerFilter::IsBetter(target, current)) {
+          VLOG_TO(logger, oat) << "Should recompile: target filter is better "
+                               << filter_comparison_message();
+          return true;
+        } else if (CompilerFilter::IsBetter(current, target)) {
+          VLOG_TO(logger, oat) << "Should not recompile: target filter is worse "
+                               << filter_comparison_message();
+          return false;
+        }
+        continue;
+      }
+      case DexoptComparator::kComparingCompilerFilterReversed: {
+        if (CompilerFilter::IsBetter(current, target)) {
+          VLOG_TO(logger, oat) << "Should recompile: target filter is worse "
+                               << filter_comparison_message();
+          return true;
+        } else if (CompilerFilter::IsBetter(target, current)) {
+          VLOG_TO(logger, oat) << "Should not recompile: target filter is better "
+                               << filter_comparison_message();
+          return false;
+        }
+        continue;
+      }
+      case DexoptComparator::kComparingPrimaryBootImageStatus: {
+        if (!CompilerFilter::IsAotCompilationEnabled(target)) {
+          continue;
+        }
+
+        const char* oat_boot_class_path_checksums =
+            file->GetOatHeader().GetStoreValueByKey(OatHeader::kBootClassPathChecksumsKey);
+        bool current_boot_image_status =
+            oat_boot_class_path_checksums != nullptr && oat_boot_class_path_checksums[0] == 'i';
+        bool target_boot_image_status = oat_file_assistant_->IsPrimaryBootImageUsable();
+        if (!current_boot_image_status && target_boot_image_status) {
+          VLOG_TO(logger, oat) << "Should recompile: target boot image status is better";
+          return true;
+        } else if (current_boot_image_status && !target_boot_image_status) {
+          VLOG_TO(logger, oat) << "Should not recompile: target boot image status is worse";
+          return false;
+        }
+        continue;
+      }
+      case DexoptComparator::kComparingExtractionStatus: {
+        if (oat_file_assistant_->ZipFileOnlyContainsUncompressedDex()) {
+          continue;
+        }
+
+        bool current_extraction_status = file->ContainsDexCode();
+        // Target extraction status is always true.
+        if (!current_extraction_status) {
+          VLOG_TO(logger, oat) << "Should recompile: target extraction status is better";
+          return true;
+        }
+        continue;
+      }
+      case DexoptComparator::kCustomTargetIsBetterThanCurrent: {
+        DCHECK(dexopt_trigger.custom_comparator_reason.has_value());
+        VLOG_TO(logger, oat) << "Should recompile: " << *dexopt_trigger.custom_comparator_reason;
+        return true;
+      }
+      case DexoptComparator::kCustomTargetIsWorseThanCurrent: {
+        DCHECK(dexopt_trigger.custom_comparator_reason.has_value());
+        VLOG_TO(logger, oat) << "Should not recompile: "
+                             << *dexopt_trigger.custom_comparator_reason;
+        return false;
+      }
     }
-  }
-
-  if (dexopt_trigger.needExtraction && !file->ContainsDexCode() &&
-      !oat_file_assistant_->ZipFileOnlyContainsUncompressedDex()) {
-    VLOG_TO(logger, oat) << "Should recompile: needExtraction";
-    return true;
   }
 
   VLOG_TO(logger, oat) << "Should not recompile";

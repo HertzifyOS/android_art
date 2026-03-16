@@ -30,10 +30,15 @@ import com.android.server.art.utils.Utils;
 import com.google.common.truth.Correspondence;
 import com.google.common.truth.Truth;
 
+import org.mockito.ArgumentMatcher;
+
 import java.io.File;
 import java.io.FileOutputStream;
+import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -47,7 +52,7 @@ public final class TestingUtils {
     /**
      * Recursively compares two objects using reflection. Returns true if the two objects are equal.
      * For simplicity, this method only supports types that every field is a primitive type, a
-     * string, a {@link List}, or a supported type.
+     * string, a {@link List}, an array, or a supported type.
      */
     public static boolean deepEquals(
             @Nullable Object a, @Nullable Object b, @NonNull StringBuilder errorMsg) {
@@ -75,7 +80,10 @@ public final class TestingUtils {
                 return a.equals(b);
             }
             if (a.getClass().isArray()) {
-                throw new UnsupportedOperationException("Array type is not supported");
+                return arrayDeepEquals(a, b, errorMsg);
+            }
+            if (a instanceof Collection) {
+                throw new UnsupportedOperationException("Other containers are not supported");
             }
             for (Field field : a.getClass().getDeclaredFields()) {
                 if (Modifier.isStatic(field.getModifiers())) {
@@ -110,13 +118,21 @@ public final class TestingUtils {
      * mismatch.
      */
     public static <T> T deepEq(@Nullable T expected) {
-        return argThat(arg -> {
-            var errorMsg = new StringBuilder();
-            boolean result = deepEquals(arg, expected, errorMsg);
-            if (!result) {
-                Log.e(TAG, errorMsg.toString());
+        return argThat(new ArgumentMatcher<T>() {
+            @Override
+            public boolean matches(T arg) {
+                var errorMsg = new StringBuilder();
+                boolean result = deepEquals(arg, expected, errorMsg);
+                if (!result) {
+                    Log.e(TAG, errorMsg.toString());
+                }
+                return result;
             }
-            return result;
+
+            @Override
+            public String toString() {
+                return "deepEq(" + expected + ")";
+            }
         });
     }
 
@@ -126,12 +142,20 @@ public final class TestingUtils {
     @SafeVarargs
     public static <ListType extends List<ItemType>, ItemType> ListType inAnyOrder(
             @Nullable ItemType... expected) {
-        return argThat(argument -> {
-            try {
-                Truth.assertThat(argument).containsExactlyElementsIn(expected);
-                return true;
-            } catch (AssertionError error) {
-                return false;
+        return argThat(new ArgumentMatcher<ListType>() {
+            @Override
+            public boolean matches(ListType argument) {
+                try {
+                    Truth.assertThat(argument).containsExactlyElementsIn(expected);
+                    return true;
+                } catch (AssertionError error) {
+                    return false;
+                }
+            }
+
+            @Override
+            public String toString() {
+                return "inAnyOrder(" + Arrays.toString(expected) + ")";
             }
         });
     }
@@ -144,14 +168,22 @@ public final class TestingUtils {
     @SafeVarargs
     public static <ListType extends List<ItemType>, ItemType> ListType inAnyOrderDeepEquals(
             @Nullable ItemType... expected) {
-        return argThat(argument -> {
-            try {
-                Truth.assertThat(argument)
-                        .comparingElementsUsing(deepEquality())
-                        .containsExactlyElementsIn(expected);
-                return true;
-            } catch (AssertionError error) {
-                return false;
+        return argThat(new ArgumentMatcher<ListType>() {
+            @Override
+            public boolean matches(ListType argument) {
+                try {
+                    Truth.assertThat(argument)
+                            .comparingElementsUsing(deepEquality())
+                            .containsExactlyElementsIn(expected);
+                    return true;
+                } catch (AssertionError error) {
+                    return false;
+                }
+            }
+
+            @Override
+            public String toString() {
+                return "inAnyOrderDeepEquals(" + Arrays.toString(expected) + ")";
             }
         });
     }
@@ -216,6 +248,21 @@ public final class TestingUtils {
         }
         for (int i = 0; i < a.size(); i++) {
             if (!deepEquals(a.get(i), b.get(i), errorMsg)) {
+                errorMsg.insert(0, String.format("Element %d mismatch: ", i));
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean arrayDeepEquals(Object a, Object b, StringBuilder errorMsg) {
+        if (Array.getLength(a) != Array.getLength(b)) {
+            errorMsg.append(String.format(
+                    "Array length mismatch: %d != %d", Array.getLength(a), Array.getLength(b)));
+            return false;
+        }
+        for (int i = 0; i < Array.getLength(a); i++) {
+            if (!deepEquals(Array.get(a, i), Array.get(b, i), errorMsg)) {
                 errorMsg.insert(0, String.format("Element %d mismatch: ", i));
                 return false;
             }

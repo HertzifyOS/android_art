@@ -86,6 +86,10 @@ std::string GetAndroidExpandSafe(/*out*/ std::string* error_msg);
 // Find $ART_APEX_DATA, /data/misc/apexdata/com.android.art, or abort.
 std::string GetArtApexData();
 
+// Returns the list of boot image profiles (e.g. /apex/com.android.conscrypt/etc/boot-image.prof).
+std::vector<std::string> GetMainlineBootImageProfilePaths(
+    const std::vector<std::string>& mainline_bcp_jars);
+
 // Returns the directory that contains the prebuilt version of the primary boot image (i.e., the one
 // generated at build time).
 std::string GetPrebuiltPrimaryBootImageDir();
