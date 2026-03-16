@@ -129,9 +129,8 @@ constexpr const char* kMinimalBootImageBasename = "boot_minimal.art";
 // The default compiler filter for primary boot image.
 constexpr const char* kPrimaryCompilerFilter = "speed-profile";
 
-// The compiler filter for boot image mainline extension. We don't have profiles for mainline BCP
-// jars, so we always use "verify".
-constexpr const char* kMainlineCompilerFilter = "verify";
+// The compiler filter for boot image mainline extension.
+constexpr const char* kMainlineCompilerFilter = "speed-profile";
 
 void EraseFiles(const std::vector<std::unique_ptr<File>>& files) {
   for (auto& file : files) {
@@ -494,24 +493,23 @@ void AddDex2OatInstructionSet(/*inout*/ CmdlineBuilder& args,
   args.AddIfNonEmpty("--instruction-set-variant=%s", system_properties.GetOrEmpty(variant_prop));
 }
 
-// Returns true if any profile has been added, or false if no profile exists, or error if any error
-// occurred.
-Result<bool> AddDex2OatProfile(
+// Returns the number of profiles that have been added, or error if an error occurred.
+Result<int> AddDex2OatProfile(
     /*inout*/ CmdlineBuilder& args,
     /*inout*/ std::vector<std::unique_ptr<File>>& output_files,
     const std::vector<std::string>& profile_paths) {
-  bool has_any_profile = false;
+  int added_profile_count = 0;
   for (const std::string& path : profile_paths) {
     std::unique_ptr<File> profile_file(OS::OpenFileForReading(path.c_str()));
     if (profile_file != nullptr) {
       args.Add("--profile-file-fd=%d", profile_file->Fd());
       output_files.emplace_back(std::move(profile_file));
-      has_any_profile = true;
+      added_profile_count++;
     } else if (errno != ENOENT) {
       return ErrnoErrorf("Failed to open profile file '{}'", path);
     }
   }
-  return has_any_profile;
+  return added_profile_count;
 }
 
 Result<void> AddBootClasspathFds(/*inout*/ CmdlineBuilder& args,
@@ -1852,13 +1850,13 @@ OnDeviceRefresh::RunDex2oatForBootClasspath(const std::string& staging_dir,
     // Primary boot image.
     std::string art_boot_profile_file = GetArtRoot() + "/etc/boot-image.prof";
     std::string framework_boot_profile_file = GetAndroidRoot() + "/etc/boot-image.prof";
-    Result<bool> has_any_profile = AddDex2OatProfile(
+    Result<int> num_added_profiles = AddDex2OatProfile(
         args, readonly_files_raii, {art_boot_profile_file, framework_boot_profile_file});
-    if (!has_any_profile.ok()) {
+    if (!num_added_profiles.ok()) {
       return CompilationResult::Error(OdrMetrics::Status::kIoError,
-                                      has_any_profile.error().message());
+                                      num_added_profiles.error().message());
     }
-    if (!*has_any_profile) {
+    if (*num_added_profiles == 0) {
       return CompilationResult::Error(OdrMetrics::Status::kIoError, "Missing boot image profile");
     }
     const std::string& compiler_filter = config_.GetBootImageCompilerFilter();
@@ -1902,7 +1900,29 @@ OnDeviceRefresh::RunDex2oatForBootClasspath(const std::string& staging_dir,
     args.Add("--oat-location=%s", OdrArtifacts::ForBootImage(output_path).OatPath());
   } else {
     // Mainline extension.
-    args.Add("--compiler-filter=%s", kMainlineCompilerFilter);
+    std::string compiler_filter = kMainlineCompilerFilter;
+    std::vector<std::string> mainline_bcp_jars = GetMainlineBcpJars();
+    std::vector<std::string> mainline_boot_image_profiles =
+        GetMainlineBootImageProfilePaths(mainline_bcp_jars);
+
+    if (!mainline_boot_image_profiles.empty()) {
+      Result<int> num_added_profiles =
+          AddDex2OatProfile(args, readonly_files_raii, mainline_boot_image_profiles);
+
+      if (!num_added_profiles.ok()) {
+        return CompilationResult::Error(OdrMetrics::Status::kIoError,
+                                        ART_FORMAT("Failed to add BCP mainline profiles: {}",
+                                                   num_added_profiles.error().message()));
+      }
+      if (static_cast<size_t>(*num_added_profiles) != mainline_boot_image_profiles.size()) {
+        return CompilationResult::Error(OdrMetrics::Status::kIoError,
+                                        "Cannot add existing BCP mainline profiles");
+      }
+    } else {
+      // Fall back to verify mode if there is no profile.
+      compiler_filter = "verify";
+    }
+    args.Add("--compiler-filter=%s", compiler_filter);
     // For boot image extensions, dex2oat takes the oat location of the primary boot image and
     // expends it with the name of the first input dex file.
     args.Add("--oat-location=%s",
@@ -2038,12 +2058,12 @@ WARN_UNUSED CompilationResult OnDeviceRefresh::RunDex2oatForSystemServer(
   bool maybe_add_profile = !compiler_filter.empty() || HasVettedDeviceSystemServerProfiles();
   bool has_added_profile = false;
   if (maybe_add_profile) {
-    Result<bool> has_any_profile = AddDex2OatProfile(args, readonly_files_raii, {profile});
-    if (!has_any_profile.ok()) {
+    Result<int> num_added_profiles = AddDex2OatProfile(args, readonly_files_raii, {profile});
+    if (!num_added_profiles.ok()) {
       return CompilationResult::Error(OdrMetrics::Status::kIoError,
-                                      has_any_profile.error().message());
+                                      num_added_profiles.error().message());
     }
-    has_added_profile = *has_any_profile;
+    has_added_profile = *num_added_profiles > 0;
   }
   if (!compiler_filter.empty()) {
     args.Add("--compiler-filter=%s", compiler_filter);
