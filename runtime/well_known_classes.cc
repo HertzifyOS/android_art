@@ -292,22 +292,25 @@ static ArtMethod* CachePrimitiveBoxingMethod(ClassLinker* class_linker,
   return CacheMethod(boxed_class, /*is_static=*/ true, "valueOf", signature.c_str(), pointer_size);
 }
 
-static ArtField* CacheBoxingCacheField(ClassLinker* class_linker,
-                                       Thread* self,
-                                       const char* class_name,
-                                       const char* cache_type)
+static ArtMethod* CachePrimitiveBoxingCacheConstructor(ClassLinker* class_linker,
+                                                       Thread* self,
+                                                       const char* cache_name,
+                                                       PointerSize pointer_size)
     REQUIRES_SHARED(Locks::mutator_lock_) {
-  ObjPtr<mirror::Class> boxed_class = FindSystemClass(class_linker, self, class_name);
-  return CacheField(boxed_class, /*is_static=*/ true, "cache", cache_type);
+  ObjPtr<mirror::Class> cache_class = FindSystemClass(class_linker, self, cache_name);
+  return CacheConstructor(cache_class, "()V", pointer_size);
 }
 
-static ArtField* CacheValueInBoxField(ClassLinker* class_linker,
-                                      Thread* self,
-                                      const char* class_name,
-                                      const char* cache_type)
+static ArtField* CacheValueInBoxField(ArtMethod* boxed_class_valueOf, const char* cache_type)
     REQUIRES_SHARED(Locks::mutator_lock_) {
-  ObjPtr<mirror::Class> boxed_class = FindSystemClass(class_linker, self, class_name);
+  ObjPtr<mirror::Class> boxed_class = boxed_class_valueOf->GetDeclaringClass();
   return CacheField(boxed_class, /*is_static=*/ false, "value", cache_type);
+}
+
+static ArtField* CacheBoxingCacheField(ArtMethod* cache_class_init, const char* cache_type)
+    REQUIRES_SHARED(Locks::mutator_lock_) {
+  ObjPtr<mirror::Class> cache_class = cache_class_init->GetDeclaringClass();
+  return CacheField(cache_class, /*is_static=*/ true, "cache", cache_type);
 }
 
 #define STRING_INIT_LIST(V) \
@@ -455,46 +458,36 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
   java_lang_Short_valueOf =
       CachePrimitiveBoxingMethod(class_linker, self, 'S', "Ljava/lang/Short;");
 
-  java_lang_Byte_ByteCache_init = CacheConstructor(
-      FindSystemClass(class_linker, self, "Ljava/lang/Byte$ByteCache;"), "()V", pointer_size);
-  java_lang_Character_CharacterCache_init = CacheConstructor(
-      FindSystemClass(class_linker, self, "Ljava/lang/Character$CharacterCache;"),
-      "()V",
-      pointer_size);
-  java_lang_Integer_IntegerCache_init = CacheConstructor(
-      FindSystemClass(class_linker, self, "Ljava/lang/Integer$IntegerCache;"), "()V", pointer_size);
-  java_lang_Long_LongCache_init = CacheConstructor(
-      FindSystemClass(class_linker, self, "Ljava/lang/Long$LongCache;"), "()V", pointer_size);
-  java_lang_Short_ShortCache_init = CacheConstructor(
-      FindSystemClass(class_linker, self, "Ljava/lang/Short$ShortCache;"), "()V", pointer_size);
+  java_lang_Byte_ByteCache_init = CachePrimitiveBoxingCacheConstructor(
+      class_linker, self, "Ljava/lang/Byte$ByteCache;", pointer_size);
+  java_lang_Character_CharacterCache_init = CachePrimitiveBoxingCacheConstructor(
+      class_linker, self, "Ljava/lang/Character$CharacterCache;", pointer_size);
+  java_lang_Integer_IntegerCache_init = CachePrimitiveBoxingCacheConstructor(
+      class_linker, self, "Ljava/lang/Integer$IntegerCache;", pointer_size);
+  java_lang_Long_LongCache_init = CachePrimitiveBoxingCacheConstructor(
+      class_linker, self, "Ljava/lang/Long$LongCache;", pointer_size);
+  java_lang_Short_ShortCache_init = CachePrimitiveBoxingCacheConstructor(
+      class_linker, self, "Ljava/lang/Short$ShortCache;", pointer_size);
 
-  java_lang_Byte_ByteCache_cache = CacheBoxingCacheField(
-      class_linker, self, "Ljava/lang/Byte$ByteCache;", "[Ljava/lang/Byte;");
-  java_lang_Character_CharacterCache_cache = CacheBoxingCacheField(
-      class_linker, self, "Ljava/lang/Character$CharacterCache;", "[Ljava/lang/Character;");
-  java_lang_Short_ShortCache_cache = CacheBoxingCacheField(
-      class_linker, self, "Ljava/lang/Short$ShortCache;", "[Ljava/lang/Short;");
-  java_lang_Integer_IntegerCache_cache = CacheBoxingCacheField(
-      class_linker, self, "Ljava/lang/Integer$IntegerCache;", "[Ljava/lang/Integer;");
-  java_lang_Long_LongCache_cache = CacheBoxingCacheField(
-      class_linker, self, "Ljava/lang/Long$LongCache;", "[Ljava/lang/Long;");
+  java_lang_Boolean_value = CacheValueInBoxField(java_lang_Boolean_valueOf, "Z");
+  java_lang_Byte_value = CacheValueInBoxField(java_lang_Byte_valueOf, "B");
+  java_lang_Character_value = CacheValueInBoxField(java_lang_Character_valueOf, "C");
+  java_lang_Double_value = CacheValueInBoxField(java_lang_Double_valueOf, "D");
+  java_lang_Float_value = CacheValueInBoxField(java_lang_Float_valueOf, "F");
+  java_lang_Integer_value = CacheValueInBoxField(java_lang_Integer_valueOf, "I");
+  java_lang_Long_value = CacheValueInBoxField(java_lang_Long_valueOf, "J");
+  java_lang_Short_value = CacheValueInBoxField(java_lang_Short_valueOf, "S");
 
-  java_lang_Boolean_value = CacheValueInBoxField(
-      class_linker, self, "Ljava/lang/Boolean;", "Z");
-  java_lang_Float_value = CacheValueInBoxField(
-      class_linker, self, "Ljava/lang/Float;", "F");
-  java_lang_Double_value = CacheValueInBoxField(
-      class_linker, self, "Ljava/lang/Double;", "D");
-  java_lang_Byte_value = CacheValueInBoxField(
-      class_linker, self, "Ljava/lang/Byte;", "B");
-  java_lang_Character_value = CacheValueInBoxField(
-      class_linker, self, "Ljava/lang/Character;", "C");
-  java_lang_Short_value = CacheValueInBoxField(
-      class_linker, self, "Ljava/lang/Short;", "S");
-  java_lang_Integer_value = CacheValueInBoxField(
-      class_linker, self, "Ljava/lang/Integer;", "I");
-  java_lang_Long_value = CacheValueInBoxField(
-      class_linker, self, "Ljava/lang/Long;", "J");
+  java_lang_Byte_ByteCache_cache =
+      CacheBoxingCacheField(java_lang_Byte_ByteCache_init, "[Ljava/lang/Byte;");
+  java_lang_Character_CharacterCache_cache =
+      CacheBoxingCacheField(java_lang_Character_CharacterCache_init, "[Ljava/lang/Character;");
+  java_lang_Integer_IntegerCache_cache =
+      CacheBoxingCacheField(java_lang_Integer_IntegerCache_init, "[Ljava/lang/Integer;");
+  java_lang_Long_LongCache_cache =
+      CacheBoxingCacheField(java_lang_Long_LongCache_init, "[Ljava/lang/Long;");
+  java_lang_Short_ShortCache_cache =
+      CacheBoxingCacheField(java_lang_Short_ShortCache_init, "[Ljava/lang/Short;");
 
   StackHandleScope<53u> hs(self);
   Handle<mirror::Class> d_s_bdcl =
