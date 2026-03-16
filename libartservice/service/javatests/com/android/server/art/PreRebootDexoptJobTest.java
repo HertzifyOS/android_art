@@ -310,6 +310,7 @@ public class PreRebootDexoptJobTest {
         mPreRebootStatsReporterHarness.recordFakeAfterRebootDataAndReport();
         mPreRebootStatsReporterHarness.verifyJobStats(Status.STATUS_FINISHED);
         mPreRebootStatsReporterHarness.verifyJobLatency(123456);
+        mPreRebootStatsReporterHarness.verifySynchronicity(JobSynchronicity.ASYNC);
     }
 
     @Test
@@ -390,6 +391,7 @@ public class PreRebootDexoptJobTest {
 
         mPreRebootStatsReporterHarness.recordFakeAfterRebootDataAndReport();
         mPreRebootStatsReporterHarness.verifyJobStats(Status.STATUS_FINISHED);
+        mPreRebootStatsReporterHarness.verifySynchronicity(JobSynchronicity.SYNC);
     }
 
     @Test
@@ -535,6 +537,7 @@ public class PreRebootDexoptJobTest {
         mPreRebootStatsReporterHarness.recordFakeAfterRebootDataAndReport();
         mPreRebootStatsReporterHarness.verifyJobStats(Status.STATUS_FINISHED);
         mPreRebootStatsReporterHarness.verifyJobLatency(123456);
+        mPreRebootStatsReporterHarness.verifySynchronicity(JobSynchronicity.HYBRID);
     }
 
     // Tests a hybrid job where the synchronous job times out but the asynchronous job doesn't get a
@@ -577,6 +580,7 @@ public class PreRebootDexoptJobTest {
         // hybrid job should be reported as partially finished.
         mPreRebootStatsReporterHarness.recordFakeAfterRebootDataAndReport();
         mPreRebootStatsReporterHarness.verifyJobStats(Status.STATUS_PARTIALLY_FINISHED);
+        mPreRebootStatsReporterHarness.verifySynchronicity(JobSynchronicity.HYBRID);
     }
 
     // Tests a hybrid job where the synchronous job completes before the timeout.

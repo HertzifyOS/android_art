@@ -25,6 +25,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.LocalManagerRegistry;
 import com.android.server.art.ArtManagerLocal;
 import com.android.server.art.ArtStatsLog;
+import com.android.server.art.PreRebootDexoptJob;
 import com.android.server.art.ReasonMapping;
 import com.android.server.art.model.DexoptStatus;
 import com.android.server.art.model.OperationProgress;
@@ -102,37 +103,43 @@ public class PreRebootStatsReporter {
         mInjector = injector;
     }
 
-    public void recordJobScheduled(boolean isAsync, boolean isOtaUpdate) {
-        recordJobScheduled(isAsync, isOtaUpdate, false /* continueFromPrevious */);
+    public void recordJobScheduled(
+            PreRebootDexoptJob.JobSynchronicity jobSynchronicity, boolean isOtaUpdate) {
+        recordJobScheduled(jobSynchronicity, isOtaUpdate, false /* continueFromPrevious */);
     }
 
-    public void recordJobScheduled(
-            boolean isAsync, boolean isOtaUpdate, boolean continueFromPrevious) {
+    public void recordJobScheduled(PreRebootDexoptJob.JobSynchronicity jobSynchronicity,
+            boolean isOtaUpdate, boolean continueFromPrevious) {
         PreRebootStats.Builder statsBuilder =
                 continueFromPrevious ? load() : PreRebootStats.newBuilder();
         statsBuilder
                 .setStatus(continueFromPrevious ? Status.STATUS_PARTIALLY_FINISHED
                                                 : Status.STATUS_SCHEDULED)
-                .setJobType(isOtaUpdate ? JobType.JOB_TYPE_OTA : JobType.JOB_TYPE_MAINLINE);
+                .setJobType(isOtaUpdate ? JobType.JOB_TYPE_OTA : JobType.JOB_TYPE_MAINLINE)
+                .setJobSynchronicity(getJobSynchronicityForStatsProto(jobSynchronicity));
         // Omit job_scheduled_timestamp_millis to indicate a synchronous job.
-        if (isAsync) {
+        if (jobSynchronicity != PreRebootDexoptJob.JobSynchronicity.SYNC) {
             statsBuilder.setJobScheduledTimestampMillis(mInjector.getClock().currentTimeMillis());
         }
         save(statsBuilder);
     }
 
-    public void recordJobNotScheduled(@NonNull Status reason, boolean isOtaUpdate) {
-        recordJobNotScheduled(reason, isOtaUpdate, false /* continueFromPrevious */);
+    public void recordJobNotScheduled(Status reason,
+            PreRebootDexoptJob.JobSynchronicity jobSynchronicity, boolean isOtaUpdate) {
+        recordJobNotScheduled(
+                reason, jobSynchronicity, isOtaUpdate, false /* continueFromPrevious */);
     }
 
-    public void recordJobNotScheduled(
-            @NonNull Status reason, boolean isOtaUpdate, boolean continueFromPrevious) {
+    public void recordJobNotScheduled(Status reason,
+            PreRebootDexoptJob.JobSynchronicity jobSynchronicity, boolean isOtaUpdate,
+            boolean continueFromPrevious) {
         Utils.check(reason == Status.STATUS_NOT_SCHEDULED_DISABLED
                 || reason == Status.STATUS_NOT_SCHEDULED_JOB_SCHEDULER);
         PreRebootStats.Builder statsBuilder =
                 continueFromPrevious ? load() : PreRebootStats.newBuilder();
-        statsBuilder.setStatus(reason).setJobType(
-                isOtaUpdate ? JobType.JOB_TYPE_OTA : JobType.JOB_TYPE_MAINLINE);
+        statsBuilder.setStatus(reason)
+                .setJobType(isOtaUpdate ? JobType.JOB_TYPE_OTA : JobType.JOB_TYPE_MAINLINE)
+                .setJobSynchronicity(getJobSynchronicityForStatsProto(jobSynchronicity));
         save(statsBuilder);
     }
 
@@ -297,7 +304,8 @@ public class PreRebootStatsReporter {
                     statsBuilder.getPackagesWithArtifactsBeforeRebootCount(),
                     getJobTypeForStatsd(statsBuilder.getJobType()),
                     getFailureReasonForStatsd(statsBuilder.getFailureReason()), mArtifactsEndStatus,
-                    mArtifactsAgeMillis);
+                    mArtifactsAgeMillis,
+                    getJobSynchronicityForStatsd(statsBuilder.getJobSynchronicity()));
         }
     }
 
@@ -312,6 +320,7 @@ public class PreRebootStatsReporter {
     @VisibleForTesting
     public static int getStatusForStatsd(@NonNull Status status) {
         return switch (status) {
+            case UNRECOGNIZED -> ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__STATUS__STATUS_UNKNOWN;
             case STATUS_UNKNOWN -> ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__STATUS__STATUS_UNKNOWN;
             case STATUS_SCHEDULED ->
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__STATUS__STATUS_SCHEDULED;
@@ -329,23 +338,25 @@ public class PreRebootStatsReporter {
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__STATUS__STATUS_NOT_SCHEDULED_DISABLED;
             case STATUS_NOT_SCHEDULED_JOB_SCHEDULER ->
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__STATUS__STATUS_NOT_SCHEDULED_JOB_SCHEDULER;
-            default -> throw new IllegalStateException("Unknown status: " + status.getNumber());
         };
     }
 
     private static int getJobTypeForStatsd(@NonNull JobType jobType) {
         return switch (jobType) {
+            case UNRECOGNIZED ->
+                ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_TYPE__JOB_TYPE_UNKNOWN;
             case JOB_TYPE_UNKNOWN ->
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_TYPE__JOB_TYPE_UNKNOWN;
             case JOB_TYPE_OTA -> ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_TYPE__JOB_TYPE_OTA;
             case JOB_TYPE_MAINLINE ->
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_TYPE__JOB_TYPE_MAINLINE;
-            default -> throw new IllegalStateException("Unknown job type: " + jobType.getNumber());
         };
     }
 
     private static int getFailureReasonForStatsd(@NonNull FailureReason failureReason) {
         return switch (failureReason) {
+            case UNRECOGNIZED ->
+                ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__FAILURE_REASON__FAILURE_UNSPECIFIED;
             case FAILURE_UNSPECIFIED ->
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__FAILURE_REASON__FAILURE_UNSPECIFIED;
             case FAILURE_UPDATE_ENGINE ->
@@ -354,9 +365,37 @@ public class PreRebootStatsReporter {
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__FAILURE_REASON__FAILURE_CHROOT_SETUP;
             case FAILURE_CLASS_LOADER ->
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__FAILURE_REASON__FAILURE_CLASS_LOADER;
-            default ->
-                throw new IllegalStateException(
-                        "Unknown failure reason: " + failureReason.getNumber());
+        };
+    }
+
+    @VisibleForTesting
+    public static PreRebootStats.JobSynchronicity getJobSynchronicityForStatsProto(
+            PreRebootDexoptJob.JobSynchronicity jobSynchronicity) {
+        return switch (jobSynchronicity) {
+            case AUTO -> throw new IllegalStateException("AUTO is not expected");
+            case SYNC -> PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_SYNC;
+            case ASYNC -> PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_ASYNC;
+            case HYBRID -> PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_HYBRID;
+        };
+    }
+
+    @VisibleForTesting
+    public static int getJobSynchronicityForStatsd(
+            PreRebootStats.JobSynchronicity jobSynchronicity) {
+        return switch (jobSynchronicity) {
+            case UNRECOGNIZED ->
+                ArtStatsLog
+                        .PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_SYNCHRONICITY__JOB_SYNCHRONICITY_UNSPECIFIED;
+            case JOB_SYNCHRONICITY_UNSPECIFIED ->
+                ArtStatsLog
+                        .PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_SYNCHRONICITY__JOB_SYNCHRONICITY_UNSPECIFIED;
+            case JOB_SYNCHRONICITY_SYNC ->
+                ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_SYNCHRONICITY__JOB_SYNCHRONICITY_SYNC;
+            case JOB_SYNCHRONICITY_ASYNC ->
+                ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_SYNCHRONICITY__JOB_SYNCHRONICITY_ASYNC;
+            case JOB_SYNCHRONICITY_HYBRID ->
+                ArtStatsLog
+                        .PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_SYNCHRONICITY__JOB_SYNCHRONICITY_HYBRID;
         };
     }
 
@@ -448,13 +487,13 @@ public class PreRebootStatsReporter {
                 int packagesWithArtifactsAfterRebootCount,
                 int packagesWithArtifactsUsableAfterRebootCount, int jobRunCount,
                 int packagesWithArtifactsBeforeRebootCount, int jobType, int failureReason,
-                int artifactsEndStatus, long artifactsAgeMillis) {
+                int artifactsEndStatus, long artifactsAgeMillis, int jobSynchronicity) {
             ArtStatsLog.write(code, status, optimizedPackageCount, failedPackageCount,
                     skippedPackageCount, totalPackageCount, jobDurationMillis, jobLatencyMillis,
                     packagesWithArtifactsAfterRebootCount,
                     packagesWithArtifactsUsableAfterRebootCount, jobRunCount,
                     packagesWithArtifactsBeforeRebootCount, jobType, failureReason,
-                    artifactsEndStatus, artifactsAgeMillis);
+                    artifactsEndStatus, artifactsAgeMillis, jobSynchronicity);
         }
 
         @NonNull

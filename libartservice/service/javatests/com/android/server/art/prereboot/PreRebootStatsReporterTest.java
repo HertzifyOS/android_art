@@ -27,6 +27,7 @@ import androidx.test.filters.SmallTest;
 
 import com.android.server.art.ArtManagerLocal;
 import com.android.server.art.ArtStatsLog;
+import com.android.server.art.PreRebootDexoptJob;
 import com.android.server.art.model.DexoptStatus;
 import com.android.server.art.model.DexoptStatus.DexContainerFileDexoptStatus;
 import com.android.server.art.prereboot.PreRebootDriver.PreRebootResult;
@@ -81,10 +82,13 @@ public class PreRebootStatsReporterTest {
         var reporter = mReporterHarness.createStatsReporter();
 
         mMockClock.setCurrentTimeMillis(50l);
-        reporter.recordJobScheduled(true /* isAsync */, false /* isOtaUpdate */);
+        reporter.recordJobScheduled(
+                PreRebootDexoptJob.JobSynchronicity.ASYNC, false /* isOtaUpdate */);
         checkProto(PreRebootStats.newBuilder()
                         .setStatus(Status.STATUS_SCHEDULED)
                         .setJobType(JobType.JOB_TYPE_MAINLINE)
+                        .setJobSynchronicity(
+                                PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_ASYNC)
                         .setJobScheduledTimestampMillis(50)
                         .build());
 
@@ -94,6 +98,8 @@ public class PreRebootStatsReporterTest {
             checkProto(PreRebootStats.newBuilder()
                             .setStatus(Status.STATUS_STARTED)
                             .setJobType(JobType.JOB_TYPE_MAINLINE)
+                            .setJobSynchronicity(
+                                    PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_ASYNC)
                             .setJobScheduledTimestampMillis(50)
                             .addJobRuns(JobRun.newBuilder().setJobStartedTimestampMillis(200))
                             .setSkippedPackageCount(0)
@@ -112,6 +118,8 @@ public class PreRebootStatsReporterTest {
             checkProto(PreRebootStats.newBuilder()
                             .setStatus(Status.STATUS_STARTED)
                             .setJobType(JobType.JOB_TYPE_MAINLINE)
+                            .setJobSynchronicity(
+                                    PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_ASYNC)
                             .setJobScheduledTimestampMillis(50)
                             .addJobRuns(JobRun.newBuilder().setJobStartedTimestampMillis(200))
                             .setSkippedPackageCount(1)
@@ -127,6 +135,8 @@ public class PreRebootStatsReporterTest {
                             .setStatus(Status.STATUS_FINISHED)
                             .setFailureReason(FailureReason.FAILURE_UNSPECIFIED)
                             .setJobType(JobType.JOB_TYPE_MAINLINE)
+                            .setJobSynchronicity(
+                                    PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_ASYNC)
                             .setJobScheduledTimestampMillis(50)
                             .addJobRuns(JobRun.newBuilder()
                                             .setJobStartedTimestampMillis(200)
@@ -145,6 +155,8 @@ public class PreRebootStatsReporterTest {
             checkProto(PreRebootStats.newBuilder()
                             .setStatus(Status.STATUS_STARTED)
                             .setJobType(JobType.JOB_TYPE_MAINLINE)
+                            .setJobSynchronicity(
+                                    PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_ASYNC)
                             .setJobScheduledTimestampMillis(50)
                             .addJobRuns(JobRun.newBuilder()
                                             .setJobStartedTimestampMillis(200)
@@ -166,6 +178,8 @@ public class PreRebootStatsReporterTest {
             checkProto(PreRebootStats.newBuilder()
                             .setStatus(Status.STATUS_STARTED)
                             .setJobType(JobType.JOB_TYPE_MAINLINE)
+                            .setJobSynchronicity(
+                                    PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_ASYNC)
                             .setJobScheduledTimestampMillis(50)
                             .addJobRuns(JobRun.newBuilder()
                                             .setJobStartedTimestampMillis(200)
@@ -184,6 +198,8 @@ public class PreRebootStatsReporterTest {
                             .setStatus(Status.STATUS_FINISHED)
                             .setFailureReason(FailureReason.FAILURE_UNSPECIFIED)
                             .setJobType(JobType.JOB_TYPE_MAINLINE)
+                            .setJobSynchronicity(
+                                    PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_ASYNC)
                             .setJobScheduledTimestampMillis(50)
                             .addJobRuns(JobRun.newBuilder()
                                             .setJobStartedTimestampMillis(200)
@@ -256,17 +272,21 @@ public class PreRebootStatsReporterTest {
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_TYPE__JOB_TYPE_MAINLINE,
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__FAILURE_REASON__FAILURE_UNSPECIFIED,
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__ARTIFACTS_END_STATUS__END_STATUS_COMMITTED,
-                2000 /* artifactsAgeMillis */);
+                2000 /* artifactsAgeMillis */,
+                ArtStatsLog
+                        .PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_SYNCHRONICITY__JOB_SYNCHRONICITY_ASYNC);
     }
 
     @Test
     public void testSuccessSync() throws Exception {
         var reporter = mReporterHarness.createStatsReporter();
 
-        reporter.recordJobScheduled(false /* isAsync */, true /* isOtaUpdate */);
+        reporter.recordJobScheduled(
+                PreRebootDexoptJob.JobSynchronicity.SYNC, true /* isOtaUpdate */);
         checkProto(PreRebootStats.newBuilder()
                         .setStatus(Status.STATUS_SCHEDULED)
                         .setJobType(JobType.JOB_TYPE_OTA)
+                        .setJobSynchronicity(PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_SYNC)
                         .build());
 
         {
@@ -275,6 +295,8 @@ public class PreRebootStatsReporterTest {
             checkProto(PreRebootStats.newBuilder()
                             .setStatus(Status.STATUS_STARTED)
                             .setJobType(JobType.JOB_TYPE_OTA)
+                            .setJobSynchronicity(
+                                    PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_SYNC)
                             .addJobRuns(JobRun.newBuilder().setJobStartedTimestampMillis(200))
                             .setSkippedPackageCount(0)
                             .setOptimizedPackageCount(0)
@@ -292,6 +314,8 @@ public class PreRebootStatsReporterTest {
             checkProto(PreRebootStats.newBuilder()
                             .setStatus(Status.STATUS_STARTED)
                             .setJobType(JobType.JOB_TYPE_OTA)
+                            .setJobSynchronicity(
+                                    PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_SYNC)
                             .addJobRuns(JobRun.newBuilder().setJobStartedTimestampMillis(200))
                             .setSkippedPackageCount(1)
                             .setOptimizedPackageCount(6)
@@ -306,6 +330,8 @@ public class PreRebootStatsReporterTest {
                             .setStatus(Status.STATUS_FINISHED)
                             .setFailureReason(FailureReason.FAILURE_UNSPECIFIED)
                             .setJobType(JobType.JOB_TYPE_OTA)
+                            .setJobSynchronicity(
+                                    PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_SYNC)
                             .addJobRuns(JobRun.newBuilder()
                                             .setJobStartedTimestampMillis(200)
                                             .setJobEndedTimestampMillis(300))
@@ -337,7 +363,8 @@ public class PreRebootStatsReporterTest {
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_TYPE__JOB_TYPE_OTA,
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__FAILURE_REASON__FAILURE_UNSPECIFIED,
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__ARTIFACTS_END_STATUS__END_STATUS_COMMITTED,
-                2000 /* artifactsAgeMillis */);
+                2000 /* artifactsAgeMillis */,
+                ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_SYNCHRONICITY__JOB_SYNCHRONICITY_SYNC);
     }
 
     private void checkFailure(Status status, FailureReason failureReason, int statusForStatsd,
@@ -345,10 +372,13 @@ public class PreRebootStatsReporterTest {
         var reporter = mReporterHarness.createStatsReporter();
 
         mMockClock.setCurrentTimeMillis(50l);
-        reporter.recordJobScheduled(true /* isAsync */, false /* isOtaUpdate */);
+        reporter.recordJobScheduled(
+                PreRebootDexoptJob.JobSynchronicity.ASYNC, false /* isOtaUpdate */);
         checkProto(PreRebootStats.newBuilder()
                         .setStatus(Status.STATUS_SCHEDULED)
                         .setJobType(JobType.JOB_TYPE_MAINLINE)
+                        .setJobSynchronicity(
+                                PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_ASYNC)
                         .setJobScheduledTimestampMillis(50)
                         .build());
 
@@ -358,6 +388,8 @@ public class PreRebootStatsReporterTest {
             checkProto(PreRebootStats.newBuilder()
                             .setStatus(Status.STATUS_STARTED)
                             .setJobType(JobType.JOB_TYPE_MAINLINE)
+                            .setJobSynchronicity(
+                                    PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_ASYNC)
                             .setJobScheduledTimestampMillis(50)
                             .addJobRuns(JobRun.newBuilder().setJobStartedTimestampMillis(200))
                             .setSkippedPackageCount(0)
@@ -373,6 +405,8 @@ public class PreRebootStatsReporterTest {
                             .setStatus(status)
                             .setFailureReason(failureReason)
                             .setJobType(JobType.JOB_TYPE_MAINLINE)
+                            .setJobSynchronicity(
+                                    PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_ASYNC)
                             .setJobScheduledTimestampMillis(50)
                             .addJobRuns(JobRun.newBuilder()
                                             .setJobStartedTimestampMillis(200)
@@ -403,7 +437,9 @@ public class PreRebootStatsReporterTest {
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_TYPE__JOB_TYPE_MAINLINE,
                 failureReasonForStatsd,
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__ARTIFACTS_END_STATUS__END_STATUS_MISSING,
-                0 /* artifactsAgeMillis */);
+                0 /* artifactsAgeMillis */,
+                ArtStatsLog
+                        .PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_SYNCHRONICITY__JOB_SYNCHRONICITY_ASYNC);
     }
 
     @Test
@@ -425,10 +461,13 @@ public class PreRebootStatsReporterTest {
         var reporter = mReporterHarness.createStatsReporter();
 
         mMockClock.setCurrentTimeMillis(50l);
-        reporter.recordJobScheduled(true /* isAsync */, false /* isOtaUpdate */);
+        reporter.recordJobScheduled(
+                PreRebootDexoptJob.JobSynchronicity.ASYNC, false /* isOtaUpdate */);
         checkProto(PreRebootStats.newBuilder()
                         .setStatus(Status.STATUS_SCHEDULED)
                         .setJobType(JobType.JOB_TYPE_MAINLINE)
+                        .setJobSynchronicity(
+                                PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_ASYNC)
                         .setJobScheduledTimestampMillis(50)
                         .build());
 
@@ -438,6 +477,8 @@ public class PreRebootStatsReporterTest {
             checkProto(PreRebootStats.newBuilder()
                             .setStatus(Status.STATUS_STARTED)
                             .setJobType(JobType.JOB_TYPE_MAINLINE)
+                            .setJobSynchronicity(
+                                    PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_ASYNC)
                             .setJobScheduledTimestampMillis(50)
                             .addJobRuns(JobRun.newBuilder().setJobStartedTimestampMillis(200))
                             .setSkippedPackageCount(0)
@@ -456,6 +497,8 @@ public class PreRebootStatsReporterTest {
             checkProto(PreRebootStats.newBuilder()
                             .setStatus(Status.STATUS_STARTED)
                             .setJobType(JobType.JOB_TYPE_MAINLINE)
+                            .setJobSynchronicity(
+                                    PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_ASYNC)
                             .setJobScheduledTimestampMillis(50)
                             .addJobRuns(JobRun.newBuilder().setJobStartedTimestampMillis(200))
                             .setSkippedPackageCount(1)
@@ -485,7 +528,9 @@ public class PreRebootStatsReporterTest {
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_TYPE__JOB_TYPE_MAINLINE,
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__FAILURE_REASON__FAILURE_UNSPECIFIED,
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__ARTIFACTS_END_STATUS__END_STATUS_COMMITTED,
-                2000 /* artifactsAgeMillis */);
+                2000 /* artifactsAgeMillis */,
+                ArtStatsLog
+                        .PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_SYNCHRONICITY__JOB_SYNCHRONICITY_ASYNC);
     }
 
     @Test
@@ -493,10 +538,13 @@ public class PreRebootStatsReporterTest {
         var reporter = mReporterHarness.createStatsReporter();
 
         mMockClock.setCurrentTimeMillis(50l);
-        reporter.recordJobScheduled(true /* isAsync */, false /* isOtaUpdate */);
+        reporter.recordJobScheduled(
+                PreRebootDexoptJob.JobSynchronicity.ASYNC, false /* isOtaUpdate */);
         checkProto(PreRebootStats.newBuilder()
                         .setStatus(Status.STATUS_SCHEDULED)
                         .setJobType(JobType.JOB_TYPE_MAINLINE)
+                        .setJobSynchronicity(
+                                PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_ASYNC)
                         .setJobScheduledTimestampMillis(50)
                         .build());
 
@@ -512,18 +560,22 @@ public class PreRebootStatsReporterTest {
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_TYPE__JOB_TYPE_MAINLINE,
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__FAILURE_REASON__FAILURE_UNSPECIFIED,
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__ARTIFACTS_END_STATUS__END_STATUS_MISSING,
-                0 /* artifactsAgeMillis */);
+                0 /* artifactsAgeMillis */,
+                ArtStatsLog
+                        .PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_SYNCHRONICITY__JOB_SYNCHRONICITY_ASYNC);
     }
 
     @Test
     public void testNotScheduled() throws Exception {
         var reporter = mReporterHarness.createStatsReporter();
 
-        reporter.recordJobNotScheduled(
-                Status.STATUS_NOT_SCHEDULED_DISABLED, false /* isOtaUpdate */);
+        reporter.recordJobNotScheduled(Status.STATUS_NOT_SCHEDULED_DISABLED,
+                PreRebootDexoptJob.JobSynchronicity.ASYNC, false /* isOtaUpdate */);
         checkProto(PreRebootStats.newBuilder()
                         .setStatus(Status.STATUS_NOT_SCHEDULED_DISABLED)
                         .setJobType(JobType.JOB_TYPE_MAINLINE)
+                        .setJobSynchronicity(
+                                PreRebootStats.JobSynchronicity.JOB_SYNCHRONICITY_ASYNC)
                         .build());
 
         mReporterHarness.recordFakeAfterRebootDataAndReport();
@@ -538,7 +590,9 @@ public class PreRebootStatsReporterTest {
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_TYPE__JOB_TYPE_MAINLINE,
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__FAILURE_REASON__FAILURE_UNSPECIFIED,
                 ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__ARTIFACTS_END_STATUS__END_STATUS_MISSING,
-                0 /* artifactsAgeMillis */);
+                0 /* artifactsAgeMillis */,
+                ArtStatsLog
+                        .PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_SYNCHRONICITY__JOB_SYNCHRONICITY_ASYNC);
     }
 
     private void checkProto(PreRebootStats expected) throws Exception {
