@@ -1707,6 +1707,13 @@ size_t TraceWriter::FlushEntriesFormatV1(
       thread_stack_[tid].push(record.method);
     } else {
       DCHECK(!thread_stack_[tid].empty()) << tid;
+      // In non-debug builds, just ignore this sample. The trace won't be correct and something has
+      // gone wrong but don't crash the entire process. Some apps use method tracing on user
+      // devices.production.
+      // TODO(mythria): Investigate this further and turn the DCHECK into a CHECK.
+      if (thread_stack_[tid].empty()) {
+        continue;
+      }
       record.method = thread_stack_[tid].top();
       thread_stack_[tid].pop();
     }
