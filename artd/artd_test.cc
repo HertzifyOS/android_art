@@ -436,7 +436,13 @@ class ArtdTest : public CommonArtTest {
                 .isOtherReadable = true,
                 .isOtherExecutable = true,
             },
-        .fileFsPermission =
+        .odexFileFsPermission =
+            FsPermission{
+                .uid = static_cast<int32_t>(st.st_uid),
+                .gid = static_cast<int32_t>(st.st_gid),
+                .isOtherReadable = true,
+            },
+        .vdexFileFsPermission =
             FsPermission{
                 .uid = static_cast<int32_t>(st.st_uid),
                 .gid = static_cast<int32_t>(st.st_gid),
@@ -1449,11 +1455,12 @@ TEST_F(ArtdTest, dexoptProfileNotOtherReadable) {
   EXPECT_CALL(*mock_exec_utils_, DoExecAndReturnCode(_, _, _)).Times(0);
   RunDexopt(AllOf(Property(&ndk::ScopedAStatus::getExceptionCode, EX_SERVICE_SPECIFIC),
                   Property(&ndk::ScopedAStatus::getMessage,
-                           HasSubstr("Outputs cannot be other-readable because the profile"))));
+                           HasSubstr("Odex file cannot be other-readable because the profile"))));
 }
 
 TEST_F(ArtdTest, dexoptOutputNotOtherReadable) {
-  output_artifacts_.permissionSettings.fileFsPermission.isOtherReadable = false;
+  output_artifacts_.permissionSettings.odexFileFsPermission.isOtherReadable = false;
+  output_artifacts_.permissionSettings.vdexFileFsPermission.isOtherReadable = false;
   dex_file_other_readable_ = false;
   profile_other_readable_ = false;
   EXPECT_CALL(*mock_exec_utils_, DoExecAndReturnCode(_, _, _)).WillOnce(Return(0));
@@ -1463,7 +1470,7 @@ TEST_F(ArtdTest, dexoptOutputNotOtherReadable) {
 }
 
 TEST_F(ArtdTest, dexoptOutputNotOtherReadableExceptVdex) {
-  output_artifacts_.permissionSettings.fileFsPermission.isOtherReadable = false;
+  output_artifacts_.permissionSettings.odexFileFsPermission.isOtherReadable = false;
   dex_file_other_readable_ = true;  // APk is other-readable.
   profile_other_readable_ = false;
   EXPECT_CALL(*mock_exec_utils_, DoExecAndReturnCode(_, _, _)).WillOnce(Return(0));
@@ -1473,8 +1480,8 @@ TEST_F(ArtdTest, dexoptOutputNotOtherReadableExceptVdex) {
 }
 
 TEST_F(ArtdTest, dexoptUidMismatch) {
-  output_artifacts_.permissionSettings.fileFsPermission.uid = 12345;
-  output_artifacts_.permissionSettings.fileFsPermission.isOtherReadable = false;
+  output_artifacts_.permissionSettings.odexFileFsPermission.uid = 12345;
+  output_artifacts_.permissionSettings.odexFileFsPermission.isOtherReadable = false;
   dex_file_other_readable_ = false;
   EXPECT_CALL(*mock_exec_utils_, DoExecAndReturnCode(_, _, _)).Times(0);
   RunDexopt(AllOf(Property(&ndk::ScopedAStatus::getExceptionCode, EX_SERVICE_SPECIFIC),
@@ -1483,8 +1490,8 @@ TEST_F(ArtdTest, dexoptUidMismatch) {
 }
 
 TEST_F(ArtdTest, dexoptGidMismatch) {
-  output_artifacts_.permissionSettings.fileFsPermission.gid = 12345;
-  output_artifacts_.permissionSettings.fileFsPermission.isOtherReadable = false;
+  output_artifacts_.permissionSettings.odexFileFsPermission.gid = 12345;
+  output_artifacts_.permissionSettings.odexFileFsPermission.isOtherReadable = false;
   dex_file_other_readable_ = false;
   EXPECT_CALL(*mock_exec_utils_, DoExecAndReturnCode(_, _, _)).Times(0);
   RunDexopt(AllOf(Property(&ndk::ScopedAStatus::getExceptionCode, EX_SERVICE_SPECIFIC),
@@ -1493,13 +1500,15 @@ TEST_F(ArtdTest, dexoptGidMismatch) {
 }
 
 TEST_F(ArtdTest, dexoptGidMatchesUid) {
-  output_artifacts_.permissionSettings.fileFsPermission = {
+  output_artifacts_.permissionSettings.odexFileFsPermission = {
+      .uid = 123, .gid = 123, .isOtherReadable = false};
+  output_artifacts_.permissionSettings.vdexFileFsPermission = {
       .uid = 123, .gid = 123, .isOtherReadable = false};
   EXPECT_CALL(*mock_injector_, Fstat(_, _)).WillRepeatedly(fstat);  // For profile.
   EXPECT_CALL(*mock_injector_, Fstat(FdOf(dex_file_), _))
-      .WillOnce(DoAll(SetArgPointee<1>((struct stat){
-                          .st_mode = S_IRUSR | S_IRGRP, .st_uid = 123, .st_gid = 456}),
-                      Return(0)));
+      .WillRepeatedly(DoAll(SetArgPointee<1>((struct stat){
+                                .st_mode = S_IRUSR | S_IRGRP, .st_uid = 123, .st_gid = 456}),
+                            Return(0)));
   ON_CALL(*mock_exec_utils_, DoExecAndReturnCode(_, _, _)).WillByDefault(Return(0));
   // It's okay to fail on chown. This happens when the test is not run as root.
   RunDexopt(AnyOf(Property(&ndk::ScopedAStatus::getExceptionCode, EX_NONE),
@@ -1508,13 +1517,15 @@ TEST_F(ArtdTest, dexoptGidMatchesUid) {
 }
 
 TEST_F(ArtdTest, dexoptGidMatchesGid) {
-  output_artifacts_.permissionSettings.fileFsPermission = {
+  output_artifacts_.permissionSettings.odexFileFsPermission = {
+      .uid = 123, .gid = 456, .isOtherReadable = false};
+  output_artifacts_.permissionSettings.vdexFileFsPermission = {
       .uid = 123, .gid = 456, .isOtherReadable = false};
   EXPECT_CALL(*mock_injector_, Fstat(_, _)).WillRepeatedly(fstat);  // For profile.
   EXPECT_CALL(*mock_injector_, Fstat(FdOf(dex_file_), _))
-      .WillOnce(DoAll(SetArgPointee<1>((struct stat){
-                          .st_mode = S_IRUSR | S_IRGRP, .st_uid = 123, .st_gid = 456}),
-                      Return(0)));
+      .WillRepeatedly(DoAll(SetArgPointee<1>((struct stat){
+                                .st_mode = S_IRUSR | S_IRGRP, .st_uid = 123, .st_gid = 456}),
+                            Return(0)));
   ON_CALL(*mock_exec_utils_, DoExecAndReturnCode(_, _, _)).WillByDefault(Return(0));
   // It's okay to fail on chown. This happens when the test is not run as root.
   RunDexopt(AnyOf(Property(&ndk::ScopedAStatus::getExceptionCode, EX_NONE),
@@ -1524,7 +1535,9 @@ TEST_F(ArtdTest, dexoptGidMatchesGid) {
 
 TEST_F(ArtdTest, dexoptUidGidChangeOk) {
   // The dex file is other-readable, so we don't check uid and gid.
-  output_artifacts_.permissionSettings.fileFsPermission = {
+  output_artifacts_.permissionSettings.odexFileFsPermission = {
+      .uid = 12345, .gid = 12345, .isOtherReadable = false};
+  output_artifacts_.permissionSettings.vdexFileFsPermission = {
       .uid = 12345, .gid = 12345, .isOtherReadable = false};
   ON_CALL(*mock_exec_utils_, DoExecAndReturnCode(_, _, _)).WillByDefault(Return(0));
   // It's okay to fail on chown. This happens when the test is not run as root.
@@ -1534,7 +1547,9 @@ TEST_F(ArtdTest, dexoptUidGidChangeOk) {
 }
 
 TEST_F(ArtdTest, dexoptNoUidGidChange) {
-  output_artifacts_.permissionSettings.fileFsPermission = {
+  output_artifacts_.permissionSettings.odexFileFsPermission = {
+      .uid = -1, .gid = -1, .isOtherReadable = false};
+  output_artifacts_.permissionSettings.vdexFileFsPermission = {
       .uid = -1, .gid = -1, .isOtherReadable = false};
   dex_file_other_readable_ = false;
   EXPECT_CALL(*mock_exec_utils_, DoExecAndReturnCode(_, _, _)).WillOnce(Return(0));
@@ -2002,26 +2017,48 @@ TEST_F(ArtdGetVisibilityTest, getProfileVisibilityPermissionDenied) {
                                     OR_FATAL(BuildProfileOrDmPath(profile_path_.value())));
 }
 
-TEST_F(ArtdGetVisibilityTest, getArtifactsVisibilityOtherReadable) {
-  TestGetVisibilityOtherReadable(&Artd::getArtifactsVisibility,
+TEST_F(ArtdGetVisibilityTest, getOdexVisibilityOtherReadable) {
+  TestGetVisibilityOtherReadable(&Artd::getOdexVisibility,
                                  artifacts_path_,
                                  OR_FATAL(BuildArtifactsPath(artifacts_path_)).oat_path);
 }
 
-TEST_F(ArtdGetVisibilityTest, getArtifactsVisibilityNotOtherReadable) {
-  TestGetVisibilityNotOtherReadable(&Artd::getArtifactsVisibility,
+TEST_F(ArtdGetVisibilityTest, getOdexVisibilityNotOtherReadable) {
+  TestGetVisibilityNotOtherReadable(&Artd::getOdexVisibility,
                                     artifacts_path_,
                                     OR_FATAL(BuildArtifactsPath(artifacts_path_)).oat_path);
 }
 
-TEST_F(ArtdGetVisibilityTest, getArtifactsVisibilityNotFound) {
-  TestGetVisibilityNotFound(&Artd::getArtifactsVisibility, artifacts_path_);
+TEST_F(ArtdGetVisibilityTest, getOdexVisibilityNotFound) {
+  TestGetVisibilityNotFound(&Artd::getOdexVisibility, artifacts_path_);
 }
 
-TEST_F(ArtdGetVisibilityTest, getArtifactsVisibilityPermissionDenied) {
-  TestGetVisibilityPermissionDenied(&Artd::getArtifactsVisibility,
+TEST_F(ArtdGetVisibilityTest, getOdexVisibilityPermissionDenied) {
+  TestGetVisibilityPermissionDenied(&Artd::getOdexVisibility,
                                     artifacts_path_,
                                     OR_FATAL(BuildArtifactsPath(artifacts_path_)).oat_path);
+}
+
+TEST_F(ArtdGetVisibilityTest, getVdexVisibilityOtherReadable) {
+  TestGetVisibilityOtherReadable(&Artd::getVdexVisibility,
+                                 artifacts_path_,
+                                 OR_FATAL(BuildArtifactsPath(artifacts_path_)).vdex_path);
+}
+
+TEST_F(ArtdGetVisibilityTest, getVdexVisibilityNotOtherReadable) {
+  TestGetVisibilityNotOtherReadable(&Artd::getVdexVisibility,
+                                    artifacts_path_,
+                                    OR_FATAL(BuildArtifactsPath(artifacts_path_)).vdex_path);
+}
+
+TEST_F(ArtdGetVisibilityTest, getVdexVisibilityNotFound) {
+  TestGetVisibilityNotFound(&Artd::getVdexVisibility, artifacts_path_);
+}
+
+TEST_F(ArtdGetVisibilityTest, getVdexVisibilityPermissionDenied) {
+  TestGetVisibilityPermissionDenied(&Artd::getVdexVisibility,
+                                    artifacts_path_,
+                                    OR_FATAL(BuildArtifactsPath(artifacts_path_)).vdex_path);
 }
 
 TEST_F(ArtdGetVisibilityTest, getDexFileVisibilityOtherReadable) {

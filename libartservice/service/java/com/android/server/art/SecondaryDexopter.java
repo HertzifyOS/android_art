@@ -102,19 +102,22 @@ public class SecondaryDexopter extends Dexopter<CheckedSecondaryDexInfo> {
 
     @Override
     @NonNull
-    protected PermissionSettings getPermissionSettings(
-            @NonNull CheckedSecondaryDexInfo dexInfo, boolean canBePublic) {
+    protected PermissionSettings getPermissionSettings(@NonNull CheckedSecondaryDexInfo dexInfo,
+            boolean canOdexBePublic, boolean canVdexBePublic) {
         int uid = getUid(dexInfo);
-        // We need the "execute" bit for "others" even though `canBePublic` is false because the
+        // We need the "execute" bit for "others" even though `can*BePublic` is false because the
         // directory can contain other artifacts that needs to be public.
         // We don't need the "read" bit for "others" on the directories because others only need to
         // access the files in the directories, but they don't need to "ls" the directories.
         FsPermission dirFsPermission = AidlUtils.buildFsPermission(uid /* uid */, uid /* gid */,
                 false /* isOtherReadable */, true /* isOtherExecutable */);
-        FsPermission fileFsPermission =
-                AidlUtils.buildFsPermission(uid /* uid */, uid /* gid */, canBePublic);
+        FsPermission odexFileFsPermission =
+                AidlUtils.buildFsPermission(uid /* uid */, uid /* gid */, canOdexBePublic);
+        FsPermission vdexFileFsPermission =
+                AidlUtils.buildFsPermission(uid /* uid */, uid /* gid */, canVdexBePublic);
         SeContext seContext = AidlUtils.buildSeContext(mPkgState.getSeInfo(), uid);
-        return AidlUtils.buildPermissionSettings(dirFsPermission, fileFsPermission, seContext);
+        return AidlUtils.buildPermissionSettings(
+                dirFsPermission, odexFileFsPermission, vdexFileFsPermission, seContext);
     }
 
     @Override

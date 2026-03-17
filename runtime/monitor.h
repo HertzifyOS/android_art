@@ -132,18 +132,15 @@ class Monitor {
   EXPORT static bool IsOwnedByMe(const Thread* self, ObjPtr<mirror::Object> obj)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
-  // NO_THREAD_SAFETY_ANALYSIS for mon->Lock.
+  // May temprarily release mutator_lock_. Returns a possibly updated pointer for obj.
   EXPORT static ObjPtr<mirror::Object> MonitorEnter(Thread* thread,
                                                     ObjPtr<mirror::Object> obj,
                                                     bool trylock)
       EXCLUSIVE_LOCK_FUNCTION(obj.Ptr())
-      NO_THREAD_SAFETY_ANALYSIS
       REQUIRES(!Roles::uninterruptible_)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
-  // NO_THREAD_SAFETY_ANALYSIS for mon->Unlock.
   EXPORT static bool MonitorExit(Thread* thread, ObjPtr<mirror::Object> obj)
-      NO_THREAD_SAFETY_ANALYSIS
       REQUIRES(!Roles::uninterruptible_)
       REQUIRES_SHARED(Locks::mutator_lock_)
       UNLOCK_FUNCTION(obj.Ptr());
@@ -158,14 +155,12 @@ class Monitor {
   }
 
   // Object.wait().  Also called for class init.
-  // NO_THREAD_SAFETY_ANALYSIS for mon->Wait.
   EXPORT static void Wait(Thread* self,
                           ObjPtr<mirror::Object> obj,
                           int64_t ms,
                           int32_t ns,
                           bool interruptShouldThrow,
-                          ThreadState why)
-      REQUIRES_SHARED(Locks::mutator_lock_) NO_THREAD_SAFETY_ANALYSIS;
+                          ThreadState why) REQUIRES_SHARED(Locks::mutator_lock_);
 
   static ThreadState FetchState(const Thread* thread,
                                 /* out */ ObjPtr<mirror::Object>* monitor_object,
@@ -214,12 +209,15 @@ class Monitor {
     return monitor_id_;
   }
 
-  // Inflate the lock on obj. May fail to inflate for spurious reasons, always re-check.
+  // Inflate the lock on obj.
   // attempt_of_4 is in 1..4 inclusive or 0. A non-zero value indicates that we are retrying
   // up to 4 times, and should only abort on 4. Zero means we are only trying once, with the
   // full suspend timeout instead of a quarter.
   // May temporarily drop and reacquire the mutator lock.
-  static void InflateThinLocked(Thread* self,
+  // Returns true if the lock state and owner thread were unchanged after we suspended the owner,
+  // and false otherwise. May fail to inflate for spurious reasons even if true is returned, always
+  // re-check.
+  static bool InflateThinLocked(Thread* self,
                                 Handle<mirror::Object> obj,
                                 LockWord lock_word,
                                 uint32_t hash_code,

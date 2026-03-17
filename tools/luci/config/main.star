@@ -300,8 +300,9 @@ def add_builder(mode,
       if cmc:
         # Request devices running at least Android 24Q3 (`AP1A` builds) for
         # (`userfaultfd`-based) Concurrent Mark-Compact GC configurations.
-        # This implicitly means Pixel 6 devices or newer.
-        dimensions |= {"device_os": "A|B|C"}
+        # We currently have several Pixel 6 devices running Android B,
+        # and Pixel 10 devices running Android C which are 64-bit only.
+        dimensions |= {"device_os": ("C" if bitness == 64 else "B")}
       else:
         # Run all other configurations on Android S since it is the oldest we support.
         # Other than the `AP1A` builds above, all other devices are flashed to `SP2A`.

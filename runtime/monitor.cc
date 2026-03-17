@@ -1120,17 +1120,19 @@ void Monitor::Inflate(Thread* self,
     Runtime::Current()->GetMonitorList()->Add(m);
     CHECK_EQ(obj->GetLockWord(true).GetState(), LockWord::kFatLocked);
   } else {
+    LOG(WARNING) << "Monitor::Inflate: Install failed " << obj;
     MonitorPool::ReleaseMonitor(self, m);
   }
 }
 
-void Monitor::InflateThinLocked(Thread* self,
+bool Monitor::InflateThinLocked(Thread* self,
                                 Handle<mirror::Object> obj,
                                 LockWord lock_word,
                                 uint32_t hash_code,
                                 int attempt_of_4) {
   DCHECK_EQ(lock_word.GetState(), LockWord::kThinLocked);
   uint32_t owner_thread_id = lock_word.ThinLockOwner();
+  bool result = true;
   if (owner_thread_id == self->GetMonitorThreadId()) {
     // We own the monitor, we can easily inflate it.
     Inflate(self, MonitorOwner::FromThread(self), obj.Get(), hash_code);
@@ -1142,9 +1144,9 @@ void Monitor::InflateThinLocked(Thread* self,
     Thread* owner_thread;
     {
       ScopedThreadSuspension sts(self, ThreadState::kWaitingForLockInflation);
-      ThreadSuspensionResult result = thread_list->SuspendPlatformOrVirtualThread(
+      ThreadSuspensionResult res = thread_list->SuspendPlatformOrVirtualThread(
           owner_thread_id, SuspendReason::kInternal, &owner_thread, attempt_of_4);
-      switch (result) {
+      switch (res) {
         case ThreadSuspensionResult::kResultFailure: {
           owner = MonitorOwner();
           break;
@@ -1167,6 +1169,9 @@ void Monitor::InflateThinLocked(Thread* self,
           lock_word.ThinLockOwner() == owner_thread_id) {
         // Go ahead and inflate the lock.
         Inflate(self, owner, obj.Get(), hash_code);
+      } else {
+        // Owner has changed; inform caller.
+        result = false;
       }
       bool resumed = thread_list->ResumePlatformOrVirtualThread(
           owner_thread_id, owner_thread, owner.IsVirtualThread(), SuspendReason::kInternal);
@@ -1174,6 +1179,7 @@ void Monitor::InflateThinLocked(Thread* self,
     }
     self->SetMonitorEnterObject(nullptr);
   }
+  return result;
 }
 
 // Fool annotalysis into thinking that the lock on obj is acquired.
@@ -1190,7 +1196,8 @@ static ObjPtr<mirror::Object> FakeUnlock(ObjPtr<mirror::Object> obj)
 
 ObjPtr<mirror::Object> Monitor::MonitorEnter(Thread* self,
                                              ObjPtr<mirror::Object> obj,
-                                             bool trylock) {
+                                             bool trylock) NO_THREAD_SAFETY_ANALYSIS {
+  // NO_THREAD_SAFETY_ANALYSIS for <monitor>->monitor_lock_, etc.
   DCHECK(self != nullptr);
   DCHECK(obj != nullptr);
   self->AssertThreadSuspensionIsAllowable();
@@ -1286,7 +1293,9 @@ ObjPtr<mirror::Object> Monitor::MonitorEnter(Thread* self,
             continue;  // Go again.
           } else {
             // We'd overflow the recursion count, so inflate the monitor.
-            InflateThinLocked(self, h_obj, lock_word, 0, std::min(inflation_attempt++, 4));
+            bool unchanged =
+                InflateThinLocked(self, h_obj, lock_word, 0, std::min(inflation_attempt++, 4));
+            DCHECK(unchanged);  // We hold the lock, and thus it shouldn't change.
           }
         } else {
           if (trylock) {
@@ -1307,9 +1316,15 @@ ObjPtr<mirror::Object> Monitor::MonitorEnter(Thread* self,
           } else {
             contention_count = 0;
             // No ordering required for initial lockword read. Install rereads it anyway.
-            InflateThinLocked(self, h_obj, lock_word, 0, std::min(inflation_attempt++, 4));
-            // The above can fail without timing out of the owner exits. If that happens on the
-            // last attempt, we retry with attempt = 4.
+            if (!InflateThinLocked(self, h_obj, lock_word, 0, std::min(inflation_attempt++, 4))) {
+              // The above can fail without timing out if e.g. the owner exits. If that happens on
+              // the last attempt, we retry with attempt = 4.
+              // If it returned false, the owner or lock status changed. Our inflation strategy
+              // actually doesn't work well for a briefly held, frequently acquired lock, since
+              // ownership is likely to change before we can suspend the owner. Try again to just
+              // use the thin lock, and reset inflation_attempt, since this can happen many times.
+              inflation_attempt = 1;
+            }
           }
         }
         continue;  // Start from the beginning.
@@ -1341,7 +1356,8 @@ ObjPtr<mirror::Object> Monitor::MonitorEnter(Thread* self,
   }
 }
 
-bool Monitor::MonitorExit(Thread* self, ObjPtr<mirror::Object> obj) {
+bool Monitor::MonitorExit(Thread* self, ObjPtr<mirror::Object> obj) NO_THREAD_SAFETY_ANALYSIS {
+  // NO_THREAD_SAFETY_ANALYSIS for <monitor>->monitor_lock_, etc.
   DCHECK(self != nullptr);
   DCHECK(obj != nullptr);
   self->AssertThreadSuspensionIsAllowable();
@@ -1408,7 +1424,8 @@ void Monitor::Wait(Thread* self,
                    int64_t ms,
                    int32_t ns,
                    bool interruptShouldThrow,
-                   ThreadState why) {
+                   ThreadState why) NO_THREAD_SAFETY_ANALYSIS {
+  // NO_THREAD_SAFETY_ANALYSIS for <monitor>->Wait(), etc.
   DCHECK(self != nullptr);
   DCHECK(obj != nullptr);
   StackHandleScope<1> hs(self);

@@ -255,7 +255,8 @@ public class PrimaryDexopterParameterizedTest extends PrimaryDexopterTestBase {
         lenient().when(mArtd.isInDalvikCache(any())).thenReturn(mParams.mIsInDalvikCache);
 
         // By default, no artifacts exist.
-        lenient().when(mArtd.getArtifactsVisibility(any())).thenReturn(FileVisibility.NOT_FOUND);
+        lenient().when(mArtd.getOdexVisibility(any())).thenReturn(FileVisibility.NOT_FOUND);
+        lenient().when(mArtd.getVdexVisibility(any())).thenReturn(FileVisibility.NOT_FOUND);
 
         if (mParams.mCallbackReturnedCompilerFilter != null) {
             mConfig.setAdjustCompilerFilterCallback(
@@ -298,6 +299,8 @@ public class PrimaryDexopterParameterizedTest extends PrimaryDexopterTestBase {
         PermissionSettings permissionSettings = buildPermissionSettings(
                 buildFsPermission(Process.SYSTEM_UID /* uid */, Process.SYSTEM_UID /* gid */,
                         false /* isOtherReadable */, true /* isOtherExecutable */),
+                buildFsPermission(Process.SYSTEM_UID /* uid */, sharedGid /* gid */,
+                        true /* isOtherReadable */),
                 buildFsPermission(Process.SYSTEM_UID /* uid */, sharedGid /* gid */,
                         true /* isOtherReadable */),
                 null /* seContext */);
