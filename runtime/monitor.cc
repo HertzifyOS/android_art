@@ -474,7 +474,9 @@ bool Monitor::TryLock(Thread* self, bool spin) {
 }
 
 template <LockReason reason>
-void Monitor::Lock(Thread* self) {
+void Monitor::Lock(Thread* self) NO_THREAD_SAFETY_ANALYSIS {
+  // Turning off thread safety analysis for this method until b/489835449
+  // is resolved
   bool called_monitors_callback = false;
   if (TryLock(self, /*spin=*/ true)) {
     // TODO: This preserves original behavior. Correct?
