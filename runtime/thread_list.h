@@ -294,7 +294,7 @@ class ThreadList {
   bool IsVirtualThreadSuspended(Thread* self, uint32_t id) REQUIRES(!Locks::thread_list_lock_);
 
   void AddMountedVirtualThread(MountedVirtualThreadData* entry) REQUIRES(Locks::thread_list_lock_);
-  void RemoveMountedVirtualThreadByThreadId(uint32_t virtual_thread_id)
+  void RemoveMountedVirtualThread(MountedVirtualThreadData* entry)
       REQUIRES(Locks::thread_list_lock_);
   uint32_t GetCarrierThreadIdByVirtualThreadId(uint32_t virtual_thread_id)
       REQUIRES(Locks::thread_list_lock_);

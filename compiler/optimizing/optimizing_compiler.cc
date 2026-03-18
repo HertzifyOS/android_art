@@ -690,6 +690,13 @@ void OptimizingCompiler::RunOptimizations(HGraph* graph,
       // Other high-level optimizations.
       OptDef(OptimizationPass::kLoadStoreElimination),
       OptDef(OptimizationPass::kCHAGuardOptimization),
+      // NB: Environment optimization pass shouldn't be before
+      // - Inliner
+      // - Bounds check elimination
+      // - CHA guard elimination
+      // - Loop optimization
+      // As these passes require full environment.
+      OptDef(OptimizationPass::kEnvironmentInputElimination),
       OptDef(OptimizationPass::kCodeSinking),
       // Simplification.
       OptDef(OptimizationPass::kConstantFolding,

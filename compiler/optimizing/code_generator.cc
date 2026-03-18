@@ -1061,27 +1061,10 @@ ScopedArenaVector<uint8_t> CodeGenerator::BuildStackMaps(const dex::CodeItem* co
 }
 
 // Returns whether stackmap dex register info is needed for the instruction.
-//
-// The following cases mandate having a dex register map:
-//  * Deoptimization
-//    when we need to obtain the values to restore actual vregisters for interpreter.
-//  * Debuggability
-//    when we want to observe the values / asynchronously deoptimize.
-//  * Monitor operations
-//    to allow dumping in a stack trace locked dex registers for non-debuggable code.
-//  * On-stack-replacement (OSR)
-//    when entering compiled for OSR code from the interpreter we need to initialize the compiled
-//    code values with the values from the vregisters.
-//  * Method local catch blocks
-//    a catch block must see the environment of the instruction from the same method that can
-//    throw to this block.
 static bool NeedsVregInfo(HInstruction* instruction, bool osr) {
   HGraph* graph = instruction->GetBlock()->GetGraph();
-  return instruction->IsDeoptimize() ||
-         graph->IsDebuggable() ||
-         graph->HasMonitorOperations() ||
-         osr ||
-         instruction->CanThrowIntoCatchBlock();
+  return GraphNeedsPreciseEnvironment(graph) ||
+         InstructionNeedsPreciseEnvironment(instruction, osr);
 }
 
 void CodeGenerator::RecordPcInfoForFrameOrBlockEntry(uint32_t dex_pc) {

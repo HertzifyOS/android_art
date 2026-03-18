@@ -65,9 +65,8 @@ class InstructionSimplifierVisitor final : public CRTPGraphVisitor<InstructionSi
 
   bool ReplaceRotateWithRor(HBinaryOperation* op, HUShr* ushr, HShl* shl);
   bool TryReplaceWithRotate(HBinaryOperation* instruction);
-  bool TryReplaceWithRotateConstantPattern(HBinaryOperation* op, HUShr* ushr, HShl* shl);
-  bool TryReplaceWithRotateRegisterNegPattern(HBinaryOperation* op, HUShr* ushr, HShl* shl);
-  bool TryReplaceWithRotateRegisterSubPattern(HBinaryOperation* op, HUShr* ushr, HShl* shl);
+  bool CanReplaceConstantPatternWithRotate(HBinaryOperation* op, HUShr* ushr, HShl* shl);
+  bool CanReplacePatternWithRotate(HBinaryOperation* op, HUShr* ushr, HShl* shl);
 
   bool TryMoveNegOnInputsAfterBinop(HBinaryOperation* binop);
   // `op` should be either HOr or HAnd.
@@ -512,6 +511,30 @@ void InstructionSimplifierVisitor::HandleShift(HBinaryOperation* instruction) {
   }
 }
 
+// Shift semantics defines that shift distances should always be masked against the register size
+// minus one, such that the shift distance is always smaller than the size of the register. For
+// example: 0 to 31 inclusive for integers and 0 to 63 inclusive for longs.
+static bool IsShiftDistanceMasked(size_t distance, size_t reg_bits) { return distance < reg_bits; }
+
+// Return true if the shift distance is guaranteed to be safe to use when replacing with a rotate.
+// If the distance is 0, the shifts and rotate are no-ops and the operation is never executed. This
+// is fine for HOr since the result is the same, but the result is different for HAdd and HXor.
+static bool CanShiftDistanceBeRotated(HBinaryOperation* op, HInstruction* shift_distance) {
+  if (op->IsOr()) {
+    return true;
+  }
+
+  return shift_distance->IsConstant() && !shift_distance->AsConstant()->IsArithmeticZero();
+}
+
+static bool CanShiftDistanceBeRotated(HBinaryOperation* op, size_t shift_distance) {
+  if (op->IsOr()) {
+    return true;
+  }
+
+  return shift_distance != 0;
+}
+
 static bool IsSubRegBitsMinusOther(HSub* sub, size_t reg_bits, HInstruction* other) {
   return (sub->GetRight() == other &&
           sub->GetLeft()->IsConstant() &&
@@ -546,26 +569,37 @@ bool InstructionSimplifierVisitor::TryReplaceWithRotate(HBinaryOperation* op) {
   DCHECK(op->IsAdd() || op->IsXor() || op->IsOr());
   HInstruction* left = op->GetLeft();
   HInstruction* right = op->GetRight();
-  // If we have an UShr and a Shl (in either order).
-  if ((left->IsUShr() && right->IsShl()) || (left->IsShl() && right->IsUShr())) {
-    HUShr* ushr = left->IsUShr() ? left->AsUShr() : right->AsUShr();
-    HShl* shl = left->IsShl() ? left->AsShl() : right->AsShl();
-    DCHECK(DataType::IsIntOrLongType(ushr->GetType()));
-    if (ushr->GetType() == shl->GetType() &&
-        ushr->GetLeft() == shl->GetLeft()) {
-      if (ushr->GetRight()->IsConstant() && shl->GetRight()->IsConstant()) {
-        // Shift distances are both constant, try replacing with Ror if they
-        // add up to the register size.
-        return TryReplaceWithRotateConstantPattern(op, ushr, shl);
-      } else if (ushr->GetRight()->IsSub() || shl->GetRight()->IsSub()) {
-        // Shift distances are potentially of the form x and (reg_size - x).
-        return TryReplaceWithRotateRegisterSubPattern(op, ushr, shl);
-      } else if (ushr->GetRight()->IsNeg() || shl->GetRight()->IsNeg()) {
-        // Shift distances are potentially of the form d and -d.
-        return TryReplaceWithRotateRegisterNegPattern(op, ushr, shl);
-      }
-    }
+  // If we don't have an UShr and a Shl (in either order).
+  if (!(left->IsUShr() && right->IsShl()) && !(left->IsShl() && right->IsUShr())) {
+    return false;
   }
+
+  // Check that both shift operations are on the same value and of the same type.
+  HUShr* ushr = left->IsUShr() ? left->AsUShr() : right->AsUShr();
+  HShl* shl = left->IsShl() ? left->AsShl() : right->AsShl();
+  DCHECK(DataType::IsIntOrLongType(ushr->GetType()));
+  if (ushr->GetType() != shl->GetType() || ushr->GetLeft() != shl->GetLeft()) {
+    return false;
+  }
+
+  // Ensure that the distances have been masked correctly. This should have been done earlier by
+  // HandleShift.
+  size_t reg_bits = DataType::Size(ushr->GetType()) * kBitsPerByte;
+  HInstruction* ushr_dist = ushr->GetRight();
+  HInstruction* shl_dist = shl->GetRight();
+  if ((ushr_dist->IsConstant() &&
+       !IsShiftDistanceMasked(Int64FromConstant(ushr_dist->AsConstant()), reg_bits)) ||
+      (shl_dist->IsConstant() &&
+       !IsShiftDistanceMasked(Int64FromConstant(shl_dist->AsConstant()), reg_bits))) {
+    return false;
+  }
+
+  // Check if one of the patterns match and replace with a rotate if so.
+  if (CanReplaceConstantPatternWithRotate(op, ushr, shl) ||
+      CanReplacePatternWithRotate(op, ushr, shl)) {
+    return ReplaceRotateWithRor(op, ushr, shl);
+  }
+
   return false;
 }
 
@@ -579,90 +613,96 @@ bool InstructionSimplifierVisitor::TryReplaceWithRotate(HBinaryOperation* op) {
 //    OP   dst, dst, tmp
 // with
 //    Ror  dst, x,   #rdist
-bool InstructionSimplifierVisitor::TryReplaceWithRotateConstantPattern(HBinaryOperation* op,
+bool InstructionSimplifierVisitor::CanReplaceConstantPatternWithRotate(HBinaryOperation* op,
                                                                        HUShr* ushr,
                                                                        HShl* shl) {
-  DCHECK(op->IsAdd() || op->IsXor() || op->IsOr());
-  size_t reg_bits = DataType::Size(ushr->GetType()) * kBitsPerByte;
-  size_t rdist = Int64FromConstant(ushr->GetRight()->AsConstant());
-  size_t ldist = Int64FromConstant(shl->GetRight()->AsConstant());
-  if (((ldist + rdist) & (reg_bits - 1)) == 0) {
-    return ReplaceRotateWithRor(op, ushr, shl);
-  }
-  return false;
-}
-
-// Replace code looking like (x >>> -d OP x << d):
-//    Neg  neg, d
-//    UShr dst, x,   neg
-//    Shl  tmp, x,   d
-//    OP   dst, dst, tmp
-// with
-//    Neg  neg, d
-//    Ror  dst, x,   neg
-// *** OR ***
-// Replace code looking like (x >>> d OP x << -d):
-//    UShr dst, x,   d
-//    Neg  neg, d
-//    Shl  tmp, x,   neg
-//    OP   dst, dst, tmp
-// with
-//    Ror  dst, x,   d
-//
-// Requires `d` to be non-zero for the HAdd and HXor case. If `d` is 0 the shifts and rotate are
-// no-ops and the `OP` is never executed. This is fine for HOr since the result is the same, but the
-// result is different for HAdd and HXor.
-bool InstructionSimplifierVisitor::TryReplaceWithRotateRegisterNegPattern(HBinaryOperation* op,
-                                                                          HUShr* ushr,
-                                                                          HShl* shl) {
-  DCHECK(op->IsAdd() || op->IsXor() || op->IsOr());
-  DCHECK(ushr->GetRight()->IsNeg() || shl->GetRight()->IsNeg());
-  bool neg_is_left = shl->GetRight()->IsNeg();
-  HNeg* neg = neg_is_left ? shl->GetRight()->AsNeg() : ushr->GetRight()->AsNeg();
-  HInstruction* value = neg->InputAt(0);
-
-  // The shift distance being negated is the distance being shifted the other way.
-  if (value != (neg_is_left ? ushr->GetRight() : shl->GetRight())) {
+  if (!ushr->GetRight()->IsConstant() || !shl->GetRight()->IsConstant()) {
     return false;
   }
 
-  const bool needs_non_zero_value = !op->IsOr();
-  if (needs_non_zero_value) {
-    if (!value->IsConstant() || value->AsConstant()->IsArithmeticZero()) {
-      return false;
-    }
+  size_t reg_bits = DataType::Size(ushr->GetType()) * kBitsPerByte;
+  size_t rdist = Int64FromConstant(ushr->GetRight()->AsConstant());
+  size_t ldist = Int64FromConstant(shl->GetRight()->AsConstant());
+
+  // Ensure that the shift distances can be rotated. This should be the case here as HandleShift
+  // should have already removed any no-op shifts.
+  if (!CanShiftDistanceBeRotated(op, rdist) || !CanShiftDistanceBeRotated(op, ldist)) {
+    return false;
   }
-  return ReplaceRotateWithRor(op, ushr, shl);
+
+  // Check that the shift distances add up to the register size.
+  DCHECK(IsPowerOfTwo(reg_bits));
+  return (ldist + rdist) % reg_bits == 0;
 }
 
-// Try replacing code looking like (x >>> d OP x << (#bits - d)):
-//    UShr dst, x,     d
-//    Sub  ld,  #bits, d
-//    Shl  tmp, x,     ld
-//    OP   dst, dst,   tmp
-// with
-//    Ror  dst, x,     d
-// *** OR ***
-// Replace code looking like (x >>> (#bits - d) OP x << d):
-//    Sub  rd,  #bits, d
-//    UShr dst, x,     rd
-//    Shl  tmp, x,     d
-//    OP   dst, dst,   tmp
-// with
-//    Neg  neg, d
-//    Ror  dst, x,     neg
-bool InstructionSimplifierVisitor::TryReplaceWithRotateRegisterSubPattern(HBinaryOperation* op,
-                                                                          HUShr* ushr,
-                                                                          HShl* shl) {
-  DCHECK(op->IsAdd() || op->IsXor() || op->IsOr());
-  DCHECK(ushr->GetRight()->IsSub() || shl->GetRight()->IsSub());
-  size_t reg_bits = DataType::Size(ushr->GetType()) * kBitsPerByte;
+bool InstructionSimplifierVisitor::CanReplacePatternWithRotate(HBinaryOperation* op,
+                                                               HUShr* ushr,
+                                                               HShl* shl) {
   HInstruction* shl_shift = shl->GetRight();
   HInstruction* ushr_shift = ushr->GetRight();
-  if ((shl_shift->IsSub() && IsSubRegBitsMinusOther(shl_shift->AsSub(), reg_bits, ushr_shift)) ||
-      (ushr_shift->IsSub() && IsSubRegBitsMinusOther(ushr_shift->AsSub(), reg_bits, shl_shift))) {
-    return ReplaceRotateWithRor(op, ushr, shl);
+
+  // Try neg pattern first.
+  if (ushr_shift->IsNeg() || shl_shift->IsNeg()) {
+    // Check if it's possible to replace code looking like (x >>> -d OP x << d):
+    //    Neg  neg, d
+    //    UShr dst, x,   neg
+    //    Shl  tmp, x,   d
+    //    OP   dst, dst, tmp
+    // with
+    //    Neg  neg, d
+    //    Ror  dst, x,   neg
+    // *** OR ***
+    // Check if it's possible to replace code looking like (x >>> d OP x << -d):
+    //    UShr dst, x,   d
+    //    Neg  neg, d
+    //    Shl  tmp, x,   neg
+    //    OP   dst, dst, tmp
+    // with
+    //    Ror  dst, x,   d
+    bool shift_is_neg = shl_shift->IsNeg();
+    HNeg* neg = shift_is_neg ? shl_shift->AsNeg() : ushr_shift->AsNeg();
+    HInstruction* shift_distance = neg->InputAt(0);
+
+    // The shift distance being negated is the distance being shifted the other way.
+    if (shift_distance == (shift_is_neg ? ushr_shift : shl_shift) &&
+        CanShiftDistanceBeRotated(op, shift_distance)) {
+      return true;
+    }
   }
+
+  // Try sub pattern next.
+  if (ushr_shift->IsSub() || shl_shift->IsSub()) {
+    // Check if it's possible to replace code looking like (x >>> d OP x << (#bits - d)):
+    //    UShr dst, x,     d
+    //    Sub  ld,  #bits, d
+    //    Shl  tmp, x,     ld
+    //    OP   dst, dst,   tmp
+    // with
+    //    Ror  dst, x,     d
+    // *** OR ***
+    // Check if it's possible to replace code looking like (x >>> (#bits - d) OP x << d):
+    //    Sub  rd,  #bits, d
+    //    UShr dst, x,     rd
+    //    Shl  tmp, x,     d
+    //    OP   dst, dst,   tmp
+    // with
+    //    Neg  neg, d
+    //    Ror  dst, x,     neg
+    size_t reg_bits = DataType::Size(ushr->GetType()) * kBitsPerByte;
+
+    // Check that one of the shift distances is of the form (#bits - d).
+    bool shl_has_sub =
+        shl_shift->IsSub() && IsSubRegBitsMinusOther(shl_shift->AsSub(), reg_bits, ushr_shift);
+    bool ushr_has_sub =
+        ushr_shift->IsSub() && IsSubRegBitsMinusOther(ushr_shift->AsSub(), reg_bits, shl_shift);
+    if (shl_has_sub || ushr_has_sub) {
+      HInstruction* shift_distance = shl_has_sub ? ushr_shift : shl_shift;
+      if (CanShiftDistanceBeRotated(op, shift_distance)) {
+        return true;
+      }
+    }
+  }
+
   return false;
 }
 

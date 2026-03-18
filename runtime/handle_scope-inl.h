@@ -322,7 +322,7 @@ template <typename Visitor>
 inline void VariableSizedHandleScope::VisitRoots(Visitor&& visitor) {
   LocalScopeType* cur = current_scope_;
   while (cur != nullptr) {
-    cur->VisitRoots(std::forward<Visitor>(visitor));
+    cur->VisitRoots(visitor);
     cur = down_cast<LocalScopeType*>(cur->GetLink());
   }
 }
@@ -331,7 +331,7 @@ template <typename Visitor>
 inline void VariableSizedHandleScope::VisitHandles(Visitor&& visitor) {
   LocalScopeType* cur = current_scope_;
   while (cur != nullptr) {
-    cur->VisitHandles(std::forward<Visitor>(visitor));
+    cur->VisitHandles(visitor);
     cur = down_cast<LocalScopeType*>(cur->GetLink());
   }
 }

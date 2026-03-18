@@ -119,7 +119,8 @@ public class Main {
         thread2.join();
     }
 
-    private static VirtualThreadContext startVirtualThreadAndVerifyNoPinning() {
+    private static VirtualThreadContext startVirtualThreadAndVerifyNoPinning()
+            throws InterruptedException {
         VirtualThreadContext context = startVirtualThreadAndGetParkedContext();
         if (context.parkedStates == null) {
             throw new AssertionError("virtual thread should be unmounted");
@@ -127,12 +128,13 @@ public class Main {
         return context;
     }
 
-    private static VirtualThreadContext startVirtualThreadAndGetParkedContext() {
-        Thread carrier1 = Thread.startVirtual(Main::task);
-
-        VirtualThreadContext context = null;
-        while (context == null || !context.isParked()) {
-            context = carrier1.getVirtualThreadContext();
+    private static VirtualThreadContext startVirtualThreadAndGetParkedContext()
+            throws InterruptedException {
+        Thread carrier = Thread.startVirtual(Main::task);
+        VirtualThreadContext context = carrier.getVirtualThreadContext();
+        carrier.join();
+        if (!context.isParked()) {
+            throw new IllegalStateException("Expect a parked virtual thread context.");
         }
         return context;
     }

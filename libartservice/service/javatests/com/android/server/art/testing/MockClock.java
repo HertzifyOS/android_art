@@ -39,7 +39,7 @@ import java.util.PriorityQueue;
 public class MockClock implements Clock, Sleeper {
     private final AsyncExecutor mExecutor;
 
-    @GuardedBy("this") private long mCurrentTimeMillis = 1000000000000L;
+    @GuardedBy("this") private volatile long mCurrentTimeMillis = 1000000000000L;
     @GuardedBy("this")
     private PriorityQueue<Task> mTasks =
             new PriorityQueue<>(Comparator.comparingLong(Task::scheduledTimeMillis));
@@ -55,7 +55,7 @@ public class MockClock implements Clock, Sleeper {
     }
 
     @Override
-    public synchronized long currentTimeMillis() {
+    public long currentTimeMillis() {
         return mCurrentTimeMillis;
     }
 
