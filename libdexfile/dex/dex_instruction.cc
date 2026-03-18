@@ -177,8 +177,8 @@ std::string Instruction::DumpString(const DexFile* file) const {
         case SGET_SHORT:
           if (file != nullptr) {
             uint32_t field_idx = VRegB_21c();
-            os << opcode << "  v" << static_cast<int>(VRegA_21c()) << ", " << file->PrettyField(field_idx, true)
-               << " // field@" << field_idx;
+            os << opcode << " v" << static_cast<int>(VRegA_21c()) << ", "
+               << file->PrettyField(field_idx, true) << " // field@" << field_idx;
             break;
           }
           FALLTHROUGH_INTENDED;
@@ -191,8 +191,8 @@ std::string Instruction::DumpString(const DexFile* file) const {
         case SPUT_SHORT:
           if (file != nullptr) {
             uint32_t field_idx = VRegB_21c();
-            os << opcode << " v" << static_cast<int>(VRegA_21c()) << ", " << file->PrettyField(field_idx, true)
-               << " // field@" << field_idx;
+            os << opcode << " v" << static_cast<int>(VRegA_21c()) << ", "
+               << file->PrettyField(field_idx, true) << " // field@" << field_idx;
             break;
           }
           FALLTHROUGH_INTENDED;
