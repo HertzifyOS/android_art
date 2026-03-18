@@ -21,7 +21,7 @@ package com.android.ahat;
  */
 class Menu {
   private static DocString mMenu =
-          DocString.link(DocString.uri("/"), DocString.text("overview"))
+          DocString.link(DocString.uri("overview"), DocString.text("overview"))
                   .append(" - ")
                   .appendLink(DocString.uri("rooted"), DocString.text("rooted"))
                   .append(" - ")
