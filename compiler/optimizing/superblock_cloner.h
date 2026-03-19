@@ -205,15 +205,6 @@ class SuperblockCloner : public ValueObject {
     return block;
   }
 
-  HInstruction* GetInstrOrig(HInstruction* copy_instr) const {
-    for (auto it : *hir_map_) {
-      if (it.second == copy_instr) {
-        return it.first;
-      }
-    }
-    return nullptr;
-  }
-
   bool IsInOrigBBSet(uint32_t block_id) const {
     return orig_bb_set_.IsBitSet(block_id);
   }
