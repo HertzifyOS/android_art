@@ -82,7 +82,7 @@ public class Main {
      * Starts the given number of virtual threads which sleeps for the given duration concurrently.
      */
     private static class SleepingVirtualThreadTestCase implements AutoCloseable {
-        private static final int CARRIER_THREADS_LIMIT = 128;
+        private static final int CARRIER_THREADS_LIMIT = 16;
         private final DateFormat df = DateFormat.getTimeInstance();
         private final Timer mTimer = new Timer();
         private final int mNumOfThreads;
