@@ -1192,6 +1192,24 @@ class NonStandardExitFrames {
       REQUIRES(art::Locks::thread_list_lock_, art::Locks::user_code_suspension_lock_)
       REQUIRES_SHARED(art::Locks::mutator_lock_);
 
+  art::ObjPtr<art::mirror::Class> ResolveFinalFrameReturnType(art::Thread* self)
+      REQUIRES(art::Locks::user_code_suspension_lock_)
+      REQUIRES_SHARED(art::Locks::mutator_lock_)
+      REQUIRES(art::Locks::thread_list_lock_)
+      REQUIRES(!art::Locks::thread_suspend_count_lock_) {
+    // Temporarily release the thread list lock to allow thread suspension and
+    // resolve the final frame's return type.
+    // Note: If the target thread is not `self`, holding the user code suspension
+    // lock prevents the suspended target thread from resuming and therefore
+    // prevents it from being unregistered, see `ThreadList::Unregister()`.
+    art::Locks::user_code_suspension_lock_->AssertExclusiveHeld(self);
+    art::Locks::thread_list_lock_->ExclusiveUnlock(self);
+    // FIXME: What if `ArtMethod::ResolveReturnType()` throws an exception?
+    art::ObjPtr<art::mirror::Class> return_type = final_frame_->GetMethod()->ResolveReturnType();
+    art::Locks::thread_list_lock_->ExclusiveLock(self);
+    return return_type;
+  }
+
   ~NonStandardExitFrames()
       REQUIRES(art::Locks::user_code_suspension_lock_)
       REQUIRES_SHARED(art::Locks::mutator_lock_)
@@ -1392,8 +1410,7 @@ StackUtil::ForceEarlyReturn(jvmtiEnv* env, EventHandler* event_handler, jthread 
     smee.NotifyFailure();
     art::Locks::thread_list_lock_->ExclusiveUnlock(self);
     return frames.result_;
-  } else if (!ValidReturnType<T>(
-                 self, frames.final_frame_->GetMethod()->ResolveReturnType(), value)) {
+  } else if (!ValidReturnType<T>(self, frames.ResolveFinalFrameReturnType(self), value)) {
     smee.NotifyFailure();
     art::Locks::thread_list_lock_->ExclusiveUnlock(self);
     return ERR(TYPE_MISMATCH);
