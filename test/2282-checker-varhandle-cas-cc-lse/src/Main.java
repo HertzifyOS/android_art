@@ -64,6 +64,10 @@ public class Main {
     /// CHECK-START-ARM64: boolean Main.testWeakCas(java.lang.Object, java.lang.Object) disassembly (after)
     /// CHECK-IF: hasIsaFeature("lse") and os.environ.get('ART_USE_READ_BARRIER') == 'true'
     /// CHECK:      casl w{{[0-9]+}}, w{{[0-9]+}}, [x{{[0-9]+}}]
+    /// CHECK-IF: os.environ.get('ART_HEAP_POISONING') == 'true'
+    /// CHECK-NEXT: neg
+    /// CHECK-NEXT: neg
+    /// CHECK-FI:
     /// CHECK-NEXT: cmp w{{[0-9]+}}, w{{[0-9]+}}
     // The following B.NE might branch to success_csel_label (fixed) or exit_loop (buggy).
     /// CHECK-NEXT: b.ne #+{{0x[0-9a-f]+}}
