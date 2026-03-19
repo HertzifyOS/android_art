@@ -136,8 +136,15 @@ inline bool IsEdgeValid(HEdge edge, HGraph* graph) {
 class SuperblockCloner : public ValueObject {
  public:
   // TODO: Investigate optimal types for the containers.
+  struct HInstructionIdComparator {
+    bool operator()(const HInstruction* a, const HInstruction* b) const {
+      DCHECK(a != nullptr);
+      DCHECK(b != nullptr);
+      return a->GetId() < b->GetId();
+    }
+  };
   using HBasicBlockMap = ArenaSafeMap<HBasicBlock*, HBasicBlock*>;
-  using HInstructionMap = ArenaSafeMap<HInstruction*, HInstruction*>;
+  using HInstructionMap = ArenaSafeMap<HInstruction*, HInstruction*, HInstructionIdComparator>;
   using HBasicBlockSet = ArenaBitVector;
   using HEdgeSet = ArenaHashSet<HEdge>;
 
