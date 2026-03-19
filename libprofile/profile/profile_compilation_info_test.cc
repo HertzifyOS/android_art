@@ -2149,21 +2149,32 @@ TEST_F(ProfileCompilationInfoTest, NoPreloadClasses) {
   ASSERT_TRUE(info2.Equals(info1));
 }
 
+TEST_F(ProfileCompilationInfoTest, GetLocationBasename) {
+  EXPECT_EQ("base.apk", ProfileCompilationInfo::GetLocationBasename("base.apk"));
+  EXPECT_EQ("base.apk", ProfileCompilationInfo::GetLocationBasename("/dir/base.apk"));
+  EXPECT_EQ("base.apk", ProfileCompilationInfo::GetLocationBasename("/a/b/c/base.apk"));
+}
+
 // Verify that GetProfileDexFileBaseKey correctly handles different dex location formats,
 // including the new v41 container format.
 TEST_F(ProfileCompilationInfoTest, GetProfileDexFileBaseKey) {
   // Normal apk
-  EXPECT_EQ("base.apk", ProfileCompilationInfo::GetProfileDexFileBaseKey("base.apk"));
-  EXPECT_EQ("base.apk", ProfileCompilationInfo::GetProfileDexFileBaseKey("/dir/base.apk"));
+  EXPECT_EQ("base.apk", ProfileCompilationInfo::GetProfileDexFileBaseKey("base.apk", ""));
+  EXPECT_EQ("base.apk",
+            ProfileCompilationInfo::GetProfileDexFileBaseKey("base.apk", "classes.dex"));
+  EXPECT_EQ("base.apk",
+            ProfileCompilationInfo::GetProfileDexFileBaseKey("/dir/base.apk", "classes.dex"));
 
   // Old multidex syntax
-  EXPECT_EQ("base.apk!classes2.dex", ProfileCompilationInfo::GetProfileDexFileBaseKey("base.apk!classes2.dex"));
-  EXPECT_EQ("base.apk!classes2.dex", ProfileCompilationInfo::GetProfileDexFileBaseKey("/dir/base.apk!classes2.dex"));
+  EXPECT_EQ("base.apk!classes2.dex",
+            ProfileCompilationInfo::GetProfileDexFileBaseKey("base.apk", "classes2.dex"));
+  EXPECT_EQ("base.apk!classes2.dex",
+            ProfileCompilationInfo::GetProfileDexFileBaseKey("/dir/base.apk", "classes2.dex"));
 
   // New multidex syntax (v41 container)
-  EXPECT_EQ("base.apk!classes2.dex", ProfileCompilationInfo::GetProfileDexFileBaseKey("base.apk!1"));
-  EXPECT_EQ("base.apk!classes2.dex", ProfileCompilationInfo::GetProfileDexFileBaseKey("/dir/base.apk!1"));
-  EXPECT_EQ("base.apk!classes11.dex", ProfileCompilationInfo::GetProfileDexFileBaseKey("base.apk!10"));
+  EXPECT_EQ("base.apk!0", ProfileCompilationInfo::GetProfileDexFileBaseKey("base.apk", "0"));
+  EXPECT_EQ("base.apk!1", ProfileCompilationInfo::GetProfileDexFileBaseKey("/dir/base.apk", "1"));
+  EXPECT_EQ("base.apk!10", ProfileCompilationInfo::GetProfileDexFileBaseKey("base.apk", "10"));
 }
 
 }  // namespace art

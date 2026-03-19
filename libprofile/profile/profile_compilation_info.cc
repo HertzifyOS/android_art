@@ -623,32 +623,45 @@ void ProfileCompilationInfo::DexPcData::AddClass(const dex::TypeIndex& type_idx)
 // Transform the actual dex location into a key used to index the dex file in the profile.
 // See ProfileCompilationInfo#GetProfileDexFileBaseKey as well.
 std::string ProfileCompilationInfo::GetProfileDexFileAugmentedKey(
-      const std::string& dex_location,
-      const ProfileSampleAnnotation& annotation) {
-  std::string base_key = GetProfileDexFileBaseKey(dex_location);
+    const DexFile* dex_file, const ProfileSampleAnnotation& annotation) {
+  DCHECK(dex_file != nullptr);
+  std::string base_key = GetProfileDexFileBaseKey(dex_file);
   return annotation == ProfileSampleAnnotation::kNone
       ? base_key
       : base_key + kSampleMetadataSeparator + annotation.GetOriginPackageName();
+}
+
+// Returns the basename of the location (e.g. "base.apk" from "/dir/base.apk").
+std::string_view ProfileCompilationInfo::GetLocationBasename(std::string_view base_location) {
+  DCHECK(!DexFileLoader::IsMultiDexLocation(base_location));
+  size_t last_sep_index = base_location.find_last_of('/');
+  return base_location.substr(last_sep_index == std::string_view::npos ? 0 : last_sep_index + 1);
 }
 
 // Transform the actual dex location into a base profile key (represented as relative paths).
 // Note: this is OK because we don't store profiles of different apps into the same file.
 // Apps with split apks don't cause trouble because each split has a different name and will not
 // collide with other entries.
-std::string ProfileCompilationInfo::GetProfileDexFileBaseKey(std::string_view dex_location) {
-  DCHECK(!dex_location.empty());
-  size_t last_sep_index = dex_location.find_last_of('/');
-  dex_location = dex_location.substr(last_sep_index == std::string::npos ? 0 : last_sep_index + 1);
-  // Container DEX (v41) changed the location format in ART from !classes2.dex to !1 because
-  // all dex files may be stored in single zip entry using the new container feature.
-  // Use the old syntax in profiles for backwards compatibility (profiles shipped to old devices).
-  // This is just a way to express the index now and does not need to correspond to zip entry name.
-  auto [filename, index] = DexFileLoader::SplitMultiDexLocation(dex_location);
-  if (index == 0) {
+std::string ProfileCompilationInfo::GetProfileDexFileBaseKey(std::string_view base_location,
+                                                             std::string_view entry_name) {
+  DCHECK(!DexFileLoader::IsMultiDexLocation(base_location));
+  std::string_view filename = GetLocationBasename(base_location);
+  if (entry_name.empty() || entry_name == "classes.dex") {
     return std::string(filename);
   }
-  return std::string(filename) + DexFileLoader::kMultiDexSeparator +
-         DexFileLoader::GetMultiDexZipEntryName(index);
+  return std::string(filename) + DexFileLoader::kMultiDexSeparator + std::string(entry_name);
+}
+
+std::string ProfileCompilationInfo::GetProfileDexFileBaseKey(const DexFile* dex_file) {
+  DCHECK(dex_file != nullptr);
+  auto [base_location, index] = DexFileLoader::SplitMultiDexLocation(dex_file->GetLocation());
+  if (dex_file->HasDexContainer()) {
+    // Use the new "!1" syntax for container dex files, since just the zip entry name isn't unique.
+    return GetProfileDexFileBaseKey(base_location, std::to_string(index));
+  } else {
+    // Use the old "!classes2.dex" syntax for backwards compatibility.
+    return GetProfileDexFileBaseKey(base_location, DexFileLoader::GetMultiDexZipEntryName(index));
+  }
 }
 
 std::string_view ProfileCompilationInfo::GetBaseKeyViewFromAugmentedKey(
@@ -1325,7 +1338,7 @@ const ProfileCompilationInfo::DexFileData* ProfileCompilationInfo::FindDexDataUs
       const DexFile* dex_file,
       const ProfileSampleAnnotation& annotation) const {
   if (annotation == ProfileSampleAnnotation::kNone) {
-    std::string profile_key = GetProfileDexFileBaseKey(dex_file->GetLocation());
+    std::string profile_key = GetProfileDexFileBaseKey(dex_file);
     for (const std::unique_ptr<DexFileData>& dex_data : info_) {
       if (profile_key == GetBaseKeyViewFromAugmentedKey(dex_data->profile_key)) {
         if (!ChecksumMatch(dex_data->checksum, dex_file->GetLocationChecksum())) {
@@ -1335,7 +1348,7 @@ const ProfileCompilationInfo::DexFileData* ProfileCompilationInfo::FindDexDataUs
       }
     }
   } else {
-    std::string profile_key = GetProfileDexFileAugmentedKey(dex_file->GetLocation(), annotation);
+    std::string profile_key = GetProfileDexFileAugmentedKey(dex_file, annotation);
     return FindDexData(profile_key, dex_file->GetLocationChecksum());
   }
 
@@ -1345,7 +1358,7 @@ const ProfileCompilationInfo::DexFileData* ProfileCompilationInfo::FindDexDataUs
 void ProfileCompilationInfo::FindAllDexData(
     const DexFile* dex_file,
     /*out*/ std::vector<const ProfileCompilationInfo::DexFileData*>* result) const {
-  std::string profile_key = GetProfileDexFileBaseKey(dex_file->GetLocation());
+  std::string profile_key = GetProfileDexFileBaseKey(dex_file);
   for (const std::unique_ptr<DexFileData>& dex_data : info_) {
     if (profile_key == GetBaseKeyViewFromAugmentedKey(dex_data->profile_key)) {
       if (ChecksumMatch(dex_data->checksum, dex_file->GetLocationChecksum())) {
@@ -1466,7 +1479,7 @@ bool ProfileCompilationInfo::Load(
 bool ProfileCompilationInfo::VerifyProfileData(const std::vector<const DexFile*>& dex_files) {
   std::unordered_map<std::string, const DexFile*> key_to_dex_file;
   for (const DexFile* dex_file : dex_files) {
-    key_to_dex_file.emplace(GetProfileDexFileBaseKey(dex_file->GetLocation()), dex_file);
+    key_to_dex_file.emplace(GetProfileDexFileBaseKey(dex_file), dex_file);
   }
   for (const std::unique_ptr<DexFileData>& dex_data : info_) {
     // We need to remove any annotation from the key during verification.
@@ -2203,7 +2216,7 @@ std::string ProfileCompilationInfo::DumpInfo(const std::vector<const DexFile*>& 
     const DexFile* dex_file = nullptr;
     for (const DexFile* current : dex_files) {
       if (GetBaseKeyViewFromAugmentedKey(dex_data->profile_key) ==
-              GetProfileDexFileBaseKey(current->GetLocation()) &&
+              GetProfileDexFileBaseKey(current) &&
           ChecksumMatch(dex_data->checksum, current->GetLocationChecksum())) {
         dex_file = current;
         break;
@@ -2369,8 +2382,8 @@ bool ProfileCompilationInfo::GenerateTestProfile(int fd,
   const uint16_t kFavorSplit = 2;
 
   for (uint16_t i = 0; i < number_of_dex_files; i++) {
-    std::string dex_location = DexFileLoader::GetMultiDexLocation(base_dex_location.c_str(), i);
-    std::string profile_key = info.GetProfileDexFileBaseKey(dex_location);
+    std::string entry_name = DexFileLoader::GetMultiDexZipEntryName(i);
+    std::string profile_key = info.GetProfileDexFileBaseKey(base_dex_location, entry_name);
 
     DexFileData* const data =
         info.GetOrAddDexFileData(profile_key, /*checksum=*/ 0, max_classes, max_methods);
@@ -2419,8 +2432,7 @@ bool ProfileCompilationInfo::GenerateTestProfile(
     return vec;
   };
   for (std::unique_ptr<const DexFile>& dex_file : dex_files) {
-    const std::string& dex_location = dex_file->GetLocation();
-    std::string profile_key = info.GetProfileDexFileBaseKey(dex_location);
+    std::string profile_key = info.GetProfileDexFileBaseKey(dex_file.get());
     uint32_t checksum = dex_file->GetLocationChecksum();
 
     uint32_t number_of_classes = dex_file->NumClassDefs();
@@ -2609,7 +2621,7 @@ bool ProfileCompilationInfo::UpdateProfileKeys(
       if (dex_data->checksum == dex_file->GetLocationChecksum() &&
           dex_data->num_type_ids == dex_file->NumTypeIds() &&
           dex_data->num_method_ids == dex_file->NumMethodIds()) {
-        std::string new_base_key = GetProfileDexFileBaseKey(dex_file->GetLocation());
+        std::string new_base_key = GetProfileDexFileBaseKey(dex_file.get());
         old_key_to_new_key[old_base_key] = new_base_key;
         new_key_to_old_keys[new_base_key].insert(old_base_key);
         found = true;

@@ -1105,12 +1105,13 @@ void ProfileSaver::Start(const ProfileSaverOptions& options,
     for (const std::string& location : code_paths) {
       // Use the profile base key for checking file uniqueness (as it is constructed solely based
       // on the location and ignores other metadata like origin package).
-      code_paths_keys.insert(ProfileCompilationInfo::GetProfileDexFileBaseKey(location));
+      code_paths_keys.insert(std::string(ProfileCompilationInfo::GetLocationBasename(location)));
     }
     for (const DexFile* dex_file : runtime->GetClassLinker()->GetBootClassPath()) {
       // Don't check ShouldProfileLocation since the boot class path may be speed compiled.
       const std::string& location = dex_file->GetLocation();
-      const std::string key = ProfileCompilationInfo::GetProfileDexFileBaseKey(location);
+      std::string base_location = DexFileLoader::GetBaseLocation(location);
+      const std::string key(ProfileCompilationInfo::GetLocationBasename(base_location));
       VLOG(profiler) << "Registering boot dex file " << location;
       if (code_paths_keys.find(key) != code_paths_keys.end()) {
         LOG(WARNING) << "Boot class path location key conflicts with code path " << location;
