@@ -1,6 +1,5 @@
 // Signature format: 6.0
 // - style=java
-// - type-argument-spacing=legacy
 package com.android.server.art {
 
   public final class ArtManagedInstallFileHelper {
@@ -70,7 +69,7 @@ package com.android.server.art {
     method @NonNull public static com.android.server.art.DexUseManagerLocal createInstance(@NonNull android.content.Context);
     method @FlaggedApi("com.android.art.flags.package_last_used_api") public long getPackageLastUsedAtMillis(@NonNull String);
     method @NonNull public java.util.List<com.android.server.art.model.DexContainerFileUseInfo> getSecondaryDexContainerFileUseInfo(@NonNull String);
-    method public void notifyDexContainersLoaded(@NonNull com.android.server.pm.PackageManagerLocal.FilteredSnapshot, @NonNull String, @NonNull java.util.Map<String,String>);
+    method public void notifyDexContainersLoaded(@NonNull com.android.server.pm.PackageManagerLocal.FilteredSnapshot, @NonNull String, @NonNull java.util.Map<String, String>);
     method public void systemReady();
   }
 
