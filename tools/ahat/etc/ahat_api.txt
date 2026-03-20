@@ -1,7 +1,6 @@
 // Signature format: 6.0
 // - style=java
 // - overloaded-method-order=source
-// - strip-java-lang-prefix=legacy
 package com.android.ahat {
 
   public class Main {
@@ -49,7 +48,7 @@ package com.android.ahat.heapdump {
     method public String toString();
   }
 
-  public class AhatBitmapInstance extends com.android.ahat.heapdump.AhatClassInstance implements java.lang.Comparable<com.android.ahat.heapdump.AhatBitmapInstance> {
+  public class AhatBitmapInstance extends com.android.ahat.heapdump.AhatClassInstance implements Comparable<com.android.ahat.heapdump.AhatBitmapInstance> {
     method public int compareTo(com.android.ahat.heapdump.AhatBitmapInstance);
     method public static java.util.List<java.util.List<com.android.ahat.heapdump.AhatBitmapInstance>> findDuplicates(com.android.ahat.heapdump.AhatBitmapInstance.BitmapDumpData);
     method public com.android.ahat.heapdump.AhatBitmapInstance.Bitmap getBitmap();
@@ -240,7 +239,7 @@ package com.android.ahat.heapdump {
     field public final com.android.ahat.heapdump.Value value;
   }
 
-  public class HprofFormatException extends java.lang.Exception {
+  public class HprofFormatException extends Exception {
   }
 
   public class Parser {
@@ -326,7 +325,7 @@ package com.android.ahat.heapdump {
     field public long numInstances;
   }
 
-  public class Size implements java.lang.Comparable<com.android.ahat.heapdump.Size> {
+  public class Size implements Comparable<com.android.ahat.heapdump.Size> {
     ctor public Size(long, long);
     method public int compareTo(com.android.ahat.heapdump.Size);
     method public long getJavaSize();
