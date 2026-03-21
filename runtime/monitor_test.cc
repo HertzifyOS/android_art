@@ -437,30 +437,35 @@ TEST_F(MonitorTest, TestMonitorOwner) {
   pid_t tid = self->GetTid();
   uint32_t carrier_id = self->GetThreadId();
 
-  // Case 1: platform thread
-  MonitorOwner owner = MonitorOwner::FromThread(self);
-  EXPECT_EQ(carrier_id, owner.GetThreadId());
-  EXPECT_FALSE(owner.IsVirtualThread());
-  EXPECT_EQ(tid, owner.GetMutexOwnerId());
-  EXPECT_TRUE(owner.IsOwner(self));
-  EXPECT_TRUE(owner == self);
-  EXPECT_FALSE(owner.IsNull());
-  EXPECT_EQ(reinterpret_cast<uintptr_t>(self), owner.getStorageValue());
+  {
+    // thread_list_lock_ is needed for the thread safety analysis of GetThreadId().
+    MutexLock mu(self, *Locks::thread_list_lock_);
+    // Case 1: platform thread
+    MonitorOwner owner = MonitorOwner::FromThread(self);
+    EXPECT_EQ(carrier_id, owner.GetThreadId());
+    EXPECT_FALSE(owner.IsVirtualThread());
+    EXPECT_EQ(tid, owner.GetMutexOwnerId());
+    EXPECT_TRUE(owner.IsOwner(self));
+    EXPECT_TRUE(owner == self);
+    EXPECT_FALSE(owner.IsNull());
+    EXPECT_EQ(reinterpret_cast<uintptr_t>(self), owner.getStorageValue());
 
-  MonitorOwner owner2 = MonitorOwner::FromPlatformThread(self);
-  EXPECT_EQ(carrier_id, owner2.GetThreadId());
-  EXPECT_EQ(owner.getStorageValue(), owner.getStorageValue());
-  EXPECT_TRUE(owner == owner2);
+    MonitorOwner owner2 = MonitorOwner::FromPlatformThread(self);
+    EXPECT_EQ(carrier_id, owner2.GetThreadId());
+    EXPECT_EQ(owner.getStorageValue(), owner.getStorageValue());
+    EXPECT_TRUE(owner == owner2);
 
-  // Case 2: null value.
-  owner = MonitorOwner();
-  EXPECT_EQ(ThreadList::kInvalidThreadId, owner.GetThreadId());
-  EXPECT_FALSE(owner.IsVirtualThread());
-  EXPECT_EQ(0, owner.GetMutexOwnerId());
-  EXPECT_FALSE(owner.IsOwner(self));
-  EXPECT_FALSE(owner == self);
-  EXPECT_TRUE(owner.IsNull());
-  EXPECT_EQ(0, owner.getStorageValue());
+    // Case 2: null value.
+    owner = MonitorOwner();
+    EXPECT_EQ(ThreadList::kInvalidThreadId, owner.GetThreadId());
+    EXPECT_FALSE(owner.IsVirtualThread());
+    EXPECT_EQ(0, owner.GetMutexOwnerId());
+    EXPECT_FALSE(owner.IsOwner(self));
+    EXPECT_FALSE(owner == self);
+    EXPECT_TRUE(owner.IsNull());
+    EXPECT_EQ(0, owner.getStorageValue());
+  }
+
 
   if (!kIsVirtualThreadEnabled) {
     return;
@@ -474,21 +479,25 @@ TEST_F(MonitorTest, TestMonitorOwner) {
   ScopedObjectAccess soa(self);
   VirtualThreadMounter virtual_thread_mounter(&mounted_data);
 
-  // Case 3: virtual thread
-  owner = MonitorOwner::FromVirtualThreadId(virtual_thread_id);
-  EXPECT_TRUE(owner.IsVirtualThread());
-  EXPECT_EQ(virtual_thread_id, owner.GetVirtualThreadId());
-  EXPECT_EQ(virtual_thread_id, owner.GetThreadId());
-  EXPECT_EQ(virtual_thread_id | MonitorMutex::kVTFlag, owner.GetMutexOwnerId());
-  EXPECT_TRUE(owner.IsOwner(self));
-  EXPECT_TRUE(owner == self);
-  EXPECT_FALSE(owner.IsNull());
-  EXPECT_EQ(virtual_thread_id << 1 | 1, owner.getStorageValue());
+  {
+    // thread_list_lock_ is needed for the thread safety analysis of GetThreadId().
+    MutexLock mu(self, *Locks::thread_list_lock_);
+    // Case 3: virtual thread
+    MonitorOwner owner = MonitorOwner::FromVirtualThreadId(virtual_thread_id);
+    EXPECT_TRUE(owner.IsVirtualThread());
+    EXPECT_EQ(virtual_thread_id, owner.GetVirtualThreadId());
+    EXPECT_EQ(virtual_thread_id, owner.GetThreadId());
+    EXPECT_EQ(virtual_thread_id | MonitorMutex::kVTFlag, owner.GetMutexOwnerId());
+    EXPECT_TRUE(owner.IsOwner(self));
+    EXPECT_TRUE(owner == self);
+    EXPECT_FALSE(owner.IsNull());
+    EXPECT_EQ(virtual_thread_id << 1 | 1, owner.getStorageValue());
 
-  owner2 = MonitorOwner::FromThread(self);
-  EXPECT_EQ(virtual_thread_id, owner2.GetThreadId());
-  EXPECT_EQ(owner.getStorageValue(), owner.getStorageValue());
-  EXPECT_TRUE(owner == owner2);
+    MonitorOwner owner2 = MonitorOwner::FromThread(self);
+    EXPECT_EQ(virtual_thread_id, owner2.GetThreadId());
+    EXPECT_EQ(owner.getStorageValue(), owner.getStorageValue());
+    EXPECT_TRUE(owner == owner2);
+  }
 }
 
 }  // namespace art

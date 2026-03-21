@@ -2612,7 +2612,14 @@ class Dex2Oat final {
   }
 
   bool PreparePreloadedClasses() {
-    if (!preloaded_classes_fds_.empty()) {
+    if (preloaded_classes_files_.empty() && preloaded_classes_fds_.empty()) {
+      // We don't have any preloaded-classes files: handle all the classes as no-preload.
+      // TODO(b/383506474): deprecate this behavior and rely only on the profile.
+    } else if (profile_compilation_info_ != nullptr &&
+               profile_compilation_info_->HasNoPreloadSection()) {
+      // If the profile has a "classes-no-preload" section, ignore preloaded-classes files.
+      compiler_options_->ignore_preloaded_classes_ = true;
+    } else if (!preloaded_classes_fds_.empty()) {
       for (int fd : preloaded_classes_fds_) {
         if (!ReadCommentedInputFromFd(fd, nullptr, &compiler_options_->preloaded_classes_)) {
           return false;

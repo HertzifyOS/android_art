@@ -186,8 +186,10 @@ public class Main {
       Diff.snapshots(ahat, base);
     }
 
-    server.createContext("/",
-        new AhatHttpHandler(new OverviewHandler(ahat, hprof, hprofbase)));
+    AhatHttpHandler overviewHandler =
+            new AhatHttpHandler(new OverviewHandler(ahat, hprof, hprofbase));
+    server.createContext("/", overviewHandler);
+    server.createContext("/overview", overviewHandler);
     server.createContext("/rooted", new AhatHttpHandler(new RootedHandler(ahat)));
     server.createContext("/object", new AhatHttpHandler(new ObjectHandler(ahat)));
     server.createContext("/objects", new AhatHttpHandler(new ObjectsHandler(ahat)));

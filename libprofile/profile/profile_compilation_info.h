@@ -93,6 +93,7 @@ class ProfileCompilationInfo {
 
   static constexpr size_t kProfileVersionSize = 4;
   static constexpr uint8_t kIndividualInlineCacheSize = 5;
+  static constexpr dex::TypeIndex kNoPreloadMarker{DexFile::kDexNoIndex16};
 
   // Data structures for encoding the offline representation of inline caches.
   // This is exposed as public in order to make it available to dex2oat compilations
@@ -379,7 +380,26 @@ class ProfileCompilationInfo {
       return false;
     }
     data->class_set_no_preload.insert(type_index);
+    has_no_preload_section = true;
     return true;
+  }
+
+  bool AddNoPreloadMarker(const std::vector<std::unique_ptr<const DexFile>>& dex_files) {
+    // Add no-preload marker for the first dex file (if any): it doesn't matter which dex file,
+    // the marker is only needed to test for the presence of "classes-no-preload" section.
+    DexFileData* const data = dex_files.empty()
+        ? nullptr
+        : GetOrAddDexFileData(dex_files[0].get(), ProfileSampleAnnotation::kNone);
+    if (data == nullptr) {
+      return false;
+    }
+    data->class_set_no_preload.insert(kNoPreloadMarker);
+    has_no_preload_section = true;
+    return true;
+  }
+
+  bool HasNoPreloadSection() const {
+    return has_no_preload_section;
   }
 
   // Add a class with the specified `descriptor` to the profile.
@@ -1119,6 +1139,8 @@ class ProfileCompilationInfo {
 
   // The version of the profile.
   uint8_t version_[kProfileVersionSize];
+
+  bool has_no_preload_section = false;
 };
 
 /**

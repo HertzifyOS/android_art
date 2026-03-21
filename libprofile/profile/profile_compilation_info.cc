@@ -1958,8 +1958,10 @@ ProfileCompilationInfo::ProfileLoadStatus ProfileCompilationInfo::LoadInternal(
         status = ReadExtraDescriptorsSection(
             *source, section_info, &extra_descriptors_remap, error);
         break;
-      case FileSectionType::kClasses:
       case FileSectionType::kClassesNoPreload:
+        has_no_preload_section = true;
+        FALLTHROUGH_INTENDED;
+      case FileSectionType::kClasses:
         // Skip if all dex files were filtered out.
         if (!info_.empty() && merge_classes) {
           status = ReadClassesSection(
@@ -2727,21 +2729,27 @@ ProfileCompilationInfo::ProfileLoadStatus ProfileCompilationInfo::DexFileData::R
       *error = "Duplicate type index.";
       return ProfileLoadStatus::kBadData;
     }
-    if (type_index_diff >= num_valid_type_indexes - type_index) {
-      *error = "Invalid type index.";
-      return ProfileLoadStatus::kBadData;
-    }
-    type_index += type_index_diff;
-    ArenaSet<dex::TypeIndex>& classes = no_preload_section ? class_set_no_preload : class_set;
-    if (type_index >= num_type_ids) {
-      uint32_t new_extra_descriptor_index = extra_descriptors_remap[type_index - num_type_ids];
-      if (new_extra_descriptor_index >= DexFile::kDexNoIndex16 - num_type_ids) {
-        *error = "Remapped type index out of range.";
-        return ProfileLoadStatus::kMergeError;
-      }
-      classes.insert(dex::TypeIndex(num_type_ids + new_extra_descriptor_index));
+    if (no_preload_section && classes_size == 1 &&
+        dex::TypeIndex(type_index_diff) == kNoPreloadMarker) {  // first diff is the index itself
+      // It's the no-preload marker: a phony type ID to make dex2oat rely on "classes-no-preload"
+      // section instead of the preloaded-classes file. Just skip it.
     } else {
-      classes.insert(dex::TypeIndex(type_index));
+      if (type_index_diff >= num_valid_type_indexes - type_index) {
+        *error = "Invalid type index.";
+        return ProfileLoadStatus::kBadData;
+      }
+      type_index += type_index_diff;
+      ArenaSet<dex::TypeIndex>& classes = no_preload_section ? class_set_no_preload : class_set;
+      if (type_index >= num_type_ids) {
+        uint32_t new_extra_descriptor_index = extra_descriptors_remap[type_index - num_type_ids];
+        if (new_extra_descriptor_index >= DexFile::kDexNoIndex16 - num_type_ids) {
+          *error = "Remapped type index out of range.";
+          return ProfileLoadStatus::kMergeError;
+        }
+        classes.insert(dex::TypeIndex(num_type_ids + new_extra_descriptor_index));
+      } else {
+        classes.insert(dex::TypeIndex(type_index));
+      }
     }
   }
   return ProfileLoadStatus::kSuccess;

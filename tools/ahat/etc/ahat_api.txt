@@ -1,4 +1,5 @@
-// Signature format: 2.0
+// Signature format: 6.0
+// - style=java
 package com.android.ahat {
 
   public class Main {
@@ -46,7 +47,7 @@ package com.android.ahat.heapdump {
     method public String toString();
   }
 
-  public class AhatBitmapInstance extends com.android.ahat.heapdump.AhatClassInstance implements java.lang.Comparable<com.android.ahat.heapdump.AhatBitmapInstance> {
+  public class AhatBitmapInstance extends com.android.ahat.heapdump.AhatClassInstance implements Comparable<com.android.ahat.heapdump.AhatBitmapInstance> {
     method public int compareTo(com.android.ahat.heapdump.AhatBitmapInstance);
     method public static java.util.List<java.util.List<com.android.ahat.heapdump.AhatBitmapInstance>> findDuplicates(com.android.ahat.heapdump.AhatBitmapInstance.BitmapDumpData);
     method public com.android.ahat.heapdump.AhatBitmapInstance.Bitmap getBitmap();
@@ -100,8 +101,8 @@ package com.android.ahat.heapdump {
     method public com.android.ahat.heapdump.AhatClassInstance asClassInstance();
     method public com.android.ahat.heapdump.AhatClassObj asClassObj();
     method public com.android.ahat.heapdump.AhatMessageInstance asMessageInstance();
-    method public String asString(int);
     method public String asString();
+    method public String asString(int);
     method public com.android.ahat.heapdump.AhatInstance getAssociatedBitmapInstance();
     method public com.android.ahat.heapdump.AhatClassObj getAssociatedClassForOverhead();
     method public com.android.ahat.heapdump.AhatInstance getBaseline();
@@ -237,12 +238,12 @@ package com.android.ahat.heapdump {
     field public final com.android.ahat.heapdump.Value value;
   }
 
-  public class HprofFormatException extends java.lang.Exception {
+  public class HprofFormatException extends Exception {
   }
 
   public class Parser {
-    ctor public Parser(java.nio.ByteBuffer);
     ctor public Parser(java.io.File) throws java.io.IOException;
+    ctor public Parser(java.nio.ByteBuffer);
     method public com.android.ahat.heapdump.Parser map(com.android.ahat.proguard.ProguardMap);
     method public com.android.ahat.heapdump.AhatSnapshot parse() throws com.android.ahat.heapdump.HprofFormatException, java.io.IOException;
     method public static com.android.ahat.heapdump.AhatSnapshot parseHeapDump(java.io.File, com.android.ahat.proguard.ProguardMap) throws com.android.ahat.heapdump.HprofFormatException, java.io.IOException;
@@ -323,7 +324,7 @@ package com.android.ahat.heapdump {
     field public long numInstances;
   }
 
-  public class Size implements java.lang.Comparable<com.android.ahat.heapdump.Size> {
+  public class Size implements Comparable<com.android.ahat.heapdump.Size> {
     ctor public Size(long, long);
     method public int compareTo(com.android.ahat.heapdump.Size);
     method public long getJavaSize();
@@ -377,15 +378,15 @@ package com.android.ahat.heapdump {
     method public boolean isBoolean();
     method public boolean isInteger();
     method public boolean isLong();
-    method public static com.android.ahat.heapdump.Value pack(com.android.ahat.heapdump.AhatInstance);
     method public static com.android.ahat.heapdump.Value pack(boolean);
-    method public static com.android.ahat.heapdump.Value pack(char);
-    method public static com.android.ahat.heapdump.Value pack(float);
-    method public static com.android.ahat.heapdump.Value pack(double);
     method public static com.android.ahat.heapdump.Value pack(byte);
-    method public static com.android.ahat.heapdump.Value pack(short);
+    method public static com.android.ahat.heapdump.Value pack(char);
+    method public static com.android.ahat.heapdump.Value pack(com.android.ahat.heapdump.AhatInstance);
+    method public static com.android.ahat.heapdump.Value pack(double);
+    method public static com.android.ahat.heapdump.Value pack(float);
     method public static com.android.ahat.heapdump.Value pack(int);
     method public static com.android.ahat.heapdump.Value pack(long);
+    method public static com.android.ahat.heapdump.Value pack(short);
     method public abstract String toString();
   }
 
