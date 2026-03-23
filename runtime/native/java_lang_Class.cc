@@ -750,6 +750,13 @@ static jboolean Class_isRecord0(JNIEnv* env, jobject javaThis) {
   return klass->IsRecordClass();
 }
 
+static jboolean Class_isValue(JNIEnv* env, jobject javaThis) {
+  ScopedFastNativeObjectAccess soa(env);
+  StackHandleScope<1> hs(soa.Self());
+  Handle<mirror::Class> klass(hs.NewHandle(DecodeClass(soa, javaThis)));
+  return klass->IsValueClass();
+}
+
 static jboolean Class_isDeclaredAnnotationPresent(JNIEnv* env, jobject javaThis,
                                                   jclass annotationType) {
   ScopedFastNativeObjectAccess soa(env);
@@ -995,6 +1002,7 @@ static JNINativeMethod gMethods[] = {
   FAST_NATIVE_METHOD(Class, isAnonymousClass, "()Z"),
   FAST_NATIVE_METHOD(Class, isDeclaredAnnotationPresent, "(Ljava/lang/Class;)Z"),
   FAST_NATIVE_METHOD(Class, isRecord0, "()Z"),
+  FAST_NATIVE_METHOD(Class, isValue, "()Z"),
   FAST_NATIVE_METHOD(Class, newInstance, "()Ljava/lang/Object;"),
 };
 

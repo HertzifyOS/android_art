@@ -347,6 +347,15 @@ class EXPORT MANAGED Class final : public Object {
     AddRemoveClassFlags(kClassFlagRecord, kClassFlagNormal);
   }
 
+  template<VerifyObjectFlags kVerifyFlags = kDefaultVerifyFlags>
+  ALWAYS_INLINE bool IsValueClass() REQUIRES_SHARED(Locks::mutator_lock_) {
+    return (GetClassFlags<kVerifyFlags>() & kClassFlagValue) != 0;
+  }
+
+  ALWAYS_INLINE void SetValueClass() REQUIRES_SHARED(Locks::mutator_lock_) {
+    AddRemoveClassFlags(kClassFlagValue);
+  }
+
   // Returns true if the class is abstract.
   template<VerifyObjectFlags kVerifyFlags = kDefaultVerifyFlags>
   ALWAYS_INLINE bool IsAbstract() REQUIRES_SHARED(Locks::mutator_lock_) {

@@ -922,13 +922,22 @@ void ThreadList::SuspendAll(const char* cause, bool long_suspend) {
     SuspendAllInternal(self);
     // All threads are known to have suspended (but a thread may still own the mutator lock)
     // Make sure this thread grabs exclusive access to the mutator lock and its protected data.
+    constexpr int kNumWakeups = 3;
+    int num_tries = 0;
 #if HAVE_TIMED_RWLOCK
     while (true) {
-      if (Locks::mutator_lock_->ExclusiveLockWithTimeout(self,
-                                                         NsToMs(thread_suspend_timeout_ns_),
-                                                         0)) {
+      num_tries++;
+      // Rather than just sleeping for thread_suspend_timeout_ns_ we sleep repeatedly to avoid
+      // timeouts when the process is frozen. When the process is frozen, threads don't progress
+      // and when the process is unfrozen we immediately timeout. Sleeping for smaller intervals
+      // repeatedly prevents this from happening in most cases.
+      // TODO(mythria): Use the new interface to get the time we are frozen to determine if the
+      // timeout was because the process was frozen instead of sleeping repeatedly. See b/49059637
+      // and b/375236774 for more details
+      if (Locks::mutator_lock_->ExclusiveLockWithTimeout(
+              self, NsToMs(thread_suspend_timeout_ns_) / kNumWakeups, 0)) {
         break;
-      } else if (!long_suspend_) {
+      } else if (num_tries >= kNumWakeups && !long_suspend_) {
         // Reading long_suspend without the mutator lock is slightly racy, in some rare cases, this
         // could result in a thread suspend timeout.
         // Timeout if we wait more than thread_suspend_timeout_ns_ nanoseconds.

@@ -46,6 +46,7 @@
 #include "handle_scope-inl.h"
 #include "hidden_api.h"
 #include "jni_id_type.h"
+#include "mirror/class_flags.h"
 #include "subtype_check.h"
 #include "method.h"
 #include "object-inl.h"
@@ -1724,7 +1725,9 @@ void Class::PopulateReferenceOffsetBitmap() {
       ref_offsets = -overflow_bitmap_word_idx | kVisitReferencesSlowpathMask;
     }
   }
-  if ((GetClassFlags() & ~kClassFlagStaticRefInfo) == 0 && ref_offsets != 0) {
+  // Value class flag is set before this method call, but that should not prevent a class from
+  // being treated as normal.
+  if ((GetClassFlags() & ~(kClassFlagStaticRefInfo | kClassFlagValue)) == 0 && ref_offsets != 0) {
     AddRemoveClassFlags(kClassFlagNormal);
   }
   SetReferenceInstanceOffsets(ref_offsets);
