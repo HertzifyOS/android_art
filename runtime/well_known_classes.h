@@ -170,12 +170,17 @@ struct EXPORT WellKnownClasses {
   static ArtMethod* java_nio_Buffer_isDirect;
   static ArtMethod* java_nio_DirectByteBuffer_init;
   static ArtMethod* java_util_Collections_emptyList;  // Only for the declaring class.
+  // Only for the declaring class.
+  static ArtMethod* java_util_concurrent_ThreadLocalRandom_current;
   static ArtMethod* java_util_function_Consumer_accept;
   // Only for the declaring class.
   static ArtMethod* jdk_internal_foreign_NativeMemorySegmentImpl_isNative;
   static ArtMethod* jdk_internal_math_FloatingDecimal_getBinaryToASCIIConverter_D;
   static ArtMethod* jdk_internal_math_FloatingDecimal_getBinaryToASCIIConverter_F;
   static ArtMethod* jdk_internal_math_FloatingDecimal_BinaryToASCIIBuffer_getChars;
+  // Only for the declaring class.
+  static ArtMethod*
+      jdk_internal_math_FloatingDecimal_ExceptionalBinaryToASCIIBuffer_toJavaFormatString;
   static ArtMethod* jdk_internal_vm_Continuation_doYieldNative;
   static ArtMethod* jdk_internal_vm_Continuation_enter;
   static ArtMethod* jdk_internal_vm_Continuation_enterSpecial;
@@ -278,6 +283,8 @@ struct EXPORT WellKnownClasses {
       dalvik_system_InMemoryDexClassLoader;
   static constexpr ClassFromMethod<&dalvik_system_PathClassLoader_init>
       dalvik_system_PathClassLoader;
+  static constexpr ClassFromMethod<&dalvik_system_VMRuntime_hiddenApiUsed>
+      dalvik_system_VMRuntime;
   static constexpr ClassFromMethod<&dalvik_system_VirtualThreadParkedStates_init>
       dalvik_system_VirtualThreadParkedStates;
   static constexpr ClassFromMethod<&java_lang_BootClassLoader_init> java_lang_BootClassLoader;
@@ -305,6 +312,8 @@ struct EXPORT WellKnownClasses {
       java_lang_reflect_Parameter;
   static constexpr ClassFromMethod<&java_nio_Buffer_isDirect> java_nio_Buffer;
   static constexpr ClassFromMethod<&java_util_Collections_emptyList> java_util_Collections;
+  static constexpr ClassFromMethod<&java_util_concurrent_ThreadLocalRandom_current>
+      java_util_concurrent_ThreadLocalRandom;
   static constexpr ClassFromMethod<&libcore_util_EmptyArray_init>
       libcore_util_EmptyArray;
 
@@ -317,6 +326,11 @@ struct EXPORT WellKnownClasses {
   static constexpr ClassFromMethod<&java_lang_Long_LongCache_init> java_lang_Long_LongCache;
   static constexpr ClassFromMethod<&jdk_internal_foreign_NativeMemorySegmentImpl_isNative>
       jdk_internal_foreign_NativeMemorySegmentImpl;
+  static constexpr ClassFromMethod<&jdk_internal_math_FloatingDecimal_BinaryToASCIIBuffer_getChars>
+      jdk_internal_math_FloatingDecimal_BinaryToASCIIBuffer;
+  static constexpr ClassFromMethod<
+      &jdk_internal_math_FloatingDecimal_ExceptionalBinaryToASCIIBuffer_toJavaFormatString>
+          jdk_internal_math_FloatingDecimal_ExceptionalBinaryToASCIIBuffer;
 
   static constexpr ClassFromMethod<&java_lang_Boolean_valueOf> java_lang_Boolean;
   static constexpr ClassFromMethod<&java_lang_Byte_valueOf> java_lang_Byte;

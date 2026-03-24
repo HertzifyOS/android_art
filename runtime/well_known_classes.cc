@@ -129,11 +129,14 @@ ArtMethod* WellKnownClasses::java_lang_reflect_Proxy_invoke;
 ArtMethod* WellKnownClasses::java_nio_Buffer_isDirect;
 ArtMethod* WellKnownClasses::java_nio_DirectByteBuffer_init;
 ArtMethod* WellKnownClasses::java_util_Collections_emptyList;
+ArtMethod* WellKnownClasses::java_util_concurrent_ThreadLocalRandom_current;
 ArtMethod* WellKnownClasses::java_util_function_Consumer_accept;
 ArtMethod* WellKnownClasses::jdk_internal_foreign_NativeMemorySegmentImpl_isNative;
 ArtMethod* WellKnownClasses::jdk_internal_math_FloatingDecimal_getBinaryToASCIIConverter_D;
 ArtMethod* WellKnownClasses::jdk_internal_math_FloatingDecimal_getBinaryToASCIIConverter_F;
 ArtMethod* WellKnownClasses::jdk_internal_math_FloatingDecimal_BinaryToASCIIBuffer_getChars;
+ArtMethod* WellKnownClasses::
+    jdk_internal_math_FloatingDecimal_ExceptionalBinaryToASCIIBuffer_toJavaFormatString;
 ArtMethod* WellKnownClasses::jdk_internal_vm_Continuation_doYieldNative;
 ArtMethod* WellKnownClasses::jdk_internal_vm_Continuation_enter;
 ArtMethod* WellKnownClasses::jdk_internal_vm_Continuation_enterSpecial;
@@ -640,12 +643,10 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
   java_lang_ClassNotFoundException_init =
       CacheConstructor(j_l_cnfe.Get(), "(Ljava/lang/String;Ljava/lang/Throwable;)V", pointer_size);
 
-  ObjPtr<mirror::Class> j_l_Double = java_lang_Double_valueOf->GetDeclaringClass();
-  java_lang_Double_doubleToRawLongBits =
-      CacheMethod(j_l_Double, /*is_static=*/ true, "doubleToRawLongBits", "(D)J", pointer_size);
-  ObjPtr<mirror::Class> j_l_Float = java_lang_Float_valueOf->GetDeclaringClass();
-  java_lang_Float_floatToRawIntBits =
-      CacheMethod(j_l_Float, /*is_static=*/ true, "floatToRawIntBits", "(F)I", pointer_size);
+  java_lang_Double_doubleToRawLongBits = CacheMethod(
+      java_lang_Double.Get(), /*is_static=*/ true, "doubleToRawLongBits", "(D)J", pointer_size);
+  java_lang_Float_floatToRawIntBits = CacheMethod(
+      java_lang_Float.Get(), /*is_static=*/ true, "floatToRawIntBits", "(F)I", pointer_size);
 
   java_lang_Daemons_start = CacheMethod(
       j_l_Daemons.Get(), /*is_static=*/ true, "start", "()V", pointer_size);
@@ -775,10 +776,13 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
   java_nio_DirectByteBuffer_init = CacheConstructor(j_n_dbb.Get(), "(JI)V", pointer_size);
 
   java_util_Collections_emptyList = CacheMethod(
-      j_u_c.Get(),
+      j_u_c.Get(), /*is_static=*/ true, "emptyList", "()Ljava/util/List;", pointer_size);
+
+  java_util_concurrent_ThreadLocalRandom_current = CacheMethod(
+      j_u_c_tlr.Get(),
       /*is_static=*/ true,
-      "emptyList",
-      "()Ljava/util/List;",
+      "current",
+      "()Ljava/util/concurrent/ThreadLocalRandom;",
       pointer_size);
 
   java_util_function_Consumer_accept = CacheMethod(
@@ -805,6 +809,12 @@ void WellKnownClasses::InitFieldsAndMethodsOnly(JNIEnv* env) {
       pointer_size);
   jdk_internal_math_FloatingDecimal_BinaryToASCIIBuffer_getChars =
       CacheMethod(j_i_m_fd_btab.Get(), /*is_static=*/ false, "getChars", "([C)I", pointer_size);
+  jdk_internal_math_FloatingDecimal_ExceptionalBinaryToASCIIBuffer_toJavaFormatString =
+      CacheMethod(j_i_m_fd_ebtab.Get(),
+                  /*is_static=*/ false,
+                  "toJavaFormatString",
+                  "()Ljava/lang/String;",
+                  pointer_size);
   jdk_internal_vm_Continuation_doYieldNative =
       CacheMethod(j_i_v_cont.Get(),
                   /*is_static=*/true,
@@ -1110,10 +1120,12 @@ void WellKnownClasses::Clear() {
   java_nio_Buffer_isDirect = nullptr;
   java_nio_DirectByteBuffer_init = nullptr;
   java_util_Collections_emptyList = nullptr;
+  java_util_concurrent_ThreadLocalRandom_current = nullptr;
   jdk_internal_foreign_NativeMemorySegmentImpl_isNative = nullptr;
   jdk_internal_math_FloatingDecimal_getBinaryToASCIIConverter_D = nullptr;
   jdk_internal_math_FloatingDecimal_getBinaryToASCIIConverter_F = nullptr;
   jdk_internal_math_FloatingDecimal_BinaryToASCIIBuffer_getChars = nullptr;
+  jdk_internal_math_FloatingDecimal_ExceptionalBinaryToASCIIBuffer_toJavaFormatString = nullptr;
   jdk_internal_vm_Continuation_doYieldNative = nullptr;
   jdk_internal_vm_Continuation_enter = nullptr;
   jdk_internal_vm_Continuation_enterSpecial = nullptr;

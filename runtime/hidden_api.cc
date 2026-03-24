@@ -755,7 +755,7 @@ void MemberSignature::NotifyHiddenApiListener(AccessMethod access_method) {
     StackHandleScope<2u> hs(soa.Self());
 
     ArtField* consumer_field = WellKnownClasses::dalvik_system_VMRuntime_nonSdkApiUsageConsumer;
-    DCHECK(consumer_field->GetDeclaringClass()->IsInitialized());
+    DCHECK(WellKnownClasses::dalvik_system_VMRuntime->IsInitialized());
     Handle<mirror::Object> consumer_object =
         hs.NewHandle(consumer_field->GetObject(consumer_field->GetDeclaringClass()));
 
