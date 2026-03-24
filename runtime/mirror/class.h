@@ -344,7 +344,7 @@ class EXPORT MANAGED Class final : public Object {
   }
 
   ALWAYS_INLINE void SetRecordClass() REQUIRES_SHARED(Locks::mutator_lock_) {
-    AddRemoveClassFlags(kClassFlagRecord, kClassFlagNormal);
+    AddRemoveClassFlags(kClassFlagRecord);
   }
 
   template<VerifyObjectFlags kVerifyFlags = kDefaultVerifyFlags>

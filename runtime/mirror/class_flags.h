@@ -94,7 +94,7 @@ static constexpr uint32_t kClassFlagStaticRefInfo =
     kClassFlagHasStaticRefs | kClassFlagHasEmbeddedVTable;
 
 static constexpr uint32_t kClassFlagPerfettoIgnoredFlags =
-    kClassFlagStaticRefInfo | kClassFlagValue;
+    kClassFlagStaticRefInfo | kClassFlagRecord | kClassFlagValue;
 
 static constexpr uint32_t kClassFlagArray = kClassFlagObjectArray | kClassFlagPrimitiveArray;
 
