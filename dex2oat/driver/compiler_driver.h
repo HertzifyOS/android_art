@@ -160,37 +160,6 @@ class CompilerDriver {
                                      const DexCompilationUnit* mUnit)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
-  // Resolve a field. Returns null on failure, including incompatible class change.
-  // NOTE: Unlike ClassLinker's ResolveField(), this method enforces is_static.
-  ArtField* ResolveField(const ScopedObjectAccess& soa,
-                         Handle<mirror::DexCache> dex_cache,
-                         Handle<mirror::ClassLoader> class_loader,
-                         uint32_t field_idx,
-                         bool is_static)
-      REQUIRES_SHARED(Locks::mutator_lock_);
-
-  // Can we fast-path an IGET/IPUT access to an instance field? If yes, compute the field offset.
-  std::pair<bool, bool> IsFastInstanceField(ObjPtr<mirror::DexCache> dex_cache,
-                                            ObjPtr<mirror::Class> referrer_class,
-                                            ArtField* resolved_field,
-                                            uint16_t field_idx)
-      REQUIRES_SHARED(Locks::mutator_lock_);
-
-  void ProcessedInstanceField(bool resolved);
-  void ProcessedStaticField(bool resolved, bool local);
-
-  // Can we fast path instance field access? Computes field's offset and volatility.
-  bool ComputeInstanceFieldInfo(uint32_t field_idx, const DexCompilationUnit* mUnit, bool is_put,
-                                MemberOffset* field_offset, bool* is_volatile)
-      REQUIRES(!Locks::mutator_lock_);
-
-  ArtField* ComputeInstanceFieldInfo(uint32_t field_idx,
-                                     const DexCompilationUnit* mUnit,
-                                     bool is_put,
-                                     const ScopedObjectAccess& soa)
-      REQUIRES_SHARED(Locks::mutator_lock_);
-
-
   size_t GetThreadCount() const {
     return parallel_thread_count_;
   }

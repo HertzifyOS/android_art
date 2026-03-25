@@ -117,11 +117,6 @@ class CompilerDriver::AOTCompilationStats {
       : stats_lock_("AOT compilation statistics lock") {}
 
   void Dump() {
-    DumpStat(resolved_instance_fields_, unresolved_instance_fields_, "instance fields resolved");
-    DumpStat(resolved_local_static_fields_ + resolved_static_fields_, unresolved_static_fields_,
-             "static fields resolved");
-    DumpStat(resolved_local_static_fields_, resolved_static_fields_ + unresolved_static_fields_,
-             "static fields local to a class");
     DumpStat(safe_casts_, not_safe_casts_, "check-casts removed based on type information");
     // Note, the code below subtracts the stat value so that when added to the stat value we have
     // 100% of samples. TODO: clean this up.
@@ -176,31 +171,6 @@ class CompilerDriver::AOTCompilationStats {
 #define STATS_LOCK()
 #endif
 
-  void ResolvedInstanceField() REQUIRES(!stats_lock_) {
-    STATS_LOCK();
-    resolved_instance_fields_++;
-  }
-
-  void UnresolvedInstanceField() REQUIRES(!stats_lock_) {
-    STATS_LOCK();
-    unresolved_instance_fields_++;
-  }
-
-  void ResolvedLocalStaticField() REQUIRES(!stats_lock_) {
-    STATS_LOCK();
-    resolved_local_static_fields_++;
-  }
-
-  void ResolvedStaticField() REQUIRES(!stats_lock_) {
-    STATS_LOCK();
-    resolved_static_fields_++;
-  }
-
-  void UnresolvedStaticField() REQUIRES(!stats_lock_) {
-    STATS_LOCK();
-    unresolved_static_fields_++;
-  }
-
   // Indicate that type information from the verifier led to devirtualization.
   void PreciseTypeDevirtualization() REQUIRES(!stats_lock_) {
     STATS_LOCK();
@@ -228,12 +198,6 @@ class CompilerDriver::AOTCompilationStats {
  private:
   Mutex stats_lock_;
 
-  size_t resolved_instance_fields_ = 0u;
-  size_t unresolved_instance_fields_ = 0u;
-
-  size_t resolved_local_static_fields_ = 0u;
-  size_t resolved_static_fields_ = 0u;
-  size_t unresolved_static_fields_ = 0u;
   // Type based devirtualization for invoke interface and virtual.
   size_t type_based_devirtualization_ = 0u;
 
@@ -262,7 +226,7 @@ CompilerDriver::CompilerDriver(
       number_of_soft_verifier_failures_(0),
       had_hard_verifier_failure_(false),
       parallel_thread_count_(thread_count),
-      stats_(new AOTCompilationStats),
+      stats_(new AOTCompilationStats()),
       compiled_method_storage_(swap_fd),
       max_arena_alloc_(0) {
   DCHECK(compiler_options_ != nullptr);
@@ -1677,66 +1641,6 @@ void CompilerDriver::UpdateImageClasses(TimingLogger* timings,
 
   // Do the marking.
   update.Walk();
-}
-
-void CompilerDriver::ProcessedInstanceField(bool resolved) {
-  if (!resolved) {
-    stats_->UnresolvedInstanceField();
-  } else {
-    stats_->ResolvedInstanceField();
-  }
-}
-
-void CompilerDriver::ProcessedStaticField(bool resolved, bool local) {
-  if (!resolved) {
-    stats_->UnresolvedStaticField();
-  } else if (local) {
-    stats_->ResolvedLocalStaticField();
-  } else {
-    stats_->ResolvedStaticField();
-  }
-}
-
-ArtField* CompilerDriver::ComputeInstanceFieldInfo(uint32_t field_idx,
-                                                   const DexCompilationUnit* mUnit,
-                                                   bool is_put,
-                                                   const ScopedObjectAccess& soa) {
-  // Try to resolve the field and compiling method's class.
-  ArtField* resolved_field;
-  ObjPtr<mirror::Class> referrer_class;
-  Handle<mirror::DexCache> dex_cache(mUnit->GetDexCache());
-  {
-    Handle<mirror::ClassLoader> class_loader = mUnit->GetClassLoader();
-    resolved_field = ResolveField(soa, dex_cache, class_loader, field_idx, /* is_static= */ false);
-    referrer_class = resolved_field != nullptr
-        ? ResolveCompilingMethodsClass(soa, dex_cache, class_loader, mUnit) : nullptr;
-  }
-  bool can_link = false;
-  if (resolved_field != nullptr && referrer_class != nullptr) {
-    std::pair<bool, bool> fast_path = IsFastInstanceField(
-        dex_cache.Get(), referrer_class, resolved_field, field_idx);
-    can_link = is_put ? fast_path.second : fast_path.first;
-  }
-  ProcessedInstanceField(can_link);
-  return can_link ? resolved_field : nullptr;
-}
-
-bool CompilerDriver::ComputeInstanceFieldInfo(uint32_t field_idx, const DexCompilationUnit* mUnit,
-                                              bool is_put, MemberOffset* field_offset,
-                                              bool* is_volatile) {
-  ScopedObjectAccess soa(Thread::Current());
-  ArtField* resolved_field = ComputeInstanceFieldInfo(field_idx, mUnit, is_put, soa);
-
-  if (resolved_field == nullptr) {
-    // Conservative defaults.
-    *is_volatile = true;
-    *field_offset = MemberOffset(static_cast<size_t>(-1));
-    return false;
-  } else {
-    *is_volatile = resolved_field->IsVolatile();
-    *field_offset = resolved_field->GetOffset();
-    return true;
-  }
 }
 
 class CompilationVisitor {
