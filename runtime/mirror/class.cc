@@ -1725,9 +1725,10 @@ void Class::PopulateReferenceOffsetBitmap() {
       ref_offsets = -overflow_bitmap_word_idx | kVisitReferencesSlowpathMask;
     }
   }
-  // Value class flag is set before this method call, but that should not prevent a class from
-  // being treated as normal.
-  if ((GetClassFlags() & ~(kClassFlagStaticRefInfo | kClassFlagValue)) == 0 && ref_offsets != 0) {
+  // Record / value class flag is set before this method call, but that should not prevent a
+  // class from being treated as normal.
+  constexpr uint32_t kIgnoredFlags = kClassFlagStaticRefInfo | kClassFlagRecord | kClassFlagValue;
+  if ((GetClassFlags() & ~kIgnoredFlags) == 0 && ref_offsets != 0) {
     AddRemoveClassFlags(kClassFlagNormal);
   }
   SetReferenceInstanceOffsets(ref_offsets);

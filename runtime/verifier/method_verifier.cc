@@ -1853,6 +1853,10 @@ bool MethodVerifierImpl::ComputeWidthsAndCountOps() {
             ok = false;
           } else {
             uint16_t element_size = inst->Fetch16(1);
+            if (element_size == 0) {
+              ok = false;
+              break;
+            }
             uint32_t length = inst->Fetch16(2) | (((uint32_t)inst->Fetch16(3)) << 16);
             // Use 64-bit calculation to avoid arithmetic overflow.
             uint64_t bytes = static_cast<uint64_t>(element_size) * static_cast<uint64_t>(length);

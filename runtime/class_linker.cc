@@ -3282,7 +3282,6 @@ ObjPtr<mirror::Class> ClassLinker::FindClass(Thread* self,
   DCHECK_NE(descriptor_length, 0u) << "descriptor is empty string";
   DCHECK(self != nullptr);
   self->AssertNoPendingException();
-  self->AssertThreadSuspensionIsAllowable();
   self->PoisonObjectPointers();  // For DefineClass, CreateArrayClass, etc...
   if (descriptor_length == 1u) {
     // only the descriptors of primitive types should be 1 character long, also avoid class lookup
