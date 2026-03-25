@@ -417,7 +417,10 @@ class TraceWriter {
   const int trace_format_version_;
 
   // Time trace was created.
-  const uint64_t start_time_;
+  uint64_t start_time_;
+
+  // Timestamp counter at the start.
+  uint64_t start_time_tsc_;
 
   // Did we overflow the buffer recording traces?
   bool overflow_;
