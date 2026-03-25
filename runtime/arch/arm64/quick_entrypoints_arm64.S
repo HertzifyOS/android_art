@@ -186,7 +186,7 @@
     ldr x1, [xSELF, # THREAD_EXCEPTION_OFFSET]  // Get exception field.
     CFI_REMEMBER_STATE
     cbnz x1, 1f
-    DEOPT_OR_RETURN x1, \is_ref                // Check if deopt is required
+    DEOPT_OR_RETURN w1, \is_ref                // Check if deopt is required
 1:                                             // deliver exception on current thread
     CFI_RESTORE_STATE_AND_DEF_CFA sp, 0
     DELIVER_PENDING_EXCEPTION
@@ -254,7 +254,7 @@
 .macro RETURN_OR_DEOPT_IF_INT_RESULT_IS_ZERO_OR_DELIVER
     CFI_REMEMBER_STATE
     cbnz w0, 1f                // result non-zero branch over
-    DEOPT_OR_RETURN x1
+    DEOPT_OR_RETURN w1
 1:
     CFI_RESTORE_STATE_AND_DEF_CFA sp, 0
     DELIVER_PENDING_EXCEPTION
@@ -1217,7 +1217,7 @@ ENTRY \name
     mov   x1, xSELF                   // pass Thread::Current
     CALL_SYMBOL \entrypoint           // (int32_t index, Thread* self)
     cbz   w0, 1f                      // If result is null, deliver the OOME.
-    DEOPT_OR_RESTORE_SAVE_EVERYTHING_FRAME_AND_RETURN_X0 x1, /* is_ref= */ 1
+    DEOPT_OR_RESTORE_SAVE_EVERYTHING_FRAME_AND_RETURN_X0 w1, /* is_ref= */ 1
 1:
     DELIVER_PENDING_EXCEPTION_FRAME_READY
 END \name
@@ -1231,7 +1231,7 @@ END \name
 .macro RETURN_OR_DEOPT_IF_RESULT_IS_NON_NULL_OR_DELIVER
     CFI_REMEMBER_STATE
     cbz w0, 1f                       // result zero branch over
-    DEOPT_OR_RETURN x1, /*is_ref=*/1 // check for deopt or return
+    DEOPT_OR_RETURN w1, /*is_ref=*/1 // check for deopt or return
 1:
     CFI_RESTORE_STATE_AND_DEF_CFA sp, 0
     DELIVER_PENDING_EXCEPTION

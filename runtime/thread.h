@@ -643,6 +643,7 @@ class EXPORT Thread {
   }
 
   void AssertThreadSuspensionIsAllowable(bool check_locks = true) const;
+  static void AssertThreadSuspensionIsAllowableOnCurrentThread(bool check_locks = true);
 
   void AssertNoTransactionCheckAllowed() const {
     CHECK(tlsPtr_.last_no_transaction_checks_cause == nullptr)
