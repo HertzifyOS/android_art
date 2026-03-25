@@ -238,12 +238,6 @@ inline void Thread::AssertThreadSuspensionIsAllowable(bool check_locks) const {
   }
 }
 
-inline void Thread::AssertThreadSuspensionIsAllowableOnCurrentThread(bool check_locks) {
-  if (kIsDebugBuild) {
-    Thread::Current()->AssertThreadSuspensionIsAllowable(check_locks);
-  }
-}
-
 inline void Thread::TransitionToSuspendedAndRunCheckpoints(ThreadState new_state) {
   DCHECK_NE(new_state, ThreadState::kRunnable);
   while (true) {
