@@ -2622,6 +2622,14 @@ bool ProfileCompilationInfo::UpdateProfileKeys(
           dex_data->num_type_ids == dex_file->NumTypeIds() &&
           dex_data->num_method_ids == dex_file->NumMethodIds()) {
         std::string new_base_key = GetProfileDexFileBaseKey(dex_file.get());
+        if (dex_file->GetHeader().HasDexContainer()) {
+          // DEX v41 introduces dex containers, which store multipe dex files per zip entry.
+          // This means the ZIP CRC32 alone isn't unique, so also check the location suffix.
+          if (DexFileLoader::SplitMultiDexLocation(old_base_key).second !=
+              DexFileLoader::SplitMultiDexLocation(new_base_key).second) {
+            continue;
+          }
+        }
         old_key_to_new_key[old_base_key] = new_base_key;
         new_key_to_old_keys[new_base_key].insert(old_base_key);
         found = true;
