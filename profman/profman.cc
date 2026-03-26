@@ -568,7 +568,7 @@ class ProfMan final {
 
   bool GetProfileFilterKeyFromApks(std::set<ProfileFilterKey>* profile_filter_keys) {
     return ForEachApkFile([&](File file, const std::string& location) {
-      std::string base_key = ProfileCompilationInfo::GetProfileDexFileBaseKey(location);
+      std::string base_key(ProfileCompilationInfo::GetLocationBasename(location));
       ArtDexFileLoader dex_file_loader(&file, location);
       std::vector<uint32_t> checksums;
       std::string error_msg;

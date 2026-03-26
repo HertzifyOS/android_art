@@ -276,6 +276,33 @@ void* MemMap::TryMemMapLow4GB(void* ptr,
 }
 #endif
 
+std::string MemMap::FormatDebugName(const char* name) {
+  // If the combined debug name exceeds the kernel limit, we ellipsize the
+  // name interior; we want to keep the end of the name to ensure preservation
+  // of any file extensions that might be used in bookkeeping.
+  // TODO(b/494278476): Also sanitize any invalid characters (e.g., `\`, `$`).
+  static constexpr std::string_view kPrefix = "dalvik-";
+  static constexpr std::string_view kEllipsis = "...";
+  static constexpr size_t kMaxKernelLen = 79;  // 80 bytes total - 1 for '\0'
+  static constexpr size_t kHeadLen = 20;
+  static constexpr size_t kTailLen =
+      kMaxKernelLen - kPrefix.length() - kEllipsis.length() - kHeadLen;
+
+  const std::string_view name_sv = (name != nullptr) ? name : "";
+  std::string debug_friendly_name;
+  if (kPrefix.length() + name_sv.length() <= kMaxKernelLen) {
+    debug_friendly_name.reserve(kPrefix.length() + name_sv.length());
+    debug_friendly_name.append(kPrefix).append(name_sv);
+  } else {
+    debug_friendly_name.reserve(kMaxKernelLen);
+    debug_friendly_name.append(kPrefix)
+        .append(name_sv.substr(0, kHeadLen))
+        .append(kEllipsis)
+        .append(name_sv.substr(name_sv.length() - kTailLen));
+  }
+  return debug_friendly_name;
+}
+
 void MemMap::SetDebugName(void* map_ptr, const char* name, size_t size) {
   // Debug naming is only used for Android target builds. For Linux targets,
   // we'll still call prctl but it wont do anything till we upstream the prctl.
@@ -283,11 +310,10 @@ void MemMap::SetDebugName(void* map_ptr, const char* name, size_t size) {
     return;
   }
 
+  const std::string debug_friendly_name = FormatDebugName(name);
+
   // lock as std::map is not thread-safe
   std::lock_guard<std::mutex> mu(*mem_maps_lock_);
-
-  std::string debug_friendly_name("dalvik-");
-  debug_friendly_name += name;
   auto it = debugStrMap.find(debug_friendly_name);
 
   if (it == debugStrMap.end()) {

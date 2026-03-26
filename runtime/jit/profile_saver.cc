@@ -215,8 +215,7 @@ void ProfileSaver::Run() {
                                                                   options_.GetMinSavePeriodMs());
     // When the delay signal is valid (the notification delay time is within
     // kProfileDelaySignalValidWindowMs), period_condition_.TimedWait is used to wait for
-    // the remaining window time to delay the processing of the profile. When there are multiple
-    // consecutive delays, the maximum sleep time does not exceed min_save_period_ns * 2.
+    // the remaining window time to delay the processing of the profile.
     // When profiling the boot class path, the delay mechanism is always disabled to ensure the
     // profile collection is not impacted.
     do {
@@ -224,8 +223,7 @@ void ProfileSaver::Run() {
       bool should_delay = !options_.GetProfileBootClassPath() &&
                           (time_since_notify < kProfileDelaySignalValidWindowMs);
 
-      if (min_save_period_ns * 0.9 <= sleep_time &&
-          !(should_delay && min_save_period_ns * 2 > sleep_time)) {
+      if (min_save_period_ns * 0.9 <= sleep_time && !should_delay) {
         break;
       }
       uint64_t wait_time = should_delay ? kProfileDelaySignalValidWindowMs - time_since_notify
@@ -1105,12 +1103,13 @@ void ProfileSaver::Start(const ProfileSaverOptions& options,
     for (const std::string& location : code_paths) {
       // Use the profile base key for checking file uniqueness (as it is constructed solely based
       // on the location and ignores other metadata like origin package).
-      code_paths_keys.insert(ProfileCompilationInfo::GetProfileDexFileBaseKey(location));
+      code_paths_keys.insert(std::string(ProfileCompilationInfo::GetLocationBasename(location)));
     }
     for (const DexFile* dex_file : runtime->GetClassLinker()->GetBootClassPath()) {
       // Don't check ShouldProfileLocation since the boot class path may be speed compiled.
       const std::string& location = dex_file->GetLocation();
-      const std::string key = ProfileCompilationInfo::GetProfileDexFileBaseKey(location);
+      std::string base_location = DexFileLoader::GetBaseLocation(location);
+      const std::string key(ProfileCompilationInfo::GetLocationBasename(base_location));
       VLOG(profiler) << "Registering boot dex file " << location;
       if (code_paths_keys.find(key) != code_paths_keys.end()) {
         LOG(WARNING) << "Boot class path location key conflicts with code path " << location;

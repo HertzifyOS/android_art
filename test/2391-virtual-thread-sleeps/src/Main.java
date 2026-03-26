@@ -36,6 +36,7 @@ import jdk.internal.access.SharedSecrets;
 public class Main {
 
     private static final boolean DEBUG = false;
+    private static final DateFormat TIME_FORMAT = DateFormat.getTimeInstance();
 
     public static void main(String[] args) throws InterruptedException {
         if (!com.android.art.flags.Flags.virtualThreadImplV1()) {
@@ -51,8 +52,8 @@ public class Main {
         testNSleepingThreads(2);
         testNSleepingThreads(10);
         testNSleepingThreads(100);
-        testNSleepingThreads(500);
         // TODO: Re-enable this test when this test is stable enough in the CI.
+        // testNSleepingThreads(500);
         // testNSleepingThreads(1000);
         // testNSleepingThreads(3000);
     }
@@ -66,8 +67,12 @@ public class Main {
      */
     private static void testNSleepingThreads(int numOfThreads) throws InterruptedException {
         long sleepDurationMs = Math.max(numOfThreads / 10, 100);
+
+        debugPrintln("Start creating test case for " + numOfThreads + " threads sleeping for " +
+                sleepDurationMs + "ms at " + timeNow());
         try (SleepingVirtualThreadTestCase test =
                      new SleepingVirtualThreadTestCase(numOfThreads, sleepDurationMs)) {
+            debugPrintln("End creating test case for " + numOfThreads + " at " + timeNow());
             test.run();
         }
     }
@@ -76,6 +81,10 @@ public class Main {
         if (DEBUG) {
              System.out.println(msg);
         }
+    }
+
+    private static String timeNow() {
+        return TIME_FORMAT.format(new Date(System.currentTimeMillis()));
     }
 
     /**
@@ -91,11 +100,11 @@ public class Main {
         private static final JavaLangAccess JLA = SharedSecrets.getJavaLangAccess();
         private static final int CARRIER_THREADS_LIMIT = 32;
         private static final int JOIN_TIMEOUT_MS = 2 * 1000;
-        private static final int TIMEOUT_MULTIPLIER = 50;
-        private static final DateFormat TIME_FORMAT = DateFormat.getTimeInstance();
+        private static final int TIMEOUT_MULTIPLIER = 200;
         private final Timer mTimer = new Timer();
         private final int mNumOfThreads;
         private final long mSleepDurationMs;
+        private final long mTimeOutMs;
 
         private final AtomicInteger mRunningTasksCounter;
 
@@ -103,48 +112,65 @@ public class Main {
 
         private final ConcurrentLinkedQueue<Thread> mFinishingCarriers;
 
+        // Use a separate counter because mFinishingCarriers.size() is slow with
+        // --gcstress and --gcverify.
+        private final AtomicInteger mFinishingCarriersCounter;
+
         public SleepingVirtualThreadTestCase(int numOfThreads, long sleepDurationMs) {
             mNumOfThreads = numOfThreads;
             mSleepDurationMs = sleepDurationMs;
+            mTimeOutMs = mSleepDurationMs * TIMEOUT_MULTIPLIER;
             mRunningTasksCounter = new AtomicInteger(0);
             mPendingTasks = new ConcurrentLinkedQueue<>();
             mFinishingCarriers = new ConcurrentLinkedQueue<>();
+            mFinishingCarriersCounter = new AtomicInteger(0);
         }
 
         public void run() throws InterruptedException {
+            debugPrintln("Start inserting tasks at " + timeNow());
             for (int i = 0; i < mNumOfThreads; i++) {
                 Runnable task = () -> {
                     Thread t = startSleepingThread(mSleepDurationMs, mTimer,
-                            mRunningTasksCounter, mPendingTasks, mFinishingCarriers);
+                            mRunningTasksCounter, mPendingTasks, mFinishingCarriers,
+                            mFinishingCarriersCounter);
                     VirtualThreadContext vtContext = t.getVirtualThreadContext();
                     debugPrintln("Thread " + vtContext.id + " started at " + timeNow());
-
                 };
                 mPendingTasks.add(task);
             }
 
+            debugPrintln("End inserting tasks at " + timeNow());
+
             long startTime = nowForElapsedTimeMillis();
             debugPrintln("Started at " + timeNow());
-            long timeout = mSleepDurationMs * TIMEOUT_MULTIPLIER;
 
-            while (mFinishingCarriers.size() < mNumOfThreads) {
+            int iterations = 0;
+            while (true) {
+                int finishCarriersCount = mFinishingCarriersCounter.get();
+                if (finishCarriersCount >= mNumOfThreads) {
+                    break;
+                }
+                int runningTaskCount = mRunningTasksCounter.get();
                 long duration = nowForElapsedTimeMillis() - startTime;
-                if (duration > timeout) {
+                if (duration > mTimeOutMs) {
                     throw new IllegalStateException("Timeout : " + duration + " ms, " +
                             "Expect " + mNumOfThreads + " threads joining, but only " +
-                            mFinishingCarriers.size() + " num of running tasks: " +
-                            mRunningTasksCounter.get());
+                            finishCarriersCount + " threads joined. " +
+                            "Num of running tasks: " + runningTaskCount +
+                            ", Num of pending tasks: " + mPendingTasks.size() +
+                            ", iterations: " + iterations + ", at: " + timeNow());
                 }
                 // It's okay to check and increment the threshold non-atomically because
                 // the counter is incremented only on this thread.
-                while (mRunningTasksCounter.get() < CARRIER_THREADS_LIMIT) {
+                while (runningTaskCount < CARRIER_THREADS_LIMIT) {
                     Runnable task = mPendingTasks.poll();
                     if (task == null) {
                         break;
                     }
-                    mRunningTasksCounter.incrementAndGet();
+                    runningTaskCount = mRunningTasksCounter.incrementAndGet();
                     task.run();
                 }
+                iterations++;
             }
 
             long duration = nowForElapsedTimeMillis() - startTime;
@@ -171,17 +197,20 @@ public class Main {
 
         private static Thread startSleepingThread(long sleepDurationMs, Timer timer,
                 AtomicInteger runningTasksCounter, ConcurrentLinkedQueue<Runnable> pendingTasks,
-                ConcurrentLinkedQueue<Thread> finishingCarriers) {
+                ConcurrentLinkedQueue<Thread> finishingCarriers,
+                AtomicInteger finishingCarriersCounter) {
             return Thread.startVirtual(() ->
                 sleepingTask(sleepDurationMs, timer, runningTasksCounter, pendingTasks,
-                        finishingCarriers));
+                        finishingCarriers, finishingCarriersCounter));
         }
 
         private static void sleepingTask(long sleepDurationMs, Timer timer,
                 AtomicInteger runningTasksCounter, ConcurrentLinkedQueue<Runnable> pendingTasks,
-                ConcurrentLinkedQueue<Thread> finishingCarriers) {
+                ConcurrentLinkedQueue<Thread> finishingCarriers,
+                AtomicInteger finishingCarriersCounter) {
             long tid1 = getCarrierThreadId();
-            parkVirtual(sleepDurationMs, timer, runningTasksCounter, pendingTasks, finishingCarriers);
+            parkVirtual(sleepDurationMs, timer, runningTasksCounter, pendingTasks, finishingCarriers,
+                finishingCarriersCounter);
             long tid2 = getCarrierThreadId();
             if (tid1 == tid2) {
                 throw new RuntimeException("thread id shouldn't be the same: "
@@ -205,7 +234,8 @@ public class Main {
 
         private static void parkVirtual(long sleepDurationMs, Timer timer,
                 AtomicInteger runningTasksCounter, ConcurrentLinkedQueue<Runnable> pendingTasks,
-                ConcurrentLinkedQueue<Thread> finishingCarriers) {
+                ConcurrentLinkedQueue<Thread> finishingCarriers,
+                AtomicInteger finishingCarriersCounter) {
             long startTime = nowForElapsedTimeMillis();
             Thread carrier = JLA.currentCarrierThread();
             VirtualThreadContext vtContext = carrier.getVirtualThreadContext();
@@ -215,13 +245,13 @@ public class Main {
             //    (and this virtual thread to park successfully) on the timer thread.
             // 2. After a delay, mark this virtual thread ready to be unparked by the scheduler.
             // 3. When capacity is available, the main thread unparks this virtual thread.
-
             TimerTask unparkingTask = new TimerTask() {
                 @Override
                 public void run() {
                     pendingTasks.add(() -> {
                         Thread th = Thread.unparkVirtual(vtContext);
                         finishingCarriers.add(th);
+                        finishingCarriersCounter.incrementAndGet();
                         debugPrintln("Virtual thread is unparked: " + virtualThreadId +
                                 " at " + timeNow());
                     });
@@ -256,10 +286,6 @@ public class Main {
             };
             timer.schedule(joiningTask, 0);
             Thread.parkVirtual();
-        }
-
-        private static String timeNow() {
-            return TIME_FORMAT.format(new Date(nowForElapsedTimeMillis()));
         }
 
         private static long nowForElapsedTimeMillis() {

@@ -1779,11 +1779,11 @@ TEST_F(ProfileAssistantTest, MergeProfilesWithFilter) {
 
   ProfileCompilationInfo::ProfileLoadFilterFn filter_fn =
       [&d1, &d2](const std::string& dex_location, uint32_t checksum) -> bool {
-          return (dex_location == ProfileCompilationInfo::GetProfileDexFileBaseKey(d1.GetLocation())
-              && checksum == d1.GetLocationChecksum())
-              || (dex_location == ProfileCompilationInfo::GetProfileDexFileBaseKey(d2.GetLocation())
-              && checksum == d2.GetLocationChecksum());
-        };
+    return (dex_location == ProfileCompilationInfo::GetProfileDexFileBaseKey(&d1) &&
+            checksum == d1.GetLocationChecksum()) ||
+           (dex_location == ProfileCompilationInfo::GetProfileDexFileBaseKey(&d2) &&
+            checksum == d2.GetLocationChecksum());
+  };
 
   ProfileCompilationInfo info1_filter;
   ProfileCompilationInfo info2_filter;
