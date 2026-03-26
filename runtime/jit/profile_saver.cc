@@ -215,8 +215,7 @@ void ProfileSaver::Run() {
                                                                   options_.GetMinSavePeriodMs());
     // When the delay signal is valid (the notification delay time is within
     // kProfileDelaySignalValidWindowMs), period_condition_.TimedWait is used to wait for
-    // the remaining window time to delay the processing of the profile. When there are multiple
-    // consecutive delays, the maximum sleep time does not exceed min_save_period_ns * 2.
+    // the remaining window time to delay the processing of the profile.
     // When profiling the boot class path, the delay mechanism is always disabled to ensure the
     // profile collection is not impacted.
     do {
@@ -224,8 +223,7 @@ void ProfileSaver::Run() {
       bool should_delay = !options_.GetProfileBootClassPath() &&
                           (time_since_notify < kProfileDelaySignalValidWindowMs);
 
-      if (min_save_period_ns * 0.9 <= sleep_time &&
-          !(should_delay && min_save_period_ns * 2 > sleep_time)) {
+      if (min_save_period_ns * 0.9 <= sleep_time && !should_delay) {
         break;
       }
       uint64_t wait_time = should_delay ? kProfileDelaySignalValidWindowMs - time_since_notify
