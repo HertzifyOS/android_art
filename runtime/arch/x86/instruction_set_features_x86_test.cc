@@ -233,20 +233,20 @@ TEST(X86InstructionSetFeaturesTest, X86FeaturesFromAlderlakeVariant) {
   EXPECT_FALSE(x86_64_features->Equals(x86_features.get()));
 }
 
-TEST(X86InstructionSetFeaturesTest, X86FeaturesFromLunarlakeVariant) {
-  // Build features for a 32-bit lunarlake x86 processor.
+TEST(X86InstructionSetFeaturesTest, X86FeaturesFromPantherlakeVariant) {
+  // Build features for a 32-bit pantherlake x86 processor.
   std::string error_msg;
   std::unique_ptr<const InstructionSetFeatures> x86_features(
-      InstructionSetFeatures::FromVariant(InstructionSet::kX86, "lunarlake", &error_msg));
+      InstructionSetFeatures::FromVariant(InstructionSet::kX86, "pantherlake", &error_msg));
   ASSERT_TRUE(x86_features.get() != nullptr) << error_msg;
   EXPECT_EQ(x86_features->GetInstructionSet(), InstructionSet::kX86);
   EXPECT_TRUE(x86_features->Equals(x86_features.get()));
   EXPECT_STREQ("ssse3,sse4.1,sse4.2,avx,avx2,popcnt", x86_features->GetFeatureString().c_str());
   EXPECT_EQ(x86_features->AsBitmap(), 63U);
 
-  // Build features for a 64-bit x86-64 lunarlake processor.
+  // Build features for a 64-bit x86-64 pantherlake processor.
   std::unique_ptr<const InstructionSetFeatures> x86_64_features(
-      InstructionSetFeatures::FromVariant(InstructionSet::kX86_64, "lunarlake", &error_msg));
+      InstructionSetFeatures::FromVariant(InstructionSet::kX86_64, "pantherlake", &error_msg));
   ASSERT_TRUE(x86_64_features.get() != nullptr) << error_msg;
   EXPECT_EQ(x86_64_features->GetInstructionSet(), InstructionSet::kX86_64);
   EXPECT_TRUE(x86_64_features->Equals(x86_64_features.get()));

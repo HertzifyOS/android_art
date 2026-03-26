@@ -50,7 +50,7 @@ static constexpr const char* x86_known_variants[] = {
     "tremont",
     "kabylake",
     "alderlake",
-    "lunarlake",
+    "pantherlake",
     "default",
 };
 
@@ -64,7 +64,7 @@ static constexpr const char* x86_variants_with_ssse3[] = {
     "tremont",
     "alderlake",
     "kabylake",
-    "lunarlake",
+    "pantherlake",
 };
 
 static constexpr const char* x86_variants_with_sse4_1[] = {
@@ -76,7 +76,7 @@ static constexpr const char* x86_variants_with_sse4_1[] = {
     "tremont",
     "alderlake",
     "kabylake",
-    "lunarlake",
+    "pantherlake",
 };
 
 static constexpr const char* x86_variants_with_sse4_2[] = {
@@ -88,7 +88,7 @@ static constexpr const char* x86_variants_with_sse4_2[] = {
     "tremont",
     "alderlake",
     "kabylake",
-    "lunarlake",
+    "pantherlake",
 };
 
 static constexpr const char* x86_variants_with_popcnt[] = {
@@ -100,18 +100,18 @@ static constexpr const char* x86_variants_with_popcnt[] = {
     "tremont",
     "alderlake",
     "kabylake",
-    "lunarlake",
+    "pantherlake",
 };
 static constexpr const char* x86_variants_with_avx[] = {
     "kabylake",
     "alderlake",
-    "lunarlake",
+    "pantherlake",
 };
 
 static constexpr const char* x86_variants_with_avx2[] = {
     "kabylake",
     "alderlake",
-    "lunarlake",
+    "pantherlake",
 };
 
 X86FeaturesUniquePtr X86InstructionSetFeatures::Create(bool x86_64,
