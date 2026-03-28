@@ -43,6 +43,7 @@ import dalvik.system.DexFile;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -304,10 +305,16 @@ public class ReasonMapping {
                                 .thenComparingLong(PackageInfo::lastActiveTime)
                                 .reversed();
                 if (reason.equals(REASON_PRE_REBOOT_DEXOPT_SYNC)) {
+                    Set<String> forcedPackages = new HashSet<>();
+                    forcedPackages.addAll(Constants.getPreRebootDexoptSyncForcedPackages());
+                    forcedPackages.add(Utils.getSystemUiPackageName(mInjector.getContext()));
+                    forcedPackages.addAll(Utils.getLauncherPackageNames(mInjector.getContext()));
+                    forcedPackages.addAll(Utils.getCameraPackageNames(mInjector.getContext()));
+
                     comparator = Comparator
                                          .comparing((PackageInfo pkgInfo) -> {
-                                             return Constants.getPreRebootDexoptSyncForcedPackages()
-                                                     .contains(pkgInfo.pkgState().getPackageName());
+                                             return forcedPackages.contains(
+                                                     pkgInfo.pkgState().getPackageName());
                                          })
                                          .reversed()
                                          .thenComparing(comparator);
@@ -435,6 +442,10 @@ public class ReasonMapping {
 
         public boolean isLauncherPackage(@NonNull String packageName) {
             return Utils.isLauncherPackage(mContext, packageName);
+        }
+
+        public Context getContext() {
+            return mContext;
         }
 
         public Clock getClock() {

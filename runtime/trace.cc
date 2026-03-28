@@ -89,7 +89,7 @@ static constexpr size_t kScalingFactorEncodedEntries = 12;
 // The key identifying the tracer to update instrumentation.
 static constexpr const char* kTracerInstrumentationKey = "Tracer";
 
-double TimestampCounter::tsc_to_nanosec_scaling_factor = -1;
+double TimestampCounter::tsc_to_nanosec_scaling_factor_ = -1;
 
 Trace* Trace::the_trace_ = nullptr;
 Trace* TraceLowOverhead::low_overhead_trace_ = nullptr;
@@ -991,7 +991,8 @@ TraceWriter::TraceWriter(File* trace_file,
       buf_(new uint8_t[std::max(kMinBufSize, buffer_size)]()),
       buffer_size_(std::max(kMinBufSize, buffer_size)),
       trace_format_version_(trace_format_version),
-      start_time_(TimestampCounter::GetNanoTime(TimestampCounter::GetTimestamp())),
+      start_time_(0),
+      start_time_tsc_(0),
       overflow_(false),
       num_records_(0),
       clock_overhead_ns_(clock_overhead_ns),
@@ -1007,8 +1008,9 @@ TraceWriter::TraceWriter(File* trace_file,
   // We record monotonic time at the start of the trace, because Android Studio
   // fetches the monotonic timer from other places and matches these times to
   // construct a cpu profile. See b/318052824 for more context.
-  uint64_t start_time_monotonic =
-      start_time_ + (NanoTime() - TimestampCounter::GetNanoTime(TimestampCounter::GetTimestamp()));
+  start_time_tsc_ = TimestampCounter::GetTimestamp();
+  uint64_t start_time_monotonic = NanoTime();
+  start_time_ = TimestampCounter::GetNanoTime(start_time_tsc_);
   uint16_t trace_version = GetTraceVersion(clock_source_, trace_format_version_);
   if (output_mode == TraceOutputMode::kStreaming && trace_format_version_ == Trace::kFormatV1) {
     trace_version |= 0xF0U;
@@ -1034,6 +1036,8 @@ TraceWriter::TraceWriter(File* trace_file,
     Append4LE(buf_.get(), kTraceMagicValue);
     Append2LE(buf_.get() + 4, trace_version);
     Append8LE(buf_.get() + 6, start_time_monotonic);
+    Append8LE(buf_.get() + 14, start_time_tsc_);
+    Append8LE(buf_.get() + 22, TimestampCounter::GetFrequency());
     cur_offset_ = kTraceHeaderLengthV2;
   }
 
@@ -1090,6 +1094,8 @@ Trace::Trace(File* trace_file,
 std::string TraceWriter::CreateSummary(int flags) {
   std::ostringstream os;
   // Compute elapsed time.
+  uint64_t end_time_tsc = TimestampCounter::GetTimestamp();
+  uint64_t end_time = NanoTime();
   uint64_t elapsed = TimestampCounter::GetNanoTime(TimestampCounter::GetTimestamp()) - start_time_;
   os << StringPrintf("%cversion\n", kTraceTokenChar);
   os << StringPrintf("%d\n", GetTraceVersion(clock_source_, trace_format_version_));
@@ -1119,6 +1125,8 @@ std::string TraceWriter::CreateSummary(int flags) {
      << "\n";
   os << "is_precise_trace=" << (flags & Trace::TraceFlag::kTraceLowOverhead ? "false" : "true")
      << "\n";
+  os << "end_time=" << end_time << "\n";
+  os << "end_tsc=" << end_time_tsc << "\n";
   std::string compiler_filter;
   std::string compilation_reason;
   Runtime::Current()->GetAppInfo()->GetPrimaryApkOptimizationStatus(&compiler_filter,

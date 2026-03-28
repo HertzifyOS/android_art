@@ -2141,6 +2141,16 @@ void UnstartedRuntime::UnstartedJNIThrowableNativeFillInStackTrace(
     [[maybe_unused]] uint32_t* args,
     JValue* result) {
   ScopedObjectAccessUnchecked soa(self);
+  Runtime* runtime = Runtime::Current();
+  if (runtime->IsActiveTransaction()) {
+    // Abort the transaction.
+    // The stack trace contains pointers to methods which would be bogus when written
+    // to the image. We would need to check if all classes owning these methods are
+    // image classes and then we would need to fix up these pointers in `ImageWriter`.
+    DCHECK(runtime->IsAotCompiler());
+    runtime->GetClassLinker()->AbortTransactionF(self, "Stack trace not supported for dex2oat");
+    return;
+  }
   result->SetL(self->CreateInternalStackTrace(soa));
 }
 

@@ -26,6 +26,9 @@ import android.app.ActivityManager.RunningAppProcessInfo;
 import android.app.role.RoleManager;
 import android.apphibernation.AppHibernationManager;
 import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.os.Binder;
 import android.os.Build;
 import android.os.DeadObjectException;
@@ -37,6 +40,7 @@ import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.provider.MediaStore;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.Pair;
@@ -424,13 +428,30 @@ public final class Utils {
         }
     }
 
+    public static String getSystemUiPackageName(@NonNull Context context) {
+        return context.getString(R.string.config_systemUi);
+    }
+
     public static boolean isSystemUiPackage(@NonNull Context context, @NonNull String packageName) {
-        return packageName.equals(context.getString(R.string.config_systemUi));
+        return packageName.equals(getSystemUiPackageName(context));
+    }
+
+    public static List<String> getLauncherPackageNames(@NonNull Context context) {
+        RoleManager roleManager = context.getSystemService(RoleManager.class);
+        return roleManager.getRoleHolders(RoleManager.ROLE_HOME);
     }
 
     public static boolean isLauncherPackage(@NonNull Context context, @NonNull String packageName) {
-        RoleManager roleManager = context.getSystemService(RoleManager.class);
-        return roleManager.getRoleHolders(RoleManager.ROLE_HOME).contains(packageName);
+        return getLauncherPackageNames(context).contains(packageName);
+    }
+
+    public static List<String> getCameraPackageNames(@NonNull Context context) {
+        Intent intent = new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE);
+        PackageManager pm = context.getPackageManager();
+        List<ResolveInfo> resolveInfoList = pm.queryIntentActivities(intent,
+                PackageManager.MATCH_DEFAULT_ONLY | PackageManager.MATCH_DIRECT_BOOT_AWARE
+                        | PackageManager.MATCH_DIRECT_BOOT_UNAWARE);
+        return resolveInfoList.stream().map(info -> info.activityInfo.packageName).toList();
     }
 
     /**

@@ -118,6 +118,10 @@ art_cc_binary {
         "com.android.art.debug",
         "test_broken_com.android.art",
     ],
+    visibility: [
+        "//art:__subpackages__",
+        "//prebuilts/r8:__subpackages__",
+    ],
 }
 
 art_cc_binary {
