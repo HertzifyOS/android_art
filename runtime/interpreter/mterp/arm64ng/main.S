@@ -884,9 +884,9 @@
    // - lr contains the entrypoint, except for polymorphic and custom invokes.
    ldrb wCSTMP, [xSHORTY], #1  // load return arg character, advance to args at shorty + 1
    sub wSHORTY_LEN, wSHORTY_LEN, 1  // reduce the remaining shorty length.
-   // Check for zero args for invoke-custom or string-init.
+   // Check for zero args for invoke-custom, invoke-polymorphic or string-init.
    // Zero args for invoke-static are handled above.
-%  if is_custom:
+%  if is_custom or is_polymorphic:
      cbz wSHORTY_LEN, .Lsetup_finished_${suffix}
 %  if is_static:
      adr xLOADW, .Lnon_range_load_w1_${suffix}
@@ -1164,9 +1164,9 @@
    // - lr contains the entrypoint, except for polymorphic and custom invokes.
    ldrb wCSTMP, [xSHORTY], #1  // load return arg character, advance to args at shorty + 1
    sub wSHORTY_LEN, wSHORTY_LEN, 1  // reduce the remaining shorty length.
-   // Check for zero args for invoke-custom or string-init.
+   // Check for zero args for invoke-custom, invoke-polymorphic or string-init.
    // Zero args for invoke-static are handled above.
-%  if is_custom:
+%  if is_custom or is_polymorphic:
      cbz wSHORTY_LEN, .Lsetup_finished_range_${suffix}
 %  if is_static:
      adr xLOADW, .Lrange_load_w1_${suffix}
