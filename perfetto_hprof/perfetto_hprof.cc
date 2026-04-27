@@ -21,10 +21,12 @@
 #include <fcntl.h>
 #include <fnmatch.h>
 #include <inttypes.h>
+#include <linux/seccomp.h>
 #include <sched.h>
 #include <signal.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <sys/wait.h>
@@ -1197,7 +1199,26 @@ void WriteHeapPackets(pid_t parent_pid, uint64_t timestamp) {
           });
 }
 
+bool IsChromiumSeccompSandbox() {
+  errno = 0;
+  // Inside Chromium sandbox: BPF filter rewrites this to -1/EPERM.
+  // Outside: kernel returns 0 (action supported) or -1/EFAULT.
+  // Pre-3.17 kernel (irrelevant on modern Android): -1/ENOSYS.
+  // This detection is based on the following chromium code:
+  // https://source.chromium.org/chromium/chromium/src/+/main:sandbox/linux/seccomp-bpf-helpers/baseline_policy.cc;l=346;drc=29982c503d2649e4212fecebf1e5791639e35620
+  auto r = syscall(__NR_seccomp, SECCOMP_GET_ACTION_AVAIL, 0u, nullptr);
+  return r == -1 && errno == EPERM;
+}
+
 void DumpPerfetto(art::Thread* self) {
+  // Chromium/Webview sandboxed processes don't allow fork() and cause a
+  // crash in the child process when attemping to grab a heap dump because
+  // they opt into a strict seccomp syscall sandbox. Skip them.
+  if (IsChromiumSeccompSandbox()) {
+    LOG(INFO) << "Chromium seccomp detected, skipping Perfetto heap dump";
+    return;
+  }
+
   ForkAndRun(
     self,
     ResumeParentPolicy::IMMEDIATELY,
